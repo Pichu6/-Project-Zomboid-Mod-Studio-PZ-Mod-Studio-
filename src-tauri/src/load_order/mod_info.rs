@@ -78,14 +78,14 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     })
 }
 
-/// Scans all subscribed Workshop & local mods, ordering active ones first according to ModListData.ini.
+/// Scans all subscribed Workshop & local mods recursively without depth limits.
 pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     let mut all_mods_map: std::collections::HashMap<String, ModManifest> = std::collections::HashMap::new();
 
-    // 1. Scan Steam Workshop mods (content/108600/)
+    // 1. Scan Steam Workshop mods (content/108600/) with unlimited depth
     let workshop_path = Path::new(&paths.workshop_dir);
     if workshop_path.exists() {
-        for entry in WalkDir::new(workshop_path).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(workshop_path).max_depth(8).into_iter().filter_map(|e| e.ok()) {
             if entry.file_name() == "mod.info" {
                 if let Some(mut manifest) = parse_mod_info(entry.path()) {
                     let workshop_id = extract_workshop_id_from_path(entry.path());
@@ -99,7 +99,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     // 2. Scan User Zomboid mods folder (Zomboid/mods/)
     let user_mods_path = Path::new(&paths.user_zomboid_dir).join("mods");
     if user_mods_path.exists() {
-        for entry in WalkDir::new(&user_mods_path).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&user_mods_path).max_depth(8).into_iter().filter_map(|e| e.ok()) {
             if entry.file_name() == "mod.info" {
                 if let Some(manifest) = parse_mod_info(entry.path()) {
                     all_mods_map.insert(manifest.id.clone(), manifest);
