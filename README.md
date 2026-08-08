@@ -1,6 +1,6 @@
 # 🧟 Project Zomboid Mod Studio (PZ Mod Studio)
 
-> **La suite definitiva de escritorio para la gestión, resolución de conflictos y compatibilidad de mods en Project Zomboid (Build 42+).**
+> **The ultimate desktop suite for managing, resolving conflicts, and ensuring mod compatibility in Project Zomboid, across any Build.**
 
 ---
 
@@ -29,7 +29,7 @@ A diferencia de un simple *script merger*, **PZ Mod Studio** ofrece una solució
 
 - **Frontend:** React + TypeScript + TailwindCSS + Monaco Editor (Engine de VS Code).
 - **Backend:** Rust + Tauri (Escaneo de rutas virtuales ultrarrápido y diffing AST).
-- **Formato:** Portable (sin instalador, compatible con GitHub Releases).
+- **Formato:** Portable (sin instalador, ejecutable independiente).
 
 ---
 
