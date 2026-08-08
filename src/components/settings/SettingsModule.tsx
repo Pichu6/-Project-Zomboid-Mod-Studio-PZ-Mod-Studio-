@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Folder, RefreshCw, CheckCircle2, AlertCircle, Save } from 'lucide-react';
+import { Folder, RefreshCw, CheckCircle2, AlertCircle, Save, FolderOpen, Lock, Unlock } from 'lucide-react';
 
 export interface StudioPathsUI {
   pz_install_dir: string;
@@ -21,19 +21,25 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   onAutoDetect,
 }) => {
   const [formData, setFormData] = useState<StudioPathsUI>(paths);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
 
-  const handleChange = (field: keyof StudioPathsUI, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-    setIsSaved(false);
+  const handleBrowsePath = (field: keyof StudioPathsUI, fieldName: string) => {
+    const currentVal = formData[field] as string;
+    const newVal = window.prompt(`Select/Enter path for ${fieldName}:`, currentVal);
+    if (newVal !== null && newVal.trim() !== '') {
+      setFormData((prev) => ({
+        ...prev,
+        [field]: newVal.trim(),
+      }));
+      setIsSaved(false);
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSavePaths(formData);
+    setIsEditing(false);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -49,17 +55,31 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               Studio Directory Configuration
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Auto-detect paths or manually enter custom game and Workshop directories.
+              Auto-detect paths or use buttons to manually select custom directories.
             </p>
           </div>
 
-          <button
-            onClick={onAutoDetect}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-            Auto-Detect Paths
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition cursor-pointer ${
+                isEditing
+                  ? 'bg-amber-950/80 text-amber-300 border-amber-700/80'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+            >
+              {isEditing ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{isEditing ? 'Editing Enabled' : 'Unlock Paths'}</span>
+            </button>
+
+            <button
+              onClick={onAutoDetect}
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              Auto-Detect Paths
+            </button>
+          </div>
         </div>
 
         {/* Validation Alert */}
@@ -79,25 +99,39 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <span>
               {formData.is_valid
                 ? 'Valid Project Zomboid installation detected.'
-                : 'Project Zomboid installation directory not found or invalid. Please verify manual path below.'}
+                : 'Project Zomboid installation directory not found or invalid. Please select a custom path.'}
             </span>
           </div>
         </div>
 
-        {/* Form Fields */}
+        {/* Read-Only Form with Dedicated Browse Buttons */}
         <form onSubmit={handleSave} className="space-y-5 bg-slate-900/60 p-6 rounded-xl border border-slate-800">
           {/* Field 1: PZ Install Directory */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Project Zomboid Installation Path ({'<PZ_Install>'})
             </label>
-            <input
-              type="text"
-              value={formData.pz_install_dir}
-              onChange={(e) => handleChange('pz_install_dir', e.target.value)}
-              placeholder="e.g. C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 transition"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly={!isEditing}
+                value={formData.pz_install_dir}
+                onChange={(e) => setFormData({ ...formData, pz_install_dir: e.target.value })}
+                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
+                  isEditing
+                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
+                    : 'text-slate-400 cursor-not-allowed select-all'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => handleBrowsePath('pz_install_dir', 'PZ Installation Directory')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Browse...</span>
+              </button>
+            </div>
             <p className="text-[10px] text-slate-500 mt-1">
               Location containing `ProjectZomboid64.exe` and `media/lua`.
             </p>
@@ -108,13 +142,27 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Steam Workshop Content Path (`content/108600`)
             </label>
-            <input
-              type="text"
-              value={formData.workshop_dir}
-              onChange={(e) => handleChange('workshop_dir', e.target.value)}
-              placeholder="e.g. C:\Program Files (x86)\Steam\steamapps\workshop\content\108600"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 transition"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly={!isEditing}
+                value={formData.workshop_dir}
+                onChange={(e) => setFormData({ ...formData, workshop_dir: e.target.value })}
+                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
+                  isEditing
+                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
+                    : 'text-slate-400 cursor-not-allowed select-all'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => handleBrowsePath('workshop_dir', 'Steam Workshop Content Directory')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Browse...</span>
+              </button>
+            </div>
             <p className="text-[10px] text-slate-500 mt-1">
               Steam Workshop directory where downloaded mods are stored.
             </p>
@@ -125,13 +173,27 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               User Zomboid User Directory (`Zomboid`)
             </label>
-            <input
-              type="text"
-              value={formData.user_zomboid_dir}
-              onChange={(e) => handleChange('user_zomboid_dir', e.target.value)}
-              placeholder="e.g. C:\Users\YourUser\Zomboid"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 transition"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly={!isEditing}
+                value={formData.user_zomboid_dir}
+                onChange={(e) => setFormData({ ...formData, user_zomboid_dir: e.target.value })}
+                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
+                  isEditing
+                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
+                    : 'text-slate-400 cursor-not-allowed select-all'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => handleBrowsePath('user_zomboid_dir', 'User Zomboid Directory')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Browse...</span>
+              </button>
+            </div>
             <p className="text-[10px] text-slate-500 mt-1">
               Contains save games, `console.txt`, and local mods folder.
             </p>
@@ -142,13 +204,27 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               ModListData.ini Configuration Path
             </label>
-            <input
-              type="text"
-              value={formData.mod_list_ini_path}
-              onChange={(e) => handleChange('mod_list_ini_path', e.target.value)}
-              placeholder="e.g. C:\Users\YourUser\Zomboid\Lua\ModManager\ModListData.ini"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 transition"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly={!isEditing}
+                value={formData.mod_list_ini_path}
+                onChange={(e) => setFormData({ ...formData, mod_list_ini_path: e.target.value })}
+                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
+                  isEditing
+                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
+                    : 'text-slate-400 cursor-not-allowed select-all'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => handleBrowsePath('mod_list_ini_path', 'ModListData.ini Path')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Browse...</span>
+              </button>
+            </div>
             <p className="text-[10px] text-slate-500 mt-1">
               Configuration file modified by PZ Mod Studio to manage active load order.
             </p>
