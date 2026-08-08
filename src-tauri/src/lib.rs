@@ -7,7 +7,7 @@ pub mod vfs;
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
 use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
 use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
-use load_order::mod_info::ModManifest;
+use load_order::mod_info::{scan_all_installed_mods, ModManifest};
 use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
 use patch_generator::{generate_master_patch, MasterPatchRequest, MasterPatchResult};
 use sandbox::{launch_sandbox_and_watch, SandboxLaunchConfig};
@@ -56,6 +56,11 @@ fn write_mod_list_ini_cmd(ini_path: String, active_mods: Vec<String>) -> Result<
 }
 
 #[tauri::command]
+fn scan_all_installed_mods_cmd(paths: StudioPaths) -> Vec<ModManifest> {
+    scan_all_installed_mods(&paths)
+}
+
+#[tauri::command]
 fn sort_mod_dependencies_cmd(manifests: Vec<ModManifest>) -> DependencyAnalysisResult {
     sort_dependencies_topologically(&manifests)
 }
@@ -98,6 +103,7 @@ pub fn run() {
             merge_pz_data_scripts_cmd,
             read_mod_list_ini_cmd,
             write_mod_list_ini_cmd,
+            scan_all_installed_mods_cmd,
             sort_mod_dependencies_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,

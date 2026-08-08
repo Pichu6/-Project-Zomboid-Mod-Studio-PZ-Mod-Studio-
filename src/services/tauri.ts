@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, TranslatedErrorCard } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -143,6 +143,32 @@ export const TauriService = {
       }));
     } catch (err) {
       console.warn('Scan conflicts error:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Scans all subscribed Workshop & local mods, ordering active ones first according to ModListData.ini
+   */
+  scanAllInstalledMods: async (paths: StudioPathsUI): Promise<ModInfo[]> => {
+    try {
+      const rawMods = await invoke<any[]>('scan_all_installed_mods_cmd', { paths });
+      if (!rawMods || rawMods.length === 0) {
+        return [];
+      }
+      return rawMods.map((m, idx) => ({
+        mod_id: m.id,
+        name: m.name || m.id,
+        description: m.description,
+        workshop_id: m.workshop_id,
+        dependencies: m.require || [],
+        enabled: m.enabled ?? false,
+        is_library: m.is_library ?? false,
+        is_map_mod: m.is_map_mod ?? false,
+        load_order_index: idx + 1,
+      }));
+    } catch (err) {
+      console.warn('Failed to scan installed mods:', err);
       return [];
     }
   },

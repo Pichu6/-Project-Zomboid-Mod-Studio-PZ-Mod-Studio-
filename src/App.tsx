@@ -35,21 +35,10 @@ export const App: React.FC = () => {
         const scannedConflicts = await TauriService.scanConflicts(savedProfile);
         setConflicts(scannedConflicts);
 
-        // Load real active mods from ModListData.ini if path exists
-        if (savedProfile.mod_list_ini_path) {
-          const iniData = await TauriService.readModListIni(savedProfile.mod_list_ini_path);
-          if (iniData.active_mods.length > 0) {
-            const realMods: ModInfo[] = iniData.active_mods.map((id, idx) => ({
-              mod_id: id,
-              name: id,
-              dependencies: [],
-              enabled: true,
-              load_order_index: idx + 1,
-              is_library: id.toLowerCase().includes('lib') || id.toLowerCase().includes('manager'),
-              is_map_mod: id.toLowerCase().includes('map'),
-            }));
-            setMods(realMods);
-          }
+        // Scan all subscribed Workshop & local mods on disk
+        const allSubscribedMods = await TauriService.scanAllInstalledMods(savedProfile);
+        if (allSubscribedMods.length > 0) {
+          setMods(allSubscribedMods);
         }
       }
     };
@@ -75,6 +64,10 @@ export const App: React.FC = () => {
     if (paths.is_valid) {
       const scannedConflicts = await TauriService.scanConflicts(paths);
       setConflicts(scannedConflicts);
+      const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
+      if (allSubscribedMods.length > 0) {
+        setMods(allSubscribedMods);
+      }
     }
   };
 
@@ -158,9 +151,12 @@ export const App: React.FC = () => {
   };
 
   const handleToggleMod = (modId: string) => {
-    setMods((prev) =>
-      prev.map((m) => (m.mod_id === modId ? { ...m, enabled: !m.enabled } : m))
-    );
+    setMods((prev) => {
+      const updated = prev.map((m) => (m.mod_id === modId ? { ...m, enabled: !m.enabled } : m));
+      const activeModIds = updated.filter((m) => m.enabled).map((m) => m.mod_id);
+      TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
+      return updated;
+    });
   };
 
   const handleApplyFix = (polyfillRuleId: string) => {
@@ -178,20 +174,9 @@ export const App: React.FC = () => {
       const scannedConflicts = await TauriService.scanConflicts(saved);
       setConflicts(scannedConflicts);
 
-      if (saved.mod_list_ini_path) {
-        const iniData = await TauriService.readModListIni(saved.mod_list_ini_path);
-        if (iniData.active_mods.length > 0) {
-          const realMods: ModInfo[] = iniData.active_mods.map((id, idx) => ({
-            mod_id: id,
-            name: id,
-            dependencies: [],
-            enabled: true,
-            load_order_index: idx + 1,
-            is_library: id.toLowerCase().includes('lib') || id.toLowerCase().includes('manager'),
-            is_map_mod: id.toLowerCase().includes('map'),
-          }));
-          setMods(realMods);
-        }
+      const allSubscribedMods = await TauriService.scanAllInstalledMods(saved);
+      if (allSubscribedMods.length > 0) {
+        setMods(allSubscribedMods);
       }
     }
   };
@@ -203,6 +188,11 @@ export const App: React.FC = () => {
     if (saved.is_valid) {
       const scannedConflicts = await TauriService.scanConflicts(saved);
       setConflicts(scannedConflicts);
+
+      const allSubscribedMods = await TauriService.scanAllInstalledMods(saved);
+      if (allSubscribedMods.length > 0) {
+        setMods(allSubscribedMods);
+      }
     }
   };
 
