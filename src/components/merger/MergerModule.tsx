@@ -1,14 +1,27 @@
 import React, { useState } from 'react';
 import { VfsConflict } from '../../types';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, Target } from 'lucide-react';
+import { StudioPathsUI } from '../settings/SettingsModule';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, Target, ShieldCheck, FolderX, RefreshCw, Sparkles } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { MOCK_CONFLICTS } from '../../data/mock_data';
 
 interface MergerModuleProps {
   conflicts: VfsConflict[];
+  paths: StudioPathsUI;
   onResolveConflict: (conflictId: string, resolvedCode: string) => void;
+  onGoToSettings: () => void;
+  onRescan: () => void;
+  onLoadMockups: (mockups: VfsConflict[]) => void;
 }
 
-export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolveConflict }) => {
+export const MergerModule: React.FC<MergerModuleProps> = ({
+  conflicts,
+  paths,
+  onResolveConflict,
+  onGoToSettings,
+  onRescan,
+  onLoadMockups,
+}) => {
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
   const [focusOnConflict, setFocusOnConflict] = useState<boolean>(true);
@@ -78,6 +91,69 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
     );
   };
 
+  // State 1: Invalid or unconfigured installation path
+  if (!paths.is_valid) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
+        <div className="max-w-md w-full bg-slate-900/80 border border-amber-500/40 rounded-2xl p-6 text-center space-y-4 shadow-xl">
+          <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto">
+            <FolderX className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-100">Setup Required: Game Directory</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Project Zomboid installation directory could not be auto-detected. Please configure your paths in App Settings to scan active mods.
+            </p>
+          </div>
+          <button
+            onClick={onGoToSettings}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs py-2.5 rounded-lg shadow transition cursor-pointer"
+          >
+            Configure Directory Paths in Settings
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // State 2: Valid paths, but 0 real conflicts found!
+  if (conflicts.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
+        <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner">
+            <ShieldCheck className="w-8 h-8" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-100">All Clean! No Script Conflicts Detected</h3>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Your active mod list in <code className="text-emerald-400 font-mono">ModListData.ini</code> has zero relative file path collisions. All installed mods will run smoothly!
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={onRescan}
+              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-4 py-2.5 rounded-lg border border-slate-700 transition cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              Rescan Active Mods
+            </button>
+
+            <button
+              onClick={() => onLoadMockups(MOCK_CONFLICTS)}
+              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-4 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              Load Preview Demo (Mockup)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // State 3: Active conflicts to display & merge!
   return (
     <div className="flex-1 flex overflow-hidden bg-slate-950 text-slate-200">
       {/* File Conflict Sidebar */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard } from './types';
-import { MOCK_CONFLICTS, MOCK_MODS, MOCK_ERROR_CARDS } from './data/mock_data';
+import { MOCK_MODS, MOCK_ERROR_CARDS } from './data/mock_data';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -13,18 +13,18 @@ import { TauriService } from './services/tauri';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MERGER');
-  const [conflicts, setConflicts] = useState<VfsConflict[]>(MOCK_CONFLICTS);
+  const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
   const [mods, setMods] = useState<ModInfo[]>(MOCK_MODS);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>(MOCK_ERROR_CARDS);
 
   // Studio Directory Paths State (Connected to Rust auto-detection & validation)
   const [paths, setPaths] = useState<StudioPathsUI>({
-    pz_install_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid',
-    workshop_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600',
-    user_zomboid_dir: 'C:\\Users\\User\\Zomboid',
-    mod_list_ini_path: 'C:\\Users\\User\\Zomboid\\Lua\\ModManager\\ModListData.ini',
-    is_valid: true,
+    pz_install_dir: '',
+    workshop_dir: '',
+    user_zomboid_dir: '',
+    mod_list_ini_path: '',
+    is_valid: false,
   });
 
   // Auto-detect paths from Rust backend on initial load
@@ -33,9 +33,8 @@ export const App: React.FC = () => {
       const autoPaths = await TauriService.getAutoPaths();
       setPaths(autoPaths);
 
-      // Perform initial conflict scan with detected paths
-      const scannedConflicts = await TauriService.scanConflicts(autoPaths);
-      if (scannedConflicts.length > 0) {
+      if (autoPaths.is_valid) {
+        const scannedConflicts = await TauriService.scanConflicts(autoPaths);
         setConflicts(scannedConflicts);
       }
     };
@@ -56,6 +55,17 @@ export const App: React.FC = () => {
       if (unlistenErrorCards) unlistenErrorCards();
     };
   }, []);
+
+  const handleRescan = async () => {
+    if (paths.is_valid) {
+      const scannedConflicts = await TauriService.scanConflicts(paths);
+      setConflicts(scannedConflicts);
+    }
+  };
+
+  const handleLoadMockups = (mockups: VfsConflict[]) => {
+    setConflicts(mockups);
+  };
 
   // Magic Button: Optimize & Resolve All
   const handleOptimizeAndResolve = () => {
@@ -122,11 +132,19 @@ export const App: React.FC = () => {
   const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
     const validated = await TauriService.validatePaths(updatedPaths);
     setPaths(validated);
+    if (validated.is_valid) {
+      const scannedConflicts = await TauriService.scanConflicts(validated);
+      setConflicts(scannedConflicts);
+    }
   };
 
   const handleAutoDetect = async () => {
     const autoPaths = await TauriService.getAutoPaths();
     setPaths(autoPaths);
+    if (autoPaths.is_valid) {
+      const scannedConflicts = await TauriService.scanConflicts(autoPaths);
+      setConflicts(scannedConflicts);
+    }
   };
 
   return (
@@ -152,7 +170,14 @@ export const App: React.FC = () => {
         {/* Tab Modules */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {activeTab === 'MERGER' && (
-            <MergerModule conflicts={conflicts} onResolveConflict={handleResolveConflict} />
+            <MergerModule
+              conflicts={conflicts}
+              paths={paths}
+              onResolveConflict={handleResolveConflict}
+              onGoToSettings={() => setActiveTab('SETTINGS')}
+              onRescan={handleRescan}
+              onLoadMockups={handleLoadMockups}
+            />
           )}
 
           {activeTab === 'POLYFILLS' && (

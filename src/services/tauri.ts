@@ -73,11 +73,14 @@ export const TauriService = {
   },
 
   /**
-   * Scans Virtual File System for conflicts between active mods
+   * Scans Virtual File System for real conflicts between active mods
    */
   scanConflicts: async (paths: StudioPathsUI): Promise<VfsConflict[]> => {
     try {
       const rawConflicts = await invoke<any[]>('scan_conflicts_cmd', { paths });
+      if (!rawConflicts || rawConflicts.length === 0) {
+        return [];
+      }
       return rawConflicts.map((c) => ({
         id: c.id,
         relative_path: c.relative_path,
@@ -96,7 +99,7 @@ export const TauriService = {
         status: 'MANUAL_CONFLICT' as const,
       }));
     } catch (err) {
-      console.warn('Using fallback scan conflicts:', err);
+      console.warn('Scan conflicts error:', err);
       return [];
     }
   },
