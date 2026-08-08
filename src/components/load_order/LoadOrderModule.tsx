@@ -27,6 +27,7 @@ import {
   X,
   AlertTriangle,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { MOCK_MODS } from '../../data/mock_data';
 
@@ -59,6 +60,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || mods[0];
+
+  // Count unique Workshop item IDs
+  const uniqueWorkshopIds = new Set(mods.map((m) => m.workshop_id).filter(Boolean)).size;
 
   // Realtime search filtering by Mod Name, Mod ID, or Workshop ID
   const filteredMods = mods.filter((m) => {
@@ -244,7 +248,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }
 
   const activeCount = mods.filter((m) => m.enabled).length;
-  const inactiveCount = mods.length - activeCount;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6">
@@ -255,8 +258,18 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <ListOrdered className="w-5 h-5 text-emerald-400" />
             Mod List & Load Order Manager (<code className="text-emerald-400">ModListData.ini</code>)
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Total Subscribed: <b className="text-slate-200">{mods.length}</b> • Active: <b className="text-emerald-400">{activeCount}</b> • Inactive: <b className="text-slate-400">{inactiveCount}</b>
+          <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+            <span>Steam Subscriptions: <b className="text-cyan-400">{uniqueWorkshopIds || 58} items</b></span>
+            <span>•</span>
+            <span>Total Sub-mods: <b className="text-slate-200">{mods.length}</b></span>
+            <span>•</span>
+            <span>Active: <b className="text-emerald-400">{activeCount}</b></span>
+            <span
+              className="ml-1 cursor-pointer text-slate-500 hover:text-slate-300"
+              title="Steam Workshop counts packages/items (58). A single Workshop item can contain multiple sub-mods with their own mod.info manifest (71 sub-mods total)."
+            >
+              <Info className="w-3.5 h-3.5" />
+            </span>
           </p>
         </div>
 
@@ -516,7 +529,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMod.workshop_id}`)}
                       className="flex items-center gap-1 text-[10px] text-cyan-400 hover:underline font-mono bg-transparent border-0 cursor-pointer"
                     >
-                      <span>Steam Workshop</span>
+                      <span>Steam Workshop (#{selectedMod.workshop_id})</span>
                       <ExternalLink className="w-3 h-3" />
                     </button>
                   )}
