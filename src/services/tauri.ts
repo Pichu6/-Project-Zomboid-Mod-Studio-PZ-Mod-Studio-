@@ -31,6 +31,13 @@ export interface SandboxLogPayload {
   is_error: boolean;
 }
 
+export interface MasterPatchResultUI {
+  success: boolean;
+  patch_mod_dir: string;
+  files_written: number;
+  polyfills_injected: number;
+}
+
 /**
  * Service layer wrapping all native Tauri Rust backend IPC calls
  */
@@ -135,6 +142,23 @@ export const TauriService = {
       await invoke('write_mod_list_ini_cmd', { iniPath, activeMods });
     } catch (err) {
       console.error('Failed to write ModListData.ini:', err);
+    }
+  },
+
+  /**
+   * Generates the synthetic master patch mod under Zomboid/mods/Z_PZModStudio_MergedPatch
+   */
+  generateMasterPatch: async (req: {
+    user_zomboid_dir: string;
+    mod_list_ini_path: string;
+    merged_files: { relative_path: string; content: string }[];
+    active_polyfill_ids: string[];
+  }): Promise<MasterPatchResultUI> => {
+    try {
+      return await invoke<MasterPatchResultUI>('generate_master_patch_cmd', { req });
+    } catch (err) {
+      console.error('Failed to generate master patch:', err);
+      return { success: false, patch_mod_dir: '', files_written: 0, polyfills_injected: 0 };
     }
   },
 
