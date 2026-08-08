@@ -163,9 +163,47 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTargetPosInput('');
   };
 
-  const handleToggleAll = (enable: boolean) => {
-    const updated = mods.map((m) => ({ ...m, enabled: enable }));
+  /**
+   * Smart Enable All (Conflict Guard):
+   * When enabling all mods, detects mutually exclusive sub-mod packages (e.g. Authentic Z Lite vs Full)
+   * and enables only the primary/main variant, keeping mutually exclusive sub-mods disabled!
+   */
+  const handleSmartEnableAll = (enable: boolean) => {
+    if (!enable) {
+      // Disable All
+      const updated = mods.map((m) => ({ ...m, enabled: false }));
+      onReorder(updated);
+      return;
+    }
+
+    // Smart Enable All: filter mutually exclusive sub-mods within same Workshop package
+    const seenPackages: Record<string, boolean> = {};
+    let skippedExclusivesCount = 0;
+
+    const updated = mods.map((m) => {
+      // Check if sub-mod has mutually exclusive keywords (e.g. 'lite', 'disable', 'compat', 'b41')
+      const isExclusiveVariant =
+        m.mod_id.toLowerCase().includes('lite') ||
+        m.name.toLowerCase().includes('lite version') ||
+        m.name.toLowerCase().includes('compat') ||
+        m.mod_id.toLowerCase().includes('compat');
+
+      if (m.workshop_id && multiModPackageMap[m.workshop_id]) {
+        if (seenPackages[m.workshop_id] && isExclusiveVariant) {
+          // Keep secondary exclusive variant disabled to prevent game crashes!
+          skippedExclusivesCount++;
+          return { ...m, enabled: false };
+        }
+        seenPackages[m.workshop_id] = true;
+      }
+
+      return { ...m, enabled: true };
+    });
+
     onReorder(updated);
+    if (skippedExclusivesCount > 0) {
+      alert(`✨ Smart Enable All Applied!\n\n- Enabled compatible mods.\n- Kept ${skippedExclusivesCount} mutually exclusive sub-mod variants (e.g. Lite/Compat options) disabled to prevent game crashes!`);
+    }
   };
 
   /**
@@ -259,7 +297,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   if (mods.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
-        <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl">
+        <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl font-sans">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner">
             <ShieldCheck className="w-8 h-8" />
           </div>
@@ -287,7 +325,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const activeCount = mods.filter((m) => m.enabled).length;
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6">
+    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
       {/* Module Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
         <div>
@@ -342,19 +380,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
-          {/* Enable All / Disable All Toggle Buttons */}
+          {/* Smart Enable All / Disable All Toggle Buttons */}
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
             <button
-              onClick={() => handleToggleAll(true)}
+              onClick={() => handleSmartEnableAll(true)}
               className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-emerald-400 font-medium transition cursor-pointer"
-              title="Enable All Mods"
+              title="Smart Enable All (Keeps mutually exclusive sub-mod variants disabled)"
             >
               <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Enable All</span>
+              <span>Smart Enable All</span>
             </button>
 
             <button
-              onClick={() => handleToggleAll(false)}
+              onClick={() => handleSmartEnableAll(false)}
               className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-slate-400 font-medium transition cursor-pointer"
               title="Disable All Mods"
             >
