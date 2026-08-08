@@ -71,4 +71,100 @@ export const DEFAULT_POLYFILL_RULES: PolyfillRule[] = [
       },
     },
   },
+  {
+    id: 'DEPRECATED_EVENT_MIGRATION',
+    name: 'Deprecated Event Hook Migration',
+    description: 'Intercepts removed B41 event triggers (e.g. OnFillContainer) and routes them to B42 event equivalents',
+    category: 'CUSTOM_SHIM',
+    severity: 'HIGH',
+    enabled: true,
+    pattern: {
+      type: 'EVENT_HOOK',
+      target_event: 'Events.OnFillContainer',
+    },
+    action: {
+      type: 'RUNTIME_SHIM',
+      shim_code: 'if Events.OnFillContainer == nil then Events.OnFillContainer = LuaEvent:new("OnFillContainer") end',
+    },
+  },
+  {
+    id: 'INVENTORY_ITEM_WRAPPER',
+    name: 'Safe Inventory Item Methods',
+    description: 'Wraps calls to item:getType() and item:getFullType() when legacy mods pass nil item instances',
+    category: 'ARGUMENT_TYPE_WRAPPER',
+    severity: 'HIGH',
+    enabled: true,
+    pattern: {
+      type: 'LUA_METHOD_CALL',
+      target_method: 'getType',
+    },
+    action: {
+      type: 'AST_WRAPPER',
+      wrapper_template: '(item and item:getType()) or ""',
+    },
+  },
+  {
+    id: 'FLUID_CONTAINER_POLYFILL',
+    name: 'B42 Fluid Container API Polyfill',
+    description: 'Converts legacy B41 drainable/liquid item method calls to the new B42 ItemFluidContainer API',
+    category: 'ARGUMENT_TYPE_WRAPPER',
+    severity: 'CRITICAL',
+    enabled: true,
+    pattern: {
+      type: 'LUA_METHOD_CALL',
+      target_method: 'getUsedDelta',
+    },
+    action: {
+      type: 'AST_WRAPPER',
+      wrapper_template: '(item and item:getFluidContainer() and item:getFluidContainer():getAmount()) or 0',
+    },
+  },
+  {
+    id: 'VEHICLE_PART_API_SHIM',
+    name: 'Vehicle Part Device Data Compatibility',
+    description: 'Bridges vehicle part API changes where getDeviceData() returned nil on non-radio vehicle parts',
+    category: 'CUSTOM_SHIM',
+    severity: 'MEDIUM',
+    enabled: true,
+    pattern: {
+      type: 'LUA_METHOD_CALL',
+      target_method: 'getDeviceData',
+    },
+    action: {
+      type: 'RUNTIME_SHIM',
+      shim_code: 'if VehiclePart then local old = VehiclePart.getDeviceData; VehiclePart.getDeviceData = function(self) return old(self) or {} end end',
+    },
+  },
+  {
+    id: 'ISUI_ELEMENT_SAFE_CONSTRUCTOR',
+    name: 'ISUI Panel Safe Font & Style Constructor',
+    description: 'Ensures ISPanel:new and ISButton:new receive valid B42 font & style arguments',
+    category: 'SAFE_GLOBAL',
+    severity: 'MEDIUM',
+    enabled: true,
+    pattern: {
+      type: 'LUA_FUNCTION_CALL',
+      target_function: 'ISPanel:new',
+    },
+    action: {
+      type: 'AST_WRAPPER',
+      wrapper_template: 'ISPanel:new(x or 0, y or 0, width or 100, height or 50)',
+    },
+  },
+  {
+    id: 'CRAFTING_RECIPE_TAG_MAPPER',
+    name: 'Crafting Recipe Tag & Fluid Mapper',
+    description: 'Translates legacy B41 recipe item requirements into B42 Tag queries (e.g. Wooden;HeavyWeapon)',
+    category: 'CUSTOM_SHIM',
+    severity: 'HIGH',
+    enabled: true,
+    pattern: {
+      type: 'PZ_SCRIPT_TAG',
+    },
+    action: {
+      type: 'REGEX_REPLACE',
+      regex: 'Result:(.*?),',
+      replacement: 'Result:$1, Tags = CraftingIngredient,',
+    },
+  },
 ];
