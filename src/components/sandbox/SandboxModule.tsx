@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX, Activity, Filter } from 'lucide-react';
+import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX, Activity, Filter, Info } from 'lucide-react';
 
 interface SandboxModuleProps {
   paths: StudioPathsUI;
@@ -26,17 +26,32 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-cachedir, -debug) and capture crashes.',
   ]);
 
+  // Aggressively detects translation warning spam lines in Project Zomboid logs
+  const isTranslationSpamLine = (line: string): boolean => {
+    const lower = line.toLowerCase();
+    return (
+      lower.includes('translation:') ||
+      lower.includes('missing arguments for') ||
+      lower.includes('missing "igui_') ||
+      lower.includes('missing "itemname_') ||
+      lower.includes('missing "contextmenu_') ||
+      lower.includes('missing "sandbox_') ||
+      lower.includes('missing "tooltip_') ||
+      lower.includes('missing "recipe_') ||
+      (lower.includes('log  : general') && lower.includes('missing'))
+    );
+  };
+
   // Subscribe to real log streaming from Rust backend
   useEffect(() => {
     let unlistenLogs: (() => void) | undefined;
 
     TauriService.listenSandboxLogs((payload) => {
-      // Filter out noisy translation warning spam if filterSpam is enabled
       const line = payload.line;
-      if (filterSpam && line.includes('Missing arguments for')) {
+      if (filterSpam && isTranslationSpamLine(line)) {
         return;
       }
-      setLogs((prev) => [...prev.slice(-300), line]);
+      setLogs((prev) => [...prev.slice(-400), line]);
     }).then((unlisten) => {
       unlistenLogs = unlisten;
     });
@@ -107,7 +122,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6">
+    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
       {/* Module Header & Controls */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
         <div>
@@ -154,6 +169,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               </>
             )}
           </button>
+        </div>
+      </div>
+
+      {/* Developer Debug Mode Notice Banner */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 mb-4 flex items-center justify-between text-xs text-slate-300">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span>
+            <b>Developer Debug Mode Active (<code className="text-cyan-300">-debug</code>):</b> The game menu displays the <code className="text-amber-300 font-bold">SCENARIOS</code> button, red <code className="text-red-400 font-bold">!</code> error box, and <code className="text-cyan-300">Reset Lua</code> tool so you can monitor and reload scripts live while testing!
+          </span>
         </div>
       </div>
 
