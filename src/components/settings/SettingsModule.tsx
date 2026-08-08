@@ -119,7 +119,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           {/* Field 2: Steam Workshop Directory */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Steam Workshop Content Path (App ID: 108600)
+              Steam Workshop Content Path
             </label>
             <div className="flex gap-2">
               <input
@@ -138,7 +138,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </button>
             </div>
             <p className="text-[10px] text-slate-500 mt-1">
-              Default Steam path: `steamapps/workshop/content/108600` (PZ Steam App ID).
+              Steam Workshop directory where downloaded mods are stored. (Steam App ID: 108600)
             </p>
           </div>
 
