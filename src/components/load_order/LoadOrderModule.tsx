@@ -29,6 +29,7 @@ import {
   Info,
   Layers,
   ShieldAlert,
+  HelpCircle,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -108,6 +109,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       workshopColorMap: colorMap,
       uniqueWorkshopIds: Object.keys(counts).length,
     };
+  }, [mods]);
+
+  // Counts per mod category for Icon Legend
+  const modCategoryCounts = useMemo(() => {
+    let mapCount = 0;
+    let libCount = 0;
+    let scriptCount = 0;
+
+    mods.forEach((m) => {
+      if (m.is_map_mod) mapCount++;
+      else if (m.is_library) libCount++;
+      else scriptCount++;
+    });
+
+    return { mapCount, libCount, scriptCount };
   }, [mods]);
 
   /**
@@ -507,6 +523,37 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
       </div>
 
+      {/* Icon Legend Bar */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-xs text-slate-400">
+        <div className="flex items-center gap-1.5 font-bold text-slate-300">
+          <HelpCircle className="w-4 h-4 text-cyan-400" />
+          <span>Mod Type Legend:</span>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2" title="Map Mod - Adds new towns, roads or custom map tiles">
+            <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
+              <MapPin className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <span>Map Mod (<b className="text-amber-400">{modCategoryCounts.mapCount}</b>)</span>
+          </div>
+
+          <div className="flex items-center gap-2" title="Base Library / Framework - Required by other mods">
+            <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
+              <Package className="w-3.5 h-3.5 text-purple-400" />
+            </div>
+            <span>Base Library (<b className="text-purple-400">{modCategoryCounts.libCount}</b>)</span>
+          </div>
+
+          <div className="flex items-center gap-2" title="Script / Feature Mod - Gameplay tweaks, items, clothing, etc.">
+            <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
+              <ListOrdered className="w-3.5 h-3.5 text-cyan-400" />
+            </div>
+            <span>Script Mod (<b className="text-cyan-400">{modCategoryCounts.scriptCount}</b>)</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main 2-Column Grid: Left Column Reorderable List / Right Column Mod Inspector */}
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
         {/* Left Column (7 cols): Reorderable Mod List */}
@@ -592,7 +639,16 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
                     {/* Mod Title, Type Icon, Package Badge & Exclusivity Warning Badge */}
                     <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
-                      <div className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                      <div
+                        className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0"
+                        title={
+                          mod.is_map_mod
+                            ? 'Map Mod (Adds custom tiles/towns)'
+                            : mod.is_library
+                            ? 'Base Library / Framework'
+                            : 'Script / Feature Mod'
+                        }
+                      >
                         {mod.is_map_mod ? (
                           <MapPin className="w-3.5 h-3.5 text-amber-400" />
                         ) : mod.is_library ? (
@@ -794,7 +850,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   Description
                 </label>
-                <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto select-text">
+                <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto select-text whitespace-pre-wrap">
                   {selectedMod.description || 'No description provided in mod.info manifest.'}
                 </div>
               </div>

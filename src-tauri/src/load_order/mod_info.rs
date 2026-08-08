@@ -20,7 +20,7 @@ pub struct ModManifest {
     pub enabled: bool,
 }
 
-/// Helper function to sanitize and clean raw mod ID strings (removes leading/trailing slashes, backslashes, quotes, spaces).
+/// Helper function to sanitize and clean raw mod ID strings.
 fn sanitize_mod_id(raw: &str) -> String {
     raw.trim()
         .trim_matches('\\')
@@ -31,13 +31,55 @@ fn sanitize_mod_id(raw: &str) -> String {
         .to_string()
 }
 
+/// Clean text encoding (fixes Windows-1252 / ANSI garbage characters like Ã±, Ã¡, etc.)
+fn clean_text_encoding(text: &str) -> String {
+    let mut cleaned = text.to_string();
+    
+    // Common UTF-8 misdecoded in Windows-1252 / Latin-1 replacements
+    let replacements = [
+        ("Ã¡", "á"), ("Ã©", "é"), ("Ã*", "í"), ("Ã³", "ó"), ("Ãº", "ú"),
+        ("Ã±", "ñ"), ("Ã‘", "Ñ"), ("Ã?", "Á"), ("Ã‰", "É"), ("Ã?", "Í"),
+        ("Ã“", "Ó"), ("Ãš", "Ú"), ("â€™", "'"), ("â€œ", "\""), ("â€", "\""),
+        ("â€“", "-"), ("â€”", "—"), ("Â°", "°"), ("ï»¿", ""),
+    ];
+
+    for (from, to) in replacements {
+        cleaned = cleaned.replace(from, to);
+    }
+
+    // Strip unprintable control characters
+    cleaned.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect()
+}
+
+/// Helper to robustly read mod.info content handling UTF-8 with BOM, Latin-1, and Windows-1252
+fn read_text_file_lossy(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    
+    // Strip UTF-8 BOM if present
+    let bytes_slice = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        &bytes[3..]
+    } else {
+        &bytes[..]
+    };
+
+    let decoded = match String::from_utf8(bytes_slice.to_vec()) {
+        Ok(s) => s,
+        Err(_) => {
+            // Fallback to ISO-8859-1 / Windows-1252 lossy decoding
+            bytes_slice.iter().map(|&b| b as char).collect()
+        }
+    };
+
+    Some(clean_text_encoding(&decoded))
+}
+
 /// Parses a mod.info file into a structured ModManifest struct.
 pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     if !path.exists() {
         return None;
     }
 
-    let content = fs::read_to_string(path).ok()?;
+    let content = read_text_file_lossy(path)?;
     let mut id = String::new();
     let mut name = String::new();
     let mut description = None;
@@ -54,9 +96,9 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         if trimmed.starts_with("id=") {
             id = sanitize_mod_id(&trimmed[3..]);
         } else if trimmed.starts_with("name=") {
-            name = trimmed[5..].trim().to_string();
+            name = clean_text_encoding(trimmed[5..].trim());
         } else if trimmed.starts_with("description=") {
-            let desc_val = trimmed[12..].trim().to_string();
+            let desc_val = clean_text_encoding(trimmed[12..].trim());
             if !desc_val.is_empty() {
                 description = Some(desc_val);
             }
@@ -82,29 +124,40 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         return None;
     }
 
-    // Resolve poster URL or icon path
+    // Robust search for poster and icon images in mod directory
     let mut poster_url = None;
     let mut icon_path = None;
 
     if let Some(dir) = parent_dir {
-        let poster_p = if !poster_file.is_empty() {
-            dir.join(&poster_file)
-        } else {
-            dir.join("poster.png")
-        };
+        // Try declared poster file, or search poster.png, poster.jpg, preview.png
+        let poster_candidates = vec![
+            if !poster_file.is_empty() { Some(dir.join(&poster_file)) } else { None },
+            Some(dir.join("poster.png")),
+            Some(dir.join("Poster.png")),
+            Some(dir.join("poster.jpg")),
+            Some(dir.join("Poster.jpg")),
+            Some(dir.join("preview.png")),
+            Some(dir.join("preview.jpg")),
+        ];
 
-        if poster_p.exists() {
-            poster_url = Some(poster_p.to_string_lossy().to_string());
+        for cand in poster_candidates.into_iter().flatten() {
+            if cand.exists() {
+                poster_url = Some(cand.to_string_lossy().replace('\\', "/"));
+                break;
+            }
         }
 
-        let icon_p = if !icon_file.is_empty() {
-            dir.join(&icon_file)
-        } else {
-            dir.join("icon.png")
-        };
+        let icon_candidates = vec![
+            if !icon_file.is_empty() { Some(dir.join(&icon_file)) } else { None },
+            Some(dir.join("icon.png")),
+            Some(dir.join("Icon.png")),
+        ];
 
-        if icon_p.exists() {
-            icon_path = Some(icon_p.to_string_lossy().to_string());
+        for cand in icon_candidates.into_iter().flatten() {
+            if cand.exists() {
+                icon_path = Some(cand.to_string_lossy().replace('\\', "/"));
+                break;
+            }
         }
     }
 
