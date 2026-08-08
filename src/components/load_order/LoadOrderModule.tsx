@@ -172,19 +172,29 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /**
-   * Auto-sorts active mods using dependency rules (libraries top, maps bottom)
+   * Auto-sorts active mods using Project Zomboid load order precedence rules:
+   * 1. Base libraries (ModManager, etc.) load FIRST (Top of list).
+   * 2. Required dependencies load BEFORE mods that require them.
+   * 3. Map mods load NEAR BOTTOM.
+   * 4. Master Patch (Z_PZModStudio_MergedPatch) ALWAYS loads LAST (Absolute bottom position) for final override!
    */
   const handleAutoSortDependencies = () => {
+    const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.includes('MergedPatch');
+
     const sorted = [...mods].sort((a, b) => {
-      // 1. Base libraries go first
+      // Rule 0: Master Patch ALWAYS goes LAST (Absolute bottom)
+      if (isMasterPatch(a.mod_id)) return 1;
+      if (isMasterPatch(b.mod_id)) return -1;
+
+      // Rule 1: Base libraries go FIRST (Top of list)
       if (a.is_library && !b.is_library) return -1;
       if (!a.is_library && b.is_library) return 1;
 
-      // 2. Map mods go last
+      // Rule 2: Map mods go NEAR BOTTOM (Before master patch)
       if (a.is_map_mod && !b.is_map_mod) return 1;
       if (!a.is_map_mod && b.is_map_mod) return -1;
 
-      // 3. Dependency order: if B requires A, A comes first
+      // Rule 3: Dependency precedence - if B requires A, A comes BEFORE B
       if (b.dependencies.includes(a.mod_id)) return -1;
       if (a.dependencies.includes(b.mod_id)) return 1;
 
@@ -192,7 +202,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     });
 
     onReorder(sorted);
-    alert('✨ Auto-Sort Complete!\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE mods that use them.\n- Map mods moved to BOTTOM.');
+    alert('✨ Auto-Sort Complete!\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE dependent mods.\n- Map mods placed NEAR BOTTOM.\n- PZ Mod Studio Master Patch placed LAST at bottom for final override!');
   };
 
   /**
