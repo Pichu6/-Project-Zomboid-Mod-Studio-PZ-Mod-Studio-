@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
+import { TauriService } from '../../services/tauri';
 import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX } from 'lucide-react';
 
 interface SandboxModuleProps {
@@ -16,34 +17,62 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onApplyFix,
   onGoToSettings,
 }) => {
-  const [testMode, setTestMode] = useState<'BACKGROUND_QUICK' | 'WINDOWED_DEEP'>('BACKGROUND_QUICK');
+  const [testMode, setTestMode] = useState<'BACKGROUND_QUICK' | 'WINDOWED_DEEP'>('WINDOWED_DEEP');
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [pid, setPid] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([
     '[PZ Mod Studio] Sandbox Test Environment Ready.',
-    '[PZ Mod Studio] Click "Start Isolated Test" to launch Project Zomboid (-cachedir, -debug) and stream console.txt in real time.',
+    '[PZ Mod Studio] Click "Start Isolated Test" to launch ProjectZomboid64.exe (-cachedir, -debug) and stream console.txt in real time.',
   ]);
 
-  const handleStartTest = () => {
-    if (!paths.is_valid) {
+  // Subscribe to real log streaming from Rust backend
+  useEffect(() => {
+    let unlistenLogs: (() => void) | undefined;
+
+    TauriService.listenSandboxLogs((payload) => {
+      setLogs((prev) => [...prev.slice(-300), payload.line]);
+    }).then((unlisten) => {
+      unlistenLogs = unlisten;
+    });
+
+    return () => {
+      if (unlistenLogs) unlistenLogs();
+    };
+  }, []);
+
+  const handleStartTest = async () => {
+    if (!paths.is_valid || !paths.pz_install_dir) {
       alert('Please configure your Project Zomboid installation directory in App Settings first.');
       return;
     }
 
     setIsRunning(true);
     setLogs([
-      '[PZ Mod Studio] Initializing Sandbox test run...',
-      `[PZ Mod Studio] Command: ProjectZomboid64.exe -cachedir "temp_sandbox" -debug (${testMode})`,
-      '[PZ Mod Studio] Watching console.txt for JVM & Lua exceptions...',
+      '[PZ Mod Studio] Launching native ProjectZomboid64.exe process...',
+      `[PZ Mod Studio] Command: ProjectZomboid64.exe -cachedir "${paths.user_zomboid_dir}\\temp_sandbox_cache" -debug (${testMode})`,
+      '[PZ Mod Studio] Waiting for console.txt output...',
     ]);
 
-    setTimeout(() => {
+    const processId = await TauriService.launchSandbox({
+      pz_install_dir: paths.pz_install_dir,
+      user_zomboid_dir: paths.user_zomboid_dir,
+      test_mode: testMode,
+    });
+
+    if (processId > 0) {
+      setPid(processId);
       setLogs((prev) => [
         ...prev,
-        '[PZ Engine] Loading base game media...',
-        '[PZ Engine] Main window reached.',
-        '[PZ Mod Studio] Monitoring active game session...',
+        `[PZ Mod Studio] Process started successfully! Process ID (PID): ${processId}`,
+        '[PZ Mod Studio] ProjectZomboid64.exe is now running on your system. Check Task Manager!',
       ]);
-    }, 2000);
+    } else {
+      setIsRunning(false);
+      setLogs((prev) => [
+        ...prev,
+        '[PZ Mod Studio ERROR] Could not spawn ProjectZomboid64.exe. Please verify ProjectZomboid64.exe exists in your install folder.',
+      ]);
+    }
   };
 
   // State 1: Invalid paths guard
@@ -122,7 +151,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             {isRunning ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                Running Test...
+                Process Running (PID: {pid || '...'})
               </>
             ) : (
               <>
@@ -145,13 +174,13 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             </span>
 
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-              Status: {isRunning ? <b className="text-emerald-400">RUNNING</b> : <b className="text-slate-500">IDLE</b>}
+              Status: {isRunning ? <b className="text-emerald-400">RUNNING (PID: {pid})</b> : <b className="text-slate-500">IDLE</b>}
             </span>
           </div>
 
           <div className="flex-1 p-4 font-mono text-xs bg-slate-950 overflow-y-auto space-y-1 select-text">
             {logs.map((log, idx) => {
-              const isErr = log.includes('JVM ERROR') || log.includes('Exception') || log.includes('Crash');
+              const isErr = log.includes('JVM ERROR') || log.includes('Exception') || log.includes('Crash') || log.includes('ERROR');
               return (
                 <div
                   key={idx}

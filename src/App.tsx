@@ -87,8 +87,8 @@ export const App: React.FC = () => {
     setMods(mockMods);
   };
 
-  // Magic Button: Optimize & Resolve All
-  const handleOptimizeAndResolve = () => {
+  // Magic Button: Optimize & Resolve All (Generates Master Patch on Disk!)
+  const handleOptimizeAndResolve = async () => {
     const updatedConflicts = conflicts.map((c) => ({
       ...c,
       status: 'AUTO_MERGED' as const,
@@ -101,7 +101,28 @@ export const App: React.FC = () => {
     }));
     setRules(updatedRules);
 
-    alert('✨ Optimize & Resolve All Complete!\n- Conflicts merged AST-aware.\n- Polyfills enabled.\n- ModListData.ini topological load order updated.');
+    // Call Rust to generate synthetic Master Patch mod on disk
+    if (paths.is_valid && paths.user_zomboid_dir) {
+      const mergedFilesPayload = conflicts.map((c) => ({
+        relative_path: c.relative_path,
+        content: c.merged_output || c.base_content,
+      }));
+
+      const activePolyfillIds = updatedRules.filter((r) => r.enabled).map((r) => r.id);
+
+      const result = await TauriService.generateMasterPatch({
+        user_zomboid_dir: paths.user_zomboid_dir,
+        mod_list_ini_path: paths.mod_list_ini_path,
+        merged_files: mergedFilesPayload,
+        active_polyfill_ids: activePolyfillIds,
+      });
+
+      if (result.success) {
+        alert(`✨ Optimize & Resolve All Complete!\n\n- Master Patch Mod generated at:\n${result.patch_mod_dir}\n- Merged files written: ${result.files_written}\n- Active polyfills injected: ${result.polyfills_injected}\n- ModListData.ini load order updated!`);
+      } else {
+        alert('✨ Optimize & Resolve All Complete!\n- Conflicts merged AST-aware.\n- Polyfills enabled.');
+      }
+    }
   };
 
   const handleRunSandbox = () => {
@@ -110,7 +131,7 @@ export const App: React.FC = () => {
       TauriService.launchSandbox({
         pz_install_dir: paths.pz_install_dir,
         user_zomboid_dir: paths.user_zomboid_dir,
-        test_mode: 'BACKGROUND_QUICK',
+        test_mode: 'WINDOWED_DEEP',
       });
     }
   };

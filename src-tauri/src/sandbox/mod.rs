@@ -40,13 +40,16 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
     config: SandboxLaunchConfig,
     stop_signal: Arc<AtomicBool>,
 ) -> Result<u32, String> {
-    let exe_path = Path::new(&config.pz_install_dir).join("ProjectZomboid64.exe");
+    let install_dir = Path::new(&config.pz_install_dir);
+    let exe_path = install_dir.join("ProjectZomboid64.exe");
+    
     if !exe_path.exists() {
-        return Err(format!("Executable not found at: {}", exe_path.display()));
+        return Err(format!("ProjectZomboid64.exe not found at: {}", exe_path.display()));
     }
 
     let temp_cache_dir = Path::new(&config.user_zomboid_dir).join("temp_sandbox_cache");
     let mut cmd = Command::new(&exe_path);
+    cmd.current_dir(install_dir); // Set working directory to game folder so DLLs load properly
     cmd.arg("-cachedir").arg(&temp_cache_dir).arg("-debug");
 
     #[cfg(target_os = "windows")]
@@ -58,7 +61,7 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
         }
     }
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to launch PZ sandbox: {}", e))?;
+    let child = cmd.spawn().map_err(|e| format!("Failed to launch ProjectZomboid64.exe: {}", e))?;
     let pid = child.id();
 
     // Spawn background thread to stream console.txt lines and detect crashes
@@ -98,7 +101,7 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
                     }
                 }
             }
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_millis(300));
         }
     });
 
@@ -114,7 +117,7 @@ fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedErrorPayl
             source_file: Some("zombie/core/Translator.java".to_string()),
             line_number: None,
             title: "Translator Format Exception (% character)".to_string(),
-            explanation: "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to colapse.".to_string(),
+            explanation: "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to collapse.".to_string(),
             recommended_action: "Apply Polyfill Rule: SANITIZE_TRANSLATOR_FORMAT".to_string(),
             polyfill_rule_id_suggestion: Some("SANITIZE_TRANSLATOR_FORMAT".to_string()),
         })
