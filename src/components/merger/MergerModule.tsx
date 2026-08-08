@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { VfsConflict } from '../../types';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers } from 'lucide-react';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, Target } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface MergerModuleProps {
@@ -11,9 +11,14 @@ interface MergerModuleProps {
 export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolveConflict }) => {
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
+  const [focusOnConflict, setFocusOnConflict] = useState<boolean>(true);
 
   const currentConflict = conflicts.find((c) => c.id === selectedConflictId) || conflicts[0];
   const [editorContent, setEditorContent] = useState<string>(currentConflict?.merged_output || '');
+
+  const startLine = currentConflict?.start_line ?? 1;
+  const conflictLine = currentConflict?.conflict_line ?? 4;
+  const totalFileLines = currentConflict?.total_file_lines ?? currentConflict?.base_content.split('\n').length ?? 1;
 
   const handleSelectConflict = (c: VfsConflict) => {
     setSelectedConflictId(c.id);
@@ -21,13 +26,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
   };
 
   /**
-   * Helper component to render code snippet with real aligned line numbers
+   * Helper component to render code snippet or full file with real aligned line numbers
    */
   const LinedCodeSnippet: React.FC<{
     content: string;
-    startLine: number;
-    conflictLine: number;
-  }> = ({ content, startLine, conflictLine }) => {
+    startLineNum: number;
+    targetConflictLine: number;
+  }> = ({ content, startLineNum, targetConflictLine }) => {
     const lines = content.split('\n');
 
     return (
@@ -35,8 +40,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
         {/* Line Numbers Gutter */}
         <div className="w-12 bg-slate-900/90 border-r border-slate-800 text-slate-500 py-2 px-1 text-right select-none font-mono text-[11px] shrink-0 space-y-0.5">
           {lines.map((_, idx) => {
-            const currentLineNum = startLine + idx;
-            const isConflict = currentLineNum === conflictLine;
+            const currentLineNum = (startLineNum || 1) + idx;
+            const isConflict = currentLineNum === targetConflictLine;
             return (
               <div
                 key={idx}
@@ -53,14 +58,14 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
         {/* Code Content Lines */}
         <div className="flex-1 py-2 overflow-x-auto">
           {lines.map((line, idx) => {
-            const currentLineNum = startLine + idx;
-            const isConflict = currentLineNum === conflictLine;
+            const currentLineNum = (startLineNum || 1) + idx;
+            const isConflict = currentLineNum === targetConflictLine;
             return (
               <div
                 key={idx}
                 className={`leading-6 h-6 px-3 whitespace-pre text-[12px] font-mono flex items-center transition ${
                   isConflict
-                    ? 'bg-amber-500/15 text-amber-200 border-l-2 border-amber-400 font-semibold'
+                    ? 'bg-amber-500/20 text-amber-200 border-l-4 border-amber-400 font-semibold shadow-inner'
                     : 'text-slate-300 hover:bg-slate-900/40'
                 }`}
               >
@@ -128,7 +133,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
                   <span className="truncate max-w-[140px]">{c.relative_path}</span>
-                  <span className="font-mono text-amber-400/90 font-semibold">L{c.conflict_line}</span>
+                  <span className="font-mono text-amber-400/90 font-semibold">L{c.conflict_line ?? 4}</span>
                 </div>
               </div>
             );
@@ -139,19 +144,33 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
       {/* Main Diff & Merger View */}
       {currentConflict ? (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Carousel of Competing Mods */}
+          {/* Top Carousel of Multi-Way Competing Mods */}
           <div className="h-72 border-b border-slate-800 bg-slate-900/80 p-3 flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-300 flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-cyan-400" />
-                <span>3-Way Sources for: <code className="text-emerald-400">{currentConflict.relative_path}</code></span>
+                <span>
+                  Multi-Way (N-Way) Sources for: <code className="text-emerald-400">{currentConflict.relative_path}</code>
+                </span>
               </span>
 
-              {/* Excerpt Metadata Banner */}
+              {/* Excerpt Metadata Banner & Focus Toggle */}
               <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-amber-300 border border-amber-500/30">
-                  <Layers className="w-3 h-3 text-amber-400" />
-                  Snippet: Lines {currentConflict.start_line} - {currentConflict.end_line} of {currentConflict.total_file_lines} (Conflict @ Line {currentConflict.conflict_line})
+                <button
+                  onClick={() => setFocusOnConflict(!focusOnConflict)}
+                  className={`flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full border transition cursor-pointer ${
+                    focusOnConflict
+                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  <Target className="w-3 h-3 text-amber-400" />
+                  <span>Focused on Conflict @ Line {conflictLine}</span>
+                </button>
+
+                <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  {currentConflict.competing_mods.length + 1} Multi-Way Sources (Vanilla Base + {currentConflict.competing_mods.length} Mods)
                 </span>
               </div>
             </div>
@@ -162,18 +181,18 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
               <div className="w-80 min-w-80 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
                 <div className="px-3 py-2 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300">Vanilla Base</span>
-                  <span className="text-[9px] font-mono text-slate-500 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
-                    L{currentConflict.start_line}-{currentConflict.end_line}
+                  <span className="text-[9px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
+                    Lines {startLine} - {startLine + currentConflict.base_content.split('\n').length - 1} ({totalFileLines} total)
                   </span>
                 </div>
                 <LinedCodeSnippet
                   content={currentConflict.base_content}
-                  startLine={currentConflict.start_line}
-                  conflictLine={currentConflict.conflict_line}
+                  startLineNum={startLine}
+                  targetConflictLine={conflictLine}
                 />
               </div>
 
-              {/* Mod Panels */}
+              {/* Multi-Way Mod Panels */}
               {currentConflict.competing_mods.map((mod, idx) => (
                 <div
                   key={idx}
@@ -184,8 +203,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
                       <span className="text-xs font-bold text-emerald-400 truncate max-w-[170px]" title={mod.mod_name}>
                         {mod.mod_name}
                       </span>
-                      <span className="text-[9px] font-mono text-slate-500 shrink-0">
-                        L{currentConflict.start_line}-{currentConflict.end_line}
+                      <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                        Mod #{idx + 1}
                       </span>
                     </div>
 
@@ -198,8 +217,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({ conflicts, onResolve
                   </div>
                   <LinedCodeSnippet
                     content={mod.content}
-                    startLine={currentConflict.start_line}
-                    conflictLine={currentConflict.conflict_line}
+                    startLineNum={startLine}
+                    targetConflictLine={conflictLine}
                   />
                 </div>
               ))}

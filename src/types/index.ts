@@ -4,7 +4,7 @@
  */
 
 // ==========================================
-// Module 1: Virtual Path Detector & 3-Way Merger
+// Module 1: Virtual Path Detector & Multi-Way (N-Way) Merger
 // ==========================================
 
 export type FileType = 'LUA' | 'SCRIPT_TXT';
@@ -23,10 +23,10 @@ export interface VfsConflict {
   id: string;
   relative_path: string; // e.g. "media/lua/client/ISUI/ISInventoryPane.lua"
   file_type: FileType;
-  start_line: number; // e.g. 350
-  end_line: number;   // e.g. 362
-  conflict_line: number; // e.g. 356
-  total_file_lines: number; // e.g. 1240
+  start_line?: number; // e.g. 1
+  end_line?: number;   // e.g. 20
+  conflict_line?: number; // e.g. 5
+  total_file_lines?: number; // e.g. 20
   base_content: string; // Vanilla file content
   competing_mods: CompetingModFile[];
   merged_output?: string;
