@@ -120,9 +120,24 @@ pub fn validate_paths(mut paths: StudioPaths) -> StudioPaths {
 }
 
 /// Scans active mods to detect relative file path collisions.
+/// Filters out conflicts that have already been resolved by Master Patch (Z_PZModStudio_MergedPatch).
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     let mut file_map: HashMap<String, Vec<CompetingModFileRaw>> = HashMap::new();
     let mut active_mods: Vec<String> = Vec::new();
+
+    // Collect relative paths already patched inside Z_PZModStudio_MergedPatch
+    let mut master_patched_files: HashSet<String> = HashSet::new();
+    let master_patch_dir = Path::new(&paths.user_zomboid_dir).join("mods").join("Z_PZModStudio_MergedPatch");
+
+    if master_patch_dir.exists() {
+        for entry in WalkDir::new(&master_patch_dir).into_iter().filter_map(|e| e.ok()) {
+            if entry.path().is_file() {
+                if let Some(rel) = extract_relative_media_path(entry.path()) {
+                    master_patched_files.insert(rel);
+                }
+            }
+        }
+    }
 
     if !paths.mod_list_ini_path.is_empty() && Path::new(&paths.mod_list_ini_path).exists() {
         if let Ok(content) = fs::read_to_string(&paths.mod_list_ini_path) {
@@ -148,6 +163,11 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                 let path_str = path.to_string_lossy();
                 if path_str.ends_with(".lua") || path_str.ends_with(".txt") {
                     if let Some(rel_path) = extract_relative_media_path(path) {
+                        // Skip if this file has already been merged into Master Patch
+                        if master_patched_files.contains(&rel_path) {
+                            continue;
+                        }
+
                         let mod_id = extract_mod_id_from_path(path).unwrap_or_else(|| "workshop_mod".to_string());
                         if active_mods.is_empty() || active_mods.contains(&mod_id) {
                             let mod_name = resolve_specific_mod_name(path, &mod_id);
@@ -174,6 +194,11 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                 let path_str = path.to_string_lossy();
                 if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) && !path_str.contains("Z_PZModStudio_MergedPatch") {
                     if let Some(rel_path) = extract_relative_media_path(path) {
+                        // Skip if this file has already been merged into Master Patch
+                        if master_patched_files.contains(&rel_path) {
+                            continue;
+                        }
+
                         let mod_id = extract_local_mod_id(path).unwrap_or_else(|| "local_mod".to_string());
                         if active_mods.is_empty() || active_mods.contains(&mod_id) {
                             let mod_name = resolve_specific_mod_name(path, &mod_id);
