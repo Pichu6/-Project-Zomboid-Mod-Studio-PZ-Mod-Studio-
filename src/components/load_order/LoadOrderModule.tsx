@@ -250,7 +250,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /**
-   * Enables ALL mods 100% without discrimination, as requested by user.
+   * Enables ALL mods 100% without discrimination.
    */
   const handleEnableAllWithoutDiscrimination = (enable: boolean) => {
     const updated = mods.map((m) => ({ ...m, enabled: enable }));
@@ -258,11 +258,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /**
-   * Auto-sorts active mods using Project Zomboid load order precedence rules:
-   * 1. Base libraries (ModManager, etc.) load FIRST (Top of list).
-   * 2. Required dependencies load BEFORE mods that require them.
+   * Auto-sorts active mods using Project Zomboid load order precedence rules + Package Grouping Cohesion:
+   * 1. Master Patch (Z_PZModStudio_MergedPatch) ALWAYS loads LAST (Absolute bottom position) for final override!
+   * 2. Base libraries (ModManager, etc.) load FIRST (Top of list).
    * 3. Map mods load NEAR BOTTOM.
-   * 4. Master Patch (Z_PZModStudio_MergedPatch) ALWAYS loads LAST (Absolute bottom position) for final override!
+   * 4. Explicit Dependency Precedence (If B requires A, A comes BEFORE B).
+   * 5. Workshop Package Cohesion Grouping: Keeps sub-mods of the same Workshop Package adjacent/together!
    */
   const handleAutoSortDependencies = () => {
     const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.includes('MergedPatch');
@@ -280,18 +281,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       if (a.is_map_mod && !b.is_map_mod) return 1;
       if (!a.is_map_mod && b.is_map_mod) return -1;
 
-      // Rule 3: Dependency precedence - if B requires A, A comes BEFORE B
+      // Rule 3: Explicit Dependency Precedence - if B requires A, A comes BEFORE B
       const normA = normalizeModId(a.mod_id);
       const normB = normalizeModId(b.mod_id);
 
       if (b.dependencies.some((dep) => normalizeModId(dep) === normA)) return -1;
       if (a.dependencies.some((dep) => normalizeModId(dep) === normB)) return 1;
 
+      // Rule 4: Package Cohesion Grouping - Keep sub-mods of the same Workshop Package adjacent!
+      if (a.workshop_id && b.workshop_id && a.workshop_id === b.workshop_id) {
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      }
+
+      if (a.workshop_id && b.workshop_id) {
+        return a.workshop_id.localeCompare(b.workshop_id);
+      }
+
       return 0;
     });
 
     onReorder(sorted);
-    alert('✨ Auto-Sort Complete!\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE dependent mods.\n- Map mods placed NEAR BOTTOM.\n- PZ Mod Studio Master Patch placed LAST at bottom for final override!');
+    alert('✨ Auto-Sort & Package Grouping Complete!\n- Sub-mods of the same Workshop Package grouped TOGETHER.\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE dependent mods.\n- Map mods placed NEAR BOTTOM.\n- PZ Mod Studio Master Patch placed LAST at bottom for final override!');
   };
 
   /**
