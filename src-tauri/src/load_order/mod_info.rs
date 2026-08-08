@@ -14,6 +14,7 @@ pub struct ModManifest {
     pub workshop_id: Option<String>,
     pub require: Vec<String>,
     pub icon_path: Option<String>,
+    pub poster_url: Option<String>,
     pub is_library: bool,
     pub is_map_mod: bool,
     pub enabled: bool,
@@ -30,8 +31,12 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     let mut name = String::new();
     let mut description = None;
     let mut require = Vec::new();
+    let mut poster_file = String::new();
+    let mut icon_file = String::new();
     let mut pack = false;
     let mut tiledef = false;
+
+    let parent_dir = path.parent();
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -51,6 +56,10 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
+        } else if trimmed.starts_with("poster=") {
+            poster_file = trimmed[7..].trim().to_string();
+        } else if trimmed.starts_with("icon=") {
+            icon_file = trimmed[5..].trim().to_string();
         } else if trimmed.starts_with("pack=") {
             pack = true;
         } else if trimmed.starts_with("tiledef=") {
@@ -62,6 +71,32 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         return None;
     }
 
+    // Resolve poster URL or icon path
+    let mut poster_url = None;
+    let mut icon_path = None;
+
+    if let Some(dir) = parent_dir {
+        let poster_p = if !poster_file.is_empty() {
+            dir.join(&poster_file)
+        } else {
+            dir.join("poster.png")
+        };
+
+        if poster_p.exists() {
+            poster_url = Some(poster_p.to_string_lossy().to_string());
+        }
+
+        let icon_p = if !icon_file.is_empty() {
+            dir.join(&icon_file)
+        } else {
+            dir.join("icon.png")
+        };
+
+        if icon_p.exists() {
+            icon_path = Some(icon_p.to_string_lossy().to_string());
+        }
+    }
+
     let is_library = require.is_empty() || id.to_lowercase().contains("lib") || id.to_lowercase().contains("manager");
     let is_map_mod = pack || tiledef || id.to_lowercase().contains("map");
 
@@ -71,7 +106,8 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         description,
         workshop_id: None,
         require,
-        icon_path: None,
+        icon_path,
+        poster_url,
         is_library,
         is_map_mod,
         enabled: false,
@@ -82,7 +118,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     let mut all_mods_map: std::collections::HashMap<String, ModManifest> = std::collections::HashMap::new();
 
-    // 1. Scan Steam Workshop mods (content/108600/) with unlimited depth
+    // 1. Scan Steam Workshop mods (content/108600/) with depth 8
     let workshop_path = Path::new(&paths.workshop_dir);
     if workshop_path.exists() {
         for entry in WalkDir::new(workshop_path).max_depth(8).into_iter().filter_map(|e| e.ok()) {
@@ -127,6 +163,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                     workshop_id: None,
                     require: Vec::new(),
                     icon_path: None,
+                    poster_url: None,
                     is_library: false,
                     is_map_mod: false,
                     enabled: true,

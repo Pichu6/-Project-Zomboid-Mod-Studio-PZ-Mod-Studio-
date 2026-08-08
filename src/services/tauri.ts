@@ -163,6 +163,8 @@ export const TauriService = {
         workshop_id: m.workshop_id,
         dependencies: m.require || [],
         enabled: m.enabled ?? false,
+        icon_path: m.icon_path,
+        poster_url: m.poster_url,
         is_library: m.is_library ?? false,
         is_map_mod: m.is_map_mod ?? false,
         load_order_index: idx + 1,

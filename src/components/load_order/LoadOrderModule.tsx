@@ -1,7 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { ListOrdered, ArrowUp, ArrowDown, Check, ShieldCheck, MapPin, Package, FolderX, Sparkles, ExternalLink, Hash, BookOpen } from 'lucide-react';
+import {
+  ListOrdered,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
+  Check,
+  ShieldCheck,
+  MapPin,
+  Package,
+  FolderX,
+  Sparkles,
+  ExternalLink,
+  Hash,
+  BookOpen,
+  Wand2,
+  CheckSquare,
+  Square,
+  ArrowDownCircle,
+  ArrowUpCircle,
+} from 'lucide-react';
 import { MOCK_MODS } from '../../data/mock_data';
 
 interface LoadOrderModuleProps {
@@ -22,10 +43,29 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onLoadMockups,
 }) => {
   const [selectedModId, setSelectedModId] = useState<string>(mods[0]?.mod_id || '');
+  const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [assigningModId, setAssigningModId] = useState<string | null>(null);
 
+  const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || mods[0];
+
+  const moveToTop = (index: number) => {
+    if (index === 0) return;
+    const updated = [...mods];
+    const [moved] = updated.splice(index, 1);
+    updated.unshift(moved);
+    onReorder(updated);
+  };
+
+  const moveToBottom = (index: number) => {
+    if (index === mods.length - 1) return;
+    const updated = [...mods];
+    const [moved] = updated.splice(index, 1);
+    updated.push(moved);
+    onReorder(updated);
+  };
 
   const moveUp = (index: number) => {
     if (index === 0) return;
@@ -56,6 +96,52 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     onReorder(updated);
     setAssigningModId(null);
     setTargetPosInput('');
+  };
+
+  const handleToggleAll = (enable: boolean) => {
+    const updated = mods.map((m) => ({ ...m, enabled: enable }));
+    onReorder(updated);
+  };
+
+  /**
+   * Auto-sorts active mods using dependency rules (libraries top, maps bottom)
+   */
+  const handleAutoSortDependencies = () => {
+    const sorted = [...mods].sort((a, b) => {
+      // 1. Base libraries go first
+      if (a.is_library && !b.is_library) return -1;
+      if (!a.is_library && b.is_library) return 1;
+
+      // 2. Map mods go last
+      if (a.is_map_mod && !b.is_map_mod) return 1;
+      if (!a.is_map_mod && b.is_map_mod) return -1;
+
+      // 3. Dependency order: if B requires A, A comes first
+      if (b.dependencies.includes(a.mod_id)) return -1;
+      if (a.dependencies.includes(b.mod_id)) return 1;
+
+      return 0;
+    });
+
+    onReorder(sorted);
+    alert('✨ Auto-Sort Complete!\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE mods that use them.\n- Map mods moved to BOTTOM.');
+  };
+
+  /**
+   * Click dependency tag in right inspector to highlight & scroll left list directly to it
+   */
+  const handleJumpToDependency = (depModId: string) => {
+    setSelectedModId(depModId);
+    setHighlightedModId(depModId);
+
+    const targetElem = modRowRefs.current[depModId];
+    if (targetElem) {
+      targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    setTimeout(() => {
+      setHighlightedModId(null);
+    }, 3000);
   };
 
   // State 1: Invalid paths guard
@@ -113,6 +199,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }
 
   const activeCount = mods.filter((m) => m.enabled).length;
+  const inactiveCount = mods.length - activeCount;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6">
@@ -124,14 +211,40 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             Mod List & Load Order Manager (<code className="text-emerald-400">ModListData.ini</code>)
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            View subscribed mods, assign position numbers, and inspect Workshop metadata details.
+            Total Subscribed: <b className="text-slate-200">{mods.length}</b> • Active: <b className="text-emerald-400">{activeCount}</b> • Inactive: <b className="text-slate-400">{inactiveCount}</b>
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 font-mono">
-            Active Mods: <b className="text-emerald-400">{activeCount}</b> / {mods.length}
-          </span>
+        <div className="flex items-center gap-3">
+          {/* Enable All / Disable All Toggle Buttons */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
+            <button
+              onClick={() => handleToggleAll(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-emerald-400 font-medium transition cursor-pointer"
+              title="Enable All Mods"
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Enable All</span>
+            </button>
+
+            <button
+              onClick={() => handleToggleAll(false)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-slate-400 font-medium transition cursor-pointer"
+              title="Disable All Mods"
+            >
+              <Square className="w-3.5 h-3.5 text-slate-500" />
+              <span>Disable All</span>
+            </button>
+          </div>
+
+          {/* Auto-Sort Button */}
+          <button
+            onClick={handleAutoSortDependencies}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
+          >
+            <Wand2 className="w-4 h-4" />
+            Auto-Sort Dependencies
+          </button>
         </div>
       </div>
 
@@ -143,22 +256,37 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800">
             <div className="col-span-1 text-center">Nº</div>
             <div className="col-span-1 text-center">Active</div>
-            <div className="col-span-6">Mod Name & ID</div>
-            <div className="col-span-4 text-right">Actions</div>
+            <div className="col-span-5">Mod Name & ID</div>
+            <div className="col-span-5 text-right">Actions</div>
+          </div>
+
+          {/* Load Priority Indicator Top Banner */}
+          <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
+            <span className="flex items-center gap-1.5 font-bold">
+              <ArrowUpCircle className="w-3.5 h-3.5" />
+              LOAD FIRST (Lowest Overriding Priority / Base Libraries)
+            </span>
+            <span className="text-[10px] text-emerald-500/80">Position #1</span>
           </div>
 
           {/* Table Rows */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-2 space-y-1">
             {mods.map((mod, idx) => {
               const isSelected = mod.mod_id === selectedModId;
+              const isHighlighted = mod.mod_id === highlightedModId;
               const isAssigningThis = assigningModId === mod.mod_id;
 
               return (
                 <div
                   key={mod.mod_id}
+                  ref={(el) => {
+                    modRowRefs.current[mod.mod_id] = el;
+                  }}
                   onClick={() => setSelectedModId(mod.mod_id)}
-                  className={`grid grid-cols-12 gap-2 px-3 py-2.5 items-center rounded-lg text-xs cursor-pointer transition ${
-                    isSelected
+                  className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
+                    isHighlighted
+                      ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
+                      : isSelected
                       ? 'bg-slate-800/90 border border-emerald-500/50 shadow'
                       : 'bg-slate-950/60 hover:bg-slate-900/90 border border-slate-800/50'
                   }`}
@@ -186,7 +314,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   </div>
 
                   {/* Mod Title & Type Icon */}
-                  <div className="col-span-6 flex items-center gap-2.5 overflow-hidden">
+                  <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
                     <div className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
                       {mod.is_map_mod ? (
                         <MapPin className="w-3.5 h-3.5 text-amber-400" />
@@ -203,8 +331,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     </div>
                   </div>
 
-                  {/* Quick Actions: Assign Position & Up/Down */}
-                  <div className="col-span-4 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  {/* Action Buttons: Top, Up, Pos #, Down, Bottom */}
+                  <div className="col-span-5 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                     {isAssigningThis ? (
                       <div className="flex items-center gap-1 bg-slate-950 p-1 rounded border border-emerald-500">
                         <input
@@ -233,7 +361,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           setAssigningModId(mod.mod_id);
                           setTargetPosInput(String(idx + 1));
                         }}
-                        className="px-2 py-1 text-[10px] font-mono font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer flex items-center gap-1"
+                        className="px-1.5 py-1 text-[10px] font-mono font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer flex items-center gap-0.5"
                         title="Assign Position #"
                       >
                         <Hash className="w-3 h-3 text-emerald-400" />
@@ -241,6 +369,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </button>
                     )}
 
+                    <button
+                      onClick={() => moveToTop(idx)}
+                      disabled={idx === 0}
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
+                      title="Move to Top (🔝)"
+                    >
+                      <ChevronsUp className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
                     <button
                       onClick={() => moveUp(idx)}
                       disabled={idx === 0}
@@ -257,10 +393,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
                     </button>
+                    <button
+                      onClick={() => moveToBottom(idx)}
+                      disabled={idx === mods.length - 1}
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
+                      title="Move to Bottom (🔻)"
+                    >
+                      <ChevronsDown className="w-3.5 h-3.5 text-amber-400" />
+                    </button>
                   </div>
                 </div>
               );
             })}
+          </div>
+
+          {/* Load Priority Indicator Bottom Banner */}
+          <div className="bg-amber-950/40 border-t border-amber-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-amber-400">
+            <span className="flex items-center gap-1.5 font-bold">
+              <ArrowDownCircle className="w-3.5 h-3.5" />
+              LOAD LAST (Highest Overriding Priority / Master Patches & Maps)
+            </span>
+            <span className="text-[10px] text-amber-500/80">Position #{mods.length}</span>
           </div>
         </div>
 
@@ -292,10 +445,23 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
               </div>
 
-              {/* Poster / Workshop Thumbnail Placeholder */}
-              <div className="h-40 bg-slate-950 rounded-lg border border-slate-800 flex flex-col items-center justify-center text-slate-500 space-y-2 relative overflow-hidden">
-                <BookOpen className="w-10 h-10 text-slate-700" />
-                <span className="text-xs font-mono text-slate-500">Workshop Preview Poster</span>
+              {/* Poster / Workshop Thumbnail Display */}
+              <div className="h-44 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
+                {selectedMod.poster_url ? (
+                  <img
+                    src={convertFileSrc(selectedMod.poster_url)}
+                    alt={selectedMod.name}
+                    className="w-full h-full object-cover rounded-lg"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-slate-600 space-y-2 p-4 text-center">
+                    <BookOpen className="w-8 h-8 text-slate-700" />
+                    <span className="text-xs font-mono text-slate-500">No Workshop Poster Available</span>
+                  </div>
+                )}
               </div>
 
               {/* Mod Description */}
@@ -303,26 +469,36 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   Description
                 </label>
-                <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto">
+                <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto select-text">
                   {selectedMod.description || 'No description provided in mod.info manifest.'}
                 </div>
               </div>
 
-              {/* Dependencies */}
+              {/* Clickable Dependencies (Highlights and Scrolls to Dependency Mod) */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   Required Dependencies (<code className="text-emerald-400">require=</code>)
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedMod.dependencies && selectedMod.dependencies.length > 0 ? (
-                    selectedMod.dependencies.map((req, rIdx) => (
-                      <span
-                        key={rIdx}
-                        className="px-2.5 py-1 text-xs font-mono rounded-md bg-slate-950 border border-slate-800 text-cyan-400 font-medium"
-                      >
-                        {req}
-                      </span>
-                    ))
+                    selectedMod.dependencies.map((req, rIdx) => {
+                      const isInstalled = mods.some((m) => m.mod_id === req);
+                      return (
+                        <button
+                          key={rIdx}
+                          onClick={() => handleJumpToDependency(req)}
+                          className={`px-2.5 py-1 text-xs font-mono rounded-md border font-medium transition cursor-pointer flex items-center gap-1 ${
+                            isInstalled
+                              ? 'bg-slate-950 hover:bg-slate-800 border-cyan-800 text-cyan-300 hover:border-cyan-500'
+                              : 'bg-red-950/40 border-red-800 text-red-400'
+                          }`}
+                          title={isInstalled ? 'Click to highlight in Mod List' : 'Missing dependency!'}
+                        >
+                          <span>{req}</span>
+                          {isInstalled && <span className="text-[9px] text-cyan-400 font-bold">↗</span>}
+                        </button>
+                      );
+                    })
                   ) : (
                     <span className="text-xs text-slate-500 italic">No dependencies required</span>
                   )}
