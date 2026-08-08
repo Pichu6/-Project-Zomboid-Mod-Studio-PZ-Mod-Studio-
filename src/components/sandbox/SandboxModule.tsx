@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX, Activity, Filter, Info } from 'lucide-react';
+import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX, Activity, Filter, Info, Trash2 } from 'lucide-react';
 
 interface SandboxModuleProps {
   paths: StudioPathsUI;
@@ -12,19 +12,24 @@ interface SandboxModuleProps {
 }
 
 /**
- * Robustly detects translator and translation missing log spam lines in Project Zomboid logs.
+ * Aggressively detects translator and missing key log spam lines in Project Zomboid logs.
  */
 const isTranslationSpamLine = (line: string): boolean => {
   const lower = line.toLowerCase();
+  // Filter out any line related to translation, translator, missing text/keys, or IGUI
   return (
     lower.includes('translator') ||
     lower.includes('translation') ||
-    lower.includes('missing "') ||
-    lower.includes("missing '") ||
-    lower.includes('missing:') ||
-    lower.includes('missing arguments') ||
+    lower.includes('missing') ||
     lower.includes('language') ||
-    (lower.includes('log') && lower.includes('missing'))
+    lower.includes('igui_') ||
+    lower.includes('itemname_') ||
+    lower.includes('contextmenu_') ||
+    lower.includes('sandbox_') ||
+    lower.includes('tooltip_') ||
+    lower.includes('recipe_') ||
+    lower.includes('ui_modexporter') ||
+    lower.includes('text_')
   );
 };
 
@@ -55,7 +60,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
     TauriService.listenSandboxLogs((payload) => {
       const line = payload.line;
-      setLogs((prev) => [...prev.slice(-600), line]);
+      setLogs((prev) => [...prev.slice(-800), line]);
     }).then((unlisten) => {
       unlistenLogs = unlisten;
     });
@@ -100,6 +105,12 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     }
   };
 
+  const handleClearLogs = () => {
+    setLogs([
+      '[PZ Monitor Center] Terminal logs cleared.',
+    ]);
+  };
+
   // State 1: Invalid paths guard
   if (!paths.is_valid) {
     return (
@@ -140,6 +151,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Clear Logs Button */}
+          <button
+            onClick={handleClearLogs}
+            className="px-3 py-2 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg transition cursor-pointer flex items-center gap-1.5"
+            title="Clear terminal output"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear Logs</span>
+          </button>
+
           {/* Toggle Filter Button */}
           <button
             onClick={() => setFilterSpam(!filterSpam)}
