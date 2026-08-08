@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard } from './types';
-import { MOCK_MODS } from './data/mock_data';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -15,7 +14,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MERGER');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
-  const [mods, setMods] = useState<ModInfo[]>(MOCK_MODS);
+  const [mods, setMods] = useState<ModInfo[]>([]);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
 
   // Studio Directory Paths State (Persistent Profile)
@@ -36,6 +35,23 @@ export const App: React.FC = () => {
       if (savedProfile.is_valid) {
         const scannedConflicts = await TauriService.scanConflicts(savedProfile);
         setConflicts(scannedConflicts);
+
+        // Load real active mods from ModListData.ini if path exists
+        if (savedProfile.mod_list_ini_path) {
+          const iniData = await TauriService.readModListIni(savedProfile.mod_list_ini_path);
+          if (iniData.active_mods.length > 0) {
+            const realMods: ModInfo[] = iniData.active_mods.map((id, idx) => ({
+              mod_id: id,
+              name: id,
+              dependencies: [],
+              enabled: true,
+              load_order_index: idx + 1,
+              is_library: id.toLowerCase().includes('lib') || id.toLowerCase().includes('manager'),
+              is_map_mod: id.toLowerCase().includes('map'),
+            }));
+            setMods(realMods);
+          }
+        }
       }
     };
     initPaths();
@@ -65,6 +81,10 @@ export const App: React.FC = () => {
 
   const handleLoadMockups = (mockups: VfsConflict[]) => {
     setConflicts(mockups);
+  };
+
+  const handleLoadModMockups = (mockMods: ModInfo[]) => {
+    setMods(mockMods);
   };
 
   // Magic Button: Optimize & Resolve All
@@ -137,6 +157,22 @@ export const App: React.FC = () => {
     if (saved.is_valid) {
       const scannedConflicts = await TauriService.scanConflicts(saved);
       setConflicts(scannedConflicts);
+
+      if (saved.mod_list_ini_path) {
+        const iniData = await TauriService.readModListIni(saved.mod_list_ini_path);
+        if (iniData.active_mods.length > 0) {
+          const realMods: ModInfo[] = iniData.active_mods.map((id, idx) => ({
+            mod_id: id,
+            name: id,
+            dependencies: [],
+            enabled: true,
+            load_order_index: idx + 1,
+            is_library: id.toLowerCase().includes('lib') || id.toLowerCase().includes('manager'),
+            is_map_mod: id.toLowerCase().includes('map'),
+          }));
+          setMods(realMods);
+        }
+      }
     }
   };
 
@@ -188,7 +224,14 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'LOAD_ORDER' && (
-            <LoadOrderModule mods={mods} onReorder={handleReorderMods} onToggleMod={handleToggleMod} />
+            <LoadOrderModule
+              paths={paths}
+              mods={mods}
+              onReorder={handleReorderMods}
+              onToggleMod={handleToggleMod}
+              onGoToSettings={() => setActiveTab('SETTINGS')}
+              onLoadMockups={handleLoadModMockups}
+            />
           )}
 
           {activeTab === 'SANDBOX' && (
