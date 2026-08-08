@@ -8,6 +8,7 @@ import { MergerModule } from './components/merger/MergerModule';
 import { PolyfillsModule } from './components/polyfills/PolyfillsModule';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
+import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MERGER');
@@ -16,16 +17,23 @@ export const App: React.FC = () => {
   const [mods, setMods] = useState<ModInfo[]>(MOCK_MODS);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>(MOCK_ERROR_CARDS);
 
+  // Studio Directory Paths State (Supports auto-detect & manual entry)
+  const [paths, setPaths] = useState<StudioPathsUI>({
+    pz_install_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid',
+    workshop_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600',
+    user_zomboid_dir: 'C:\\Users\\User\\Zomboid',
+    mod_list_ini_path: 'C:\\Users\\User\\Zomboid\\Lua\\ModManager\\ModListData.ini',
+    is_valid: true,
+  });
+
   // Magic Button: Optimize & Resolve All
   const handleOptimizeAndResolve = () => {
-    // 1. Auto-resolve pending conflicts
     const updatedConflicts = conflicts.map((c) => ({
       ...c,
       status: 'AUTO_MERGED' as const,
     }));
     setConflicts(updatedConflicts);
 
-    // 2. Enable all recommended Polyfill rules
     const updatedRules = rules.map((r) => ({
       ...r,
       enabled: true,
@@ -73,6 +81,21 @@ export const App: React.FC = () => {
     setActiveTab('POLYFILLS');
   };
 
+  const handleSavePaths = (updatedPaths: StudioPathsUI) => {
+    setPaths(updatedPaths);
+  };
+
+  const handleAutoDetect = () => {
+    // Standard default paths
+    setPaths({
+      pz_install_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid',
+      workshop_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600',
+      user_zomboid_dir: 'C:\\Users\\User\\Zomboid',
+      mod_list_ini_path: 'C:\\Users\\User\\Zomboid\\Lua\\ModManager\\ModListData.ini',
+      is_valid: true,
+    });
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Studio Header */}
@@ -112,16 +135,11 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'SETTINGS' && (
-            <div className="flex-1 flex items-center justify-center p-6 text-slate-400 text-sm">
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl max-w-md space-y-3">
-                <h3 className="text-base font-bold text-slate-200">Application Settings</h3>
-                <div className="text-xs space-y-2 font-mono">
-                  <div>Game Directory: <span className="text-emerald-400">C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid</span></div>
-                  <div>ModListData.ini: <span className="text-cyan-400">C:/Users/User/Zomboid/Lua/ModManager/ModListData.ini</span></div>
-                  <div>Steam Workshop: <span className="text-purple-400">content/108600</span></div>
-                </div>
-              </div>
-            </div>
+            <SettingsModule
+              paths={paths}
+              onSavePaths={handleSavePaths}
+              onAutoDetect={handleAutoDetect}
+            />
           )}
         </main>
       </div>
