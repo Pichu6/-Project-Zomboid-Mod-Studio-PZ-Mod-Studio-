@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Info,
   Layers,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -99,6 +100,47 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     };
   }, [mods]);
 
+  /**
+   * Calculates mutual exclusivity conflicts between active mods.
+   * If two sub-mods belong to the same Workshop package and one is a variant of the other (e.g. Neat Building vs Neat Building UI Only),
+   * they are marked as mutually exclusive conflicts.
+   */
+  const activeConflictsMap = useMemo(() => {
+    const conflictMap: Record<string, { conflictingModId: string; conflictingModName: string; reason: string }[]> = {};
+
+    const activeMods = mods.filter((m) => m.enabled);
+
+    for (let i = 0; i < activeMods.length; i++) {
+      for (let j = i + 1; j < activeMods.length; j++) {
+        const modA = activeMods[i];
+        const modB = activeMods[j];
+
+        // Check if both belong to the same multi-mod Workshop package
+        if (modA.workshop_id && modB.workshop_id && modA.workshop_id === modB.workshop_id) {
+          const nameA = modA.name.toLowerCase();
+          const nameB = modB.name.toLowerCase();
+          const idA = modA.mod_id.toLowerCase();
+          const idB = modB.mod_id.toLowerCase();
+
+          const isVariantA = nameA.includes('ui only') || nameA.includes('lite') || idA.includes('uionly') || idA.includes('lite');
+          const isVariantB = nameB.includes('ui only') || nameB.includes('lite') || idB.includes('uionly') || idB.includes('lite');
+
+          if (isVariantA || isVariantB) {
+            const reason = `Mutually exclusive variants within Workshop package #${modA.workshop_id}`;
+
+            if (!conflictMap[modA.mod_id]) conflictMap[modA.mod_id] = [];
+            conflictMap[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name, reason });
+
+            if (!conflictMap[modB.mod_id]) conflictMap[modB.mod_id] = [];
+            conflictMap[modB.mod_id].push({ conflictingModId: modA.mod_id, conflictingModName: modA.name, reason });
+          }
+        }
+      }
+    }
+
+    return conflictMap;
+  }, [mods]);
+
   // Realtime search filtering by Mod Name, Mod ID, or Workshop ID
   const filteredMods = mods.filter((m) => {
     if (!searchQuery.trim()) return true;
@@ -164,46 +206,47 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /**
-   * Smart Enable All (Conflict Guard):
-   * When enabling all mods, detects mutually exclusive sub-mod packages (e.g. Authentic Z Lite vs Full)
-   * and enables only the primary/main variant, keeping mutually exclusive sub-mods disabled!
+   * Toggles mod status. If enabling a mod that has a mutually exclusive sibling active,
+   * automatically deactivates the conflicting sibling to prevent game crashes!
    */
-  const handleSmartEnableAll = (enable: boolean) => {
-    if (!enable) {
-      // Disable All
-      const updated = mods.map((m) => ({ ...m, enabled: false }));
-      onReorder(updated);
-      return;
-    }
+  const handleToggleSingleMod = (modId: string) => {
+    const targetMod = mods.find((m) => m.mod_id === modId);
+    if (!targetMod) return;
 
-    // Smart Enable All: filter mutually exclusive sub-mods within same Workshop package
-    const seenPackages: Record<string, boolean> = {};
-    let skippedExclusivesCount = 0;
+    const targetWillBeEnabled = !targetMod.enabled;
 
-    const updated = mods.map((m) => {
-      // Check if sub-mod has mutually exclusive keywords (e.g. 'lite', 'disable', 'compat', 'b41')
-      const isExclusiveVariant =
-        m.mod_id.toLowerCase().includes('lite') ||
-        m.name.toLowerCase().includes('lite version') ||
-        m.name.toLowerCase().includes('compat') ||
-        m.mod_id.toLowerCase().includes('compat');
-
-      if (m.workshop_id && multiModPackageMap[m.workshop_id]) {
-        if (seenPackages[m.workshop_id] && isExclusiveVariant) {
-          // Keep secondary exclusive variant disabled to prevent game crashes!
-          skippedExclusivesCount++;
-          return { ...m, enabled: false };
+    if (targetWillBeEnabled && targetMod.workshop_id) {
+      // Find active conflicting sub-mods in the same package
+      const updated = mods.map((m) => {
+        if (m.mod_id === modId) {
+          return { ...m, enabled: true };
         }
-        seenPackages[m.workshop_id] = true;
-      }
 
-      return { ...m, enabled: true };
-    });
+        if (m.enabled && m.workshop_id === targetMod.workshop_id && m.mod_id !== modId) {
+          const nameA = targetMod.name.toLowerCase();
+          const nameB = m.name.toLowerCase();
+          const isVariantA = nameA.includes('ui only') || nameA.includes('lite');
+          const isVariantB = nameB.includes('ui only') || nameB.includes('lite');
 
-    onReorder(updated);
-    if (skippedExclusivesCount > 0) {
-      alert(`✨ Smart Enable All Applied!\n\n- Enabled compatible mods.\n- Kept ${skippedExclusivesCount} mutually exclusive sub-mod variants (e.g. Lite/Compat options) disabled to prevent game crashes!`);
+          if (isVariantA || isVariantB) {
+            // Auto-deactivate conflicting sibling
+            return { ...m, enabled: false };
+          }
+        }
+        return m;
+      });
+      onReorder(updated);
+    } else {
+      onToggleMod(modId);
     }
+  };
+
+  /**
+   * Enables ALL mods 100% without discrimination, as requested by user.
+   */
+  const handleEnableAllWithoutDiscrimination = (enable: boolean) => {
+    const updated = mods.map((m) => ({ ...m, enabled: enable }));
+    onReorder(updated);
   };
 
   /**
@@ -296,7 +339,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   // State 2: Valid paths, but 0 active mods in ModListData.ini
   if (mods.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200 font-sans">
         <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl font-sans">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner">
             <ShieldCheck className="w-8 h-8" />
@@ -323,6 +366,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }
 
   const activeCount = mods.filter((m) => m.enabled).length;
+  const activeConflictsCount = Object.keys(activeConflictsMap).length;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
@@ -339,6 +383,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <span>Total Sub-mods: <b className="text-slate-200">{mods.length}</b></span>
             <span>•</span>
             <span>Active: <b className="text-emerald-400">{activeCount}</b></span>
+            {activeConflictsCount > 0 && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1 text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  {activeConflictsCount} Exclusivity Warnings
+                </span>
+              </>
+            )}
             <span
               className="ml-1 cursor-pointer text-slate-500 hover:text-slate-300"
               title="Steam Workshop counts packages/items (58). A single Workshop item can contain multiple sub-mods with their own mod.info manifest (71 sub-mods total). Multi-mod packages are highlighted with color borders."
@@ -380,19 +433,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
-          {/* Smart Enable All / Disable All Toggle Buttons */}
+          {/* Enable All / Disable All Toggle Buttons */}
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
             <button
-              onClick={() => handleSmartEnableAll(true)}
+              onClick={() => handleEnableAllWithoutDiscrimination(true)}
               className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-emerald-400 font-medium transition cursor-pointer"
-              title="Smart Enable All (Keeps mutually exclusive sub-mod variants disabled)"
+              title="Enable ALL Mods 100% Without Discrimination"
             >
               <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Smart Enable All</span>
+              <span>Enable All</span>
             </button>
 
             <button
-              onClick={() => handleSmartEnableAll(false)}
+              onClick={() => handleEnableAllWithoutDiscrimination(false)}
               className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-slate-400 font-medium transition cursor-pointer"
               title="Disable All Mods"
             >
@@ -449,6 +502,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const isMultiPackage = mod.workshop_id ? multiModPackageMap[mod.workshop_id] : false;
                 const packageColor = mod.workshop_id ? workshopColorMap[mod.workshop_id] : null;
 
+                const conflictsForThisMod = activeConflictsMap[mod.mod_id];
+                const hasExclusivityConflict = conflictsForThisMod && conflictsForThisMod.length > 0;
+
                 return (
                   <div
                     key={mod.mod_id}
@@ -457,7 +513,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
-                      isMultiPackage && packageColor ? `border-l-4 ${packageColor.border}` : 'border-l border-l-transparent'
+                      hasExclusivityConflict
+                        ? 'border-2 border-amber-500/80 bg-amber-950/20 shadow-md shadow-amber-950/30'
+                        : isMultiPackage && packageColor
+                        ? `border-l-4 ${packageColor.border}`
+                        : 'border-l border-l-transparent'
                     } ${
                       isHighlighted
                         ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
@@ -471,12 +531,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       #{originalIndex + 1}
                     </div>
 
-                    {/* Enable/Disable Toggle */}
+                    {/* Enable/Disable Toggle (Smart Mutual Exclusivity Switch) */}
                     <div className="col-span-1 flex justify-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onToggleMod(mod.mod_id);
+                          handleToggleSingleMod(mod.mod_id);
                         }}
                         className={`w-5 h-5 rounded flex items-center justify-center transition cursor-pointer ${
                           mod.enabled
@@ -488,7 +548,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </button>
                     </div>
 
-                    {/* Mod Title, Type Icon & Package Badge */}
+                    {/* Mod Title, Type Icon, Package Badge & Exclusivity Warning Badge */}
                     <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
                       <div className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
                         {mod.is_map_mod ? (
@@ -509,6 +569,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                               title={`Multi-mod Workshop package #${mod.workshop_id}`}
                             >
                               Pkg #{mod.workshop_id}
+                            </span>
+                          )}
+
+                          {/* Mutually Exclusive Incompatibility Warning Tooltip Badge */}
+                          {hasExclusivityConflict && (
+                            <span
+                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 cursor-help"
+                              title={`⚠️ INCOMPATIBILITY WARNING!\nMutually exclusive sub-mod active alongside: [${conflictsForThisMod[0].conflictingModName}]. Activating both may cause script crashes. Clicking one will auto-switch to prevent conflicts.`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-400" />
+                              <span>INCOMPATIBLE</span>
                             </span>
                           )}
                         </div>
@@ -636,6 +707,26 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <h3 className="text-base font-bold text-slate-100">{selectedMod.name}</h3>
                 <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
               </div>
+
+              {/* Active Incompatibility Warning Card in Inspector */}
+              {activeConflictsMap[selectedMod.mod_id] && activeConflictsMap[selectedMod.mod_id].length > 0 && (
+                <div className="p-3 bg-amber-950/60 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center gap-2 font-bold text-amber-300">
+                    <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Incompatibility Warning Detected</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    This mod is currently active alongside mutually exclusive sub-mod:{' '}
+                    <b className="text-amber-300">[{activeConflictsMap[selectedMod.mod_id][0].conflictingModName}]</b>.
+                  </p>
+                  <button
+                    onClick={() => handleToggleSingleMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    <span>Disable Conflicting Sibling Mod</span>
+                  </button>
+                </div>
+              )}
 
               {/* Poster / Workshop Thumbnail Display */}
               <div className="h-44 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
