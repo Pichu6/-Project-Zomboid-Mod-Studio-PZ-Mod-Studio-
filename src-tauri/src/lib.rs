@@ -74,6 +74,17 @@ fn generate_master_patch_cmd(req: MasterPatchRequest) -> Result<MasterPatchResul
     generate_master_patch(req)
 }
 
+#[tauri::command]
+fn pick_folder_cmd(default_path: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new();
+    if let Some(ref path) = default_path {
+        if !path.is_empty() {
+            dialog = dialog.set_directory(path);
+        }
+    }
+    dialog.pick_folder().map(|p| p.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -89,7 +100,8 @@ pub fn run() {
             write_mod_list_ini_cmd,
             sort_mod_dependencies_cmd,
             launch_sandbox_cmd,
-            generate_master_patch_cmd
+            generate_master_patch_cmd,
+            pick_folder_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

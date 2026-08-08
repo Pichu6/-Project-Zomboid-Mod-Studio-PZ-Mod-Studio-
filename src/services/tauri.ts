@@ -73,6 +73,18 @@ export const TauriService = {
   },
 
   /**
+   * Opens native Windows Explorer folder picker dialog
+   */
+  pickFolder: async (defaultPath?: string): Promise<string | null> => {
+    try {
+      return await invoke<string | null>('pick_folder_cmd', { defaultPath });
+    } catch (err) {
+      console.error('Folder picker error:', err);
+      return null;
+    }
+  },
+
+  /**
    * Scans Virtual File System for real conflicts between active mods
    */
   scanConflicts: async (paths: StudioPathsUI): Promise<VfsConflict[]> => {
