@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
+import { TauriService } from '../../services/tauri';
 import {
   ListOrdered,
   ArrowUp,
@@ -144,14 +145,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   /**
    * Click dependency tag in right inspector to highlight & scroll left list directly to it.
-   * If missing, do not trigger fallback selecting mods[0]!
+   * If missing, open Steam Workshop in default desktop browser via Rust Tauri IPC!
    */
   const handleJumpToDependency = (depModId: string) => {
     const targetMod = mods.find((m) => m.mod_id === depModId);
 
     if (!targetMod) {
-      // Missing dependency - search Steam Workshop page instead of fallback selecting mods[0]
-      window.open(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(depModId)}`, '_blank');
+      // Missing dependency - open Steam Workshop search in default Windows browser
+      const searchUrl = `https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(depModId)}`;
+      TauriService.openExternalUrl(searchUrl);
       return;
     }
 
@@ -481,15 +483,13 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   </span>
 
                   {selectedMod.workshop_id && (
-                    <a
-                      href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMod.workshop_id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[10px] text-cyan-400 hover:underline font-mono"
+                    <button
+                      onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMod.workshop_id}`)}
+                      className="flex items-center gap-1 text-[10px] text-cyan-400 hover:underline font-mono bg-transparent border-0 cursor-pointer"
                     >
                       <span>Steam Workshop</span>
                       <ExternalLink className="w-3 h-3" />
-                    </a>
+                    </button>
                   )}
                 </div>
 
@@ -526,7 +526,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </div>
               </div>
 
-              {/* Clickable Dependencies (Highlights installed dependencies or opens Workshop for missing ones) */}
+              {/* Clickable Dependencies (Highlights installed dependencies or opens Workshop via Tauri IPC) */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   Required Dependencies (<code className="text-emerald-400">require=</code>)

@@ -45,6 +45,17 @@ const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
  */
 export const TauriService = {
   /**
+   * Opens any external web URL in the user's default system browser
+   */
+  openExternalUrl: async (url: string): Promise<void> => {
+    try {
+      await invoke('open_external_url_cmd', { url });
+    } catch (err) {
+      console.error('Failed to open external URL:', err);
+    }
+  },
+
+  /**
    * Loads saved directory paths profile from LocalStorage or Rust auto-detection
    */
   loadSavedPathsProfile: async (): Promise<StudioPathsUI> => {

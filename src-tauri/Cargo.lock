@@ -2791,6 +2791,7 @@ version = "0.1.0"
 dependencies = [
  "dirs-next",
  "full_moon",
+ "open",
  "rfd",
  "serde",
  "serde_json",
