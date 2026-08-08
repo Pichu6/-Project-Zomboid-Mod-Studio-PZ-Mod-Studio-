@@ -23,6 +23,10 @@ export interface VfsConflict {
   id: string;
   relative_path: string; // e.g. "media/lua/client/ISUI/ISInventoryPane.lua"
   file_type: FileType;
+  start_line: number; // e.g. 350
+  end_line: number;   // e.g. 362
+  conflict_line: number; // e.g. 356
+  total_file_lines: number; // e.g. 1240
   base_content: string; // Vanilla file content
   competing_mods: CompetingModFile[];
   merged_output?: string;

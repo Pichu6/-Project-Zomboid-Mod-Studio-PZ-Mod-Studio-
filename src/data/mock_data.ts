@@ -6,6 +6,10 @@ export const MOCK_CONFLICTS: VfsConflict[] = [
     relative_path: 'media/lua/client/ISUI/ISInventoryPane.lua',
     file_type: 'LUA',
     status: 'MANUAL_CONFLICT',
+    start_line: 350,
+    end_line: 356,
+    conflict_line: 354,
+    total_file_lines: 1420,
     base_content: `-- Vanilla ISInventoryPane.lua
 function ISInventoryPane:renderDetails(item)
     local y = 10
@@ -50,6 +54,10 @@ end`,
     relative_path: 'media/scripts/items_weapons.txt',
     file_type: 'SCRIPT_TXT',
     status: 'AUTO_MERGED',
+    start_line: 112,
+    end_line: 119,
+    conflict_line: 115,
+    total_file_lines: 850,
     base_content: `module Base {
     item BaseballBat {
         Weight = 2.0,
@@ -87,7 +95,7 @@ end`,
         Weight = 1.8,
         Type = Weapon,
         MinDamage = 1.0,
- maxDamage = 1.6,
+        MaxDamage = 1.6,
         Tags = HeavyWeapon;Wooden,
     }
 }`,
