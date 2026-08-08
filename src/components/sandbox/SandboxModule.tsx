@@ -12,25 +12,19 @@ interface SandboxModuleProps {
 }
 
 /**
- * Aggressively detects translator and translation missing log spam lines in Project Zomboid logs.
+ * Robustly detects translator and translation missing log spam lines in Project Zomboid logs.
  */
 const isTranslationSpamLine = (line: string): boolean => {
   const lower = line.toLowerCase();
   return (
-    lower.includes('translation:') ||
     lower.includes('translator') ||
-    lower.includes('missing arguments for') ||
+    lower.includes('translation') ||
     lower.includes('missing "') ||
     lower.includes("missing '") ||
-    lower.includes('missing translation') ||
+    lower.includes('missing:') ||
+    lower.includes('missing arguments') ||
     lower.includes('language') ||
-    lower.includes('gui_') ||
-    lower.includes('itemname_') ||
-    lower.includes('contextmenu_') ||
-    lower.includes('sandbox_') ||
-    lower.includes('tooltip_') ||
-    lower.includes('recipe_') ||
-    (lower.includes('log  : general') && lower.includes('missing'))
+    (lower.includes('log') && lower.includes('missing'))
   );
 };
 
