@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
@@ -10,6 +10,29 @@ interface SandboxModuleProps {
   onApplyFix: (polyfillRuleId: string) => void;
   onGoToSettings: () => void;
 }
+
+/**
+ * Aggressively detects translator and translation missing log spam lines in Project Zomboid logs.
+ */
+const isTranslationSpamLine = (line: string): boolean => {
+  const lower = line.toLowerCase();
+  return (
+    lower.includes('translation:') ||
+    lower.includes('translator') ||
+    lower.includes('missing arguments for') ||
+    lower.includes('missing "') ||
+    lower.includes("missing '") ||
+    lower.includes('missing translation') ||
+    lower.includes('language') ||
+    lower.includes('gui_') ||
+    lower.includes('itemname_') ||
+    lower.includes('contextmenu_') ||
+    lower.includes('sandbox_') ||
+    lower.includes('tooltip_') ||
+    lower.includes('recipe_') ||
+    (lower.includes('log  : general') && lower.includes('missing'))
+  );
+};
 
 export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
@@ -26,21 +49,11 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-cachedir, -debug) and capture crashes.',
   ]);
 
-  // Aggressively detects translation warning spam lines in Project Zomboid logs
-  const isTranslationSpamLine = (line: string): boolean => {
-    const lower = line.toLowerCase();
-    return (
-      lower.includes('translation:') ||
-      lower.includes('missing arguments for') ||
-      lower.includes('missing "igui_') ||
-      lower.includes('missing "itemname_') ||
-      lower.includes('missing "contextmenu_') ||
-      lower.includes('missing "sandbox_') ||
-      lower.includes('missing "tooltip_') ||
-      lower.includes('missing "recipe_') ||
-      (lower.includes('log  : general') && lower.includes('missing'))
-    );
-  };
+  // Dynamically filter displayed logs in real time based on filterSpam toggle state
+  const displayedLogs = useMemo(() => {
+    if (!filterSpam) return logs;
+    return logs.filter((line) => !isTranslationSpamLine(line));
+  }, [logs, filterSpam]);
 
   // Subscribe to real log streaming from Rust backend
   useEffect(() => {
@@ -48,10 +61,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
     TauriService.listenSandboxLogs((payload) => {
       const line = payload.line;
-      if (filterSpam && isTranslationSpamLine(line)) {
-        return;
-      }
-      setLogs((prev) => [...prev.slice(-400), line]);
+      setLogs((prev) => [...prev.slice(-600), line]);
     }).then((unlisten) => {
       unlistenLogs = unlisten;
     });
@@ -59,7 +69,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     return () => {
       if (unlistenLogs) unlistenLogs();
     };
-  }, [filterSpam]);
+  }, []);
 
   const handleStartTest = async () => {
     if (!paths.is_valid || !paths.pz_install_dir) {
@@ -84,7 +94,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       setPid(processId);
       setLogs((prev) => [
         ...prev,
-        `[PZ Monitor Center] Game running! Process ID (PID): ${processId}`,
+        `[PZ Monitor Center] Active game session PID: ${processId}`,
         '[PZ Monitor Center] Monitoring active game session for Lua/Java crashes. Check Task Manager!',
       ]);
     } else {
@@ -136,16 +146,18 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Toggle Filter Button */}
           <button
             onClick={() => setFilterSpam(!filterSpam)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg border transition cursor-pointer flex items-center gap-2 shadow ${
               filterSpam
-                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
-                : 'bg-slate-900 text-slate-400 border-slate-800'
+                ? 'bg-emerald-950 text-emerald-300 border-emerald-700 shadow-emerald-950/40'
+                : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
             }`}
+            title="Click to toggle filtering of noisy Translator and missing translation lines"
           >
-            <Filter className="w-3.5 h-3.5" />
-            <span>{filterSpam ? 'Translation Spam Filtered' : 'Show All Logs'}</span>
+            <Filter className={`w-4 h-4 ${filterSpam ? 'text-emerald-400' : 'text-slate-500'}`} />
+            <span>{filterSpam ? 'Translator Spam: FILTERED (HIDE)' : 'Translator Spam: SHOW ALL'}</span>
           </button>
 
           <button
@@ -190,6 +202,9 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
               <Terminal className="w-4 h-4 text-emerald-400" />
               Live Console Output (<code className="text-emerald-400">console.txt</code>)
+              <span className="text-[10px] text-slate-500 font-normal">
+                ({displayedLogs.length} / {logs.length} lines)
+              </span>
             </span>
 
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
@@ -198,7 +213,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
           </div>
 
           <div className="flex-1 p-4 font-mono text-xs bg-slate-950 overflow-y-auto space-y-1 select-text">
-            {logs.map((log, idx) => {
+            {displayedLogs.map((log, idx) => {
               const isErr = log.includes('JVM ERROR') || log.includes('Exception') || log.includes('Crash') || log.includes('ERROR');
               return (
                 <div
