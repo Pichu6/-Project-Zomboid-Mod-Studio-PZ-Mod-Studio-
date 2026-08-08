@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use crate::load_order::mod_info::parse_mod_info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudioPaths {
@@ -15,7 +14,7 @@ pub struct StudioPaths {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompetingFileRaw {
+pub struct CompetingModFileRaw {
     pub mod_id: String,
     pub mod_name: String,
     pub absolute_path: String,
@@ -32,46 +31,61 @@ pub struct VfsConflictRaw {
     pub conflict_line: usize,
     pub total_file_lines: usize,
     pub base_content: String,
-    pub competing_files: Vec<CompetingFileRaw>,
+    pub competing_files: Vec<CompetingModFileRaw>,
 }
 
-/// Auto-detects Project Zomboid installation and user directories on Windows.
+/// Auto-detects default Project Zomboid installation and user data paths across drives.
 pub fn auto_detect_paths() -> StudioPaths {
-    let mut install_dir = String::new();
-    let mut workshop_dir = String::new();
+    let user_home = dirs_next::home_dir().unwrap_or_else(|| PathBuf::from("C:\\"));
+    let user_zomboid = user_home.join("Zomboid");
+    let mod_list_ini = user_zomboid.join("mods").join("ModListData.ini");
 
-    // Standard Steam Library locations on Windows
-    let candidate_drives = vec!["C", "D", "E", "F", "G"];
-    for drive in candidate_drives {
-        let pz_path = format!("{}:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid", drive);
-        let lib_path = format!("{}:\\SteamLibrary\\steamapps\\common\\ProjectZomboid", drive);
-        
-        if Path::new(&pz_path).exists() {
-            install_dir = pz_path;
-            workshop_dir = format!("{}:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600", drive);
-            break;
-        } else if Path::new(&lib_path).exists() {
-            install_dir = lib_path;
-            workshop_dir = format!("{}:\\SteamLibrary\\steamapps\\workshop\\content\\108600", drive);
-            break;
-        }
-    }
+    let pz_install_candidates = vec![
+        r"C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid",
+        r"C:\Program Files\Steam\steamapps\common\ProjectZomboid",
+        r"D:\SteamLibrary\steamapps\common\ProjectZomboid",
+        r"E:\SteamLibrary\steamapps\common\ProjectZomboid",
+        r"F:\SteamLibrary\steamapps\common\ProjectZomboid",
+        r"G:\SteamLibrary\steamapps\common\ProjectZomboid",
+    ];
 
-    // Detect User Zomboid Directory (C:\Users\<User>\Zomboid)
-    let user_zomboid_dir = dirs_next::home_dir()
-        .map(|h| h.join("Zomboid").to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let workshop_candidates = vec![
+        r"C:\Program Files (x86)\Steam\steamapps\workshop\content\108600",
+        r"C:\Program Files\Steam\steamapps\workshop\content\108600",
+        r"D:\SteamLibrary\steamapps\workshop\content\108600",
+        r"E:\SteamLibrary\steamapps\workshop\content\108600",
+        r"F:\SteamLibrary\steamapps\workshop\content\108600",
+        r"G:\SteamLibrary\steamapps\workshop\content\108600",
+    ];
 
-    let mod_list_ini_path = if !user_zomboid_dir.is_empty() {
-        format!("{}\\Lua\\ModManager\\ModListData.ini", user_zomboid_dir)
+    let pz_install_dir = pz_install_candidates
+        .into_iter()
+        .find(|p| Path::new(p).exists())
+        .unwrap_or("")
+        .to_string();
+
+    let workshop_dir = workshop_candidates
+        .into_iter()
+        .find(|p| Path::new(p).exists())
+        .unwrap_or("")
+        .to_string();
+
+    let user_zomboid_dir = if user_zomboid.exists() {
+        user_zomboid.to_string_lossy().to_string()
     } else {
         String::new()
     };
 
-    let is_valid = !install_dir.is_empty() && Path::new(&install_dir).exists();
+    let mod_list_ini_path = if mod_list_ini.exists() {
+        mod_list_ini.to_string_lossy().to_string()
+    } else {
+        String::new()
+    };
+
+    let is_valid = !pz_install_dir.is_empty() && !user_zomboid_dir.is_empty();
 
     StudioPaths {
-        pz_install_dir: install_dir,
+        pz_install_dir,
         workshop_dir,
         user_zomboid_dir,
         mod_list_ini_path,
@@ -79,145 +93,226 @@ pub fn auto_detect_paths() -> StudioPaths {
     }
 }
 
-/// Validates user custom or manually entered paths.
-pub fn validate_paths(paths: StudioPaths) -> StudioPaths {
-    let is_valid = Path::new(&paths.pz_install_dir).exists();
-    StudioPaths {
-        is_valid,
-        ..paths
+/// Validates provided paths.
+pub fn validate_paths(mut paths: StudioPaths) -> StudioPaths {
+    let pz_ok = !paths.pz_install_dir.is_empty() && Path::new(&paths.pz_install_dir).exists();
+    let user_ok = !paths.user_zomboid_dir.is_empty() && Path::new(&paths.user_zomboid_dir).exists();
+
+    if pz_ok && (paths.workshop_dir.is_empty() || !Path::new(&paths.workshop_dir).exists()) {
+        let install_path = Path::new(&paths.pz_install_dir);
+        if let Some(parent) = install_path.parent().and_then(|p| p.parent()) {
+            let candidate = parent.join("workshop").join("content").join("108600");
+            if candidate.exists() {
+                paths.workshop_dir = candidate.to_string_lossy().to_string();
+            }
+        }
     }
+
+    if user_ok && (paths.mod_list_ini_path.is_empty() || !Path::new(&paths.mod_list_ini_path).exists()) {
+        let candidate = Path::new(&paths.user_zomboid_dir).join("mods").join("ModListData.ini");
+        if candidate.exists() {
+            paths.mod_list_ini_path = candidate.to_string_lossy().to_string();
+        }
+    }
+
+    paths.is_valid = pz_ok && user_ok;
+    paths
 }
 
-/// Scans active Workshop mods & Vanilla directories for virtual path collisions.
+/// Scans active mods to detect relative file path collisions.
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
-    let mut path_map: HashMap<String, Vec<CompetingFileRaw>> = HashMap::new();
+    let mut file_map: HashMap<String, Vec<CompetingModFileRaw>> = HashMap::new();
+    let mut active_mods: Vec<String> = Vec::new();
 
-    let workshop_path = Path::new(&paths.workshop_dir);
-    if workshop_path.exists() {
-        // Walk workshop mods
-        for entry in WalkDir::new(workshop_path).into_iter().filter_map(|e| e.ok()) {
+    if !paths.mod_list_ini_path.is_empty() && Path::new(&paths.mod_list_ini_path).exists() {
+        if let Ok(content) = fs::read_to_string(&paths.mod_list_ini_path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("activeMods=") {
+                    active_mods = trimmed[11..]
+                        .split(';')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty() && s != "Z_PZModStudio_MergedPatch")
+                        .collect();
+                    break;
+                }
+            }
+        }
+    }
+
+    let workshop_dir = Path::new(&paths.workshop_dir);
+    if workshop_dir.exists() {
+        for entry in WalkDir::new(workshop_dir).max_depth(8).into_iter().filter_map(|e| e.ok()) {
             let path = entry.path();
             if path.is_file() {
                 let path_str = path.to_string_lossy();
-                let is_lua = path_str.ends_with(".lua");
-                let is_script = path_str.ends_with(".txt") && path_str.contains("media\\scripts");
-
-                if is_lua || is_script {
-                    if let Some(rel_idx) = path_str.find("media\\") {
-                        let rel_path = path_str[rel_idx..].replace('\\', "/");
-                        let mod_id = extract_mod_id_from_path(&path_str);
-                        let mod_name = resolve_specific_mod_name(path, &mod_id);
-
-                        // Read actual file content
-                        let content = fs::read_to_string(path).unwrap_or_default();
-
-                        let competing_file = CompetingFileRaw {
-                            mod_id: mod_id.clone(),
-                            mod_name,
-                            absolute_path: path_str.to_string(),
-                            content,
-                        };
-
-                        path_map.entry(rel_path).or_default().push(competing_file);
+                if path_str.ends_with(".lua") || path_str.ends_with(".txt") {
+                    if let Some(rel_path) = extract_relative_media_path(path) {
+                        let mod_id = extract_mod_id_from_path(path).unwrap_or_else(|| "workshop_mod".to_string());
+                        if active_mods.is_empty() || active_mods.contains(&mod_id) {
+                            let mod_name = resolve_specific_mod_name(path, &mod_id);
+                            if let Ok(content) = fs::read_to_string(path) {
+                                file_map.entry(rel_path).or_default().push(CompetingModFileRaw {
+                                    mod_id,
+                                    mod_name,
+                                    absolute_path: path_str.to_string(),
+                                    content,
+                                });
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    // Filter relative paths with 2+ competing files
+    let user_mods_dir = Path::new(&paths.user_zomboid_dir).join("mods");
+    if user_mods_dir.exists() {
+        for entry in WalkDir::new(&user_mods_dir).max_depth(8).into_iter().filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_file() {
+                let path_str = path.to_string_lossy();
+                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) && !path_str.contains("Z_PZModStudio_MergedPatch") {
+                    if let Some(rel_path) = extract_relative_media_path(path) {
+                        let mod_id = extract_local_mod_id(path).unwrap_or_else(|| "local_mod".to_string());
+                        if active_mods.is_empty() || active_mods.contains(&mod_id) {
+                            let mod_name = resolve_specific_mod_name(path, &mod_id);
+                            if let Ok(content) = fs::read_to_string(path) {
+                                file_map.entry(rel_path).or_default().push(CompetingModFileRaw {
+                                    mod_id,
+                                    mod_name,
+                                    absolute_path: path_str.to_string(),
+                                    content,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let pz_media_dir = Path::new(&paths.pz_install_dir).join("media");
+
     let mut conflicts = Vec::new();
     let mut id_counter = 1;
 
-    for (rel_path, competing_files) in path_map {
+    for (rel_path, mut competing_files) in file_map {
         if competing_files.len() > 1 {
-            let file_type = if rel_path.ends_with(".lua") {
-                "LUA".to_string()
-            } else {
-                "SCRIPT_TXT".to_string()
-            };
+            let mut unique_mods = Vec::new();
+            let mut seen_mods = HashSet::new();
 
-            // Read base Vanilla file content if it exists
-            let vanilla_file = PathBuf::from(&paths.pz_install_dir).join(&rel_path);
-            let base_content = if vanilla_file.exists() {
-                fs::read_to_string(&vanilla_file).unwrap_or_default()
-            } else {
-                "-- Vanilla file not present for this path".to_string()
-            };
+            for file in competing_files.drain(..) {
+                if !seen_mods.contains(&file.mod_id) {
+                    seen_mods.insert(file.mod_id.clone());
+                    unique_mods.push(file);
+                }
+            }
 
-            let total_file_lines = base_content.lines().count().max(1);
+            if unique_mods.len() > 1 {
+                let vanilla_file_path = pz_media_dir.join(&rel_path);
+                let base_content = if vanilla_file_path.exists() {
+                    fs::read_to_string(&vanilla_file_path).unwrap_or_else(|_| "-- vanilla file unreadable".to_string())
+                } else {
+                    "-- vanilla file not present for this path".to_string()
+                };
 
-            // Compute actual conflicting line index
-            let conflict_line = find_first_conflict_line(&base_content, &competing_files);
-            let start_line = conflict_line.saturating_sub(5).max(1);
-            let end_line = (conflict_line + 5).min(total_file_lines);
+                let file_type = if rel_path.ends_with(".lua") { "LUA" } else { "SCRIPT_TXT" };
+                let total_file_lines = base_content.lines().count().max(1);
+                let conflict_line = find_first_differing_line(&base_content, &unique_mods);
 
-            conflicts.push(VfsConflictRaw {
-                id: format!("c{}", id_counter),
-                relative_path: rel_path,
-                file_type,
-                start_line,
-                end_line,
-                conflict_line,
-                total_file_lines,
-                base_content,
-                competing_files,
-            });
+                conflicts.push(VfsConflictRaw {
+                    id: format!("conflict_{}", id_counter),
+                    relative_path: rel_path,
+                    file_type: file_type.to_string(),
+                    start_line: 1,
+                    end_line: total_file_lines,
+                    conflict_line,
+                    total_file_lines,
+                    base_content,
+                    competing_files: unique_mods,
+                });
 
-            id_counter += 1;
+                id_counter += 1;
+            }
         }
     }
 
     conflicts
 }
 
-fn extract_mod_id_from_path(path: &str) -> String {
-    if let Some(idx) = path.find("108600\\") {
-        let rest = &path[idx + 7..];
-        if let Some(end_idx) = rest.find('\\') {
-            return rest[..end_idx].to_string();
+/// Finds the EXACT 1-based line index where content actually differs between Vanilla and competing mods.
+fn find_first_differing_line(base: &str, files: &[CompetingModFileRaw]) -> usize {
+    let base_lines: Vec<&str> = base.lines().collect();
+    let file_lines_list: Vec<Vec<&str>> = files.iter().map(|f| f.content.lines().collect()).collect();
+
+    let max_lines = base_lines.len().max(
+        file_lines_list.iter().map(|l| l.len()).max().unwrap_or(0)
+    );
+
+    for idx in 0..max_lines {
+        let base_line = base_lines.get(idx).copied().unwrap_or("");
+        
+        for file_lines in &file_lines_list {
+            let mod_line = file_lines.get(idx).copied().unwrap_or("");
+            if base_line != mod_line {
+                return idx + 1; // Return exact 1-based line number of difference
+            }
         }
     }
-    "UnknownMod".to_string()
+
+    1
 }
 
-/// Resolves unique mod name by walking up towards closest mod.info manifest
-fn resolve_specific_mod_name(file_path: &Path, default_id: &str) -> String {
-    let mut curr = file_path.parent();
-    while let Some(dir) = curr {
-        let mod_info_file = dir.join("mod.info");
-        if mod_info_file.exists() {
-            if let Some(manifest) = parse_mod_info(&mod_info_file) {
-                if !manifest.name.is_empty() {
-                    return manifest.name;
+fn resolve_specific_mod_name(file_path: &Path, fallback_mod_id: &str) -> String {
+    let mut current = file_path.parent();
+    while let Some(dir) = current {
+        let info_path = dir.join("mod.info");
+        if info_path.exists() {
+            if let Ok(content) = fs::read_to_string(&info_path) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("name=") {
+                        let name_val = trimmed[5..].trim().to_string();
+                        if !name_val.is_empty() {
+                            return name_val;
+                        }
+                    }
                 }
             }
-        }
-        if dir.file_name().and_then(|n| n.to_str()) == Some("108600") {
             break;
         }
-        curr = dir.parent();
+        current = dir.parent();
     }
-    format!("Workshop Mod ({})", default_id)
+    fallback_mod_id.to_string()
 }
 
-fn find_first_conflict_line(base: &str, competing: &[CompetingFileRaw]) -> usize {
-    let base_lines: Vec<&str> = base.lines().collect();
-    if competing.is_empty() {
-        return 1;
+fn extract_relative_media_path(path: &Path) -> Option<String> {
+    let path_str = path.to_string_lossy().replace('\\', "/");
+    if let Some(idx) = path_str.find("/media/") {
+        return Some(path_str[idx + 1..].to_string());
     }
+    None
+}
 
-    let first_mod_lines: Vec<&str> = competing[0].content.lines().collect();
-    let max_lines = base_lines.len().max(first_mod_lines.len());
-
-    for i in 0..max_lines {
-        let base_l = base_lines.get(i).copied().unwrap_or("");
-        for mod_file in competing {
-            let mod_l = mod_file.content.lines().nth(i).unwrap_or("");
-            if base_l != mod_l {
-                return i + 1; // 1-indexed
-            }
+fn extract_mod_id_from_path(path: &Path) -> Option<String> {
+    let path_str = path.to_string_lossy();
+    if let Some(idx) = path_str.find("108600\\") {
+        let rest = &path_str[idx + 7..];
+        if let Some(end_idx) = rest.find('\\') {
+            return Some(rest[..end_idx].to_string());
         }
     }
-    1
+    None
+}
+
+fn extract_local_mod_id(path: &Path) -> Option<String> {
+    let path_str = path.to_string_lossy();
+    if let Some(idx) = path_str.find("mods\\") {
+        let rest = &path_str[idx + 5..];
+        if let Some(end_idx) = rest.find('\\') {
+            return Some(rest[..end_idx].to_string());
+        }
+    }
+    None
 }

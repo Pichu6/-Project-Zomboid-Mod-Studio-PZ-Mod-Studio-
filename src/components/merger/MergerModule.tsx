@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle, Wand2, GripHorizontal } from 'lucide-react';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle, Wand2, GripHorizontal, Sparkle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { MOCK_CONFLICTS } from '../../data/mock_data';
 
@@ -87,14 +87,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   /**
-   * Helper component to render code snippet or full file with real line numbers & auto-scroll to conflict
+   * Code Snippet Renderer with exact Diff Highlighting (Green for mod changes, Amber for exact conflict line)
    */
   const LinedCodeSnippet: React.FC<{
     content: string;
+    vanillaBaseContent: string;
     startLineNum: number;
     targetConflictLine: number;
-  }> = ({ content, startLineNum, targetConflictLine }) => {
+  }> = ({ content, vanillaBaseContent, startLineNum, targetConflictLine }) => {
     const lines = content.split('\n');
+    const vanillaLines = vanillaBaseContent.split('\n');
     const conflictRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -124,20 +126,26 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           })}
         </div>
 
-        {/* Code Content Lines */}
+        {/* Code Content Lines with Diff Highlighting */}
         <div className="flex-1 py-2 overflow-x-auto">
           {lines.map((line, idx) => {
             const currentLineNum = (startLineNum || 1) + idx;
             const isConflict = currentLineNum === targetConflictLine;
+            const vanillaLine = vanillaLines[idx] ?? '';
+            const isModifiedFromVanilla = line.trim() !== vanillaLine.trim() && !isConflict;
+
+            let lineStyle = 'text-slate-300 hover:bg-slate-900/40';
+            if (isConflict) {
+              lineStyle = 'bg-amber-500/30 text-amber-200 border-l-4 border-amber-400 font-bold shadow-md';
+            } else if (isModifiedFromVanilla) {
+              lineStyle = 'bg-emerald-950/40 text-emerald-300 border-l-4 border-emerald-500/80 font-medium';
+            }
+
             return (
               <div
                 key={idx}
                 ref={isConflict ? conflictRef : null}
-                className={`leading-6 h-6 px-3 whitespace-pre text-[12px] font-mono flex items-center transition ${
-                  isConflict
-                    ? 'bg-amber-500/25 text-amber-200 border-l-4 border-amber-400 font-bold shadow-md'
-                    : 'text-slate-300 hover:bg-slate-900/40'
-                }`}
+                className={`leading-6 h-6 px-3 whitespace-pre text-[12px] font-mono flex items-center transition ${lineStyle}`}
               >
                 {line || ' '}
               </div>
@@ -257,7 +265,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   </span>
                   {c.status === 'AUTO_MERGED' ? (
                     <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Auto-Merged
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Auto-Merged
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-[10px] text-amber-400 font-medium">
@@ -301,7 +309,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               <div className="flex items-center gap-2 shrink-0">
                 <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                  Conflict @ Line {conflictLine}
+                  Differing Line #{conflictLine}
                 </span>
 
                 <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
@@ -319,12 +327,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               </div>
             </div>
 
-            {/* Conflict Line Breakdown Box */}
-            <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2 mb-2 flex items-start gap-2 text-xs font-mono shrink-0">
-              <span className="text-amber-400 font-bold shrink-0">Line {conflictLine} Conflict:</span>
+            {/* Conflict Line Breakdown Box with Exact Line Snippet Comparison */}
+            <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2.5 mb-2 flex items-start gap-2 text-xs font-mono shrink-0">
+              <span className="text-amber-400 font-bold shrink-0 flex items-center gap-1">
+                <Sparkle className="w-3.5 h-3.5 text-amber-400" />
+                Line #{conflictLine} Comparison:
+              </span>
               <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300">
                 <span className="text-slate-400">
-                  <b className="text-slate-200">Vanilla:</b> "{getLineSnippet(currentConflict.base_content, conflictLine)}"
+                  <b className="text-slate-200">Vanilla Base:</b> "{getLineSnippet(currentConflict.base_content, conflictLine)}"
                 </span>
                 {currentConflict.competing_mods.map((mod, idx) => (
                   <span key={idx} className="text-emerald-300">
@@ -346,6 +357,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 </div>
                 <LinedCodeSnippet
                   content={currentConflict.base_content}
+                  vanillaBaseContent={currentConflict.base_content}
                   startLineNum={startLine}
                   targetConflictLine={conflictLine}
                 />
@@ -376,6 +388,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   </div>
                   <LinedCodeSnippet
                     content={mod.content}
+                    vanillaBaseContent={currentConflict.base_content}
                     startLineNum={startLine}
                     targetConflictLine={conflictLine}
                   />
