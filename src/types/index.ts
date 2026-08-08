@@ -73,7 +73,7 @@ export interface PolyfillRule {
 }
 
 // ==========================================
-// Module 3: Load Order & Dependency Manager
+// Module 3: Mod List & Workshop Inspector
 // ==========================================
 
 export interface ModInfo {
@@ -84,6 +84,8 @@ export interface ModInfo {
   author?: string;
   version?: string;
   icon_path?: string;
+  poster_url?: string;
+  url?: string;
   dependencies: string[]; // require= directives
   enabled: boolean;
   is_library?: boolean;
@@ -109,7 +111,7 @@ export interface ModProfile {
 }
 
 // ==========================================
-// Module 4: Test Sandbox & Crash Diagnostics
+// Module 4: Monitor Center & Crash Diagnostics
 // ==========================================
 
 export type SandboxStatus = 'IDLE' | 'BOOTING' | 'RUNNING' | 'SUCCESS' | 'CRASHED';
@@ -138,4 +140,4 @@ export interface SandboxSession {
 // App Navigation State
 // ==========================================
 
-export type ActiveTab = 'MERGER' | 'POLYFILLS' | 'LOAD_ORDER' | 'SANDBOX' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'MERGER' | 'POLYFILLS' | 'MONITOR' | 'SETTINGS';

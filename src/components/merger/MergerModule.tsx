@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle, Wand2 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { MOCK_CONFLICTS } from '../../data/mock_data';
 
@@ -9,6 +9,7 @@ interface MergerModuleProps {
   conflicts: VfsConflict[];
   paths: StudioPathsUI;
   onResolveConflict: (conflictId: string, resolvedCode: string) => void;
+  onOptimizeAndResolve: () => void;
   onGoToSettings: () => void;
   onRescan: () => void;
   onLoadMockups: (mockups: VfsConflict[]) => void;
@@ -18,6 +19,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   conflicts,
   paths,
   onResolveConflict,
+  onOptimizeAndResolve,
   onGoToSettings,
   onRescan,
   onLoadMockups,
@@ -213,12 +215,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     {c.file_type}
                   </span>
                   {c.status === 'AUTO_MERGED' ? (
-                    <span className="flex items-center gap-1 text-[10px] text-emerald-400">
-                      <CheckCircle2 className="w-3 h-3" /> Auto-Merged
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Auto-Merged
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-[10px] text-amber-400 font-medium">
-                      <AlertTriangle className="w-3 h-3 text-amber-400" /> Needs Review
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> Needs Review
                     </span>
                   )}
                 </div>
@@ -237,12 +239,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       </div>
 
-      {/* Main Split Screen: Top 50% Multi-Way Competing Code / Bottom 50% Output Editor */}
+      {/* Main Split Screen */}
       {currentConflict ? (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Panel: 50% Screen Height for Competing Code Carousel */}
+          {/* Top Panel: Competing Code Carousel */}
           <div className="flex-1 flex flex-col border-b border-slate-800 bg-slate-900/80 p-3 min-h-0 overflow-hidden">
-            {/* Header & Conflict Summary Banner */}
+            {/* Header with Auto-Merge Button */}
             <div className="flex flex-col gap-2 mb-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
@@ -253,6 +255,14 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 </span>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={onOptimizeAndResolve}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Auto-Merge & Generate Master Patch
+                  </button>
+
                   <span className="flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
                     Conflict Detected @ Line {conflictLine}
@@ -281,7 +291,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               </div>
             </div>
 
-            {/* Horizontal Carousel with 50% Height */}
+            {/* Horizontal Carousel */}
             <div className="flex-1 flex gap-3 overflow-x-auto min-h-0">
               {/* Panel A: Vanilla Base */}
               <div className="w-96 min-w-96 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
@@ -331,7 +341,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </div>
           </div>
 
-          {/* Bottom Panel: 50% Screen Height for Resolved Output Monaco Editor */}
+          {/* Bottom Panel: Resolved Output Monaco Editor */}
           <div className="flex-1 flex flex-col bg-slate-950 p-3 min-h-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">

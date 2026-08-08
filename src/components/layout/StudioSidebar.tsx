@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveTab } from '../../types';
-import { GitMerge, ShieldAlert, ListOrdered, FlaskConical, Settings } from 'lucide-react';
+import { GitCompare, Wrench, ListOrdered, Settings, Activity } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -15,83 +15,87 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   conflictCount,
   errorCardCount,
 }) => {
-  const navItems: { id: ActiveTab; label: string; icon: React.ReactNode; badge?: number; color?: string }[] = [
+  const navItems = [
     {
-      id: 'MERGER',
+      id: 'MOD_LIST' as ActiveTab,
+      label: 'Mod List',
+      icon: ListOrdered,
+      badge: null,
+      badgeColor: '',
+    },
+    {
+      id: 'MERGER' as ActiveTab,
       label: 'Script Merger',
-      icon: <GitMerge className="w-4 h-4" />,
-      badge: conflictCount,
-      color: conflictCount > 0 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : undefined,
+      icon: GitCompare,
+      badge: conflictCount > 0 ? conflictCount : null,
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
     },
     {
-      id: 'POLYFILLS',
+      id: 'POLYFILLS' as ActiveTab,
       label: 'Polyfill Rules',
-      icon: <ShieldAlert className="w-4 h-4" />,
+      icon: Wrench,
+      badge: null,
+      badgeColor: '',
     },
     {
-      id: 'LOAD_ORDER',
-      label: 'Load Order Manager',
-      icon: <ListOrdered className="w-4 h-4" />,
-    },
-    {
-      id: 'SANDBOX',
-      label: 'Sandbox Lab',
-      icon: <FlaskConical className="w-4 h-4" />,
-      badge: errorCardCount,
-      color: errorCardCount > 0 ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : undefined,
+      id: 'MONITOR' as ActiveTab,
+      label: 'Monitor Center',
+      icon: Activity,
+      badge: errorCardCount > 0 ? errorCardCount : null,
+      badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40',
     },
   ];
 
   return (
-    <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between select-none">
-      {/* Navigation Links */}
-      <div className="p-3 space-y-1">
-        <p className="px-3 pt-2 pb-1 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+    <aside className="w-56 bg-slate-900/60 border-r border-slate-800 flex flex-col justify-between select-none shrink-0 p-3">
+      {/* Top Nav List */}
+      <div className="space-y-4">
+        <div className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
           Studio Modules
-        </p>
-        {navItems.map((item) => {
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
-                isActive
-                  ? 'bg-slate-800 text-emerald-400 border border-slate-700/80 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className={isActive ? 'text-emerald-400' : 'text-slate-500'}>
-                  {item.icon}
-                </span>
-                <span>{item.label}</span>
-              </div>
-              {item.badge !== undefined && item.badge > 0 && (
-                <span
-                  className={`px-2 py-0.5 text-[10px] rounded-full border font-mono font-bold ${
-                    item.color || 'bg-slate-800 text-slate-300 border-slate-700'
-                  }`}
-                >
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        </div>
+
+        <nav className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  isActive
+                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 font-bold shadow'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <span>{item.label}</span>
+                </div>
+
+                {item.badge !== null && (
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border ${item.badgeColor}`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
-      {/* Bottom Settings Link */}
-      <div className="p-3 border-t border-slate-900">
+      {/* Bottom App Settings */}
+      <div className="pt-3 border-t border-slate-800">
         <button
           onClick={() => setActiveTab('SETTINGS')}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition cursor-pointer ${
             activeTab === 'SETTINGS'
-              ? 'bg-slate-800 text-emerald-400 border border-slate-700'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              ? 'bg-slate-800 text-slate-100 font-bold border border-slate-700'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          <Settings className="w-4 h-4 text-slate-500" />
+          <Settings className="w-4 h-4 text-slate-400" />
           <span>App Settings</span>
         </button>
       </div>

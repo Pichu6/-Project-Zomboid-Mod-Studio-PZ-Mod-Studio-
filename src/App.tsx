@@ -11,7 +11,7 @@ import { SettingsModule, StudioPathsUI } from './components/settings/SettingsMod
 import { TauriService } from './services/tauri';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('MERGER');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('MOD_LIST');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
   const [mods, setMods] = useState<ModInfo[]>([]);
@@ -87,7 +87,7 @@ export const App: React.FC = () => {
     setMods(mockMods);
   };
 
-  // Magic Button: Optimize & Resolve All (Generates Master Patch on Disk!)
+  // Magic Button: Auto-Merge & Generate Master Patch on Disk!
   const handleOptimizeAndResolve = async () => {
     const updatedConflicts = conflicts.map((c) => ({
       ...c,
@@ -118,15 +118,15 @@ export const App: React.FC = () => {
       });
 
       if (result.success) {
-        alert(`✨ Optimize & Resolve All Complete!\n\n- Master Patch Mod generated at:\n${result.patch_mod_dir}\n- Merged files written: ${result.files_written}\n- Active polyfills injected: ${result.polyfills_injected}\n- ModListData.ini load order updated!`);
+        alert(`✨ Master Patch Generation Complete!\n\n- Master Patch Mod written at:\n${result.patch_mod_dir}\n- Merged files written: ${result.files_written}\n- Active polyfills injected: ${result.polyfills_injected}\n- ModListData.ini load order updated!`);
       } else {
-        alert('✨ Optimize & Resolve All Complete!\n- Conflicts merged AST-aware.\n- Polyfills enabled.');
+        alert('✨ Auto-Merge Complete!\n- Conflicts merged AST-aware.\n- Polyfills enabled.');
       }
     }
   };
 
   const handleRunSandbox = () => {
-    setActiveTab('SANDBOX');
+    setActiveTab('MONITOR');
     if (paths.is_valid) {
       TauriService.launchSandbox({
         pz_install_dir: paths.pz_install_dir,
@@ -213,13 +213,12 @@ export const App: React.FC = () => {
       <StudioHeader
         conflictCount={conflicts.filter((c) => c.status !== 'RESOLVED' && c.status !== 'AUTO_MERGED').length}
         polyfillCount={rules.filter((r) => r.enabled).length}
-        onOptimizeAndResolve={handleOptimizeAndResolve}
         onRunSandbox={handleRunSandbox}
       />
 
       {/* Main Studio Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Studio Sidebar */}
+        {/* StudioSidebar */}
         <StudioSidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -229,22 +228,7 @@ export const App: React.FC = () => {
 
         {/* Tab Modules */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {activeTab === 'MERGER' && (
-            <MergerModule
-              conflicts={conflicts}
-              paths={paths}
-              onResolveConflict={handleResolveConflict}
-              onGoToSettings={() => setActiveTab('SETTINGS')}
-              onRescan={handleRescan}
-              onLoadMockups={handleLoadMockups}
-            />
-          )}
-
-          {activeTab === 'POLYFILLS' && (
-            <PolyfillsModule rules={rules} onToggleRule={handleToggleRule} />
-          )}
-
-          {activeTab === 'LOAD_ORDER' && (
+          {activeTab === 'MOD_LIST' && (
             <LoadOrderModule
               paths={paths}
               mods={mods}
@@ -255,7 +239,23 @@ export const App: React.FC = () => {
             />
           )}
 
-          {activeTab === 'SANDBOX' && (
+          {activeTab === 'MERGER' && (
+            <MergerModule
+              conflicts={conflicts}
+              paths={paths}
+              onResolveConflict={handleResolveConflict}
+              onOptimizeAndResolve={handleOptimizeAndResolve}
+              onGoToSettings={() => setActiveTab('SETTINGS')}
+              onRescan={handleRescan}
+              onLoadMockups={handleLoadMockups}
+            />
+          )}
+
+          {activeTab === 'POLYFILLS' && (
+            <PolyfillsModule rules={rules} onToggleRule={handleToggleRule} />
+          )}
+
+          {activeTab === 'MONITOR' && (
             <SandboxModule
               paths={paths}
               errorCards={errorCards}

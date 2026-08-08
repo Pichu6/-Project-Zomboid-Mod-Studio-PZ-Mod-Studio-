@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX } from 'lucide-react';
+import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX, Activity, Filter } from 'lucide-react';
 
 interface SandboxModuleProps {
   paths: StudioPathsUI;
@@ -17,12 +17,13 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onApplyFix,
   onGoToSettings,
 }) => {
-  const [testMode, setTestMode] = useState<'BACKGROUND_QUICK' | 'WINDOWED_DEEP'>('WINDOWED_DEEP');
+  const [testMode] = useState<'BACKGROUND_QUICK' | 'WINDOWED_DEEP'>('WINDOWED_DEEP');
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [filterSpam, setFilterSpam] = useState<boolean>(true);
   const [pid, setPid] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([
-    '[PZ Mod Studio] Sandbox Test Environment Ready.',
-    '[PZ Mod Studio] Click "Start Isolated Test" to launch ProjectZomboid64.exe (-cachedir, -debug) and stream console.txt in real time.',
+    '[PZ Monitor Center] Realtime session monitor ready.',
+    '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-cachedir, -debug) and capture crashes.',
   ]);
 
   // Subscribe to real log streaming from Rust backend
@@ -30,7 +31,12 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     let unlistenLogs: (() => void) | undefined;
 
     TauriService.listenSandboxLogs((payload) => {
-      setLogs((prev) => [...prev.slice(-300), payload.line]);
+      // Filter out noisy translation warning spam if filterSpam is enabled
+      const line = payload.line;
+      if (filterSpam && line.includes('Missing arguments for')) {
+        return;
+      }
+      setLogs((prev) => [...prev.slice(-300), line]);
     }).then((unlisten) => {
       unlistenLogs = unlisten;
     });
@@ -38,7 +44,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     return () => {
       if (unlistenLogs) unlistenLogs();
     };
-  }, []);
+  }, [filterSpam]);
 
   const handleStartTest = async () => {
     if (!paths.is_valid || !paths.pz_install_dir) {
@@ -48,9 +54,9 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
     setIsRunning(true);
     setLogs([
-      '[PZ Mod Studio] Launching native ProjectZomboid64.exe process...',
-      `[PZ Mod Studio] Command: ProjectZomboid64.exe -cachedir "${paths.user_zomboid_dir}\\temp_sandbox_cache" -debug (${testMode})`,
-      '[PZ Mod Studio] Waiting for console.txt output...',
+      '[PZ Monitor Center] Spawning ProjectZomboid64.exe wrapper process...',
+      `[PZ Monitor Center] Command: ProjectZomboid64.exe -cachedir "${paths.user_zomboid_dir}\\temp_sandbox_cache" -debug`,
+      '[PZ Monitor Center] Streaming live console.txt events...',
     ]);
 
     const processId = await TauriService.launchSandbox({
@@ -63,14 +69,14 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       setPid(processId);
       setLogs((prev) => [
         ...prev,
-        `[PZ Mod Studio] Process started successfully! Process ID (PID): ${processId}`,
-        '[PZ Mod Studio] ProjectZomboid64.exe is now running on your system. Check Task Manager!',
+        `[PZ Monitor Center] Game running! Process ID (PID): ${processId}`,
+        '[PZ Monitor Center] Monitoring active game session for Lua/Java crashes. Check Task Manager!',
       ]);
     } else {
       setIsRunning(false);
       setLogs((prev) => [
         ...prev,
-        '[PZ Mod Studio ERROR] Could not spawn ProjectZomboid64.exe. Please verify ProjectZomboid64.exe exists in your install folder.',
+        '[PZ Monitor Center ERROR] Could not spawn ProjectZomboid64.exe. Check install folder path in Settings.',
       ]);
     }
   };
@@ -86,7 +92,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-100">Setup Required: Game Directory</h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Project Zomboid installation directory must be configured in App Settings before launching an isolated Sandbox Test.
+              Project Zomboid installation directory must be configured in App Settings before launching a Monitored Game Session.
             </p>
           </div>
           <button
@@ -102,42 +108,30 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6">
-      {/* Module Header & Control Toolbar */}
+      {/* Module Header & Controls */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <Terminal className="w-5 h-5 text-emerald-400" />
-            Sandbox Test Lab & Log Inspector (<code className="text-emerald-400">console.txt</code>)
+            <Activity className="w-5 h-5 text-emerald-400" />
+            Monitor Center & Crash Diagnostics (<code className="text-emerald-400">console.txt</code>)
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Test builds in an isolated environment (<code className="text-slate-300">-cachedir</code>, <code className="text-slate-300">-debug</code>) and translate crashes into 1-click solutions.
+            Monitors active game sessions in real time and translates Java/Lua exceptions into 1-click repair cards.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Test Mode Selector */}
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-1 flex gap-1 text-xs">
-            <button
-              onClick={() => setTestMode('BACKGROUND_QUICK')}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                testMode === 'BACKGROUND_QUICK'
-                  ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Background Quick Test
-            </button>
-            <button
-              onClick={() => setTestMode('WINDOWED_DEEP')}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                testMode === 'WINDOWED_DEEP'
-                  ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Windowed Deep Test
-            </button>
-          </div>
+          <button
+            onClick={() => setFilterSpam(!filterSpam)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex items-center gap-1.5 ${
+              filterSpam
+                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
+                : 'bg-slate-900 text-slate-400 border-slate-800'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>{filterSpam ? 'Translation Spam Filtered' : 'Show All Logs'}</span>
+          </button>
 
           <button
             onClick={handleStartTest}
@@ -151,30 +145,30 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             {isRunning ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                Process Running (PID: {pid || '...'})
+                Session Running (PID: {pid || '...'})
               </>
             ) : (
               <>
                 <Play className="w-4 h-4 fill-current" />
-                Start Isolated Test
+                Launch Monitored Game Session
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* Main Grid: Console Log Watcher (Left) vs Translated Error Cards (Right) */}
+      {/* Main Grid: Console Terminal Watcher (Left) vs Actionable Cards (Right) */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-        {/* Left Column: Realtime Console.txt Terminal */}
+        {/* Left Column: Realtime Terminal Log Inspector */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
           <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
             <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
               <Terminal className="w-4 h-4 text-emerald-400" />
-              Realtime Log Watcher (<code className="text-emerald-400">console.txt</code>)
+              Live Console Output (<code className="text-emerald-400">console.txt</code>)
             </span>
 
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-              Status: {isRunning ? <b className="text-emerald-400">RUNNING (PID: {pid})</b> : <b className="text-slate-500">IDLE</b>}
+              Status: {isRunning ? <b className="text-emerald-400">ACTIVE (PID: {pid})</b> : <b className="text-slate-500">IDLE</b>}
             </span>
           </div>
 
@@ -195,15 +189,15 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Translated Actionable Repair Cards */}
+        {/* Right Column: Actionable Repair Cards */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
             <h3 className="text-xs font-bold text-slate-200">
-              TRANSLATED ACTIONABLE CARDS ({errorCards.length})
+              CRASH DIAGNOSTICS & REPAIR CARDS ({errorCards.length})
             </h3>
             {errorCards.length === 0 && (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-                <CheckCircle className="w-3 h-3" /> No Crashes Detected
+                <CheckCircle className="w-3 h-3" /> Zero Crash Exceptions
               </span>
             )}
           </div>
@@ -212,9 +206,9 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             {errorCards.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
                 <CheckCircle className="w-10 h-10 text-emerald-500/40" />
-                <p className="text-xs font-medium text-slate-400">Zero Crash Exceptions Captured</p>
-                <p className="text-[11px] text-slate-500 max-w-xs">
-                  Run an isolated test to monitor runtime crashes and receive 1-click repair suggestions.
+                <p className="text-xs font-medium text-slate-400">Zero Critical Crashes Detected</p>
+                <p className="text-[11px] text-slate-500 max-w-xs leading-relaxed">
+                  When a mod causes a Java or Lua crash during game execution, Monitor Center intercepts it and generates a 1-click repair card here.
                 </p>
               </div>
             ) : (
@@ -234,7 +228,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                   </div>
 
                   <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-slate-800">
-                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Raw Stacktrace Snippet</div>
+                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Captured Log Snippet</div>
                     <div className="truncate">{card.raw_error}</div>
                   </div>
 
@@ -244,7 +238,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                       className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition cursor-pointer"
                     >
                       <Wrench className="w-3.5 h-3.5" />
-                      1-Click Fix: Apply Polyfill Rule
+                      1-Click Fix: Enable Polyfill Rule
                     </button>
                   )}
                 </div>
