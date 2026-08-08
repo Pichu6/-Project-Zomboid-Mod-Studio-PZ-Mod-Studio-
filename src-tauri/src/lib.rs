@@ -1,5 +1,6 @@
 pub mod diff_engine;
 pub mod load_order;
+pub mod sandbox;
 pub mod vfs;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
@@ -7,6 +8,9 @@ use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
 use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
 use load_order::mod_info::ModManifest;
 use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
+use sandbox::{launch_sandbox_and_watch, SandboxLaunchConfig};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use vfs::{auto_detect_paths, scan_conflicts, validate_paths, StudioPaths, VfsConflictRaw};
 
 #[tauri::command]
@@ -54,6 +58,15 @@ fn sort_mod_dependencies_cmd(manifests: Vec<ModManifest>) -> DependencyAnalysisR
     sort_dependencies_topologically(&manifests)
 }
 
+#[tauri::command]
+fn launch_sandbox_cmd<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    config: SandboxLaunchConfig,
+) -> Result<u32, String> {
+    let stop_signal = Arc::new(AtomicBool::new(false));
+    launch_sandbox_and_watch(app_handle, config, stop_signal)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -67,7 +80,8 @@ pub fn run() {
             merge_pz_data_scripts_cmd,
             read_mod_list_ini_cmd,
             write_mod_list_ini_cmd,
-            sort_mod_dependencies_cmd
+            sort_mod_dependencies_cmd,
+            launch_sandbox_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
