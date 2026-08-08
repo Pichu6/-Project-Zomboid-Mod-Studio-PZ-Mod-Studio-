@@ -20,6 +20,17 @@ pub struct ModManifest {
     pub enabled: bool,
 }
 
+/// Helper function to sanitize and clean raw mod ID strings (removes leading/trailing slashes, backslashes, quotes, spaces).
+fn sanitize_mod_id(raw: &str) -> String {
+    raw.trim()
+        .trim_matches('\\')
+        .trim_matches('/')
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim()
+        .to_string()
+}
+
 /// Parses a mod.info file into a structured ModManifest struct.
 pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     if !path.exists() {
@@ -41,7 +52,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("id=") {
-            id = trimmed[3..].trim().to_string();
+            id = sanitize_mod_id(&trimmed[3..]);
         } else if trimmed.starts_with("name=") {
             name = trimmed[5..].trim().to_string();
         } else if trimmed.starts_with("description=") {
@@ -53,7 +64,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
             let req_str = trimmed[8..].trim();
             require = req_str
                 .split(',')
-                .map(|s| s.trim().to_string())
+                .map(|s| sanitize_mod_id(s))
                 .filter(|s| !s.is_empty())
                 .collect();
         } else if trimmed.starts_with("poster=") {
@@ -97,7 +108,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         }
     }
 
-    let is_library = require.is_empty() || id.to_lowercase().contains("lib") || id.to_lowercase().contains("manager");
+    let is_library = require.is_empty() || id.to_lowercase().contains("lib") || id.to_lowercase().contains("manager") || id.to_lowercase().contains("framework");
     let is_map_mod = pack || tiledef || id.to_lowercase().contains("map");
 
     Some(ModManifest {
@@ -150,11 +161,21 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     let mut processed_ids = HashSet::new();
 
     if let Ok(ini_data) = read_mod_list_ini(&paths.mod_list_ini_path) {
-        for active_id in ini_data.active_mods {
-            if let Some(mut manifest) = all_mods_map.remove(&active_id) {
-                manifest.enabled = true;
-                result_mods.push(manifest);
-                processed_ids.insert(active_id);
+        for raw_active_id in ini_data.active_mods {
+            let active_id = sanitize_mod_id(&raw_active_id);
+
+            // Case-insensitive & sanitized matching against scanned manifests
+            let matched_key = all_mods_map
+                .keys()
+                .find(|k| k.to_lowercase() == active_id.to_lowercase())
+                .cloned();
+
+            if let Some(key) = matched_key {
+                if let Some(mut manifest) = all_mods_map.remove(&key) {
+                    manifest.enabled = true;
+                    result_mods.push(manifest);
+                    processed_ids.insert(key);
+                }
             } else if !active_id.is_empty() {
                 // Mod in ini not found on disk
                 result_mods.push(ModManifest {

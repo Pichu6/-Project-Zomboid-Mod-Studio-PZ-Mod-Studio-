@@ -53,6 +53,16 @@ const PACKAGE_COLOR_PALETTES = [
   { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-950/80 text-fuchsia-300 border-fuchsia-800' },
 ];
 
+/**
+ * Normalizes raw mod IDs by removing leading/trailing slashes, backslashes, quotes, and whitespace.
+ */
+const normalizeModId = (id: string): string => {
+  return id
+    .toLowerCase()
+    .replace(/^[\/\\'"\s]+|[\/\\'"\s]+$/g, '')
+    .trim();
+};
+
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   paths,
   mods,
@@ -102,8 +112,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   /**
    * Calculates mutual exclusivity conflicts between active mods.
-   * If two sub-mods belong to the same Workshop package and one is a variant of the other (e.g. Neat Building vs Neat Building UI Only),
-   * they are marked as mutually exclusive conflicts.
    */
   const activeConflictsMap = useMemo(() => {
     const conflictMap: Record<string, { conflictingModId: string; conflictingModName: string; reason: string }[]> = {};
@@ -273,8 +281,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       if (!a.is_map_mod && b.is_map_mod) return -1;
 
       // Rule 3: Dependency precedence - if B requires A, A comes BEFORE B
-      if (b.dependencies.includes(a.mod_id)) return -1;
-      if (a.dependencies.includes(b.mod_id)) return 1;
+      const normA = normalizeModId(a.mod_id);
+      const normB = normalizeModId(b.mod_id);
+
+      if (b.dependencies.some((dep) => normalizeModId(dep) === normA)) return -1;
+      if (a.dependencies.some((dep) => normalizeModId(dep) === normB)) return 1;
 
       return 0;
     });
@@ -284,24 +295,45 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /**
+   * Checks if a dependency string is installed among subscribed mods using sanitized flex-matching.
+   */
+  const findInstalledDependency = (reqRaw: string): ModInfo | undefined => {
+    const normReq = normalizeModId(reqRaw);
+    const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
+
+    return mods.find((m) => {
+      const normM = normalizeModId(m.mod_id);
+      const alphaM = normM.replace(/[^a-z0-9]/g, '');
+
+      return (
+        normM === normReq ||
+        alphaM === alphaReq ||
+        (alphaReq.length > 3 && alphaM.includes(alphaReq)) ||
+        (alphaM.length > 3 && alphaReq.includes(alphaM))
+      );
+    });
+  };
+
+  /**
    * Click dependency tag in right inspector to highlight & scroll left list directly to it.
    * If missing, open Steam Workshop in default desktop browser via Rust Tauri IPC!
    */
-  const handleJumpToDependency = (depModId: string) => {
-    const targetMod = mods.find((m) => m.mod_id === depModId);
+  const handleJumpToDependency = (depModIdRaw: string) => {
+    const targetMod = findInstalledDependency(depModIdRaw);
 
     if (!targetMod) {
       // Missing dependency - open Steam Workshop search in default Windows browser
-      const searchUrl = `https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(depModId)}`;
+      const cleanSearch = normalizeModId(depModIdRaw);
+      const searchUrl = `https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(cleanSearch)}`;
       TauriService.openExternalUrl(searchUrl);
       return;
     }
 
     setSearchQuery(''); // Clear search query so target mod is visible
-    setSelectedModId(depModId);
-    setHighlightedModId(depModId);
+    setSelectedModId(targetMod.mod_id);
+    setHighlightedModId(targetMod.mod_id);
 
-    const targetElem = modRowRefs.current[depModId];
+    const targetElem = modRowRefs.current[targetMod.mod_id];
     if (targetElem) {
       targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -314,7 +346,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   // State 1: Invalid paths guard
   if (!paths.is_valid || !paths.mod_list_ini_path) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200 font-sans">
         <div className="max-w-md w-full bg-slate-900/80 border border-amber-500/40 rounded-2xl p-6 text-center space-y-4 shadow-xl">
           <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto">
             <FolderX className="w-6 h-6" />
@@ -757,33 +789,35 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </div>
               </div>
 
-              {/* Clickable Dependencies (Highlights installed dependencies or opens Workshop via Tauri IPC) */}
+              {/* Clickable Dependencies (Sanitized matching against installed mods) */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   Required Dependencies (<code className="text-emerald-400">require=</code>)
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedMod.dependencies && selectedMod.dependencies.length > 0 ? (
-                    selectedMod.dependencies.map((req, rIdx) => {
-                      const isInstalled = mods.some((m) => m.mod_id === req);
+                    selectedMod.dependencies.map((reqRaw, rIdx) => {
+                      const matchedInstalledMod = findInstalledDependency(reqRaw);
+                      const cleanReqId = normalizeModId(reqRaw);
+
                       return (
                         <button
                           key={rIdx}
-                          onClick={() => handleJumpToDependency(req)}
+                          onClick={() => handleJumpToDependency(reqRaw)}
                           className={`px-2.5 py-1 text-xs font-mono rounded-md border font-medium transition cursor-pointer flex items-center gap-1 ${
-                            isInstalled
+                            matchedInstalledMod
                               ? 'bg-slate-950 hover:bg-slate-800 border-cyan-800 text-cyan-300 hover:border-cyan-500'
                               : 'bg-red-950/40 hover:bg-red-900/60 border-red-800 text-red-400 hover:text-red-300'
                           }`}
                           title={
-                            isInstalled
-                              ? 'Click to highlight & scroll to dependency in Mod List'
+                            matchedInstalledMod
+                              ? `Installed: [${matchedInstalledMod.name}] - Click to highlight & scroll`
                               : 'Missing dependency! Click to search on Steam Workshop'
                           }
                         >
-                          {!isInstalled && <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />}
-                          <span>{req}</span>
-                          {isInstalled ? (
+                          {!matchedInstalledMod && <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />}
+                          <span>{cleanReqId}</span>
+                          {matchedInstalledMod ? (
                             <span className="text-[9px] text-cyan-400 font-bold">↗</span>
                           ) : (
                             <ExternalLink className="w-3 h-3 text-red-400" />
