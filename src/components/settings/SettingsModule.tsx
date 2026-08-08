@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Folder, RefreshCw, CheckCircle2, AlertCircle, Save, FolderOpen, Lock, Unlock } from 'lucide-react';
+import { Folder, RefreshCw, CheckCircle2, AlertCircle, Save, FolderOpen } from 'lucide-react';
 
 export interface StudioPathsUI {
   pz_install_dir: string;
@@ -21,7 +21,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   onAutoDetect,
 }) => {
   const [formData, setFormData] = useState<StudioPathsUI>(paths);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
 
   const handleBrowsePath = (field: keyof StudioPathsUI, fieldName: string) => {
@@ -39,7 +38,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSavePaths(formData);
-    setIsEditing(false);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -59,27 +57,13 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition cursor-pointer ${
-                isEditing
-                  ? 'bg-amber-950/80 text-amber-300 border-amber-700/80'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-              }`}
-            >
-              {isEditing ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5 text-slate-400" />}
-              <span>{isEditing ? 'Editing Enabled' : 'Unlock Paths'}</span>
-            </button>
-
-            <button
-              onClick={onAutoDetect}
-              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-              Auto-Detect Paths
-            </button>
-          </div>
+          <button
+            onClick={onAutoDetect}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3.5 py-2 rounded-lg border border-slate-700 transition cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+            Auto-Detect Paths
+          </button>
         </div>
 
         {/* Validation Alert */}
@@ -109,23 +93,18 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           {/* Field 1: PZ Install Directory */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Project Zomboid Installation Path ({'<PZ_Install>'})
+              Project Zomboid Installation Path
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
-                readOnly={!isEditing}
+                readOnly
                 value={formData.pz_install_dir}
-                onChange={(e) => setFormData({ ...formData, pz_install_dir: e.target.value })}
-                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
-                  isEditing
-                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
-                    : 'text-slate-400 cursor-not-allowed select-all'
-                }`}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-400 cursor-not-allowed select-all"
               />
               <button
                 type="button"
-                onClick={() => handleBrowsePath('pz_install_dir', 'PZ Installation Directory')}
+                onClick={() => handleBrowsePath('pz_install_dir', 'Project Zomboid Installation Path')}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer"
               >
                 <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
@@ -140,23 +119,18 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           {/* Field 2: Steam Workshop Directory */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Steam Workshop Content Path (`content/108600`)
+              Steam Workshop Content Path
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
-                readOnly={!isEditing}
+                readOnly
                 value={formData.workshop_dir}
-                onChange={(e) => setFormData({ ...formData, workshop_dir: e.target.value })}
-                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
-                  isEditing
-                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
-                    : 'text-slate-400 cursor-not-allowed select-all'
-                }`}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-400 cursor-not-allowed select-all"
               />
               <button
                 type="button"
-                onClick={() => handleBrowsePath('workshop_dir', 'Steam Workshop Content Directory')}
+                onClick={() => handleBrowsePath('workshop_dir', 'Steam Workshop Content Path')}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer"
               >
                 <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
@@ -171,19 +145,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           {/* Field 3: User Zomboid Directory */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              User Zomboid User Directory (`Zomboid`)
+              User Zomboid Directory
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
-                readOnly={!isEditing}
+                readOnly
                 value={formData.user_zomboid_dir}
-                onChange={(e) => setFormData({ ...formData, user_zomboid_dir: e.target.value })}
-                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
-                  isEditing
-                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
-                    : 'text-slate-400 cursor-not-allowed select-all'
-                }`}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-400 cursor-not-allowed select-all"
               />
               <button
                 type="button"
@@ -207,14 +176,9 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <div className="flex gap-2">
               <input
                 type="text"
-                readOnly={!isEditing}
+                readOnly
                 value={formData.mod_list_ini_path}
-                onChange={(e) => setFormData({ ...formData, mod_list_ini_path: e.target.value })}
-                className={`flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono transition ${
-                  isEditing
-                    ? 'text-slate-100 border-amber-500/50 focus:outline-none'
-                    : 'text-slate-400 cursor-not-allowed select-all'
-                }`}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-slate-400 cursor-not-allowed select-all"
               />
               <button
                 type="button"
