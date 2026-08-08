@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle, Wand2 } from 'lucide-react';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle, Wand2, GripHorizontal } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { MOCK_CONFLICTS } from '../../data/mock_data';
 
@@ -27,6 +27,11 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
 
+  // Vertical resizable split panel height percentage (Top competing mods vs Bottom merged output)
+  const [topHeightPercent, setTopHeightPercent] = useState<number>(55);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const currentConflict = conflicts.find((c) => c.id === selectedConflictId) || conflicts[0];
   const [editorContent, setEditorContent] = useState<string>(currentConflict?.merged_output || '');
 
@@ -35,6 +40,42 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setEditorContent(currentConflict.merged_output || currentConflict.base_content);
     }
   }, [selectedConflictId, currentConflict]);
+
+  // Handle vertical panel dragging
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing || !containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const relativeY = e.clientY - containerRect.top;
+      const newPercent = (relativeY / containerRect.height) * 100;
+      // Clamp between 20% and 80%
+      setTopHeightPercent(Math.max(20, Math.min(80, newPercent)));
+    },
+    [isResizing]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const startLine = currentConflict?.start_line ?? 1;
   const conflictLine = currentConflict?.conflict_line ?? 1;
@@ -176,9 +217,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-slate-950 text-slate-200">
+    <div className="flex-1 flex overflow-hidden bg-slate-950 text-slate-200 select-none">
       {/* File Conflict Sidebar */}
-      <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50">
+      <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50 shrink-0">
         <div className="p-3 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
             <GitCompare className="w-4 h-4 text-emerald-400" />
@@ -239,59 +280,61 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       </div>
 
-      {/* Main Split Screen */}
+      {/* Main Split Screen Container */}
       {currentConflict ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Panel: Competing Code Carousel */}
-          <div className="flex-1 flex flex-col border-b border-slate-800 bg-slate-900/80 p-3 min-h-0 overflow-hidden">
-            {/* Header with Auto-Merge Button */}
-            <div className="flex flex-col gap-2 mb-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-cyan-400" />
-                  <span>
-                    File: <code className="text-emerald-400 font-mono">{currentConflict.relative_path}</code>
-                  </span>
+        <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* Top Panel: Competing Code Carousel (Resizable height) */}
+          <div
+            style={{ height: `${topHeightPercent}%` }}
+            className="flex flex-col bg-slate-900/80 p-3 min-h-0 overflow-hidden"
+          >
+            {/* Header Toolbar (Fixed Non-Overlapping Layout) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2 mb-2 shrink-0">
+              <div className="flex items-center gap-2 overflow-hidden max-w-xl">
+                <FileCode className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="text-xs font-bold text-slate-200 truncate">
+                  File: <code className="text-emerald-400 font-mono">{currentConflict.relative_path}</code>
                 </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={onOptimizeAndResolve}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
-                  >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    Auto-Merge & Generate Master Patch
-                  </button>
-
-                  <span className="flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                    Conflict Detected @ Line {conflictLine}
-                  </span>
-
-                  <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
-                    <Layers className="w-3 h-3 text-cyan-400" />
-                    {currentConflict.competing_mods.length + 1} Multi-Way Sources
-                  </span>
-                </div>
               </div>
 
-              {/* Conflict Line Comparison Breakdown Card */}
-              <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2 flex items-start gap-2 text-xs font-mono">
-                <span className="text-amber-400 font-bold shrink-0">Line {conflictLine} Conflict:</span>
-                <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300">
-                  <span className="text-slate-400">
-                    <b className="text-slate-200">Vanilla:</b> "{getLineSnippet(currentConflict.base_content, conflictLine)}"
-                  </span>
-                  {currentConflict.competing_mods.map((mod, idx) => (
-                    <span key={idx} className="text-emerald-300">
-                      <b className="text-emerald-400">[{mod.mod_name}]:</b> "{getLineSnippet(mod.content, conflictLine)}"
-                    </span>
-                  ))}
-                </div>
+              {/* Action Badges & Auto-Merge Button (Clean flex row) */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  Conflict @ Line {conflictLine}
+                </span>
+
+                <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  {currentConflict.competing_mods.length + 1} Sources
+                </span>
+
+                <button
+                  onClick={onOptimizeAndResolve}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Auto-Merge & Generate Master Patch</span>
+                </button>
               </div>
             </div>
 
-            {/* Horizontal Carousel */}
+            {/* Conflict Line Breakdown Box */}
+            <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2 mb-2 flex items-start gap-2 text-xs font-mono shrink-0">
+              <span className="text-amber-400 font-bold shrink-0">Line {conflictLine} Conflict:</span>
+              <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300">
+                <span className="text-slate-400">
+                  <b className="text-slate-200">Vanilla:</b> "{getLineSnippet(currentConflict.base_content, conflictLine)}"
+                </span>
+                {currentConflict.competing_mods.map((mod, idx) => (
+                  <span key={idx} className="text-emerald-300">
+                    <b className="text-emerald-400">[{mod.mod_name}]:</b> "{getLineSnippet(mod.content, conflictLine)}"
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Horizontal Code Panels Carousel */}
             <div className="flex-1 flex gap-3 overflow-x-auto min-h-0">
               {/* Panel A: Vanilla Base */}
               <div className="w-96 min-w-96 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
@@ -341,9 +384,23 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </div>
           </div>
 
-          {/* Bottom Panel: Resolved Output Monaco Editor */}
-          <div className="flex-1 flex flex-col bg-slate-950 p-3 min-h-0">
-            <div className="flex items-center justify-between mb-2">
+          {/* Draggable Vertical Splitter Bar */}
+          <div
+            onMouseDown={handleMouseDown}
+            className={`h-2.5 bg-slate-900 hover:bg-emerald-600/60 border-y border-slate-800 cursor-ns-resize flex items-center justify-center transition shrink-0 select-none ${
+              isResizing ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:text-white'
+            }`}
+            title="Drag vertically to resize code panels vs output editor"
+          >
+            <GripHorizontal className="w-5 h-3" />
+          </div>
+
+          {/* Bottom Panel: Resolved Output Monaco Editor (Dynamic remaining height) */}
+          <div
+            style={{ height: `${100 - topHeightPercent}%` }}
+            className="flex flex-col bg-slate-950 p-3 min-h-0 overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-emerald-400">
                   Resolved Merged Output (Guarded Master Patch)
