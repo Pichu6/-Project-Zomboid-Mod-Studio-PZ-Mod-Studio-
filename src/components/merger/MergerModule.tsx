@@ -10,8 +10,8 @@ interface MergerModuleProps {
   onResolveConflict: (conflictId: string, resolvedCode: string) => void;
   onOptimizeAndResolve: () => void;
   onGoToSettings: () => void;
-  onRescan: () => void;
-  onLoadMockups: (mockups: VfsConflict[]) => void;
+  onRescan: () => Promise<void> | void;
+  onLoadMockups?: (mockups: VfsConflict[]) => void;
 }
 
 export const MergerModule: React.FC<MergerModuleProps> = ({
@@ -24,6 +24,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 }) => {
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
+  const [isRescanning, setIsRescanning] = useState<boolean>(false);
+  const [showScanDoneBanner, setShowScanDoneBanner] = useState<boolean>(false);
 
   // Vertical resizable split panel height percentage (Top competing mods vs Bottom merged output)
   const [topHeightPercent, setTopHeightPercent] = useState<number>(55);
@@ -38,6 +40,17 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setEditorContent(currentConflict.merged_output || currentConflict.base_content);
     }
   }, [selectedConflictId, currentConflict]);
+
+  const handleRescanClick = async () => {
+    setIsRescanning(true);
+    setShowScanDoneBanner(false);
+    await onRescan();
+    setTimeout(() => {
+      setIsRescanning(false);
+      setShowScanDoneBanner(true);
+      setTimeout(() => setShowScanDoneBanner(false), 2500);
+    }, 600);
+  };
 
   // Handle vertical panel dragging
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -179,14 +192,17 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     );
   }
 
-  // State 2: 0 real conflicts found
+  // State 2: 0 real conflicts found (Clean Screen)
   if (conflicts.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
-        <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner">
-            <ShieldCheck className="w-8 h-8" />
+        <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl relative overflow-hidden">
+          <div className={`w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner transition-all duration-300 ${
+            isRescanning ? 'scale-110 border-cyan-400 text-cyan-400 animate-pulse' : ''
+          }`}>
+            <ShieldCheck className={`w-8 h-8 ${isRescanning ? 'animate-bounce text-cyan-400' : ''}`} />
           </div>
+
           <div>
             <h3 className="text-lg font-bold text-slate-100">All Clean! No Script Conflicts Detected</h3>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
@@ -194,14 +210,22 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </p>
           </div>
 
-          <div className="pt-2 flex justify-center">
+          <div className="pt-2 flex flex-col items-center gap-3">
             <button
-              onClick={onRescan}
-              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-5 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer shadow"
+              onClick={handleRescanClick}
+              disabled={isRescanning}
+              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-5 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer shadow hover:border-emerald-500"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
-              Rescan Active Mods
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRescanning ? 'animate-spin text-cyan-400' : ''}`} />
+              <span>{isRescanning ? 'Scanning Active Mods...' : 'Rescan Active Mods'}</span>
             </button>
+
+            {showScanDoneBanner && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[11px] font-mono animate-fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Scan Complete: 0 Unresolved Conflicts Found</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
