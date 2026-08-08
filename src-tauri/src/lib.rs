@@ -1,8 +1,12 @@
 pub mod diff_engine;
+pub mod load_order;
 pub mod vfs;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
 use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
+use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
+use load_order::mod_info::ModManifest;
+use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
 use vfs::{auto_detect_paths, scan_conflicts, validate_paths, StudioPaths, VfsConflictRaw};
 
 #[tauri::command]
@@ -35,6 +39,21 @@ fn merge_pz_data_scripts_cmd(base: String, mod_a: String, mod_b: String) -> PzSc
     merge_pz_data_scripts(&base, &mod_a, &mod_b)
 }
 
+#[tauri::command]
+fn read_mod_list_ini_cmd(ini_path: String) -> Result<ModListData, String> {
+    read_mod_list_ini(&ini_path)
+}
+
+#[tauri::command]
+fn write_mod_list_ini_cmd(ini_path: String, active_mods: Vec<String>) -> Result<(), String> {
+    write_mod_list_ini(&ini_path, &active_mods)
+}
+
+#[tauri::command]
+fn sort_mod_dependencies_cmd(manifests: Vec<ModManifest>) -> DependencyAnalysisResult {
+    sort_dependencies_topologically(&manifests)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -45,7 +64,10 @@ pub fn run() {
             scan_conflicts_cmd,
             validate_lua_syntax_cmd,
             three_way_merge_lua_cmd,
-            merge_pz_data_scripts_cmd
+            merge_pz_data_scripts_cmd,
+            read_mod_list_ini_cmd,
+            write_mod_list_ini_cmd,
+            sort_mod_dependencies_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
