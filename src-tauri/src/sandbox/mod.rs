@@ -34,7 +34,34 @@ pub struct LogLinePayload {
     pub is_error: bool,
 }
 
-/// Spawns an isolated Project Zomboid test process and monitors console.txt in real time.
+/// Checks Windows task list to detect if ProjectZomboid64.exe is already running.
+pub fn find_running_pz_pid() -> Option<u32> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = Command::new("tasklist");
+        cmd.args(&["/FI", "IMAGENAME eq ProjectZomboid64.exe", "/FO", "CSV", "/NH"]);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        if let Ok(output) = cmd.output() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                if line.contains("ProjectZomboid64.exe") {
+                    let parts: Vec<&str> = line.split(',').collect();
+                    if parts.len() >= 2 {
+                        let pid_str = parts[1].trim().trim_matches('"');
+                        if let Ok(pid) = pid_str.parse::<u32>() {
+                            return Some(pid);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Spawns or attaches to an active Project Zomboid process and monitors console.txt in real time.
 pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
     config: SandboxLaunchConfig,
@@ -42,31 +69,48 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
 ) -> Result<u32, String> {
     let install_dir = Path::new(&config.pz_install_dir);
     let exe_path = install_dir.join("ProjectZomboid64.exe");
-    
+
     if !exe_path.exists() {
         return Err(format!("ProjectZomboid64.exe not found at: {}", exe_path.display()));
     }
 
-    let temp_cache_dir = Path::new(&config.user_zomboid_dir).join("temp_sandbox_cache");
-    let mut cmd = Command::new(&exe_path);
-    cmd.current_dir(install_dir); // Set working directory to game folder so DLLs load properly
-    cmd.arg("-cachedir").arg(&temp_cache_dir).arg("-debug");
+    // Safety Guard: Check if ProjectZomboid64.exe is ALREADY running on Windows
+    let (pid, is_already_running) = if let Some(existing_pid) = find_running_pz_pid() {
+        (existing_pid, true)
+    } else {
+        let temp_cache_dir = Path::new(&config.user_zomboid_dir).join("temp_sandbox_cache");
+        let mut cmd = Command::new(&exe_path);
+        cmd.current_dir(install_dir); // Set working directory to game folder so DLLs load properly
+        cmd.arg("-cachedir").arg(&temp_cache_dir).arg("-debug");
 
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        if config.test_mode == "BACKGROUND_QUICK" {
-            // Hide console window for background test
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            if config.test_mode == "BACKGROUND_QUICK" {
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
         }
-    }
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to launch ProjectZomboid64.exe: {}", e))?;
-    let pid = child.id();
+        let child = cmd.spawn().map_err(|e| format!("Failed to launch ProjectZomboid64.exe: {}", e))?;
+        (child.id(), false)
+    };
+
+    // Emit initial log message
+    let app = app_handle.clone();
+    if is_already_running {
+        let _ = app.emit("sandbox-log", LogLinePayload {
+            line: format!("[PZ Monitor Center] Project Zomboid is ALREADY RUNNING (PID: {}). Attached to active session without launching a duplicate game!", pid),
+            is_error: false,
+        });
+    } else {
+        let _ = app.emit("sandbox-log", LogLinePayload {
+            line: format!("[PZ Monitor Center] Launched new ProjectZomboid64.exe (-debug) session! PID: {}", pid),
+            is_error: false,
+        });
+    }
 
     // Spawn background thread to stream console.txt lines and detect crashes
     let console_txt_path = Path::new(&config.user_zomboid_dir).join("console.txt");
-    let app = app_handle.clone();
 
     thread::spawn(move || {
         let mut file_offset = 0u64;
