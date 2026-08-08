@@ -71,6 +71,15 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleRefreshMods = async () => {
+    if (paths.is_valid) {
+      const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
+      if (allSubscribedMods.length > 0) {
+        setMods(allSubscribedMods);
+      }
+    }
+  };
+
   const handleLoadMockups = (mockups: VfsConflict[]) => {
     setConflicts(mockups);
   };
@@ -223,6 +232,7 @@ export const App: React.FC = () => {
               mods={mods}
               onReorder={handleReorderMods}
               onToggleMod={handleToggleMod}
+              onRefreshMods={handleRefreshMods}
               onGoToSettings={() => setActiveTab('SETTINGS')}
               onLoadMockups={handleLoadModMockups}
             />

@@ -26,6 +26,7 @@ import {
   Search,
   X,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { MOCK_MODS } from '../../data/mock_data';
 
@@ -34,6 +35,7 @@ interface LoadOrderModuleProps {
   mods: ModInfo[];
   onReorder: (newOrder: ModInfo[]) => void;
   onToggleMod: (modId: string) => void;
+  onRefreshMods: () => Promise<void>;
   onGoToSettings: () => void;
   onLoadMockups: (mockups: ModInfo[]) => void;
 }
@@ -43,6 +45,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   mods,
   onReorder,
   onToggleMod,
+  onRefreshMods,
   onGoToSettings,
   onLoadMockups,
 }) => {
@@ -51,6 +54,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [assigningModId, setAssigningModId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -66,6 +70,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
     );
   });
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await onRefreshMods();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   const moveToTop = (index: number) => {
     if (index === 0) return;
@@ -211,7 +221,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </p>
           </div>
 
-          <div className="pt-2 flex justify-center">
+          <div className="pt-2 flex gap-3 justify-center">
+            <button
+              onClick={handleRefresh}
+              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-4 py-2.5 rounded-lg border border-slate-700 transition cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh Subscribed Mods
+            </button>
+
             <button
               onClick={() => onLoadMockups(MOCK_MODS)}
               className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-4 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer"
@@ -243,6 +261,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Refresh Subscribed Mods Button */}
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer"
+            title="Re-scan Workshop directory for newly subscribed/unsubscribed mods"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh Subscribed</span>
+          </button>
+
           {/* Realtime Search Bar Input */}
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
@@ -251,7 +280,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               placeholder="Search mod name, ID, workshop..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-64 bg-slate-900 border border-slate-800 focus:border-emerald-500/80 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
+              className="w-60 bg-slate-900 border border-slate-800 focus:border-emerald-500/80 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
             />
             {searchQuery && (
               <button
