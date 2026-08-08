@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, Target, ShieldCheck, FolderX, RefreshCw, Sparkles } from 'lucide-react';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { MOCK_CONFLICTS } from '../../data/mock_data';
 
@@ -24,13 +24,18 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 }) => {
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
-  const [focusOnConflict, setFocusOnConflict] = useState<boolean>(true);
 
   const currentConflict = conflicts.find((c) => c.id === selectedConflictId) || conflicts[0];
   const [editorContent, setEditorContent] = useState<string>(currentConflict?.merged_output || '');
 
+  useEffect(() => {
+    if (currentConflict) {
+      setEditorContent(currentConflict.merged_output || currentConflict.base_content);
+    }
+  }, [selectedConflictId, currentConflict]);
+
   const startLine = currentConflict?.start_line ?? 1;
-  const conflictLine = currentConflict?.conflict_line ?? 4;
+  const conflictLine = currentConflict?.conflict_line ?? 1;
   const totalFileLines = currentConflict?.total_file_lines ?? currentConflict?.base_content.split('\n').length ?? 1;
 
   const handleSelectConflict = (c: VfsConflict) => {
@@ -39,7 +44,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   /**
-   * Helper component to render code snippet or full file with real aligned line numbers
+   * Helper component to render code snippet or full file with real line numbers & auto-scroll to conflict
    */
   const LinedCodeSnippet: React.FC<{
     content: string;
@@ -47,22 +52,30 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     targetConflictLine: number;
   }> = ({ content, startLineNum, targetConflictLine }) => {
     const lines = content.split('\n');
+    const conflictRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      if (conflictRef.current) {
+        conflictRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, [targetConflictLine, content]);
 
     return (
       <div className="flex-1 flex overflow-auto text-xs font-mono bg-slate-950 rounded-b-lg select-text">
         {/* Line Numbers Gutter */}
-        <div className="w-12 bg-slate-900/90 border-r border-slate-800 text-slate-500 py-2 px-1 text-right select-none font-mono text-[11px] shrink-0 space-y-0.5">
+        <div className="w-16 bg-slate-900/90 border-r border-slate-800 text-slate-500 py-2 px-1 text-right select-none font-mono text-[11px] shrink-0 space-y-0.5">
           {lines.map((_, idx) => {
             const currentLineNum = (startLineNum || 1) + idx;
             const isConflict = currentLineNum === targetConflictLine;
             return (
               <div
                 key={idx}
-                className={`leading-6 h-6 px-1 ${
-                  isConflict ? 'text-amber-400 font-bold bg-amber-500/20 rounded' : 'hover:text-slate-300'
+                className={`leading-6 h-6 px-1 flex items-center justify-end gap-1 ${
+                  isConflict ? 'text-amber-300 font-bold bg-amber-500/30 rounded' : 'hover:text-slate-300'
                 }`}
               >
-                {currentLineNum}
+                {isConflict && <span className="text-[9px] text-amber-400 font-extrabold">▶</span>}
+                <span>{currentLineNum}</span>
               </div>
             );
           })}
@@ -76,9 +89,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             return (
               <div
                 key={idx}
+                ref={isConflict ? conflictRef : null}
                 className={`leading-6 h-6 px-3 whitespace-pre text-[12px] font-mono flex items-center transition ${
                   isConflict
-                    ? 'bg-amber-500/20 text-amber-200 border-l-4 border-amber-400 font-semibold shadow-inner'
+                    ? 'bg-amber-500/25 text-amber-200 border-l-4 border-amber-400 font-bold shadow-md'
                     : 'text-slate-300 hover:bg-slate-900/40'
                 }`}
               >
@@ -91,7 +105,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     );
   };
 
-  // State 1: Invalid or unconfigured installation path
+  // State 1: Invalid paths
   if (!paths.is_valid) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
@@ -116,7 +130,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     );
   }
 
-  // State 2: Valid paths, but 0 real conflicts found!
+  // State 2: 0 real conflicts found
   if (conflicts.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
@@ -153,7 +167,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     );
   }
 
-  // State 3: Active conflicts to display & merge!
+  // Helper to extract conflicting line snippet for breakdown box
+  const getLineSnippet = (text: string, lineIndex: number): string => {
+    const lines = text.split('\n');
+    return lines[lineIndex - 1]?.trim() || '(empty or end of file)';
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden bg-slate-950 text-slate-200">
       {/* File Conflict Sidebar */}
@@ -170,7 +189,6 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
                 : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}
-            title="Collapse non-conflicting lines"
           >
             <EyeOff className="w-3 h-3" />
             <span>{filterNoise ? 'Noise Filtered' : 'Show All'}</span>
@@ -199,17 +217,19 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       <CheckCircle2 className="w-3 h-3" /> Auto-Merged
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-[10px] text-amber-400">
-                      <AlertTriangle className="w-3 h-3" /> Needs Review
+                    <span className="flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+                      <AlertTriangle className="w-3 h-3 text-amber-400" /> Needs Review
                     </span>
                   )}
                 </div>
-                <div className="font-mono text-slate-200 truncate" title={c.relative_path}>
+                <div className="font-mono text-slate-200 font-semibold truncate" title={c.relative_path}>
                   {c.relative_path.split('/').pop()}
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
                   <span className="truncate max-w-[140px]">{c.relative_path}</span>
-                  <span className="font-mono text-amber-400/90 font-semibold">L{c.conflict_line ?? 4}</span>
+                  <span className="font-mono text-amber-400 font-bold bg-amber-500/10 px-1 rounded border border-amber-500/20">
+                    L{c.conflict_line ?? 1}
+                  </span>
                 </div>
               </div>
             );
@@ -217,48 +237,58 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       </div>
 
-      {/* Main Diff & Merger View */}
+      {/* Main Split Screen: Top 50% Multi-Way Competing Code / Bottom 50% Output Editor */}
       {currentConflict ? (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Carousel of Multi-Way Competing Mods */}
-          <div className="h-72 border-b border-slate-800 bg-slate-900/80 p-3 flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-300 flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-cyan-400" />
-                <span>
-                  Multi-Way (N-Way) Sources for: <code className="text-emerald-400">{currentConflict.relative_path}</code>
+          {/* Top Panel: 50% Screen Height for Competing Code Carousel */}
+          <div className="flex-1 flex flex-col border-b border-slate-800 bg-slate-900/80 p-3 min-h-0 overflow-hidden">
+            {/* Header & Conflict Summary Banner */}
+            <div className="flex flex-col gap-2 mb-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                  <FileCode className="w-4 h-4 text-cyan-400" />
+                  <span>
+                    File: <code className="text-emerald-400 font-mono">{currentConflict.relative_path}</code>
+                  </span>
                 </span>
-              </span>
 
-              {/* Excerpt Metadata Banner & Focus Toggle */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setFocusOnConflict(!focusOnConflict)}
-                  className={`flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full border transition cursor-pointer ${
-                    focusOnConflict
-                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
-                >
-                  <Target className="w-3 h-3 text-amber-400" />
-                  <span>Focused on Conflict @ Line {conflictLine}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                    Conflict Detected @ Line {conflictLine}
+                  </span>
 
-                <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
-                  <Layers className="w-3 h-3 text-cyan-400" />
-                  {currentConflict.competing_mods.length + 1} Multi-Way Sources (Vanilla Base + {currentConflict.competing_mods.length} Mods)
-                </span>
+                  <span className="flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
+                    <Layers className="w-3 h-3 text-cyan-400" />
+                    {currentConflict.competing_mods.length + 1} Multi-Way Sources
+                  </span>
+                </div>
+              </div>
+
+              {/* Conflict Line Comparison Breakdown Card */}
+              <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2 flex items-start gap-2 text-xs font-mono">
+                <span className="text-amber-400 font-bold shrink-0">Line {conflictLine} Conflict:</span>
+                <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300">
+                  <span className="text-slate-400">
+                    <b className="text-slate-200">Vanilla:</b> "{getLineSnippet(currentConflict.base_content, conflictLine)}"
+                  </span>
+                  {currentConflict.competing_mods.map((mod, idx) => (
+                    <span key={idx} className="text-emerald-300">
+                      <b className="text-emerald-400">[{mod.mod_name}]:</b> "{getLineSnippet(mod.content, conflictLine)}"
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Horizontal Carousel */}
-            <div className="flex-1 flex gap-3 overflow-x-auto pb-2">
+            {/* Horizontal Carousel with 50% Height */}
+            <div className="flex-1 flex gap-3 overflow-x-auto min-h-0">
               {/* Panel A: Vanilla Base */}
-              <div className="w-80 min-w-80 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
-                <div className="px-3 py-2 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300">Vanilla Base</span>
+              <div className="w-96 min-w-96 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
+                <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300">Vanilla Base Game</span>
                   <span className="text-[9px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
-                    Lines {startLine} - {startLine + currentConflict.base_content.split('\n').length - 1} ({totalFileLines} total)
+                    {totalFileLines} total lines
                   </span>
                 </div>
                 <LinedCodeSnippet
@@ -272,21 +302,21 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               {currentConflict.competing_mods.map((mod, idx) => (
                 <div
                   key={idx}
-                  className="w-96 min-w-96 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow group hover:border-emerald-500/50 transition"
+                  className="w-[420px] min-w-[420px] bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow group hover:border-emerald-500/50 transition"
                 >
                   <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 overflow-hidden">
-                      <span className="text-xs font-bold text-emerald-400 truncate max-w-[170px]" title={mod.mod_name}>
+                      <span className="text-xs font-bold text-emerald-400 truncate max-w-[220px]" title={mod.mod_name}>
                         {mod.mod_name}
                       </span>
                       <span className="text-[9px] font-mono text-slate-400 shrink-0">
-                        Mod #{idx + 1}
+                        ({mod.mod_id})
                       </span>
                     </div>
 
                     <button
                       onClick={() => setEditorContent(mod.content)}
-                      className="px-2 py-1 text-[10px] font-semibold rounded bg-emerald-950 text-emerald-300 border border-emerald-800 hover:bg-emerald-700 hover:text-white transition cursor-pointer shrink-0"
+                      className="px-2.5 py-1 text-[10px] font-semibold rounded bg-emerald-950 text-emerald-300 border border-emerald-800 hover:bg-emerald-700 hover:text-white transition cursor-pointer shrink-0 shadow-sm"
                     >
                       Use This Code
                     </button>
@@ -301,12 +331,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </div>
           </div>
 
-          {/* Bottom Resolved Output Monaco Editor */}
-          <div className="flex-1 flex flex-col bg-slate-950 p-3">
+          {/* Bottom Panel: 50% Screen Height for Resolved Output Monaco Editor */}
+          <div className="flex-1 flex flex-col bg-slate-950 p-3 min-h-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-emerald-400">
-                  Resolved Merged Output (Syntax Guarded)
+                <span className="text-xs font-bold text-emerald-400">
+                  Resolved Merged Output (Guarded Master Patch)
                 </span>
                 <span className="px-2 py-0.5 text-[9px] rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80 font-mono">
                   Live Lua AST Validation
@@ -315,7 +345,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
               <button
                 onClick={() => onResolveConflict(currentConflict.id, editorContent)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow transition cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 Confirm & Save Output

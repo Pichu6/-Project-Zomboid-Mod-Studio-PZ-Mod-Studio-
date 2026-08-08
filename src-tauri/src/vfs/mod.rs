@@ -91,7 +91,6 @@ pub fn validate_paths(paths: StudioPaths) -> StudioPaths {
 /// Scans active Workshop mods & Vanilla directories for virtual path collisions.
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     let mut path_map: HashMap<String, Vec<CompetingFileRaw>> = HashMap::new();
-    let mut mod_name_cache: HashMap<String, String> = HashMap::new();
 
     let workshop_path = Path::new(&paths.workshop_dir);
     if workshop_path.exists() {
@@ -107,11 +106,7 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                     if let Some(rel_idx) = path_str.find("media\\") {
                         let rel_path = path_str[rel_idx..].replace('\\', "/");
                         let mod_id = extract_mod_id_from_path(&path_str);
-                        
-                        // Resolve human-readable mod name from mod.info
-                        let mod_name = mod_name_cache.entry(mod_id.clone()).or_insert_with(|| {
-                            find_and_parse_mod_name(workshop_path, &mod_id)
-                        }).clone();
+                        let mod_name = resolve_specific_mod_name(path, &mod_id);
 
                         // Read actual file content
                         let content = fs::read_to_string(path).unwrap_or_default();
@@ -186,18 +181,24 @@ fn extract_mod_id_from_path(path: &str) -> String {
     "UnknownMod".to_string()
 }
 
-fn find_and_parse_mod_name(workshop_root: &Path, mod_id: &str) -> String {
-    let mod_folder = workshop_root.join(mod_id);
-    for entry in WalkDir::new(&mod_folder).max_depth(3).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_name() == "mod.info" {
-            if let Some(manifest) = parse_mod_info(entry.path()) {
+/// Resolves unique mod name by walking up towards closest mod.info manifest
+fn resolve_specific_mod_name(file_path: &Path, default_id: &str) -> String {
+    let mut curr = file_path.parent();
+    while let Some(dir) = curr {
+        let mod_info_file = dir.join("mod.info");
+        if mod_info_file.exists() {
+            if let Some(manifest) = parse_mod_info(&mod_info_file) {
                 if !manifest.name.is_empty() {
                     return manifest.name;
                 }
             }
         }
+        if dir.file_name().and_then(|n| n.to_str()) == Some("108600") {
+            break;
+        }
+        curr = dir.parent();
     }
-    format!("Workshop Mod ({})", mod_id)
+    format!("Workshop Mod ({})", default_id)
 }
 
 fn find_first_conflict_line(base: &str, competing: &[CompetingFileRaw]) -> usize {
