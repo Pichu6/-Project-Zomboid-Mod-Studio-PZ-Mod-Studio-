@@ -90,11 +90,7 @@ export const App: React.FC = () => {
 
   // Magic Button: Auto-Merge & Generate Master Patch on Disk!
   const handleOptimizeAndResolve = async () => {
-    const updatedConflicts = conflicts.map((c) => ({
-      ...c,
-      status: 'AUTO_MERGED' as const,
-    }));
-    setConflicts(updatedConflicts);
+    const totalCount = conflicts.length;
 
     const updatedRules = rules.map((r) => ({
       ...r,
@@ -118,8 +114,11 @@ export const App: React.FC = () => {
         active_polyfill_ids: activePolyfillIds,
       });
 
+      // Clear conflicts from list since they are now resolved into Master Patch on disk!
+      setConflicts([]);
+
       if (result.success) {
-        alert(`✨ Master Patch Generation Complete!\n\n- Master Patch Mod written at:\n${result.patch_mod_dir}\n- Merged files written: ${result.files_written}\n- Active polyfills injected: ${result.polyfills_injected}\n- ModListData.ini load order updated!`);
+        alert(`✨ Auto-Merge Complete & All Conflicts Resolved!\n\n- Master Patch Mod generated at:\n${result.patch_mod_dir}\n- Total conflicts resolved into patch: ${totalCount}\n- Merged files written: ${result.files_written}\n- Active polyfills injected: ${result.polyfills_injected}\n- ModListData.ini load order updated!`);
       } else {
         alert('✨ Auto-Merge Complete!\n- Conflicts merged AST-aware.\n- Polyfills enabled.');
       }
@@ -137,13 +136,9 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleResolveConflict = (conflictId: string, resolvedCode: string) => {
+  const handleResolveConflict = (conflictId: string, _resolvedCode: string) => {
     setConflicts((prev) =>
-      prev.map((c) =>
-        c.id === conflictId
-          ? { ...c, merged_output: resolvedCode, status: 'RESOLVED' as const }
-          : c
-      )
+      prev.filter((c) => c.id !== conflictId)
     );
   };
 
@@ -209,7 +204,7 @@ export const App: React.FC = () => {
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Studio Header */}
       <StudioHeader
-        conflictCount={conflicts.filter((c) => c.status !== 'RESOLVED' && c.status !== 'AUTO_MERGED').length}
+        conflictCount={conflicts.length}
         polyfillCount={rules.filter((r) => r.enabled).length}
         onRunSandbox={handleRunSandbox}
       />
@@ -220,7 +215,7 @@ export const App: React.FC = () => {
         <StudioSidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          conflictCount={conflicts.filter((c) => c.status !== 'RESOLVED' && c.status !== 'AUTO_MERGED').length}
+          conflictCount={conflicts.length}
           errorCardCount={errorCards.length}
         />
 
