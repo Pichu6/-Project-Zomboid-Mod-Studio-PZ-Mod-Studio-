@@ -140,4 +140,4 @@ export interface SandboxSession {
 // App Navigation State
 // ==========================================
 
-export type ActiveTab = 'MOD_LIST' | 'MERGER' | 'POLYFILLS' | 'MONITOR' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'MERGER' | 'MONITOR' | 'SETTINGS';

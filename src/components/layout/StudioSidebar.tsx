@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveTab } from '../../types';
-import { GitCompare, Wrench, ListOrdered, Settings, Activity } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -29,13 +29,6 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: GitCompare,
       badge: conflictCount > 0 ? conflictCount : null,
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    },
-    {
-      id: 'POLYFILLS' as ActiveTab,
-      label: 'Polyfill Rules',
-      icon: Wrench,
-      badge: null,
-      badgeColor: '',
     },
     {
       id: 'MONITOR' as ActiveTab,

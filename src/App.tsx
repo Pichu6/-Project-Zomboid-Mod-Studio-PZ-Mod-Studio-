@@ -4,7 +4,6 @@ import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
 import { MergerModule } from './components/merger/MergerModule';
-import { PolyfillsModule } from './components/polyfills/PolyfillsModule';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
@@ -169,7 +168,7 @@ export const App: React.FC = () => {
       prev.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r))
     );
     setErrorCards((prev) => prev.filter((card) => card.polyfill_rule_id_suggestion !== polyfillRuleId));
-    setActiveTab('POLYFILLS');
+    setActiveTab('SETTINGS');
   };
 
   const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
@@ -251,10 +250,6 @@ export const App: React.FC = () => {
             />
           )}
 
-          {activeTab === 'POLYFILLS' && (
-            <PolyfillsModule rules={rules} onToggleRule={handleToggleRule} />
-          )}
-
           {activeTab === 'MONITOR' && (
             <SandboxModule
               paths={paths}
@@ -267,7 +262,9 @@ export const App: React.FC = () => {
           {activeTab === 'SETTINGS' && (
             <SettingsModule
               paths={paths}
+              rules={rules}
               onSavePaths={handleSavePaths}
+              onToggleRule={handleToggleRule}
               onAutoDetect={handleAutoDetect}
             />
           )}
