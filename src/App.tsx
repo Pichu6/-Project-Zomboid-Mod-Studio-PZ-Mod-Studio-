@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard } from './types';
 import { MOCK_CONFLICTS, MOCK_MODS, MOCK_ERROR_CARDS } from './data/mock_data';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
@@ -9,6 +9,7 @@ import { PolyfillsModule } from './components/polyfills/PolyfillsModule';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
+import { TauriService } from './services/tauri';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MERGER');
@@ -17,7 +18,7 @@ export const App: React.FC = () => {
   const [mods, setMods] = useState<ModInfo[]>(MOCK_MODS);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>(MOCK_ERROR_CARDS);
 
-  // Studio Directory Paths State (Supports auto-detect & manual entry)
+  // Studio Directory Paths State (Connected to Rust auto-detection & validation)
   const [paths, setPaths] = useState<StudioPathsUI>({
     pz_install_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid',
     workshop_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600',
@@ -25,6 +26,36 @@ export const App: React.FC = () => {
     mod_list_ini_path: 'C:\\Users\\User\\Zomboid\\Lua\\ModManager\\ModListData.ini',
     is_valid: true,
   });
+
+  // Auto-detect paths from Rust backend on initial load
+  useEffect(() => {
+    const initPaths = async () => {
+      const autoPaths = await TauriService.getAutoPaths();
+      setPaths(autoPaths);
+
+      // Perform initial conflict scan with detected paths
+      const scannedConflicts = await TauriService.scanConflicts(autoPaths);
+      if (scannedConflicts.length > 0) {
+        setConflicts(scannedConflicts);
+      }
+    };
+    initPaths();
+  }, []);
+
+  // Listen to realtime sandbox logs & error cards from Rust watcher
+  useEffect(() => {
+    let unlistenErrorCards: (() => void) | undefined;
+
+    TauriService.listenSandboxErrorCards((card) => {
+      setErrorCards((prev) => [card, ...prev]);
+    }).then((unlisten) => {
+      unlistenErrorCards = unlisten;
+    });
+
+    return () => {
+      if (unlistenErrorCards) unlistenErrorCards();
+    };
+  }, []);
 
   // Magic Button: Optimize & Resolve All
   const handleOptimizeAndResolve = () => {
@@ -45,6 +76,11 @@ export const App: React.FC = () => {
 
   const handleRunSandbox = () => {
     setActiveTab('SANDBOX');
+    TauriService.launchSandbox({
+      pz_install_dir: paths.pz_install_dir,
+      user_zomboid_dir: paths.user_zomboid_dir,
+      test_mode: 'BACKGROUND_QUICK',
+    });
   };
 
   const handleResolveConflict = (conflictId: string, resolvedCode: string) => {
@@ -65,6 +101,8 @@ export const App: React.FC = () => {
 
   const handleReorderMods = (newOrder: ModInfo[]) => {
     setMods(newOrder);
+    const activeModIds = newOrder.filter((m) => m.enabled).map((m) => m.mod_id);
+    TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
   };
 
   const handleToggleMod = (modId: string) => {
@@ -81,19 +119,14 @@ export const App: React.FC = () => {
     setActiveTab('POLYFILLS');
   };
 
-  const handleSavePaths = (updatedPaths: StudioPathsUI) => {
-    setPaths(updatedPaths);
+  const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
+    const validated = await TauriService.validatePaths(updatedPaths);
+    setPaths(validated);
   };
 
-  const handleAutoDetect = () => {
-    // Standard default paths
-    setPaths({
-      pz_install_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid',
-      workshop_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600',
-      user_zomboid_dir: 'C:\\Users\\User\\Zomboid',
-      mod_list_ini_path: 'C:\\Users\\User\\Zomboid\\Lua\\ModManager\\ModListData.ini',
-      is_valid: true,
-    });
+  const handleAutoDetect = async () => {
+    const autoPaths = await TauriService.getAutoPaths();
+    setPaths(autoPaths);
   };
 
   return (
