@@ -41,15 +41,34 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
     })
 }
 
-/// Writes active mod load order list back to ModListData.ini.
+/// Writes active mod load order list back to ModListData.ini AND synchronizes
+/// in-game Mod Manager configuration files (default.txt & saved_modlists) so the in-game UI shows 100% identical ordering!
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let path = Path::new(ini_path);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+
+        // 1. Primary write to Zomboid/Lua/ModListData.ini
+        let mods_joined = active_mods.join(";");
+        let content = format!("[ModList]\nactiveMods={}\n", mods_joined);
+        fs::write(path, content).map_err(|e| e.to_string())?;
+
+        // 2. Synchronize Zomboid/mods/default.txt for in-game Mod Manager compatibility
+        if let Some(zomboid_dir) = parent.parent() {
+            let default_txt_path = zomboid_dir.join("mods").join("default.txt");
+            if let Some(mods_parent) = default_txt_path.parent() {
+                let _ = fs::create_dir_all(mods_parent);
+            }
+            let default_txt_content = active_mods.join("\n");
+            let _ = fs::write(default_txt_path, default_txt_content);
+
+            // 3. Synchronize Zomboid/saved_modlists/PZModStudio.txt profile
+            let saved_modlists_dir = zomboid_dir.join("saved_modlists");
+            let _ = fs::create_dir_all(&saved_modlists_dir);
+            let pz_studio_preset = saved_modlists_dir.join("PZModStudio.txt");
+            let _ = fs::write(pz_studio_preset, active_mods.join("\n"));
+        }
     }
 
-    let mods_joined = active_mods.join(";");
-    let content = format!("[ModList]\nactiveMods={}\n", mods_joined);
-
-    fs::write(path, content).map_err(|e| e.to_string())
+    Ok(())
 }
