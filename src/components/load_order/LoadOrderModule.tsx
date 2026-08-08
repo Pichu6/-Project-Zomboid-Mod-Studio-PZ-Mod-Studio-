@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -28,6 +28,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Info,
+  Layers,
 } from 'lucide-react';
 import { MOCK_MODS } from '../../data/mock_data';
 
@@ -40,6 +41,18 @@ interface LoadOrderModuleProps {
   onGoToSettings: () => void;
   onLoadMockups: (mockups: ModInfo[]) => void;
 }
+
+// Preset harmonious color palettes for multi-mod Workshop packages
+const PACKAGE_COLOR_PALETTES = [
+  { border: 'border-l-cyan-500', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-800' },
+  { border: 'border-l-purple-500', badge: 'bg-purple-950/80 text-purple-300 border-purple-800' },
+  { border: 'border-l-amber-500', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' },
+  { border: 'border-l-emerald-500', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' },
+  { border: 'border-l-rose-500', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' },
+  { border: 'border-l-indigo-500', badge: 'bg-indigo-950/80 text-indigo-300 border-indigo-800' },
+  { border: 'border-l-teal-500', badge: 'bg-teal-950/80 text-teal-300 border-teal-800' },
+  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-950/80 text-fuchsia-300 border-fuchsia-800' },
+];
 
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   paths,
@@ -61,8 +74,33 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || mods[0];
 
-  // Count unique Workshop item IDs
-  const uniqueWorkshopIds = new Set(mods.map((m) => m.workshop_id).filter(Boolean)).size;
+  // Count unique Workshop item IDs and identify multi-mod packages
+  const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    mods.forEach((m) => {
+      if (m.workshop_id) {
+        counts[m.workshop_id] = (counts[m.workshop_id] || 0) + 1;
+      }
+    });
+
+    const multiMap: Record<string, boolean> = {};
+    const colorMap: Record<string, typeof PACKAGE_COLOR_PALETTES[0]> = {};
+    let colorIdx = 0;
+
+    Object.entries(counts).forEach(([wId, count]) => {
+      if (count > 1) {
+        multiMap[wId] = true;
+        colorMap[wId] = PACKAGE_COLOR_PALETTES[colorIdx % PACKAGE_COLOR_PALETTES.length];
+        colorIdx++;
+      }
+    });
+
+    return {
+      multiModPackageMap: multiMap,
+      workshopColorMap: colorMap,
+      uniqueWorkshopIds: Object.keys(counts).length,
+    };
+  }, [mods]);
 
   // Realtime search filtering by Mod Name, Mod ID, or Workshop ID
   const filteredMods = mods.filter((m) => {
@@ -266,7 +304,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <span>Active: <b className="text-emerald-400">{activeCount}</b></span>
             <span
               className="ml-1 cursor-pointer text-slate-500 hover:text-slate-300"
-              title="Steam Workshop counts packages/items (58). A single Workshop item can contain multiple sub-mods with their own mod.info manifest (71 sub-mods total)."
+              title="Steam Workshop counts packages/items (58). A single Workshop item can contain multiple sub-mods with their own mod.info manifest (71 sub-mods total). Multi-mod packages are highlighted with color borders."
             >
               <Info className="w-3.5 h-3.5" />
             </span>
@@ -371,6 +409,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const isHighlighted = mod.mod_id === highlightedModId;
                 const isAssigningThis = assigningModId === mod.mod_id;
 
+                const isMultiPackage = mod.workshop_id ? multiModPackageMap[mod.workshop_id] : false;
+                const packageColor = mod.workshop_id ? workshopColorMap[mod.workshop_id] : null;
+
                 return (
                   <div
                     key={mod.mod_id}
@@ -379,6 +420,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
+                      isMultiPackage && packageColor ? `border-l-4 ${packageColor.border}` : 'border-l border-l-transparent'
+                    } ${
                       isHighlighted
                         ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
                         : isSelected
@@ -408,7 +451,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </button>
                     </div>
 
-                    {/* Mod Title & Type Icon */}
+                    {/* Mod Title, Type Icon & Package Badge */}
                     <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
                       <div className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
                         {mod.is_map_mod ? (
@@ -421,7 +464,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </div>
 
                       <div className="overflow-hidden">
-                        <div className="font-bold text-slate-200 truncate">{mod.name}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-200 truncate">{mod.name}</span>
+                          {isMultiPackage && packageColor && (
+                            <span
+                              className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${packageColor.badge} shrink-0`}
+                              title={`Multi-mod Workshop package #${mod.workshop_id}`}
+                            >
+                              Pkg #{mod.workshop_id}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[9px] font-mono text-slate-500 truncate">ID: {mod.mod_id}</div>
                       </div>
                     </div>
@@ -520,9 +573,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               {/* Mod Title & Header Badge */}
               <div className="border-b border-slate-800 pb-3 space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                    {selectedMod.is_map_mod ? 'MAP MOD' : selectedMod.is_library ? 'BASE LIBRARY' : 'SCRIPT MOD'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                      {selectedMod.is_map_mod ? 'MAP MOD' : selectedMod.is_library ? 'BASE LIBRARY' : 'SCRIPT MOD'}
+                    </span>
+                    {selectedMod.workshop_id && multiModPackageMap[selectedMod.workshop_id] && workshopColorMap[selectedMod.workshop_id] && (
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${workshopColorMap[selectedMod.workshop_id].badge} flex items-center gap-1`}>
+                        <Layers className="w-3 h-3" />
+                        Multi-Mod Package
+                      </span>
+                    )}
+                  </div>
 
                   {selectedMod.workshop_id && (
                     <button
