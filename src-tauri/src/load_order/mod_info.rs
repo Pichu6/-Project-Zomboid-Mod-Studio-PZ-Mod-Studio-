@@ -115,6 +115,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 }
 
 /// Scans all subscribed Workshop & local mods recursively without depth limits.
+/// Preserves exact ModListData.ini load order for active mods, and sorts remaining mods deterministically.
 pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     let mut all_mods_map: std::collections::HashMap<String, ModManifest> = std::collections::HashMap::new();
 
@@ -144,7 +145,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         }
     }
 
-    // 3. Read active order from ModListData.ini
+    // 3. Read active order deterministically from ModListData.ini
     let mut result_mods = Vec::new();
     let mut processed_ids = HashSet::new();
 
@@ -173,13 +174,25 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         }
     }
 
-    // 4. Append remaining subscribed mods found on disk (disabled by default)
-    for (id, mut manifest) in all_mods_map {
-        if !processed_ids.contains(&id) {
+    // 4. Append remaining subscribed mods found on disk (disabled by default) in deterministic alphabetical order
+    let mut remaining_mods: Vec<ModManifest> = all_mods_map
+        .into_iter()
+        .filter(|(id, _)| !processed_ids.contains(id))
+        .map(|(_, mut manifest)| {
             manifest.enabled = false;
-            result_mods.push(manifest);
-        }
-    }
+            manifest
+        })
+        .collect();
+
+    // Sort remaining mods alphabetically by name and id so their position is 100% stable across refreshes!
+    remaining_mods.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    result_mods.extend(remaining_mods);
 
     result_mods
 }
