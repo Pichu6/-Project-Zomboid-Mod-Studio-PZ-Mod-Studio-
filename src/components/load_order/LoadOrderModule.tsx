@@ -14,7 +14,6 @@ import {
   MapPin,
   Package,
   FolderX,
-  Sparkles,
   ExternalLink,
   Hash,
   BookOpen,
@@ -30,7 +29,6 @@ import {
   Info,
   Layers,
 } from 'lucide-react';
-import { MOCK_MODS } from '../../data/mock_data';
 
 interface LoadOrderModuleProps {
   paths: StudioPathsUI;
@@ -61,7 +59,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onToggleMod,
   onRefreshMods,
   onGoToSettings,
-  onLoadMockups,
 }) => {
   const [selectedModId, setSelectedModId] = useState<string>(mods[0]?.mod_id || '');
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
@@ -269,25 +266,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div>
             <h3 className="text-lg font-bold text-slate-100">No Active Mods Found</h3>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Your <code className="text-emerald-400 font-mono">ModListData.ini</code> currently has zero active mods listed. Activate mods in-game or load sample data below.
+              Your <code className="text-emerald-400 font-mono">ModListData.ini</code> currently has zero active mods listed. Activate mods in-game or refresh subscribed mods.
             </p>
           </div>
 
-          <div className="pt-2 flex gap-3 justify-center">
+          <div className="pt-2 flex justify-center">
             <button
               onClick={handleRefresh}
-              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-4 py-2.5 rounded-lg border border-slate-700 transition cursor-pointer"
+              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-5 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer shadow"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh Subscribed Mods
-            </button>
-
-            <button
-              onClick={() => onLoadMockups(MOCK_MODS)}
-              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-4 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Load Sample Active Mods (Preview Demo)
             </button>
           </div>
         </div>

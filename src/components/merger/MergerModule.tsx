@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, Sparkles, AlertCircle, Wand2, GripHorizontal, Sparkle } from 'lucide-react';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, AlertCircle, Wand2, GripHorizontal, Sparkle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
-import { MOCK_CONFLICTS } from '../../data/mock_data';
 
 interface MergerModuleProps {
   conflicts: VfsConflict[];
@@ -22,7 +21,6 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   onOptimizeAndResolve,
   onGoToSettings,
   onRescan,
-  onLoadMockups,
 }) => {
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
@@ -196,21 +194,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="pt-2 flex justify-center">
             <button
               onClick={onRescan}
-              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-4 py-2.5 rounded-lg border border-slate-700 transition cursor-pointer"
+              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-5 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer shadow"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
               Rescan Active Mods
-            </button>
-
-            <button
-              onClick={() => onLoadMockups(MOCK_CONFLICTS)}
-              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-4 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Load Preview Demo (Mockup)
             </button>
           </div>
         </div>
