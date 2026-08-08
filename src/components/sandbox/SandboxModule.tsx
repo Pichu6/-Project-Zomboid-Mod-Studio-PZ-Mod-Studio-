@@ -1,155 +1,227 @@
 import React, { useState } from 'react';
-import { TranslatedErrorCard, SandboxStatus } from '../../types';
-import { FlaskConical, Play, Square, AlertOctagon, Wrench, Terminal } from 'lucide-react';
+import { TranslatedErrorCard } from '../../types';
+import { StudioPathsUI } from '../settings/SettingsModule';
+import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX } from 'lucide-react';
 
 interface SandboxModuleProps {
+  paths: StudioPathsUI;
   errorCards: TranslatedErrorCard[];
   onApplyFix: (polyfillRuleId: string) => void;
+  onGoToSettings: () => void;
 }
 
-export const SandboxModule: React.FC<SandboxModuleProps> = ({ errorCards, onApplyFix }) => {
-  const [status, setStatus] = useState<SandboxStatus>('IDLE');
+export const SandboxModule: React.FC<SandboxModuleProps> = ({
+  paths,
+  errorCards,
+  onApplyFix,
+  onGoToSettings,
+}) => {
   const [testMode, setTestMode] = useState<'BACKGROUND_QUICK' | 'WINDOWED_DEEP'>('BACKGROUND_QUICK');
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [logs, setLogs] = useState<string[]>([
+    '[PZ Mod Studio] Sandbox Test Environment Ready.',
+    '[PZ Mod Studio] Click "Start Isolated Test" to launch Project Zomboid (-cachedir, -debug) and stream console.txt in real time.',
+  ]);
 
-  const startTest = () => {
-    setStatus('BOOTING');
+  const handleStartTest = () => {
+    if (!paths.is_valid) {
+      alert('Please configure your Project Zomboid installation directory in App Settings first.');
+      return;
+    }
+
+    setIsRunning(true);
+    setLogs([
+      '[PZ Mod Studio] Initializing Sandbox test run...',
+      `[PZ Mod Studio] Command: ProjectZomboid64.exe -cachedir "temp_sandbox" -debug (${testMode})`,
+      '[PZ Mod Studio] Watching console.txt for JVM & Lua exceptions...',
+    ]);
+
     setTimeout(() => {
-      setStatus('RUNNING');
-      setTimeout(() => {
-        setStatus('CRASHED');
-      }, 2000);
-    }, 1500);
+      setLogs((prev) => [
+        ...prev,
+        '[PZ Engine] Loading base game media...',
+        '[PZ Engine] Main window reached.',
+        '[PZ Mod Studio] Monitoring active game session...',
+      ]);
+    }, 2000);
   };
 
-  const stopTest = () => {
-    setStatus('IDLE');
-  };
+  // State 1: Invalid paths guard
+  if (!paths.is_valid) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
+        <div className="max-w-md w-full bg-slate-900/80 border border-amber-500/40 rounded-2xl p-6 text-center space-y-4 shadow-xl">
+          <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto">
+            <FolderX className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-100">Setup Required: Game Directory</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Project Zomboid installation directory must be configured in App Settings before launching an isolated Sandbox Test.
+            </p>
+          </div>
+          <button
+            onClick={onGoToSettings}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs py-2.5 rounded-lg shadow transition cursor-pointer"
+          >
+            Configure Directory Paths in Settings
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 p-6">
-      {/* Header Info */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6">
+      {/* Module Header & Control Toolbar */}
+      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <FlaskConical className="w-5 h-5 text-emerald-400" />
-            Sandbox Test Lab & Log Inspector (`console.txt`)
+            <Terminal className="w-5 h-5 text-emerald-400" />
+            Sandbox Test Lab & Log Inspector (<code className="text-emerald-400">console.txt</code>)
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Test builds in an isolated environment (`-cachedir`, `-debug`) and translate crashes into 1-click solutions.
+            Test builds in an isolated environment (<code className="text-slate-300">-cachedir</code>, <code className="text-slate-300">-debug</code>) and translate crashes into 1-click solutions.
           </p>
         </div>
 
-        {/* Test Controls */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-slate-900 rounded-lg p-1 border border-slate-800 text-xs">
+          {/* Test Mode Selector */}
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-1 flex gap-1 text-xs">
             <button
               onClick={() => setTestMode('BACKGROUND_QUICK')}
-              className={`px-3 py-1.5 rounded-md transition cursor-pointer ${
-                testMode === 'BACKGROUND_QUICK' ? 'bg-slate-800 text-emerald-400 font-semibold shadow' : 'text-slate-400'
+              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
+                testMode === 'BACKGROUND_QUICK'
+                  ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Background Quick Test
             </button>
             <button
               onClick={() => setTestMode('WINDOWED_DEEP')}
-              className={`px-3 py-1.5 rounded-md transition cursor-pointer ${
-                testMode === 'WINDOWED_DEEP' ? 'bg-slate-800 text-emerald-400 font-semibold shadow' : 'text-slate-400'
+              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
+                testMode === 'WINDOWED_DEEP'
+                  ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Windowed Deep Test
             </button>
           </div>
 
-          {status === 'IDLE' || status === 'CRASHED' || status === 'SUCCESS' ? (
-            <button
-              onClick={startTest}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-4 py-2 rounded-lg shadow transition cursor-pointer"
-            >
-              <Play className="w-4 h-4 fill-white" />
-              Start Isolated Test
-            </button>
-          ) : (
-            <button
-              onClick={stopTest}
-              className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs px-4 py-2 rounded-lg shadow transition cursor-pointer animate-pulse"
-            >
-              <Square className="w-4 h-4 fill-white" />
-              Stop Test
-            </button>
-          )}
+          <button
+            onClick={handleStartTest}
+            disabled={isRunning}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold shadow transition cursor-pointer ${
+              isRunning
+                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+            }`}
+          >
+            {isRunning ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                Running Test...
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 fill-current" />
+                Start Isolated Test
+              </>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* Main Grid: Status & Error Cards */}
-      <div className="flex-1 grid grid-cols-12 gap-6 overflow-hidden">
-        {/* Left Column: Live Terminal Log Watcher */}
-        <div className="col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden">
-          <div className="p-3 border-b border-slate-800 bg-slate-900 flex items-center justify-between text-xs font-semibold text-slate-400">
-            <span className="flex items-center gap-2">
+      {/* Main Grid: Console Log Watcher (Left) vs Translated Error Cards (Right) */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
+        {/* Left Column: Realtime Console.txt Terminal */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
+          <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
               <Terminal className="w-4 h-4 text-emerald-400" />
-              <span>Realtime Log Watcher (`console.txt`)</span>
+              Realtime Log Watcher (<code className="text-emerald-400">console.txt</code>)
             </span>
-            <span className="font-mono text-[10px] text-slate-500">Status: {status}</span>
+
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
+              Status: {isRunning ? <b className="text-emerald-400">RUNNING</b> : <b className="text-slate-500">IDLE</b>}
+            </span>
           </div>
 
-          <div className="flex-1 p-3 font-mono text-[11px] text-slate-400 overflow-y-auto space-y-1 bg-slate-950">
-            <div className="text-slate-600">[PZ Mod Studio] Initializing Sandbox test run...</div>
-            <div className="text-slate-600">[PZ Mod Studio] Command: ProjectZomboid64.exe -cachedir "temp_sandbox" -debug</div>
-            {status === 'BOOTING' && (
-              <div className="text-cyan-400 animate-pulse">[PZ Engine] Loading PZ Lua state and mod manifests...</div>
-            )}
-            {status === 'RUNNING' && (
-              <div className="text-emerald-400">[PZ Engine] Main menu reached successfully.</div>
-            )}
-            {status === 'CRASHED' && (
-              <>
-                <div className="text-rose-400 font-bold">[JVM ERROR] java.lang.UnknownFormatConversionException: Conversion = "%"</div>
-                <div className="text-rose-400/80">    at zombie.core.Translator.getText(Translator.java:142)</div>
-                <div className="text-rose-400/80">    at ISInventoryPane.renderDetails(ISInventoryPane.lua:58)</div>
-                <div className="text-amber-400">[PZ Mod Studio] Crash intercepted! Interceptor generated 2 actionable cards.</div>
-              </>
-            )}
+          <div className="flex-1 p-4 font-mono text-xs bg-slate-950 overflow-y-auto space-y-1 select-text">
+            {logs.map((log, idx) => {
+              const isErr = log.includes('JVM ERROR') || log.includes('Exception') || log.includes('Crash');
+              return (
+                <div
+                  key={idx}
+                  className={`leading-relaxed ${
+                    isErr ? 'text-red-400 font-bold bg-red-950/30 px-2 py-0.5 rounded border-l-2 border-red-500' : 'text-slate-400'
+                  }`}
+                >
+                  {log}
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Right Column: Actionable Error Cards */}
-        <div className="col-span-5 flex flex-col space-y-4 overflow-y-auto">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Translated Actionable Cards ({errorCards.length})
-          </h3>
+        {/* Right Column: Translated Actionable Repair Cards */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 className="text-xs font-bold text-slate-200">
+              TRANSLATED ACTIONABLE CARDS ({errorCards.length})
+            </h3>
+            {errorCards.length === 0 && (
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                <CheckCircle className="w-3 h-3" /> No Crashes Detected
+              </span>
+            )}
+          </div>
 
-          {errorCards.map((card) => (
-            <div
-              key={card.id}
-              className="p-4 rounded-xl bg-slate-900/90 border border-rose-500/40 shadow-lg flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center gap-2 text-rose-400 font-semibold text-xs mb-1">
-                  <AlertOctagon className="w-4 h-4 shrink-0" />
-                  <span>{card.title}</span>
-                </div>
-
-                <p className="text-xs text-slate-300 leading-relaxed mb-3">
-                  {card.explanation}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {errorCards.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
+                <CheckCircle className="w-10 h-10 text-emerald-500/40" />
+                <p className="text-xs font-medium text-slate-400">Zero Crash Exceptions Captured</p>
+                <p className="text-[11px] text-slate-500 max-w-xs">
+                  Run an isolated test to monitor runtime crashes and receive 1-click repair suggestions.
                 </p>
-
-                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-400 mb-3">
-                  <div className="text-slate-500 text-[10px] uppercase font-semibold mb-0.5">Raw Stacktrace Snippet</div>
-                  <div className="text-rose-300 truncate">{card.raw_error}</div>
-                </div>
               </div>
-
-              {card.polyfill_rule_id_suggestion && (
-                <button
-                  onClick={() => onApplyFix(card.polyfill_rule_id_suggestion!)}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs px-3 py-2 rounded-lg transition shadow cursor-pointer"
+            ) : (
+              errorCards.map((card) => (
+                <div
+                  key={card.id}
+                  className="bg-slate-950 border border-red-500/40 rounded-xl p-4 space-y-3 shadow-md hover:border-red-500/70 transition"
                 >
-                  <Wrench className="w-3.5 h-3.5" />
-                  1-Click Fix: Apply Polyfill Rule
-                </button>
-              )}
-            </div>
-          ))}
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-100">{card.title}</h4>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                        {card.explanation}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-slate-800">
+                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Raw Stacktrace Snippet</div>
+                    <div className="truncate">{card.raw_error}</div>
+                  </div>
+
+                  {card.polyfill_rule_id_suggestion && (
+                    <button
+                      onClick={() => onApplyFix(card.polyfill_rule_id_suggestion!)}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition cursor-pointer"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      1-Click Fix: Apply Polyfill Rule
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

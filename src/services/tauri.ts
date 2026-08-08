@@ -38,10 +38,41 @@ export interface MasterPatchResultUI {
   polyfills_injected: number;
 }
 
+const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
+
 /**
  * Service layer wrapping all native Tauri Rust backend IPC calls
  */
 export const TauriService = {
+  /**
+   * Loads saved directory paths profile from LocalStorage or Rust auto-detection
+   */
+  loadSavedPathsProfile: async (): Promise<StudioPathsUI> => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY_PATHS);
+      if (cached) {
+        const parsed = JSON.parse(cached) as StudioPathsUI;
+        if (parsed.pz_install_dir) {
+          // Re-validate cached paths with Rust
+          return await invoke<StudioPathsUI>('set_and_validate_paths', { customPaths: parsed });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load cached paths profile:', err);
+    }
+    // Fallback to Rust auto-detection
+    return await TauriService.getAutoPaths();
+  },
+
+  /**
+   * Saves directory paths profile persistently to LocalStorage
+   */
+  savePathsProfile: async (paths: StudioPathsUI): Promise<StudioPathsUI> => {
+    const validated = await TauriService.validatePaths(paths);
+    localStorage.setItem(STORAGE_KEY_PATHS, JSON.stringify(validated));
+    return validated;
+  },
+
   /**
    * Auto-detects Project Zomboid installation and user directories
    */
@@ -51,10 +82,10 @@ export const TauriService = {
     } catch (err) {
       console.warn('Fallback to default paths:', err);
       return {
-        pz_install_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\ProjectZomboid',
-        workshop_dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\108600',
-        user_zomboid_dir: 'C:\\Users\\User\\Zomboid',
-        mod_list_ini_path: 'C:\\Users\\User\\Zomboid\\Lua\\ModManager\\ModListData.ini',
+        pz_install_dir: '',
+        workshop_dir: '',
+        user_zomboid_dir: '',
+        mod_list_ini_path: '',
         is_valid: false,
       };
     }

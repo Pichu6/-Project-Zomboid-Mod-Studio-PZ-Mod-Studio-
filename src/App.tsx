@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard } from './types';
-import { MOCK_MODS, MOCK_ERROR_CARDS } from './data/mock_data';
+import { MOCK_MODS } from './data/mock_data';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -16,9 +16,9 @@ export const App: React.FC = () => {
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
   const [mods, setMods] = useState<ModInfo[]>(MOCK_MODS);
-  const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>(MOCK_ERROR_CARDS);
+  const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
 
-  // Studio Directory Paths State (Connected to Rust auto-detection & validation)
+  // Studio Directory Paths State (Persistent Profile)
   const [paths, setPaths] = useState<StudioPathsUI>({
     pz_install_dir: '',
     workshop_dir: '',
@@ -27,14 +27,14 @@ export const App: React.FC = () => {
     is_valid: false,
   });
 
-  // Auto-detect paths from Rust backend on initial load
+  // Load saved profile or auto-detect paths from Rust backend on initial load
   useEffect(() => {
     const initPaths = async () => {
-      const autoPaths = await TauriService.getAutoPaths();
-      setPaths(autoPaths);
+      const savedProfile = await TauriService.loadSavedPathsProfile();
+      setPaths(savedProfile);
 
-      if (autoPaths.is_valid) {
-        const scannedConflicts = await TauriService.scanConflicts(autoPaths);
+      if (savedProfile.is_valid) {
+        const scannedConflicts = await TauriService.scanConflicts(savedProfile);
         setConflicts(scannedConflicts);
       }
     };
@@ -86,11 +86,13 @@ export const App: React.FC = () => {
 
   const handleRunSandbox = () => {
     setActiveTab('SANDBOX');
-    TauriService.launchSandbox({
-      pz_install_dir: paths.pz_install_dir,
-      user_zomboid_dir: paths.user_zomboid_dir,
-      test_mode: 'BACKGROUND_QUICK',
-    });
+    if (paths.is_valid) {
+      TauriService.launchSandbox({
+        pz_install_dir: paths.pz_install_dir,
+        user_zomboid_dir: paths.user_zomboid_dir,
+        test_mode: 'BACKGROUND_QUICK',
+      });
+    }
   };
 
   const handleResolveConflict = (conflictId: string, resolvedCode: string) => {
@@ -130,19 +132,20 @@ export const App: React.FC = () => {
   };
 
   const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
-    const validated = await TauriService.validatePaths(updatedPaths);
-    setPaths(validated);
-    if (validated.is_valid) {
-      const scannedConflicts = await TauriService.scanConflicts(validated);
+    const saved = await TauriService.savePathsProfile(updatedPaths);
+    setPaths(saved);
+    if (saved.is_valid) {
+      const scannedConflicts = await TauriService.scanConflicts(saved);
       setConflicts(scannedConflicts);
     }
   };
 
   const handleAutoDetect = async () => {
     const autoPaths = await TauriService.getAutoPaths();
-    setPaths(autoPaths);
-    if (autoPaths.is_valid) {
-      const scannedConflicts = await TauriService.scanConflicts(autoPaths);
+    const saved = await TauriService.savePathsProfile(autoPaths);
+    setPaths(saved);
+    if (saved.is_valid) {
+      const scannedConflicts = await TauriService.scanConflicts(saved);
       setConflicts(scannedConflicts);
     }
   };
@@ -189,7 +192,12 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'SANDBOX' && (
-            <SandboxModule errorCards={errorCards} onApplyFix={handleApplyFix} />
+            <SandboxModule
+              paths={paths}
+              errorCards={errorCards}
+              onApplyFix={handleApplyFix}
+              onGoToSettings={() => setActiveTab('SETTINGS')}
+            />
           )}
 
           {activeTab === 'SETTINGS' && (
