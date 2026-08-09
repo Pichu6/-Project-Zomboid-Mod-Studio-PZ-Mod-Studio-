@@ -8,6 +8,7 @@ interface SandboxModuleProps {
   paths: StudioPathsUI;
   errorCards: TranslatedErrorCard[];
   onApplyFix: (polyfillRuleId: string) => void;
+  onClearErrorCards?: () => void;
   onGoToSettings: () => void;
 }
 
@@ -36,6 +37,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
   errorCards,
   onApplyFix,
+  onClearErrorCards,
   onGoToSettings,
 }) => {
   const [filterSpam, setFilterSpam] = useState<boolean>(true);
@@ -185,7 +187,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             <h3 className="text-xs font-bold text-slate-200">
               CRASH DIAGNOSTICS & REPAIR CARDS ({errorCards.length})
             </h3>
-            {errorCards.length === 0 && (
+            {errorCards.length > 0 ? (
+              <button
+                onClick={onClearErrorCards}
+                className="text-[10px] text-slate-400 hover:text-slate-200 font-mono bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
+                title="Clear all active crash diagnostic cards"
+              >
+                <Trash2 className="w-3 h-3 text-slate-400" />
+                <span>Dismiss All</span>
+              </button>
+            ) : (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
                 <CheckCircle className="w-3 h-3" /> Zero Crash Exceptions
               </span>

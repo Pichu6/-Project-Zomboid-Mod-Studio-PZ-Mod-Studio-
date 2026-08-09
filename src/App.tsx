@@ -50,7 +50,17 @@ export const App: React.FC = () => {
     let unlistenErrorCards: (() => void) | undefined;
 
     TauriService.listenSandboxErrorCards((card) => {
-      setErrorCards((prev) => [card, ...prev]);
+      setErrorCards((prev) => {
+        // If suggested polyfill rule is ALREADY active, skip card creation!
+        if (card.polyfill_rule_id_suggestion && rules.some((r) => r.id === card.polyfill_rule_id_suggestion && r.enabled)) {
+          return prev;
+        }
+        // Deduplicate cards by title or rule suggestion so 32 identical cards never stack!
+        const isDuplicate = prev.some((c) => c.title === card.title || (c.polyfill_rule_id_suggestion && c.polyfill_rule_id_suggestion === card.polyfill_rule_id_suggestion));
+        if (isDuplicate) return prev;
+
+        return [card, ...prev];
+      });
     }).then((unlisten) => {
       unlistenErrorCards = unlisten;
     });
@@ -58,7 +68,7 @@ export const App: React.FC = () => {
     return () => {
       if (unlistenErrorCards) unlistenErrorCards();
     };
-  }, []);
+  }, [rules]);
 
   const handleRescan = async () => {
     if (paths.is_valid) {
@@ -163,11 +173,23 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleApplyFix = (polyfillRuleId: string) => {
-    setRules((prev) =>
-      prev.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r))
-    );
+  const handleApplyFix = async (polyfillRuleId: string) => {
+    const updatedRules = rules.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r));
+    setRules(updatedRules);
     setErrorCards((prev) => prev.filter((card) => card.polyfill_rule_id_suggestion !== polyfillRuleId));
+
+    if (paths.is_valid && paths.user_zomboid_dir) {
+      await TauriService.generateMasterPatch({
+        user_zomboid_dir: paths.user_zomboid_dir,
+        mod_list_ini_path: paths.mod_list_ini_path,
+        merged_files: conflicts.map((c) => ({ relative_path: c.relative_path, content: c.merged_output || c.base_content })),
+        active_polyfill_ids: updatedRules.filter((r) => r.enabled).map((r) => r.id),
+      });
+    }
+  };
+
+  const handleClearErrorCards = () => {
+    setErrorCards([]);
   };
 
   const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
@@ -249,6 +271,7 @@ export const App: React.FC = () => {
               paths={paths}
               errorCards={errorCards}
               onApplyFix={handleApplyFix}
+              onClearErrorCards={handleClearErrorCards}
               onGoToSettings={() => setActiveTab('SETTINGS')}
             />
           )}

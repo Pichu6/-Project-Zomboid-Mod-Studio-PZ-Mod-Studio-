@@ -107,21 +107,27 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
         }
     }
 
-    // 1. Primary write to Zomboid/mods/default.txt in exact native Project Zomboid Lua format!
+    // 1. Primary write to Zomboid/mods/default.txt in exact native Project Zomboid Lua format (NO QUOTES)
     let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
     for mod_id in active_mods {
         let clean_id = sanitize_mod_id(mod_id);
         if !clean_id.is_empty() {
-            default_txt_content.push_str(&format!("    mod = \"{}\",\n", clean_id));
+            default_txt_content.push_str(&format!("    mod = {},\n", clean_id));
         }
     }
     default_txt_content.push_str("}\n\nmaps\n{\n}\n");
 
     fs::write(&default_txt_path, &default_txt_content).map_err(|e| e.to_string())?;
 
-    // Synchronize to secondary default.txt locations (Zomboid/Lua/mods/default.txt & saved_modlists)
+    // Synchronize to secondary default.txt locations & write Zomboid/mods.txt
     if let Some(mods_dir) = default_txt_path.parent() {
         if let Some(zomboid_dir) = mods_dir.parent() {
+            let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
+            let active_lines = clean_mods.join("\n");
+
+            // Write Zomboid/mods.txt directly (Native Project Zomboid engine active mods list)
+            let _ = fs::write(zomboid_dir.join("mods.txt"), &active_lines);
+
             let lua_mods_dir = zomboid_dir.join("Lua").join("mods");
             let _ = fs::create_dir_all(&lua_mods_dir);
             let _ = fs::write(lua_mods_dir.join("default.txt"), &default_txt_content);
@@ -134,7 +140,6 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             let _ = fs::create_dir_all(&lua_saved_dir);
             let _ = fs::write(lua_saved_dir.join("default.txt"), &default_txt_content);
 
-            let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
             let mods_joined = clean_mods.join(";");
             let lua_dir = zomboid_dir.join("Lua");
             let _ = fs::create_dir_all(&lua_dir);
@@ -148,7 +153,6 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             let modgroups_content = format!("[ModGroups]\nactive={}\n", mods_joined);
             let _ = fs::write(lua_dir.join("modgroups.ini"), modgroups_content);
 
-            let active_lines = clean_mods.join("\n");
             let _ = fs::write(lua_dir.join("ModLoadOrderSorter.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("mod_order.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
