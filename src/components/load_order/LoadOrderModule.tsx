@@ -240,7 +240,16 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       return true;
     }
 
-    // 2. Check if both mods belong to the same Workshop item (e.g. 2297098490)
+    // 2. Check GunFighter 1.0 vs 2.0 specifically by mod ID
+    const idA = modA.mod_id.toLowerCase();
+    const idB = modB.mod_id.toLowerCase();
+    if (idA.includes("gunfighter") && idB.includes("gunfighter")) {
+      const isA20 = idA.includes("2.0") || idA.includes("main");
+      const isB20 = idB.includes("2.0") || idB.includes("main");
+      if (isA20 !== isB20) return true;
+    }
+
+    // 3. Check if both mods belong to the same Workshop item (e.g. 2297098490)
     if (modA.workshop_id && modB.workshop_id && modA.workshop_id === modB.workshop_id) {
       const aRequiresB = modA.dependencies.some((d) => isExactOrSanitizedMatch(d, modB.mod_id));
       const bRequiresA = modB.dependencies.some((d) => isExactOrSanitizedMatch(d, modA.mod_id));
@@ -251,8 +260,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
       const nameA = modA.name.toLowerCase();
       const nameB = modB.name.toLowerCase();
-      const idA = modA.mod_id.toLowerCase();
-      const idB = modB.mod_id.toLowerCase();
 
       const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only', 'main mod', '2.0', '1.0', 'gunfighter'];
 
