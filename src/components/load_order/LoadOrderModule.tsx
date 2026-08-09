@@ -616,9 +616,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
                       hasDisabledDependency
-                        ? 'border-2 border-rose-500/80 bg-rose-950/20 shadow-md shadow-rose-950/30'
+                        ? 'border-2 border-rose-500/80 bg-rose-950/30 shadow-md shadow-rose-950/30'
                         : hasExclusivityConflict
-                        ? 'border-2 border-amber-500/80 bg-amber-950/20 shadow-md shadow-amber-950/30'
+                        ? 'border-2 border-amber-500/80 bg-amber-950/30 shadow-md shadow-amber-950/30'
                         : isMultiPackage && packageColor
                         ? `border-l-4 ${packageColor.border}`
                         : 'border-l border-l-transparent'
@@ -626,33 +626,43 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       isHighlighted
                         ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
                         : isSelected
-                        ? 'bg-slate-800/90 border border-emerald-500/50 shadow'
-                        : 'bg-slate-950/60 hover:bg-slate-900/90 border border-slate-800/50'
+                        ? 'bg-slate-800/90 border border-emerald-500/60 shadow-lg'
+                        : mod.enabled
+                        ? 'bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800'
+                        : 'bg-slate-950/40 opacity-60 hover:opacity-100 border border-slate-900/60'
                     }`}
                   >
-                    <div className="col-span-1 text-center font-mono text-slate-400 font-bold text-[11px]">
+                    {/* Fixed Line Number (Original Load Order Index) */}
+                    <div className={`col-span-1 text-center font-mono text-[11px] ${mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
                       #{originalIndex + 1}
                     </div>
 
+                    {/* Enable/Disable Toggle Checkbox */}
                     <div className="col-span-1 flex justify-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleToggleSingleMod(mod.mod_id);
                         }}
-                        className={`w-5 h-5 rounded flex items-center justify-center transition cursor-pointer ${
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition cursor-pointer ${
                           mod.enabled
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                            : 'bg-slate-800 text-slate-600 border border-slate-700'
+                            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 border border-emerald-400 font-bold'
+                            : 'bg-slate-950 text-slate-700 border border-slate-700 hover:border-slate-500'
                         }`}
+                        title={mod.enabled ? 'Click to disable mod' : 'Click to enable mod'}
                       >
-                        <Check className="w-3.5 h-3.5" />
+                        {mod.enabled && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </button>
                     </div>
 
+                    {/* Mod Title, Type Icon & Warning Badges */}
                     <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
                       <div
-                        className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0"
+                        className={`w-6 h-6 rounded border flex items-center justify-center shrink-0 ${
+                          mod.enabled
+                            ? 'bg-slate-900 border-slate-800'
+                            : 'bg-slate-950/80 border-slate-900 opacity-60'
+                        }`}
                         title={
                           mod.is_map_mod
                             ? 'Map Mod (Adds custom tiles/towns)'
@@ -662,17 +672,25 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         }
                       >
                         {mod.is_map_mod ? (
-                          <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                          <MapPin className={`w-3.5 h-3.5 ${mod.enabled ? 'text-amber-400' : 'text-amber-700'}`} />
                         ) : mod.is_library ? (
-                          <Package className="w-3.5 h-3.5 text-purple-400" />
+                          <Package className={`w-3.5 h-3.5 ${mod.enabled ? 'text-purple-400' : 'text-purple-700'}`} />
                         ) : (
-                          <ListOrdered className="w-3.5 h-3.5 text-cyan-400" />
+                          <ListOrdered className={`w-3.5 h-3.5 ${mod.enabled ? 'text-cyan-400' : 'text-cyan-700'}`} />
                         )}
                       </div>
 
                       <div className="overflow-hidden">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-200 truncate">{mod.name}</span>
+                          <span className={`truncate ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-500 line-through decoration-slate-700'}`}>
+                            {mod.name}
+                          </span>
+
+                          {!mod.enabled && (
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
+                              OFF
+                            </span>
+                          )}
 
                           {hasDisabledDependency && (
                             <span
@@ -694,7 +712,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-[9px] font-mono text-slate-500 truncate">ID: {mod.mod_id}</div>
+                        <div className={`text-[9px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
+                          ID: {mod.mod_id}
+                        </div>
                       </div>
                     </div>
 
