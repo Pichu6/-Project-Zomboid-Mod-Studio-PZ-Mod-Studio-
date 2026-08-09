@@ -673,14 +673,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       <div className="overflow-hidden">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-slate-200 truncate">{mod.name}</span>
-                          {isMultiPackage && packageColor && (
-                            <span
-                              className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${packageColor.badge} shrink-0`}
-                              title={`Multi-mod Workshop package #${mod.workshop_id}`}
-                            >
-                              Pkg #{mod.workshop_id}
-                            </span>
-                          )}
 
                           {hasDisabledDependency && (
                             <span
