@@ -78,10 +78,9 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
     let (pid, is_already_running) = if let Some(existing_pid) = find_running_pz_pid() {
         (existing_pid, true)
     } else {
-        let temp_cache_dir = Path::new(&config.user_zomboid_dir).join("temp_sandbox_cache");
         let mut cmd = Command::new(&exe_path);
         cmd.current_dir(install_dir); // Set working directory to game folder so DLLs load properly
-        cmd.arg("-cachedir").arg(&temp_cache_dir).arg("-debug");
+        cmd.arg("-debug"); // Run with real Zomboid user dir so default.txt is read directly!
 
         #[cfg(target_os = "windows")]
         {

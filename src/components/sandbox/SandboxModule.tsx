@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { Play, AlertCircle, Wrench, CheckCircle, Terminal, RefreshCw, FolderX, Activity, Filter, Info, Trash2 } from 'lucide-react';
+import { AlertCircle, Wrench, CheckCircle, Terminal, FolderX, Activity, Filter, Info, Trash2 } from 'lucide-react';
 
 interface SandboxModuleProps {
   paths: StudioPathsUI;
@@ -16,7 +16,6 @@ interface SandboxModuleProps {
  */
 const isTranslationSpamLine = (line: string): boolean => {
   const lower = line.toLowerCase();
-  // Filter out any line related to translation, translator, missing text/keys, or IGUI
   return (
     lower.includes('translator') ||
     lower.includes('translation') ||
@@ -39,13 +38,10 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onApplyFix,
   onGoToSettings,
 }) => {
-  const [testMode] = useState<'BACKGROUND_QUICK' | 'WINDOWED_DEEP'>('WINDOWED_DEEP');
-  const [isRunning, setIsRunning] = useState<boolean>(false);
   const [filterSpam, setFilterSpam] = useState<boolean>(true);
-  const [pid, setPid] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([
     '[PZ Monitor Center] Realtime session monitor ready.',
-    '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-cachedir, -debug) and capture crashes.',
+    '[PZ Monitor Center] Click "Launch Game (Monitored)" in the top header to start ProjectZomboid64.exe (-debug) and capture crashes.',
   ]);
 
   // Dynamically filter displayed logs in real time based on filterSpam toggle state
@@ -70,41 +66,6 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     };
   }, []);
 
-  const handleStartTest = async () => {
-    if (!paths.is_valid || !paths.pz_install_dir) {
-      alert('Please configure your Project Zomboid installation directory in App Settings first.');
-      return;
-    }
-
-    setIsRunning(true);
-    setLogs([
-      '[PZ Monitor Center] Spawning ProjectZomboid64.exe wrapper process...',
-      `[PZ Monitor Center] Command: ProjectZomboid64.exe -cachedir "${paths.user_zomboid_dir}\\temp_sandbox_cache" -debug`,
-      '[PZ Monitor Center] Streaming live console.txt events...',
-    ]);
-
-    const processId = await TauriService.launchSandbox({
-      pz_install_dir: paths.pz_install_dir,
-      user_zomboid_dir: paths.user_zomboid_dir,
-      test_mode: testMode,
-    });
-
-    if (processId > 0) {
-      setPid(processId);
-      setLogs((prev) => [
-        ...prev,
-        `[PZ Monitor Center] Active game session PID: ${processId}`,
-        '[PZ Monitor Center] Monitoring active game session for Lua/Java crashes. Check Task Manager!',
-      ]);
-    } else {
-      setIsRunning(false);
-      setLogs((prev) => [
-        ...prev,
-        '[PZ Monitor Center ERROR] Could not spawn ProjectZomboid64.exe. Check install folder path in Settings.',
-      ]);
-    }
-  };
-
   const handleClearLogs = () => {
     setLogs([
       '[PZ Monitor Center] Terminal logs cleared.',
@@ -114,7 +75,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   // State 1: Invalid paths guard
   if (!paths.is_valid) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200 font-sans">
         <div className="max-w-md w-full bg-slate-900/80 border border-amber-500/40 rounded-2xl p-6 text-center space-y-4 shadow-xl">
           <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto">
             <FolderX className="w-6 h-6" />
@@ -174,28 +135,6 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             <Filter className={`w-4 h-4 ${filterSpam ? 'text-emerald-400' : 'text-slate-500'}`} />
             <span>{filterSpam ? 'Translator Spam: FILTERED (HIDE)' : 'Translator Spam: SHOW ALL'}</span>
           </button>
-
-          <button
-            onClick={handleStartTest}
-            disabled={isRunning}
-            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold shadow transition cursor-pointer ${
-              isRunning
-                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-            }`}
-          >
-            {isRunning ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                Session Running (PID: {pid || '...'})
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" />
-                Launch Monitored Game Session
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -220,10 +159,6 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               <span className="text-[10px] text-slate-500 font-normal">
                 ({displayedLogs.length} / {logs.length} lines)
               </span>
-            </span>
-
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
-              Status: {isRunning ? <b className="text-emerald-400">ACTIVE (PID: {pid})</b> : <b className="text-slate-500">IDLE</b>}
             </span>
           </div>
 
