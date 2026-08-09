@@ -201,6 +201,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
   const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
@@ -208,18 +209,30 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const triggerReorder = (newOrder: ModInfo[]) => {
+    setHasUnsavedChanges(true);
+    onReorder(newOrder);
+  };
+
+  const triggerToggleMod = (modId: string) => {
+    setHasUnsavedChanges(true);
+    onToggleMod(modId);
+  };
+
   const handleSaveExplicitly = async () => {
     setIsSaving(true);
     const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
     await TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
     setSaveToast('💾 ¡ModListData.ini guardado!');
     setIsSaving(false);
+    setHasUnsavedChanges(false);
     setTimeout(() => setSaveToast(null), 3000);
   };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await onRefreshMods();
+    setHasUnsavedChanges(false);
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
@@ -472,7 +485,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const newCurrentIdx = newOrder.findIndex((m) => m.mod_id === modId);
     newOrder.splice(newCurrentIdx, 0, movedReq);
 
-    onReorder(newOrder);
+    triggerReorder(newOrder);
     handleJumpToMod(modId);
   };
 
@@ -524,7 +537,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const temp = newOrder[index];
     newOrder[index] = newOrder[index - 1];
     newOrder[index - 1] = temp;
-    onReorder(newOrder);
+    triggerReorder(newOrder);
   };
 
   const moveDown = (index: number) => {
@@ -533,7 +546,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const temp = newOrder[index];
     newOrder[index] = newOrder[index + 1];
     newOrder[index + 1] = temp;
-    onReorder(newOrder);
+    triggerReorder(newOrder);
   };
 
   const moveToTop = (index: number) => {
@@ -541,7 +554,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const newOrder = [...mods];
     const item = newOrder.splice(index, 1)[0];
     newOrder.unshift(item);
-    onReorder(newOrder);
+    triggerReorder(newOrder);
   };
 
   const moveToBottom = (index: number) => {
@@ -549,7 +562,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const newOrder = [...mods];
     const item = newOrder.splice(index, 1)[0];
     newOrder.push(item);
-    onReorder(newOrder);
+    triggerReorder(newOrder);
   };
 
   const handleAssignPosition = (modId: string, targetPos: number) => {
@@ -566,7 +579,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const [movedMod] = newOrder.splice(currentIndex, 1);
     newOrder.splice(targetIndex, 0, movedMod);
 
-    onReorder(newOrder);
+    triggerReorder(newOrder);
     setAssigningModId(null);
     setTargetPosInput('');
   };
@@ -590,15 +603,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         }
         return m;
       });
-      onReorder(updated);
+      triggerReorder(updated);
     } else {
-      onToggleMod(modId);
+      triggerToggleMod(modId);
     }
   };
 
   const handleEnableAllWithoutDiscrimination = (enable: boolean) => {
     const updated = mods.map((m) => ({ ...m, enabled: enable }));
-    onReorder(updated);
+    triggerReorder(updated);
   };
 
   const handleAutoSortDependencies = () => {
@@ -627,7 +640,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
 
-    onReorder(sorted);
+    triggerReorder(sorted);
     const isSilenced = localStorage.getItem('pz_hide_autosort_notice') === 'true';
     if (!isSilenced) {
       setShowAutoSortNotice(true);
@@ -826,11 +839,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={handleSaveExplicitly}
-            disabled={isSaving}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer shrink-0"
-            title="Guardar el orden de carga activo en ModListData.ini"
+            disabled={!hasUnsavedChanges || isSaving}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition shadow shrink-0 ${
+              hasUnsavedChanges && !isSaving
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white cursor-pointer shadow-emerald-950/50 shadow-lg animate-pulse'
+                : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
+            }`}
+            title={hasUnsavedChanges ? '¡Tienes cambios sin guardar! Haz clic para guardar en ModListData.ini' : 'No hay cambios pendientes por guardar'}
           >
-            <Save className={`w-4 h-4 text-emerald-100 ${isSaving ? 'animate-spin' : ''}`} />
+            <Save className={`w-4 h-4 ${hasUnsavedChanges ? 'text-emerald-100' : 'text-slate-500'} ${isSaving ? 'animate-spin' : ''}`} />
             <span>Guardar</span>
           </button>
 
