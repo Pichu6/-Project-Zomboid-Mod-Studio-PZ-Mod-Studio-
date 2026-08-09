@@ -9,7 +9,7 @@ pub struct ModListData {
 }
 
 /// Reads active mods from Zomboid/mods/default.txt (Project Zomboid's primary active mods file)
-/// with fallback to ModListData.ini.
+/// supporting all syntax variants (`mod = FH,`, `mod "FH",`, `mod = "FH",`).
 pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
     let ini_p = Path::new(ini_path);
     let mut active_mods = Vec::new();
@@ -26,16 +26,29 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
 
         if default_txt.exists() {
             if let Ok(content) = fs::read_to_string(&default_txt) {
+                let mut in_mods_block = false;
                 for line in content.lines() {
                     let trimmed = line.trim();
-                    if trimmed.starts_with("mod \"") {
-                        if let Some(start_quote) = trimmed.find('"') {
-                            if let Some(end_quote) = trimmed[start_quote + 1..].find('"') {
-                                let mod_id = &trimmed[start_quote + 1..start_quote + 1 + end_quote];
-                                if !mod_id.is_empty() {
-                                    active_mods.push(mod_id.to_string());
-                                }
-                            }
+                    if trimmed == "mods" || trimmed.starts_with("mods") {
+                        in_mods_block = true;
+                        continue;
+                    }
+                    if in_mods_block && (trimmed == "maps" || trimmed.starts_with("maps")) {
+                        break;
+                    }
+
+                    if in_mods_block && trimmed.starts_with("mod") {
+                        let raw_id = trimmed[3..]
+                            .trim()
+                            .trim_start_matches('=')
+                            .trim()
+                            .trim_matches('"')
+                            .trim_matches('\'')
+                            .trim_end_matches(',')
+                            .trim();
+
+                        if !raw_id.is_empty() && raw_id != "{" && raw_id != "}" {
+                            active_mods.push(raw_id.to_string());
                         }
                     }
                 }
@@ -69,7 +82,7 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
 }
 
 /// Writes active mod load order list back to Zomboid/mods/default.txt (Project Zomboid's actual primary active mods file)
-/// in exact Lua table syntax, as well as ModListData.ini, loadorder.ini, and modgroups.ini.
+/// in exact Project Zomboid Lua table format (`mod = ModID,`), as well as ModListData.ini, loadorder.ini, and modgroups.ini.
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let path = Path::new(ini_path);
     if let Some(parent) = path.parent() {
@@ -91,7 +104,7 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
         // 1. Primary write to Zomboid/mods/default.txt in exact Project Zomboid Lua table format!
         let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
         for mod_id in active_mods {
-            default_txt_content.push_str(&format!("\tmod \"{}\",\n", mod_id));
+            default_txt_content.push_str(&format!("    mod = {},\n", mod_id));
         }
         default_txt_content.push_str("}\n\nmaps\n{\n}\n");
 
