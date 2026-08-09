@@ -477,17 +477,28 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 <button
                   onClick={onOptimizeAndResolve}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
+                  title="Fusión Automática: Combina las funciones y tablas de TODOS los mods activos en un solo parche"
                 >
                   <Wand2 className="w-3.5 h-3.5" />
-                  <span>Auto-Merge & Generate Master Patch</span>
+                  <span>⚡ Fusionar Todo Automáticamente y Empaquetar</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Explanatory Info Card: What happens if I choose nothing vs manual override */}
+            <div className="bg-slate-950/80 border border-cyan-500/30 rounded-lg p-2.5 mb-2 flex items-center justify-between gap-3 text-xs shrink-0">
+              <div className="flex items-center gap-2 text-slate-300">
+                <Sparkle className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  <b>💡 ¿Si no elijo nada qué hace?</b> El motor AST <b>combina automáticamente el código de TODOS los mods</b> en un solo archivo fusionado para que todos funcionen juntos en el juego. Si deseas descartar otros mods y forzar el código de un mod específico, presiona <i>"Usar Solo Este Mod"</i>.
+                </span>
               </div>
             </div>
 
             {/* Conflict Line Breakdown Box with Exact Line Snippet Comparison */}
             <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2.5 mb-2 flex items-start gap-2 text-xs font-mono shrink-0">
               <span className="text-amber-400 font-bold shrink-0 flex items-center gap-1">
-                <Sparkle className="w-3.5 h-3.5 text-amber-400" />
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
                 Line #{conflictLine} Comparison:
               </span>
               <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300">
@@ -528,7 +539,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 >
                   <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 overflow-hidden">
-                      <span className="text-xs font-bold text-emerald-400 truncate max-w-[220px]" title={mod.mod_name}>
+                      <span className="text-xs font-bold text-emerald-400 truncate max-w-[200px]" title={mod.mod_name}>
                         {mod.mod_name}
                       </span>
                       <span className="text-[9px] font-mono text-slate-400 shrink-0">
@@ -539,8 +550,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     <button
                       onClick={() => setEditorContent(mod.content)}
                       className="px-2.5 py-1 text-[10px] font-semibold rounded bg-emerald-950 text-emerald-300 border border-emerald-800 hover:bg-emerald-700 hover:text-white transition cursor-pointer shrink-0 shadow-sm"
+                      title={`Reemplazar el resultado para usar únicamente el código de ${mod.mod_name}`}
                     >
-                      Use This Code
+                      Usar Solo Este Mod
                     </button>
                   </div>
                   <LinedCodeSnippet
@@ -573,19 +585,20 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             <div className="flex items-center justify-between mb-2 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-emerald-400">
-                  Resolved Merged Output (Guarded Master Patch)
+                  Resultado de la Fusión (Master Patch)
                 </span>
                 <span className="px-2 py-0.5 text-[9px] rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80 font-mono">
-                  Live Lua AST Validation
+                  Combinación AST en Tiempo Real
                 </span>
               </div>
 
               <button
                 onClick={() => onResolveConflict(currentConflict.id, editorContent)}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition cursor-pointer"
+                title="Guardar los cambios de fusión de este archivo específico"
               >
                 <Check className="w-3.5 h-3.5" />
-                Confirm & Save Output
+                <span>✓ Guardar Fusión de este Archivo</span>
               </button>
             </div>
 
