@@ -232,14 +232,15 @@ author=PZ Mod Studio\r\n";
 
         let mod_info_path = patch_dir.join("mod.info");
         let _ = fs::write(&mod_info_path, mod_info_content);
-        let _ = fs::write(patch_dir.join("poster.png"), crate::patch_generator::VALID_POSTER_PNG);
-        let _ = fs::write(patch_dir.join("icon.png"), crate::patch_generator::VALID_POSTER_PNG);
+        let png_256 = crate::patch_generator::generate_256x256_png_bytes();
+        let _ = fs::write(patch_dir.join("poster.png"), &png_256);
+        let _ = fs::write(patch_dir.join("icon.png"), &png_256);
 
         let media_dir = patch_dir.join("media");
         let _ = fs::create_dir_all(&media_dir);
         let _ = fs::write(media_dir.join("mod.info"), mod_info_content);
-        let _ = fs::write(media_dir.join("poster.png"), crate::patch_generator::VALID_POSTER_PNG);
-        let _ = fs::write(media_dir.join("icon.png"), crate::patch_generator::VALID_POSTER_PNG);
+        let _ = fs::write(media_dir.join("poster.png"), &png_256);
+        let _ = fs::write(media_dir.join("icon.png"), &png_256);
 
         let polyfill_dir = media_dir.join("lua").join("shared");
         let _ = fs::create_dir_all(&polyfill_dir);
