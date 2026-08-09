@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, RefreshCw, AlertCircle, Wand2, GripHorizontal, Sparkle } from 'lucide-react';
+import { TauriService } from '../../services/tauri';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, AlertCircle, Wand2, GripHorizontal, Sparkle, Trash2, RotateCcw, PackageCheck } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface MergerModuleProps {
@@ -25,7 +26,29 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
   const [isRescanning, setIsRescanning] = useState<boolean>(false);
+  const [isCleaning, setIsCleaning] = useState<boolean>(false);
+  const [cleanDoneMessage, setCleanDoneMessage] = useState<string | null>(null);
   const [showScanDoneBanner, setShowScanDoneBanner] = useState<boolean>(false);
+
+  const handleCleanMasterPatch = async () => {
+    setIsCleaning(true);
+    setCleanDoneMessage(null);
+    try {
+      await TauriService.cleanMasterPatch({
+        workshop_dir: paths.workshop_dir,
+        pz_install_dir: paths.pz_install_dir,
+        user_zomboid_dir: paths.user_zomboid_dir,
+        mod_list_ini_path: paths.mod_list_ini_path,
+      });
+      setCleanDoneMessage('Master Patch desempaquetado y eliminado con éxito. Se re-escanearon los mods activos.');
+      await onRescan();
+    } catch (err) {
+      console.error('Clean failed:', err);
+    } finally {
+      setIsCleaning(false);
+      setTimeout(() => setCleanDoneMessage(null), 6000);
+    }
+  };
 
   // Vertical resizable split panel height percentage (Top competing mods vs Bottom merged output)
   const [topHeightPercent, setTopHeightPercent] = useState<number>(55);
@@ -210,23 +233,51 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col items-center gap-3">
-            <button
-              onClick={handleRescanClick}
-              disabled={isRescanning}
-              className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-5 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer shadow hover:border-emerald-500"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRescanning ? 'animate-spin text-cyan-400' : ''}`} />
-              <span>{isRescanning ? 'Scanning Active Mods...' : 'Rescan Active Mods'}</span>
-            </button>
-
-            {showScanDoneBanner && (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[11px] font-mono animate-fade-in">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Scan Complete: 0 Unresolved Conflicts Found</span>
-              </div>
-            )}
+          {/* Master Patch Management Banner */}
+          <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3 text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <PackageCheck className="w-4 h-4 text-emerald-400" />
+                <span>Gestión de Master Patch (Script Merger)</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Si agregaste mods nuevos o te suscribiste a mods viejos recientemente, presiona <b>Recalcular & Reempaquetar</b> para desempaquetar las fusiones antiguas y re-fusionar todos los mods activos actuales.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={handleRescanClick}
+                disabled={isRescanning}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-bold py-2 px-3 rounded-lg border border-emerald-700 transition cursor-pointer shadow"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 text-emerald-400 ${isRescanning ? 'animate-spin' : ''}`} />
+                <span>{isRescanning ? 'Recalculando...' : 'Recalcular & Reempaquetar'}</span>
+              </button>
+              <button
+                onClick={handleCleanMasterPatch}
+                disabled={isCleaning}
+                className="flex items-center justify-center gap-1.5 bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold py-2 px-3 rounded-lg border border-amber-700/60 transition cursor-pointer shadow"
+                title="Desempaqueta y borra el mod Z_PZModStudio_MergedPatch del disco"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isCleaning ? 'Limpiando...' : 'Desempaquetar Patch'}</span>
+              </button>
+            </div>
           </div>
+
+          {cleanDoneMessage && (
+            <div className="p-3 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{cleanDoneMessage}</span>
+            </div>
+          )}
+
+          {showScanDoneBanner && (
+            <div className="flex items-center justify-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[11px] font-mono animate-fade-in">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Scan Complete: 0 Unresolved Conflicts Found</span>
+            </div>
+          )}
         </div>
       </div>
     );

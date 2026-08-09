@@ -123,6 +123,11 @@ fn open_external_url_cmd(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("Failed to open URL in browser: {}", e))
 }
 
+#[tauri::command]
+fn clean_master_patch_cmd(req: MasterPatchRequest) -> Result<bool, String> {
+    patch_generator::clean_master_patch(req)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -140,6 +145,7 @@ pub fn run() {
             sort_mod_dependencies_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
+            clean_master_patch_cmd,
             pick_folder_cmd,
             pick_save_file_cmd,
             pick_open_file_cmd,

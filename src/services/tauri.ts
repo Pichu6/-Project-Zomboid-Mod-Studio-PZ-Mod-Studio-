@@ -255,6 +255,31 @@ export const TauriService = {
   },
 
   /**
+   * Safely removes Z_PZModStudio_MergedPatch synthetic patch files from disk
+   */
+  cleanMasterPatch: async (req: {
+    workshop_dir?: string;
+    pz_install_dir?: string;
+    user_zomboid_dir: string;
+    mod_list_ini_path: string;
+    merged_files?: { relative_path: string; content: string }[];
+    active_polyfill_ids?: string[];
+  }): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('clean_master_patch_cmd', {
+        req: {
+          ...req,
+          merged_files: req.merged_files || [],
+          active_polyfill_ids: req.active_polyfill_ids || [],
+        },
+      });
+    } catch (err) {
+      console.error('Failed to clean master patch:', err);
+      return false;
+    }
+  },
+
+  /**
    * Spawns isolated sandbox test run
    */
   launchSandbox: async (config: { pz_install_dir: string; user_zomboid_dir: string; test_mode: string }): Promise<number> => {

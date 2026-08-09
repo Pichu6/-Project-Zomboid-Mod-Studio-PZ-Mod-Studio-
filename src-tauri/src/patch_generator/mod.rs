@@ -410,3 +410,40 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
 
     Ok(workshop_item_dir.to_string_lossy().to_string())
 }
+
+/// Safely removes all Z_PZModStudio_MergedPatch synthetic patch files from disk and removes it from active load order.
+pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
+    let mut target_dirs = Vec::new();
+
+    if let (Some(ref carrier_id), Some(ref ws_dir)) = (&req.carrier_workshop_id, &req.workshop_dir) {
+        let clean_c = carrier_id.trim();
+        if !clean_c.is_empty() && !ws_dir.is_empty() {
+            target_dirs.push(Path::new(ws_dir).join(clean_c).join("Contents").join("mods").join("Z_PZModStudio_MergedPatch"));
+            target_dirs.push(Path::new(ws_dir).join(clean_c).join("mods").join("Z_PZModStudio_MergedPatch"));
+        }
+    }
+    for user_dir in crate::load_order::mod_info::get_all_user_zomboid_dirs(&req.user_zomboid_dir) {
+        target_dirs.push(user_dir.join("mods").join("Z_PZModStudio_MergedPatch"));
+        target_dirs.push(user_dir.join("Lua").join("mods").join("Z_PZModStudio_MergedPatch"));
+    }
+    if let Some(ref install_dir) = req.pz_install_dir {
+        if !install_dir.is_empty() {
+            target_dirs.push(Path::new(install_dir).join("mods").join("Z_PZModStudio_MergedPatch"));
+        }
+    }
+
+    for dir in target_dirs {
+        if dir.exists() {
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    if !req.mod_list_ini_path.is_empty() {
+        if let Ok(mut mod_list) = read_mod_list_ini(&req.mod_list_ini_path) {
+            mod_list.active_mods.retain(|id| id != "Z_PZModStudio_MergedPatch");
+            let _ = write_mod_list_ini(&req.mod_list_ini_path, &mod_list.active_mods);
+        }
+    }
+
+    Ok(true)
+}
