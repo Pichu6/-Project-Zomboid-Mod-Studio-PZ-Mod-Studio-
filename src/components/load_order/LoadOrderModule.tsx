@@ -695,15 +695,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             {mod.name}
                           </span>
 
-                          {isMultiPackage && packageColor && (
-                            <span
-                              className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${packageColor.badge} shrink-0`}
-                              title={`Multi-mod Workshop package #${mod.workshop_id}`}
-                            >
-                              Pkg #{mod.workshop_id}
-                            </span>
-                          )}
-
                           {!mod.enabled && (
                             <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
                               OFF
