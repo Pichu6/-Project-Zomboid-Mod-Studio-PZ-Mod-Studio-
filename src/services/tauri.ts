@@ -38,6 +38,14 @@ export interface MasterPatchResultUI {
   polyfills_injected: number;
 }
 
+export interface MasterPatchStatusInfoUI {
+  is_packaged: boolean;
+  created_at?: string;
+  packaged_mods: string[];
+  merged_files: string[];
+  missing_active_mods: string[];
+}
+
 const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
 
 /**
@@ -276,6 +284,26 @@ export const TauriService = {
     } catch (err) {
       console.error('Failed to clean master patch:', err);
       return false;
+    }
+  },
+
+  /**
+   * Reads current packaging status and metadata for Z_PZModStudio_MergedPatch
+   */
+  getMasterPatchStatus: async (userZomboidDir: string, modListIniPath: string): Promise<MasterPatchStatusInfoUI> => {
+    try {
+      return await invoke<MasterPatchStatusInfoUI>('get_master_patch_status_cmd', {
+        userZomboidDir,
+        modListIniPath,
+      });
+    } catch (err) {
+      console.error('Failed to get master patch status:', err);
+      return {
+        is_packaged: false,
+        packaged_mods: [],
+        merged_files: [],
+        missing_active_mods: [],
+      };
     }
   },
 

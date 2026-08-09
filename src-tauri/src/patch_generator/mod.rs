@@ -21,6 +21,23 @@ pub struct MasterPatchRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MasterPatchMetadata {
+    pub is_packaged: bool,
+    pub created_at: String,
+    pub packaged_mod_ids: Vec<String>,
+    pub merged_file_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MasterPatchStatusInfo {
+    pub is_packaged: bool,
+    pub created_at: Option<String>,
+    pub packaged_mods: Vec<String>,
+    pub merged_files: Vec<String>,
+    pub missing_active_mods: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterPatchResult {
     pub success: bool,
     pub patch_mod_dir: String,
@@ -304,6 +321,26 @@ end)
             mod_list.active_mods.retain(|id| id != &patch_id);
             mod_list.active_mods.push(patch_id);
             let _ = write_mod_list_ini(&req.mod_list_ini_path, &mod_list.active_mods);
+
+            // Write patch_metadata.json
+            let merged_file_paths: Vec<String> = req.merged_files.iter().map(|f| f.relative_path.clone()).collect();
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default();
+
+            let meta = MasterPatchMetadata {
+                is_packaged: true,
+                created_at: format!("Epoch-{}", timestamp),
+                packaged_mod_ids: mod_list.active_mods.clone(),
+                merged_file_paths,
+            };
+
+            if let Ok(meta_json) = serde_json::to_string_pretty(&meta) {
+                for patch_dir in &target_dirs {
+                    let _ = fs::write(patch_dir.join("patch_metadata.json"), &meta_json);
+                }
+            }
         }
     }
 
@@ -446,4 +483,47 @@ pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
     }
 
     Ok(true)
+}
+
+/// Reads the current packaging status of Z_PZModStudio_MergedPatch from patch_metadata.json
+pub fn get_master_patch_status(user_zomboid_dir: &str, mod_list_ini_path: &str) -> MasterPatchStatusInfo {
+    let all_user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
+    let patch_dir = all_user_dirs[0].join("mods").join("Z_PZModStudio_MergedPatch");
+
+    let meta_path = patch_dir.join("patch_metadata.json");
+    let active_mods: Vec<String> = if !mod_list_ini_path.is_empty() {
+        read_mod_list_ini(mod_list_ini_path)
+            .map(|data| data.active_mods.into_iter().filter(|s| s != "Z_PZModStudio_MergedPatch").collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    if meta_path.exists() {
+        if let Ok(content) = fs::read_to_string(&meta_path) {
+            if let Ok(meta) = serde_json::from_str::<MasterPatchMetadata>(&content) {
+                let missing: Vec<String> = active_mods
+                    .iter()
+                    .cloned()
+                    .filter(|id| !meta.packaged_mod_ids.contains(id))
+                    .collect();
+
+                return MasterPatchStatusInfo {
+                    is_packaged: meta.is_packaged,
+                    created_at: Some(meta.created_at),
+                    packaged_mods: meta.packaged_mod_ids,
+                    merged_files: meta.merged_file_paths,
+                    missing_active_mods: missing,
+                };
+            }
+        }
+    }
+
+    MasterPatchStatusInfo {
+        is_packaged: false,
+        created_at: None,
+        packaged_mods: Vec::new(),
+        merged_files: Vec::new(),
+        missing_active_mods: active_mods,
+    }
 }

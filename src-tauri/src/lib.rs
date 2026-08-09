@@ -128,6 +128,11 @@ fn clean_master_patch_cmd(req: MasterPatchRequest) -> Result<bool, String> {
     patch_generator::clean_master_patch(req)
 }
 
+#[tauri::command]
+fn get_master_patch_status_cmd(user_zomboid_dir: String, mod_list_ini_path: String) -> patch_generator::MasterPatchStatusInfo {
+    patch_generator::get_master_patch_status(&user_zomboid_dir, &mod_list_ini_path)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -146,6 +151,7 @@ pub fn run() {
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,
+            get_master_patch_status_cmd,
             pick_folder_cmd,
             pick_save_file_cmd,
             pick_open_file_cmd,

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService } from '../../services/tauri';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, AlertCircle, Wand2, GripHorizontal, Sparkle, Trash2, RotateCcw, PackageCheck } from 'lucide-react';
+import { TauriService, MasterPatchStatusInfoUI } from '../../services/tauri';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, AlertCircle, Wand2, GripHorizontal, Sparkle, PackageCheck, Package, Unlock, RefreshCw } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface MergerModuleProps {
@@ -27,8 +27,22 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [filterNoise, setFilterNoise] = useState<boolean>(true);
   const [isRescanning, setIsRescanning] = useState<boolean>(false);
   const [isCleaning, setIsCleaning] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [cleanDoneMessage, setCleanDoneMessage] = useState<string | null>(null);
+  const [generateDoneMessage, setGenerateDoneMessage] = useState<string | null>(null);
   const [showScanDoneBanner, setShowScanDoneBanner] = useState<boolean>(false);
+  const [patchStatus, setPatchStatus] = useState<MasterPatchStatusInfoUI | null>(null);
+
+  const fetchPatchStatus = useCallback(async () => {
+    if (paths.user_zomboid_dir) {
+      const status = await TauriService.getMasterPatchStatus(paths.user_zomboid_dir, paths.mod_list_ini_path);
+      setPatchStatus(status);
+    }
+  }, [paths.user_zomboid_dir, paths.mod_list_ini_path]);
+
+  useEffect(() => {
+    fetchPatchStatus();
+  }, [fetchPatchStatus, conflicts]);
 
   const handleCleanMasterPatch = async () => {
     setIsCleaning(true);
@@ -41,12 +55,43 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         mod_list_ini_path: paths.mod_list_ini_path,
       });
       setCleanDoneMessage('Master Patch desempaquetado y eliminado con éxito. Se re-escanearon los mods activos.');
+      await fetchPatchStatus();
       await onRescan();
     } catch (err) {
       console.error('Clean failed:', err);
     } finally {
       setIsCleaning(false);
       setTimeout(() => setCleanDoneMessage(null), 6000);
+    }
+  };
+
+  const handleGenerateMasterPatch = async () => {
+    setIsGenerating(true);
+    setGenerateDoneMessage(null);
+    try {
+      const mergedFilesPayload = conflicts.map((c) => ({
+        relative_path: c.relative_path,
+        content: c.merged_output || c.base_content,
+      }));
+
+      const res = await TauriService.generateMasterPatch({
+        workshop_dir: paths.workshop_dir,
+        pz_install_dir: paths.pz_install_dir,
+        user_zomboid_dir: paths.user_zomboid_dir,
+        mod_list_ini_path: paths.mod_list_ini_path,
+        merged_files: mergedFilesPayload,
+        active_polyfill_ids: ['translator_fix', 'safe_gettext'],
+      });
+
+      if (res.success) {
+        setGenerateDoneMessage(`Master Patch empacado y generado con éxito en Zomboid/mods/Z_PZModStudio_MergedPatch.`);
+        await fetchPatchStatus();
+      }
+    } catch (err) {
+      console.error('Generate failed:', err);
+    } finally {
+      setIsGenerating(false);
+      setTimeout(() => setGenerateDoneMessage(null), 6000);
     }
   };
 
@@ -234,40 +279,77 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           </div>
 
           {/* Master Patch Management Banner */}
-          <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3 text-left">
+          <div className="p-4 bg-slate-950/90 border border-slate-800 rounded-xl space-y-3 text-left">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                <PackageCheck className="w-4 h-4 text-emerald-400" />
-                <span>Gestión de Master Patch (Script Merger)</span>
+                {patchStatus?.is_packaged ? (
+                  <>
+                    <PackageCheck className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400 font-bold">Estado: Master Patch EMPAQUETADO y Activo</span>
+                  </>
+                ) : (
+                  <>
+                    <Unlock className="w-4 h-4 text-amber-400" />
+                    <span className="text-amber-400 font-bold">Estado: Master Patch DESEMPAQUETADO (Modo Análisis)</span>
+                  </>
+                )}
               </span>
+              {patchStatus?.is_packaged && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                  {patchStatus.merged_files.length} Archivos Fusionados en Disco
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Si agregaste mods nuevos o te suscribiste a mods viejos recientemente, presiona <b>Recalcular & Reempaquetar</b> para desempaquetar las fusiones antiguas y re-fusionar todos los mods activos actuales.
+
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              {patchStatus?.is_packaged
+                ? 'El mod sintético Z_PZModStudio_MergedPatch está empaquetado en disco y cargándose en Project Zomboid. Puedes desempaquetarlo en cualquier momento para revisar conflictos o agregar mods nuevos.'
+                : 'El paquete está desempaquetado y abierto en Modo Análisis. Revisa las diferencias comparativas en pantalla y presiona "Empaquetar Master Patch" cuando estés listo para generar el parche final.'}
             </p>
+
+            {patchStatus?.missing_active_mods && patchStatus.missing_active_mods.length > 0 && patchStatus.is_packaged && (
+              <div className="p-2.5 bg-amber-950/50 border border-amber-500/40 rounded-lg text-amber-300 text-[11px] font-mono flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  Hay <b>{patchStatus.missing_active_mods.length} mods activos nuevos</b> que no están incluidos en la fusión empaquetada actual. Se recomienda re-empaquetar.
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <button
-                onClick={handleRescanClick}
-                disabled={isRescanning}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-bold py-2 px-3 rounded-lg border border-emerald-700 transition cursor-pointer shadow"
+                onClick={handleGenerateMasterPatch}
+                disabled={isGenerating}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold py-2.5 px-4 rounded-lg transition cursor-pointer shadow-lg"
               >
-                <RotateCcw className={`w-3.5 h-3.5 text-emerald-400 ${isRescanning ? 'animate-spin' : ''}`} />
-                <span>{isRescanning ? 'Recalculando...' : 'Recalcular & Reempaquetar'}</span>
+                <Package className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+                <span>{isGenerating ? 'Empaquetando...' : '📦 Empaquetar Master Patch'}</span>
               </button>
-              <button
-                onClick={handleCleanMasterPatch}
-                disabled={isCleaning}
-                className="flex items-center justify-center gap-1.5 bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold py-2 px-3 rounded-lg border border-amber-700/60 transition cursor-pointer shadow"
-                title="Desempaqueta y borra el mod Z_PZModStudio_MergedPatch del disco"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-amber-400" />
-                <span>{isCleaning ? 'Limpiando...' : 'Desempaquetar Patch'}</span>
-              </button>
+
+              {patchStatus?.is_packaged && (
+                <button
+                  onClick={handleCleanMasterPatch}
+                  disabled={isCleaning}
+                  className="flex items-center justify-center gap-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-xs font-bold py-2.5 px-4 rounded-lg border border-amber-700/60 transition cursor-pointer shadow"
+                  title="Desempaqueta y borra el mod Z_PZModStudio_MergedPatch del disco"
+                >
+                  <Unlock className="w-4 h-4 text-amber-400" />
+                  <span>{isCleaning ? 'Limpiando...' : '🔓 Desempaquetar Patch'}</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {cleanDoneMessage && (
+          {generateDoneMessage && (
             <div className="p-3 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{generateDoneMessage}</span>
+            </div>
+          )}
+
+          {cleanDoneMessage && (
+            <div className="p-3 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
               <span>{cleanDoneMessage}</span>
             </div>
           )}
@@ -298,17 +380,27 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             <GitCompare className="w-4 h-4 text-emerald-400" />
             <span>Virtual Conflicts ({conflicts.length})</span>
           </div>
-          <button
-            onClick={() => setFilterNoise(!filterNoise)}
-            className={`px-2 py-1 text-[10px] rounded flex items-center gap-1 border transition cursor-pointer ${
-              filterNoise
-                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
-            }`}
-          >
-            <EyeOff className="w-3 h-3" />
-            <span>{filterNoise ? 'Noise Filtered' : 'Show All'}</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleRescanClick}
+              disabled={isRescanning}
+              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer border border-slate-700"
+              title="Re-escanear conflictos en mods activos"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRescanning ? 'animate-spin text-cyan-400' : ''}`} />
+            </button>
+            <button
+              onClick={() => setFilterNoise(!filterNoise)}
+              className={`px-2 py-1 text-[10px] rounded flex items-center gap-1 border transition cursor-pointer ${
+                filterNoise
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              <EyeOff className="w-3 h-3" />
+              <span>{filterNoise ? 'Noise Filtered' : 'Show All'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
