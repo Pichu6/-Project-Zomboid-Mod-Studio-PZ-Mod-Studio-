@@ -29,7 +29,6 @@ import {
   X,
   ShieldAlert,
   Link2,
-  Undo2,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -587,18 +586,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return findInstalledDependencyInMods(reqRaw, mods);
   };
 
-  const [jumpHistory, setJumpHistory] = useState<string[]>([]);
-
   /**
    * Helper to jump to any mod in the list: clears search query, selects it, highlights row with cyan glow, and scrolls smoothly to it!
    */
-  const handleJumpToMod = (targetModId: string, pushHistory: boolean = true) => {
+  const handleJumpToMod = (targetModId: string) => {
     const targetMod = mods.find((m) => m.mod_id === targetModId || normalizeModId(m.mod_id) === normalizeModId(targetModId));
     const finalId = targetMod ? targetMod.mod_id : targetModId;
-
-    if (pushHistory && selectedModId && selectedModId !== finalId) {
-      setJumpHistory((prev) => [...prev, selectedModId]);
-    }
 
     setSearchQuery(''); // Clear search query so target mod is guaranteed visible in DOM
     setSelectedModId(finalId);
@@ -614,13 +607,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTimeout(() => {
       setHighlightedModId(null);
     }, 3000);
-  };
-
-  const handleGoBack = () => {
-    if (jumpHistory.length === 0) return;
-    const previousModId = jumpHistory[jumpHistory.length - 1];
-    setJumpHistory((prev) => prev.slice(0, prev.length - 1));
-    handleJumpToMod(previousModId, false);
   };
 
   const handleJumpToDependency = (depModIdRaw: string) => {
@@ -1183,19 +1169,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           {selectedMod ? (
             <div className="flex-1 flex flex-col overflow-y-auto space-y-4 pr-1">
               <div className="border-b border-slate-800 pb-3 space-y-1">
-                {jumpHistory.length > 0 && (
-                  <div className="pb-1">
-                    <button
-                      onClick={handleGoBack}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-purple-200 border border-purple-600 rounded-lg text-xs font-bold transition shadow cursor-pointer"
-                      title="Volver al mod anterior o mod padre en el inspector"
-                    >
-                      <Undo2 className="w-4 h-4 text-purple-300" />
-                      <span>↩️ Volver al Mod Padre</span>
-                    </button>
-                  </div>
-                )}
-
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
