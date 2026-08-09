@@ -331,5 +331,26 @@ author=PZ Mod Studio\r\n";
         let _ = fs::write(local_mods_dir.join("poster.png"), &png_256);
     }
 
+    // 3. Also populate common install dirs for PZ -debug mode compatibility
+    let pz_installs = [
+        r"G:\Juegos\steamapps\common\ProjectZomboid",
+        r"C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid",
+        r"D:\SteamLibrary\steamapps\common\ProjectZomboid",
+        r"E:\SteamLibrary\steamapps\common\ProjectZomboid",
+    ];
+    for pz_dir in &pz_installs {
+        let install_path = Path::new(pz_dir);
+        if install_path.exists() {
+            let debug_ws = install_path.join("Workshop").join("Z_PZModStudio_Carrier");
+            if let Ok(_) = fs::create_dir_all(debug_ws.join("Contents").join("mods").join("Z_PZModStudio_Carrier")) {
+                let _ = fs::write(debug_ws.join("workshop.txt"), workshop_txt);
+                let _ = fs::write(debug_ws.join("preview.png"), &png_256);
+                let c_mod = debug_ws.join("Contents").join("mods").join("Z_PZModStudio_Carrier");
+                let _ = fs::write(c_mod.join("mod.info"), mod_info);
+                let _ = fs::write(c_mod.join("poster.png"), &png_256);
+            }
+        }
+    }
+
     Ok(workshop_item_dir.to_string_lossy().to_string())
 }
