@@ -316,8 +316,8 @@ description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfil
 poster=poster.png\r\n\
 icon=icon.png\r\n\
 modversion=1.0.0\r\n\
-pzversion=42\r\n\
-versionMin=42.0.0\r\n\
+pzversion=42.0\r\n\
+versionMin=42.0\r\n\
 author=PZ Mod Studio\r\n";
 
     fs::write(carrier_mod_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
