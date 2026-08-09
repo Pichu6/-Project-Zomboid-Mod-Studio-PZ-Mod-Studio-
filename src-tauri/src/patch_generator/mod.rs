@@ -315,13 +315,6 @@ author=PZ Mod Studio\r\n";
     let _ = fs::write(contents_mod_dir.join("poster.png"), &png_256);
     let _ = fs::write(contents_mod_dir.join("icon.png"), &png_256);
 
-    let carrier_mod_dir = workshop_item_dir.join("mods").join("Z_PZModStudio_MergedPatch");
-    if let Ok(_) = fs::create_dir_all(&carrier_mod_dir) {
-        let _ = fs::write(carrier_mod_dir.join("mod.info"), mod_info);
-        let _ = fs::write(carrier_mod_dir.join("poster.png"), &png_256);
-        let _ = fs::write(carrier_mod_dir.join("icon.png"), &png_256);
-    }
-
     // 2. Also create Zomboid/mods/Z_PZModStudio_Carrier as secondary backup
     let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
     if let Ok(_) = fs::create_dir_all(&local_mods_dir) {
