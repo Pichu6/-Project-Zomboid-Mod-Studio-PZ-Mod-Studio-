@@ -1,6 +1,6 @@
-use super::mod_info::ModManifest;
+use super::mod_info::{sanitize_mod_id, ModManifest};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DependencyAnalysisResult {
@@ -9,29 +9,44 @@ pub struct DependencyAnalysisResult {
     pub has_circular_dependency: bool,
 }
 
+fn find_manifest_id_by_req<'a>(req: &str, manifests: &'a [ModManifest]) -> Option<&'a str> {
+    let clean_req = req.trim().to_lowercase();
+    let sanitized_req = sanitize_mod_id(&clean_req);
+
+    for m in manifests {
+        let clean_m = m.id.trim().to_lowercase();
+        let sanitized_m = sanitize_mod_id(&clean_m);
+
+        if clean_m == clean_req || sanitized_m == sanitized_req || (sanitized_req.len() > 3 && sanitized_m.contains(&sanitized_req)) {
+            return Some(&m.id);
+        }
+    }
+    None
+}
+
 /// Performs topological sort on mod manifests based on require= directives.
 pub fn sort_dependencies_topologically(manifests: &[ModManifest]) -> DependencyAnalysisResult {
     let mut in_degree: HashMap<String, usize> = HashMap::new();
     let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-    let mut known_mods: HashSet<String> = HashSet::new();
     let mut missing_deps = Vec::new();
 
     for m in manifests {
-        known_mods.insert(m.id.clone());
         in_degree.entry(m.id.clone()).or_insert(0);
         graph.entry(m.id.clone()).or_default();
     }
 
     for m in manifests {
         for req in &m.require {
-            if !known_mods.contains(req) {
+            if let Some(target_id) = find_manifest_id_by_req(req, manifests) {
+                if target_id != m.id {
+                    // target_id (library/framework) must come BEFORE m.id
+                    graph.entry(target_id.to_string()).or_default().push(m.id.clone());
+                    *in_degree.entry(m.id.clone()).or_insert(0) += 1;
+                }
+            } else {
                 if !missing_deps.contains(req) {
                     missing_deps.push(req.clone());
                 }
-            } else {
-                // req must come BEFORE m.id -> graph edge req -> m.id
-                graph.entry(req.clone()).or_default().push(m.id.clone());
-                *in_degree.entry(m.id.clone()).or_insert(0) += 1;
             }
         }
     }

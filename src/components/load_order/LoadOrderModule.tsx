@@ -411,16 +411,20 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const handleFixLoadOrderViolation = (modId: string, requiredModId: string) => {
     const currentIdx = mods.findIndex((m) => m.mod_id === modId);
-    const requiredIdx = mods.findIndex((m) => m.mod_id === requiredModId);
-    if (currentIdx === -1 || requiredIdx === -1) return;
+    const reqMod = findInstalledDependencyInMods(requiredModId, mods);
+    if (currentIdx === -1 || !reqMod) return;
 
+    const requiredIdx = mods.findIndex((m) => m.mod_id === reqMod.mod_id);
+    if (requiredIdx === -1) return;
+
+    // Move requiredModId (library/framework) BEFORE modId so it loads first!
     const newOrder = [...mods];
-    const [movedMod] = newOrder.splice(currentIdx, 1);
-    const newReqIdx = newOrder.findIndex((m) => m.mod_id === requiredModId);
-    newOrder.splice(newReqIdx + 1, 0, movedMod);
+    const [movedReq] = newOrder.splice(requiredIdx, 1);
+    const newCurrentIdx = newOrder.findIndex((m) => m.mod_id === modId);
+    newOrder.splice(newCurrentIdx, 0, movedReq);
 
     onReorder(newOrder);
-    handleJumpToMod(movedMod.mod_id);
+    handleJumpToMod(modId);
   };
 
   const filteredMods = useMemo(() => {
