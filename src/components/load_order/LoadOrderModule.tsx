@@ -1,35 +1,35 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   ListOrdered,
+  RefreshCw,
+  Search,
+  Wand2,
+  CheckSquare,
+  Square,
+  ArrowUpCircle,
+  ArrowDownCircle,
   ArrowUp,
   ArrowDown,
   ChevronsUp,
   ChevronsDown,
-  Check,
-  ShieldCheck,
-  MapPin,
-  Package,
-  FolderX,
-  ExternalLink,
   Hash,
+  Check,
+  Package,
+  MapPin,
+  ExternalLink,
   BookOpen,
-  Wand2,
-  CheckSquare,
-  Square,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Search,
-  X,
-  AlertTriangle,
-  RefreshCw,
-  Info,
   Layers,
-  ShieldAlert,
+  FolderX,
+  ShieldCheck,
   HelpCircle,
+  AlertTriangle,
+  X,
+  ShieldAlert,
+  Link2,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -37,30 +37,34 @@ interface LoadOrderModuleProps {
   mods: ModInfo[];
   onReorder: (newOrder: ModInfo[]) => void;
   onToggleMod: (modId: string) => void;
-  onRefreshMods: () => Promise<void>;
+  onRefreshMods: () => void;
   onGoToSettings: () => void;
-  onLoadMockups: (mockups: ModInfo[]) => void;
+  onLoadMockups: (mockMods: ModInfo[]) => void;
 }
 
-// Preset harmonious color palettes for multi-mod Workshop packages
+/**
+ * Palette of distinct neon border & badge styling classes for multi-mod Workshop packages.
+ */
 const PACKAGE_COLOR_PALETTES = [
-  { border: 'border-l-cyan-500', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-800' },
-  { border: 'border-l-purple-500', badge: 'bg-purple-950/80 text-purple-300 border-purple-800' },
-  { border: 'border-l-amber-500', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' },
-  { border: 'border-l-emerald-500', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' },
-  { border: 'border-l-rose-500', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' },
-  { border: 'border-l-indigo-500', badge: 'bg-indigo-950/80 text-indigo-300 border-indigo-800' },
-  { border: 'border-l-teal-500', badge: 'bg-teal-950/80 text-teal-300 border-teal-800' },
-  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-950/80 text-fuchsia-300 border-fuchsia-800' },
+  { border: 'border-l-cyan-400', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-700' },
+  { border: 'border-l-purple-400', badge: 'bg-purple-950/80 text-purple-300 border-purple-700' },
+  { border: 'border-l-emerald-400', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-700' },
+  { border: 'border-l-amber-400', badge: 'bg-amber-950/80 text-amber-300 border-amber-700' },
+  { border: 'border-l-pink-400', badge: 'bg-pink-950/80 text-pink-300 border-pink-700' },
+  { border: 'border-l-indigo-400', badge: 'bg-indigo-950/80 text-indigo-300 border-indigo-700' },
+  { border: 'border-l-rose-400', badge: 'bg-rose-950/80 text-rose-300 border-rose-700' },
+  { border: 'border-l-teal-400', badge: 'bg-teal-950/80 text-teal-300 border-teal-700' },
 ];
 
 /**
- * Normalizes raw mod IDs by removing leading/trailing slashes, backslashes, quotes, and whitespace.
+ * Normalizes mod ID for strict comparison by stripping slashes, backslashes, quotes, and space.
  */
 const normalizeModId = (id: string): string => {
   return id
+    .trim()
     .toLowerCase()
-    .replace(/^[\/\\'"\s]+|[\/\\'"\s]+$/g, '')
+    .replace(/^[\\/]+/, '')
+    .replace(/[\\'"]/g, '')
     .trim();
 };
 
@@ -72,109 +76,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onRefreshMods,
   onGoToSettings,
 }) => {
-  const [selectedModId, setSelectedModId] = useState<string>(mods[0]?.mod_id || '');
+  const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
-  const [targetPosInput, setTargetPosInput] = useState<string>('');
-  const [assigningModId, setAssigningModId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [assigningModId, setAssigningModId] = useState<string | null>(null);
+  const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const selectedMod = mods.find((m) => m.mod_id === selectedModId) || mods[0];
-
-  // Count unique Workshop item IDs and identify multi-mod packages
-  const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
-    const counts: Record<string, number> = {};
-    mods.forEach((m) => {
-      if (m.workshop_id) {
-        counts[m.workshop_id] = (counts[m.workshop_id] || 0) + 1;
-      }
-    });
-
-    const multiMap: Record<string, boolean> = {};
-    const colorMap: Record<string, typeof PACKAGE_COLOR_PALETTES[0]> = {};
-    let colorIdx = 0;
-
-    Object.entries(counts).forEach(([wId, count]) => {
-      if (count > 1) {
-        multiMap[wId] = true;
-        colorMap[wId] = PACKAGE_COLOR_PALETTES[colorIdx % PACKAGE_COLOR_PALETTES.length];
-        colorIdx++;
-      }
-    });
-
-    return {
-      multiModPackageMap: multiMap,
-      workshopColorMap: colorMap,
-      uniqueWorkshopIds: Object.keys(counts).length,
-    };
-  }, [mods]);
-
-  // Counts per mod category for Icon Legend
-  const modCategoryCounts = useMemo(() => {
-    let mapCount = 0;
-    let libCount = 0;
-    let scriptCount = 0;
-
-    mods.forEach((m) => {
-      if (m.is_map_mod) mapCount++;
-      else if (m.is_library) libCount++;
-      else scriptCount++;
-    });
-
-    return { mapCount, libCount, scriptCount };
-  }, [mods]);
-
-  /**
-   * Calculates mutual exclusivity conflicts between active mods.
-   */
-  const activeConflictsMap = useMemo(() => {
-    const conflictMap: Record<string, { conflictingModId: string; conflictingModName: string; reason: string }[]> = {};
-
-    const activeMods = mods.filter((m) => m.enabled);
-
-    for (let i = 0; i < activeMods.length; i++) {
-      for (let j = i + 1; j < activeMods.length; j++) {
-        const modA = activeMods[i];
-        const modB = activeMods[j];
-
-        // Check if both belong to the same multi-mod Workshop package
-        if (modA.workshop_id && modB.workshop_id && modA.workshop_id === modB.workshop_id) {
-          const nameA = modA.name.toLowerCase();
-          const nameB = modB.name.toLowerCase();
-          const idA = modA.mod_id.toLowerCase();
-          const idB = modB.mod_id.toLowerCase();
-
-          const isVariantA = nameA.includes('ui only') || nameA.includes('lite') || idA.includes('uionly') || idA.includes('lite');
-          const isVariantB = nameB.includes('ui only') || nameB.includes('lite') || idB.includes('uionly') || idB.includes('lite');
-
-          if (isVariantA || isVariantB) {
-            const reason = `Mutually exclusive variants within Workshop package #${modA.workshop_id}`;
-
-            if (!conflictMap[modA.mod_id]) conflictMap[modA.mod_id] = [];
-            conflictMap[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name, reason });
-
-            if (!conflictMap[modB.mod_id]) conflictMap[modB.mod_id] = [];
-            conflictMap[modB.mod_id].push({ conflictingModId: modA.mod_id, conflictingModName: modA.name, reason });
-          }
-        }
-      }
-    }
-
-    return conflictMap;
-  }, [mods]);
-
-  // Realtime search filtering by Mod Name, Mod ID, or Workshop ID
-  const filteredMods = mods.filter((m) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase().trim();
-    return (
-      m.name.toLowerCase().includes(query) ||
-      m.mod_id.toLowerCase().includes(query) ||
-      (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
-    );
-  });
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -182,56 +91,189 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  const moveToTop = (index: number) => {
-    if (index === 0) return;
-    const updated = [...mods];
-    const [moved] = updated.splice(index, 1);
-    updated.unshift(moved);
-    onReorder(updated);
-  };
+  // Group mods by workshop_id to detect multi-mod Workshop packages
+  const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const m of mods) {
+      if (m.workshop_id) {
+        counts[m.workshop_id] = (counts[m.workshop_id] || 0) + 1;
+      }
+    }
 
-  const moveToBottom = (index: number) => {
-    if (index === mods.length - 1) return;
-    const updated = [...mods];
-    const [moved] = updated.splice(index, 1);
-    updated.push(moved);
-    onReorder(updated);
-  };
+    const multiMap: Record<string, boolean> = {};
+    const colorMap: Record<string, typeof PACKAGE_COLOR_PALETTES[0]> = {};
+    let colorIdx = 0;
+
+    for (const [wId, count] of Object.entries(counts)) {
+      if (count > 1) {
+        multiMap[wId] = true;
+        colorMap[wId] = PACKAGE_COLOR_PALETTES[colorIdx % PACKAGE_COLOR_PALETTES.length];
+        colorIdx++;
+      }
+    }
+
+    const uniqueWorkshopCount = Object.keys(counts).length;
+
+    return { multiModPackageMap: multiMap, workshopColorMap: colorMap, uniqueWorkshopIds: uniqueWorkshopCount };
+  }, [mods]);
+
+  // Calculate live Counts for Map Mods, Base Libraries, and Script Mods
+  const modCategoryCounts = useMemo(() => {
+    let mapCount = 0;
+    let libCount = 0;
+    let scriptCount = 0;
+
+    for (const m of mods) {
+      if (m.is_map_mod) mapCount++;
+      else if (m.is_library) libCount++;
+      else scriptCount++;
+    }
+
+    return { mapCount, libCount, scriptCount };
+  }, [mods]);
+
+  // Detect active mutually exclusive sub-mod conflicts in real time
+  const activeConflictsMap = useMemo(() => {
+    const map: Record<string, { conflictingModId: string; conflictingModName: string }[]> = {};
+
+    const activeMods = mods.filter((m) => m.enabled);
+    const activeByPackage: Record<string, ModInfo[]> = {};
+
+    for (const m of activeMods) {
+      if (m.workshop_id) {
+        if (!activeByPackage[m.workshop_id]) activeByPackage[m.workshop_id] = [];
+        activeByPackage[m.workshop_id].push(m);
+      }
+    }
+
+    for (const pkgMods of Object.values(activeByPackage)) {
+      if (pkgMods.length > 1) {
+        for (let i = 0; i < pkgMods.length; i++) {
+          for (let j = i + 1; j < pkgMods.length; j++) {
+            const modA = pkgMods[i];
+            const modB = pkgMods[j];
+
+            const nameA = modA.name.toLowerCase();
+            const nameB = modB.name.toLowerCase();
+            const isVariantA = nameA.includes('ui only') || nameA.includes('lite') || nameA.includes('base');
+            const isVariantB = nameB.includes('ui only') || nameB.includes('lite') || nameB.includes('base');
+
+            if (isVariantA || isVariantB) {
+              if (!map[modA.mod_id]) map[modA.mod_id] = [];
+              map[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name });
+
+              if (!map[modB.mod_id]) map[modB.mod_id] = [];
+              map[modB.mod_id].push({ conflictingModId: modA.mod_id, conflictingModName: modA.name });
+            }
+          }
+        }
+      }
+    }
+
+    return map;
+  }, [mods]);
+
+  // Detect missing/disabled required dependencies for each active mod
+  const missingActiveDependenciesMap = useMemo(() => {
+    const map: Record<string, ModInfo[]> = {};
+
+    for (const m of mods) {
+      if (m.enabled && m.dependencies && m.dependencies.length > 0) {
+        const disabledDeps: ModInfo[] = [];
+        for (const depRaw of m.dependencies) {
+          const normReq = normalizeModId(depRaw);
+          const matched = mods.find((target) => normalizeModId(target.mod_id) === normReq);
+          if (matched && !matched.enabled) {
+            disabledDeps.push(matched);
+          }
+        }
+        if (disabledDeps.length > 0) {
+          map[m.mod_id] = disabledDeps;
+        }
+      }
+    }
+
+    return map;
+  }, [mods]);
+
+  // Filter mods in real time based on search query
+  const filteredMods = useMemo(() => {
+    if (!searchQuery.trim()) return mods;
+    const query = searchQuery.toLowerCase().trim();
+    return mods.filter(
+      (m) =>
+        m.name.toLowerCase().includes(query) ||
+        m.mod_id.toLowerCase().includes(query) ||
+        (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
+    );
+  }, [mods, searchQuery]);
+
+  const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
+
+  // Reverse Dependents: Find all mods that require the currently selected mod
+  const reverseDependents = useMemo(() => {
+    if (!selectedMod) return [];
+    const selNorm = normalizeModId(selectedMod.mod_id);
+    return mods.filter(
+      (m) => m.mod_id !== selectedMod.mod_id && m.dependencies.some((dep) => normalizeModId(dep) === selNorm)
+    );
+  }, [selectedMod, mods]);
 
   const moveUp = (index: number) => {
-    if (index === 0) return;
-    const updated = [...mods];
-    const temp = updated[index - 1];
-    updated[index - 1] = updated[index];
-    updated[index] = temp;
-    onReorder(updated);
+    if (index <= 0) return;
+    const newOrder = [...mods];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[index - 1];
+    newOrder[index - 1] = temp;
+    onReorder(newOrder);
   };
 
   const moveDown = (index: number) => {
-    if (index === mods.length - 1) return;
-    const updated = [...mods];
-    const temp = updated[index + 1];
-    updated[index + 1] = updated[index];
-    updated[index] = temp;
-    onReorder(updated);
+    if (index >= mods.length - 1) return;
+    const newOrder = [...mods];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[index + 1];
+    newOrder[index + 1] = temp;
+    onReorder(newOrder);
   };
 
-  const handleAssignPosition = (modId: string, newPosOneBased: number) => {
+  const moveToTop = (index: number) => {
+    if (index <= 0) return;
+    const newOrder = [...mods];
+    const item = newOrder.splice(index, 1)[0];
+    newOrder.unshift(item);
+    onReorder(newOrder);
+  };
+
+  const moveToBottom = (index: number) => {
+    if (index >= mods.length - 1) return;
+    const newOrder = [...mods];
+    const item = newOrder.splice(index, 1)[0];
+    newOrder.push(item);
+    onReorder(newOrder);
+  };
+
+  const handleAssignPosition = (modId: string, targetPos: number) => {
     const currentIndex = mods.findIndex((m) => m.mod_id === modId);
     if (currentIndex === -1) return;
 
-    let targetIndex = Math.max(0, Math.min(mods.length - 1, newPosOneBased - 1));
-    const updated = [...mods];
-    const [movedMod] = updated.splice(currentIndex, 1);
-    updated.splice(targetIndex, 0, movedMod);
-    onReorder(updated);
+    let targetIndex = Math.max(1, Math.min(targetPos, mods.length)) - 1;
+    if (currentIndex === targetIndex) {
+      setAssigningModId(null);
+      return;
+    }
+
+    const newOrder = [...mods];
+    const [movedMod] = newOrder.splice(currentIndex, 1);
+    newOrder.splice(targetIndex, 0, movedMod);
+
+    onReorder(newOrder);
     setAssigningModId(null);
     setTargetPosInput('');
   };
 
   /**
-   * Toggles mod status. If enabling a mod that has a mutually exclusive sibling active,
-   * automatically deactivates the conflicting sibling to prevent game crashes!
+   * Smart Toggle: If enabling a mod with conflicting sub-mods, auto-disables sibling variants!
    */
   const handleToggleSingleMod = (modId: string) => {
     const targetMod = mods.find((m) => m.mod_id === modId);
@@ -240,7 +282,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const targetWillBeEnabled = !targetMod.enabled;
 
     if (targetWillBeEnabled && targetMod.workshop_id) {
-      // Find active conflicting sub-mods in the same package
       const updated = mods.map((m) => {
         if (m.mod_id === modId) {
           return { ...m, enabled: true };
@@ -249,11 +290,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         if (m.enabled && m.workshop_id === targetMod.workshop_id && m.mod_id !== modId) {
           const nameA = targetMod.name.toLowerCase();
           const nameB = m.name.toLowerCase();
-          const isVariantA = nameA.includes('ui only') || nameA.includes('lite');
-          const isVariantB = nameB.includes('ui only') || nameB.includes('lite');
+          const isVariantA = nameA.includes('ui only') || nameA.includes('lite') || nameA.includes('base');
+          const isVariantB = nameB.includes('ui only') || nameB.includes('lite') || nameB.includes('base');
 
           if (isVariantA || isVariantB) {
-            // Auto-deactivate conflicting sibling
             return { ...m, enabled: false };
           }
         }
@@ -274,37 +314,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /**
-   * Auto-sorts active mods using Project Zomboid load order precedence rules + Package Grouping Cohesion:
-   * 1. Master Patch (Z_PZModStudio_MergedPatch) ALWAYS loads LAST (Absolute bottom position) for final override!
-   * 2. Base libraries (ModManager, etc.) load FIRST (Top of list).
-   * 3. Map mods load NEAR BOTTOM.
-   * 4. Explicit Dependency Precedence (If B requires A, A comes BEFORE B).
-   * 5. Workshop Package Cohesion Grouping: Keeps sub-mods of the same Workshop Package adjacent/together!
+   * Auto-sorts active mods using Project Zomboid load order precedence rules + Package Grouping Cohesion.
    */
   const handleAutoSortDependencies = () => {
     const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.includes('MergedPatch');
 
     const sorted = [...mods].sort((a, b) => {
-      // Rule 0: Master Patch ALWAYS goes LAST (Absolute bottom)
       if (isMasterPatch(a.mod_id)) return 1;
       if (isMasterPatch(b.mod_id)) return -1;
 
-      // Rule 1: Base libraries go FIRST (Top of list)
       if (a.is_library && !b.is_library) return -1;
       if (!a.is_library && b.is_library) return 1;
 
-      // Rule 2: Map mods go NEAR BOTTOM (Before master patch)
       if (a.is_map_mod && !b.is_map_mod) return 1;
       if (!a.is_map_mod && b.is_map_mod) return -1;
 
-      // Rule 3: Explicit Dependency Precedence - if B requires A, A comes BEFORE B
       const normA = normalizeModId(a.mod_id);
       const normB = normalizeModId(b.mod_id);
 
       if (b.dependencies.some((dep) => normalizeModId(dep) === normA)) return -1;
       if (a.dependencies.some((dep) => normalizeModId(dep) === normB)) return 1;
 
-      // Rule 4: Package Cohesion Grouping - Keep sub-mods of the same Workshop Package adjacent!
       if (a.workshop_id && b.workshop_id && a.workshop_id === b.workshop_id) {
         return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
       }
@@ -320,9 +350,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     alert('✨ Auto-Sort & Package Grouping Complete!\n- Sub-mods of the same Workshop Package grouped TOGETHER.\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE dependent mods.\n- Map mods placed NEAR BOTTOM.\n- PZ Mod Studio Master Patch placed LAST at bottom for final override!');
   };
 
-  /**
-   * Checks if a dependency string is installed among subscribed mods using sanitized flex-matching.
-   */
   const findInstalledDependency = (reqRaw: string): ModInfo | undefined => {
     const normReq = normalizeModId(reqRaw);
     const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
@@ -340,22 +367,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     });
   };
 
-  /**
-   * Click dependency tag in right inspector to highlight & scroll left list directly to it.
-   * If missing, open Steam Workshop in default desktop browser via Rust Tauri IPC!
-   */
   const handleJumpToDependency = (depModIdRaw: string) => {
     const targetMod = findInstalledDependency(depModIdRaw);
 
     if (!targetMod) {
-      // Missing dependency - open Steam Workshop search in default Windows browser
       const cleanSearch = normalizeModId(depModIdRaw);
       const searchUrl = `https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(cleanSearch)}`;
       TauriService.openExternalUrl(searchUrl);
       return;
     }
 
-    setSearchQuery(''); // Clear search query so target mod is visible
+    setSearchQuery('');
     setSelectedModId(targetMod.mod_id);
     setHighlightedModId(targetMod.mod_id);
 
@@ -425,6 +447,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const activeCount = mods.filter((m) => m.enabled).length;
   const activeConflictsCount = Object.keys(activeConflictsMap).length;
+  const missingDepsCount = Object.keys(missingActiveDependenciesMap).length;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
@@ -450,17 +473,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </span>
               </>
             )}
-            <span
-              className="ml-1 cursor-pointer text-slate-500 hover:text-slate-300"
-              title="Steam Workshop counts packages/items (58). A single Workshop item can contain multiple sub-mods with their own mod.info manifest (71 sub-mods total). Multi-mod packages are highlighted with color borders."
-            >
-              <Info className="w-3.5 h-3.5" />
-            </span>
+            {missingDepsCount > 0 && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1 text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
+                  <AlertTriangle className="w-3 h-3 text-rose-400" />
+                  {missingDepsCount} Missing Library Warnings
+                </span>
+              </>
+            )}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Refresh Subscribed Mods Button */}
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -471,7 +496,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <span>Refresh Subscribed</span>
           </button>
 
-          {/* Realtime Search Bar Input */}
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
             <input
@@ -491,7 +515,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
-          {/* Enable All / Disable All Toggle Buttons */}
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
             <button
               onClick={() => handleEnableAllWithoutDiscrimination(true)}
@@ -512,7 +535,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </button>
           </div>
 
-          {/* Auto-Sort Button */}
           <button
             onClick={handleAutoSortDependencies}
             className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
@@ -558,7 +580,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
         {/* Left Column (7 cols): Reorderable Mod List */}
         <div className="col-span-12 lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
-          {/* Table Header */}
           <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800">
             <div className="col-span-1 text-center">Nº</div>
             <div className="col-span-1 text-center">Active</div>
@@ -566,7 +587,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <div className="col-span-5 text-right">Actions</div>
           </div>
 
-          {/* Load Priority Indicator Top Banner */}
           <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
             <span className="flex items-center gap-1.5 font-bold">
               <ArrowUpCircle className="w-3.5 h-3.5" />
@@ -575,7 +595,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <span className="text-[10px] text-emerald-500/80">Position #1</span>
           </div>
 
-          {/* Table Rows */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-2 space-y-1">
             {filteredMods.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
@@ -594,6 +613,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const conflictsForThisMod = activeConflictsMap[mod.mod_id];
                 const hasExclusivityConflict = conflictsForThisMod && conflictsForThisMod.length > 0;
 
+                const disabledDependencies = missingActiveDependenciesMap[mod.mod_id];
+                const hasDisabledDependency = disabledDependencies && disabledDependencies.length > 0;
+
                 return (
                   <div
                     key={mod.mod_id}
@@ -602,7 +624,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
-                      hasExclusivityConflict
+                      hasDisabledDependency
+                        ? 'border-2 border-rose-500/80 bg-rose-950/20 shadow-md shadow-rose-950/30'
+                        : hasExclusivityConflict
                         ? 'border-2 border-amber-500/80 bg-amber-950/20 shadow-md shadow-amber-950/30'
                         : isMultiPackage && packageColor
                         ? `border-l-4 ${packageColor.border}`
@@ -615,12 +639,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         : 'bg-slate-950/60 hover:bg-slate-900/90 border border-slate-800/50'
                     }`}
                   >
-                    {/* Fixed Line Number (Original Load Order Index) */}
                     <div className="col-span-1 text-center font-mono text-slate-400 font-bold text-[11px]">
                       #{originalIndex + 1}
                     </div>
 
-                    {/* Enable/Disable Toggle (Smart Mutual Exclusivity Switch) */}
                     <div className="col-span-1 flex justify-center">
                       <button
                         onClick={(e) => {
@@ -637,7 +659,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </button>
                     </div>
 
-                    {/* Mod Title, Type Icon, Package Badge & Exclusivity Warning Badge */}
                     <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
                       <div
                         className="w-6 h-6 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0"
@@ -670,11 +691,20 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </span>
                           )}
 
-                          {/* Mutually Exclusive Incompatibility Warning Tooltip Badge */}
+                          {hasDisabledDependency && (
+                            <span
+                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 shrink-0 cursor-help"
+                              title={`⚠️ REQ LIBRARY DISABLED!\nThis mod is active, but required library [${disabledDependencies[0].name}] is currently DISABLED. Enable [${disabledDependencies[0].name}] for this mod to function.`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-rose-400" />
+                              <span>REQ OFF: {disabledDependencies[0].name}</span>
+                            </span>
+                          )}
+
                           {hasExclusivityConflict && (
                             <span
                               className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 cursor-help"
-                              title={`⚠️ INCOMPATIBILITY WARNING!\nMutually exclusive sub-mod active alongside: [${conflictsForThisMod[0].conflictingModName}]. Activating both may cause script crashes. Clicking one will auto-switch to prevent conflicts.`}
+                              title={`⚠️ INCOMPATIBILITY WARNING!\nMutually exclusive sub-mod active alongside: [${conflictsForThisMod[0].conflictingModName}].`}
                             >
                               <AlertTriangle className="w-3 h-3 text-amber-400" />
                               <span>INCOMPATIBLE</span>
@@ -685,7 +715,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </div>
                     </div>
 
-                    {/* Action Buttons: Top, Up, Pos #, Down, Bottom */}
                     <div className="col-span-5 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                       {isAssigningThis ? (
                         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded border border-emerald-500">
@@ -762,7 +791,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
-          {/* Load Priority Indicator Bottom Banner */}
           <div className="bg-amber-950/40 border-t border-amber-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-amber-400">
             <span className="flex items-center gap-1.5 font-bold">
               <ArrowDownCircle className="w-3.5 h-3.5" />
@@ -776,7 +804,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <div className="col-span-12 lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4">
           {selectedMod ? (
             <div className="flex-1 flex flex-col overflow-y-auto space-y-4 pr-1">
-              {/* Mod Title & Header Badge */}
               <div className="border-b border-slate-800 pb-3 space-y-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -805,6 +832,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <h3 className="text-base font-bold text-slate-100">{selectedMod.name}</h3>
                 <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
               </div>
+
+              {/* Disabled Dependency Warning Card */}
+              {missingActiveDependenciesMap[selectedMod.mod_id] && missingActiveDependenciesMap[selectedMod.mod_id].length > 0 && (
+                <div className="p-3 bg-rose-950/60 border-2 border-rose-500/80 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center gap-2 font-bold text-rose-300">
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Missing Base Library Warning</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    This mod is currently active, but required library{' '}
+                    <b className="text-rose-300">[{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</b> is DISABLED!
+                  </p>
+                  <button
+                    onClick={() => handleToggleSingleMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>1-Click Enable Required Library: [{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</span>
+                  </button>
+                </div>
+              )}
 
               {/* Active Incompatibility Warning Card in Inspector */}
               {activeConflictsMap[selectedMod.mod_id] && activeConflictsMap[selectedMod.mod_id].length > 0 && (
@@ -865,23 +913,32 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     selectedMod.dependencies.map((reqRaw, rIdx) => {
                       const matchedInstalledMod = findInstalledDependency(reqRaw);
                       const cleanReqId = normalizeModId(reqRaw);
+                      const isDepDisabled = matchedInstalledMod && !matchedInstalledMod.enabled;
 
                       return (
                         <button
                           key={rIdx}
                           onClick={() => handleJumpToDependency(reqRaw)}
                           className={`px-2.5 py-1 text-xs font-mono rounded-md border font-medium transition cursor-pointer flex items-center gap-1 ${
-                            matchedInstalledMod
+                            isDepDisabled
+                              ? 'bg-rose-950/80 border-rose-700 text-rose-300 hover:border-rose-500 font-bold'
+                              : matchedInstalledMod
                               ? 'bg-slate-950 hover:bg-slate-800 border-cyan-800 text-cyan-300 hover:border-cyan-500'
                               : 'bg-red-950/40 hover:bg-red-900/60 border-red-800 text-red-400 hover:text-red-300'
                           }`}
                           title={
-                            matchedInstalledMod
+                            isDepDisabled
+                              ? `⚠️ DISABLED: [${matchedInstalledMod.name}] - Click to jump & enable!`
+                              : matchedInstalledMod
                               ? `Installed: [${matchedInstalledMod.name}] - Click to highlight & scroll`
                               : 'Missing dependency! Click to search on Steam Workshop'
                           }
                         >
-                          {!matchedInstalledMod && <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />}
+                          {isDepDisabled ? (
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                          ) : !matchedInstalledMod ? (
+                            <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                          ) : null}
                           <span>{cleanReqId}</span>
                           {matchedInstalledMod ? (
                             <span className="text-[9px] text-cyan-400 font-bold">↗</span>
@@ -893,6 +950,41 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     })
                   ) : (
                     <span className="text-xs text-slate-500 italic">No dependencies required</span>
+                  )}
+                </div>
+              </div>
+
+              {/* NEW SECTION: Reverse Dependents (Mods that require this library) */}
+              <div className="space-y-1 border-t border-slate-800 pt-3">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-purple-400">
+                    <Link2 className="w-3.5 h-3.5" />
+                    Dependents (Mods requiring this library) ({reverseDependents.length})
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {reverseDependents.length > 0 ? (
+                    reverseDependents.map((depMod) => (
+                      <button
+                        key={depMod.mod_id}
+                        onClick={() => {
+                          setSelectedModId(depMod.mod_id);
+                          setHighlightedModId(depMod.mod_id);
+                          setTimeout(() => setHighlightedModId(null), 3000);
+                        }}
+                        className={`px-2.5 py-1 text-xs font-mono rounded-md border transition cursor-pointer flex items-center gap-1 ${
+                          depMod.enabled
+                            ? 'bg-purple-950/60 border-purple-700 text-purple-200 hover:border-purple-400 font-bold'
+                            : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                        }`}
+                        title={`Click to jump to [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                        <span>{depMod.name}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">No installed mods require this library</span>
                   )}
                 </div>
               </div>

@@ -119,14 +119,26 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
 
     fs::write(&default_txt_path, &default_txt_content).map_err(|e| e.to_string())?;
 
-    // 2. Also write Zomboid/Lua/ModListData.ini & auxiliary files for backwards compatibility
+    // Synchronize to secondary default.txt locations (Zomboid/Lua/mods/default.txt & saved_modlists)
     if let Some(mods_dir) = default_txt_path.parent() {
         if let Some(zomboid_dir) = mods_dir.parent() {
-            let lua_dir = zomboid_dir.join("Lua");
-            let _ = fs::create_dir_all(&lua_dir);
+            let lua_mods_dir = zomboid_dir.join("Lua").join("mods");
+            let _ = fs::create_dir_all(&lua_mods_dir);
+            let _ = fs::write(lua_mods_dir.join("default.txt"), &default_txt_content);
+
+            let saved_modlists_dir = zomboid_dir.join("saved_modlists");
+            let _ = fs::create_dir_all(&saved_modlists_dir);
+            let _ = fs::write(saved_modlists_dir.join("default.txt"), &default_txt_content);
+
+            let lua_saved_dir = zomboid_dir.join("Lua").join("saved_modlists");
+            let _ = fs::create_dir_all(&lua_saved_dir);
+            let _ = fs::write(lua_saved_dir.join("default.txt"), &default_txt_content);
 
             let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
             let mods_joined = clean_mods.join(";");
+            let lua_dir = zomboid_dir.join("Lua");
+            let _ = fs::create_dir_all(&lua_dir);
+
             let ini_content = format!("[ModList]\nactiveMods={}\n", mods_joined);
             let _ = fs::write(lua_dir.join("ModListData.ini"), &ini_content);
 
@@ -141,11 +153,7 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             let _ = fs::write(lua_dir.join("mod_order.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("ModLoadOrderExporter.txt"), &active_lines);
-
-            let saved_modlists_dir = zomboid_dir.join("saved_modlists");
-            let _ = fs::create_dir_all(&saved_modlists_dir);
-            let pz_studio_preset = saved_modlists_dir.join("PZModStudio.txt");
-            let _ = fs::write(pz_studio_preset, &active_lines);
+            let _ = fs::write(saved_modlists_dir.join("PZModStudio.txt"), &active_lines);
         }
     }
 
