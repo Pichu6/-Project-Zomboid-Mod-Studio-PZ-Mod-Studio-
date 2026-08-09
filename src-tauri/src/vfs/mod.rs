@@ -163,7 +163,9 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
             let path = entry.path();
             if path.is_file() {
                 let path_str = path.to_string_lossy();
-                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) && !path_str.contains("Z_PZModStudio_MergedPatch") {
+                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) 
+                   && !path_str.contains("Z_PZModStudio_") 
+                   && !path_str.contains("PZModStudioCarrier") {
                     if let Some(rel_path) = extract_relative_media_path(path) {
                         let mod_id = resolve_specific_mod_id(path)
                             .or_else(|| extract_mod_id_from_path(path))
@@ -193,8 +195,7 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
             if path.is_file() {
                 let path_str = path.to_string_lossy();
                 if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) 
-                   && !path_str.contains("Z_PZModStudio_MergedPatch") 
-                   && !path_str.contains("Z_PZModStudio_Carrier")
+                   && !path_str.contains("Z_PZModStudio_") 
                    && !path_str.contains("PZModStudioCarrier") {
                     if let Some(rel_path) = extract_relative_media_path(path) {
                         let mod_id = resolve_specific_mod_id(path)
