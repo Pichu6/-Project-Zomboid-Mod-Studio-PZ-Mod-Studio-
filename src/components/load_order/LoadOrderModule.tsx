@@ -540,27 +540,23 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       if (isMasterPatch(a.mod_id)) return 1;
       if (isMasterPatch(b.mod_id)) return -1;
 
+      // 1. Dependency relationships take ABSOLUTE priority over category or Workshop ID!
+      const bRequiresA = b.dependencies.some((dep) => findInstalledDependencyInMods(dep, [a]) !== undefined);
+      const aRequiresB = a.dependencies.some((dep) => findInstalledDependencyInMods(dep, [b]) !== undefined);
+
+      if (bRequiresA && !aRequiresB) return -1; // 'a' (framework/dependency) must load BEFORE 'b'!
+      if (aRequiresB && !bRequiresA) return 1;  // 'b' (framework/dependency) must load BEFORE 'a'!
+
+      // 2. Base Libraries come before general mods
       if (a.is_library && !b.is_library) return -1;
       if (!a.is_library && b.is_library) return 1;
 
+      // 3. Map mods come after general mods
       if (a.is_map_mod && !b.is_map_mod) return 1;
       if (!a.is_map_mod && b.is_map_mod) return -1;
 
-      const normA = normalizeModId(a.mod_id);
-      const normB = normalizeModId(b.mod_id);
-
-      if (b.dependencies.some((dep) => normalizeModId(dep) === normA)) return -1;
-      if (a.dependencies.some((dep) => normalizeModId(dep) === normB)) return 1;
-
-      if (a.workshop_id && b.workshop_id && a.workshop_id === b.workshop_id) {
-        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-      }
-
-      if (a.workshop_id && b.workshop_id) {
-        return a.workshop_id.localeCompare(b.workshop_id);
-      }
-
-      return 0;
+      // 4. Stable alphabetical sort tie-breaker by mod name
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
 
     onReorder(sorted);
