@@ -22,6 +22,7 @@ export const App: React.FC = () => {
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
   const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
+  const [isInitialLaunchModal, setIsInitialLaunchModal] = useState(true);
 
   // Studio Directory Paths State (Persistent Profile)
   const [paths, setPaths] = useState<StudioPathsUI>({
@@ -51,6 +52,7 @@ export const App: React.FC = () => {
         // Open Instance Selector if saved instances exist
         const existingInstances = await TauriService.listInstances(savedProfile.user_zomboid_dir);
         if (existingInstances.length > 0) {
+          setIsInitialLaunchModal(true);
           setIsInstanceModalOpen(true);
         }
       }
@@ -278,7 +280,10 @@ export const App: React.FC = () => {
         conflictCount={conflicts.length}
         polyfillCount={rules.filter((r) => r.enabled).length}
         onRunSandbox={handleRunSandbox}
-        onOpenInstanceSelector={() => setIsInstanceModalOpen(true)}
+        onOpenInstanceSelector={() => {
+          setIsInitialLaunchModal(false);
+          setIsInstanceModalOpen(true);
+        }}
       />
 
       {/* Main Studio Body */}
@@ -369,6 +374,7 @@ export const App: React.FC = () => {
         paths={paths}
         onSelectInstance={handleSelectInstance}
         onCreateNewInstanceClick={() => setActiveTab('INSTANCES')}
+        isInitialLaunch={isInitialLaunchModal}
       />
     </div>
   );

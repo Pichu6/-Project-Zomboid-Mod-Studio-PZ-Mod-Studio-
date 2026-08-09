@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Check, Plus, X, FolderArchive, ArrowRight, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Layers, Check, Plus, X, FolderArchive, ArrowRight, ShieldCheck, RefreshCw, Trash2 } from 'lucide-react';
 import { AppInstance, StudioPathsUI } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -9,6 +9,7 @@ interface InitialInstanceModalProps {
   paths: StudioPathsUI;
   onSelectInstance: (instance: AppInstance) => void;
   onCreateNewInstanceClick: () => void;
+  isInitialLaunch?: boolean;
 }
 
 export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
@@ -17,19 +18,41 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
   paths,
   onSelectInstance,
   onCreateNewInstanceClick,
+  isInitialLaunch = true,
 }) => {
   const [instances, setInstances] = useState<AppInstance[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const loadInstancesList = async () => {
+    if (paths.user_zomboid_dir) {
+      setIsLoading(true);
+      try {
+        const list = await TauriService.listInstances(paths.user_zomboid_dir);
+        setInstances(list);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     if (isOpen && paths.user_zomboid_dir) {
-      setIsLoading(true);
-      TauriService.listInstances(paths.user_zomboid_dir)
-        .then((list) => setInstances(list))
-        .catch(console.error)
-        .finally(() => setIsLoading(false));
+      loadInstancesList();
     }
   }, [isOpen, paths.user_zomboid_dir]);
+
+  const handleDeleteInstance = async (id: string, name: string) => {
+    if (confirm(`¿Estás seguro de que deseas eliminar el perfil de instancia "${name}"?`)) {
+      try {
+        await TauriService.deleteInstance(paths.user_zomboid_dir, id);
+        await loadInstancesList();
+      } catch (err) {
+        console.error('Error al eliminar instancia:', err);
+      }
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -53,12 +76,14 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {!isInitialLaunch && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Content Body: Instances Grid */}
@@ -101,10 +126,29 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 text-[10px] font-mono">
                     <span className="text-emerald-400 font-bold">{inst.active_mod_ids.length} Mods</span>
-                    <span className="text-slate-300 group-hover:text-emerald-400 font-bold transition flex items-center gap-1">
-                      <span>Cargar</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteInstance(inst.id, inst.name);
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-950 hover:text-red-400 text-slate-400 transition cursor-pointer border border-slate-800"
+                        title="Eliminar esta instancia"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          onSelectInstance(inst);
+                          onClose();
+                        }}
+                        className="px-3 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Cargar</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -115,7 +159,7 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
               <div className="space-y-1">
                 <h4 className="text-xs font-bold text-slate-300">No hay instancias guardadas aún</h4>
                 <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                  Puedes continuar con el orden de carga actual de tu juego o crear un nuevo perfil aislado.
+                  Crea tu primera instancia para organizar tus perfiles de mods aislados.
                 </p>
               </div>
             </div>
@@ -135,13 +179,15 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
             <span>Crear Nueva Instancia</span>
           </button>
 
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-2 cursor-pointer"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Continuar con Configuración Actual</span>
-          </button>
+          {!isInitialLaunch && (
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-2 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Continuar con Configuración Actual</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
