@@ -144,6 +144,8 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     if let (Some(ref carrier_id), Some(ref ws_dir)) = (&req.carrier_workshop_id, &req.workshop_dir) {
         let clean_c = carrier_id.trim();
         if !clean_c.is_empty() && !ws_dir.is_empty() {
+            target_dirs.push(Path::new(ws_dir).join(clean_c).join("Contents").join("mods").join("Z_PZModStudio_Carrier"));
+            target_dirs.push(Path::new(ws_dir).join(clean_c).join("mods").join("Z_PZModStudio_Carrier"));
             target_dirs.push(Path::new(ws_dir).join(clean_c).join("mods").join("Z_PZModStudio_MergedPatch"));
         }
     }
