@@ -46,6 +46,16 @@ export interface MasterPatchStatusInfoUI {
   missing_active_mods: string[];
 }
 
+export interface MergedPackageInfoUI {
+  folder_name: string;
+  display_name: string;
+  mod_id: string;
+  is_packaged: boolean;
+  created_at?: string;
+  packaged_mods: string[];
+  merged_files: string[];
+}
+
 const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
 
 /**
@@ -253,6 +263,7 @@ export const TauriService = {
     mod_list_ini_path: string;
     merged_files: { relative_path: string; content: string }[];
     active_polyfill_ids: string[];
+    package_folder_name?: string;
   }): Promise<MasterPatchResultUI> => {
     try {
       return await invoke<MasterPatchResultUI>('generate_master_patch_cmd', { req });
@@ -272,6 +283,7 @@ export const TauriService = {
     mod_list_ini_path: string;
     merged_files?: { relative_path: string; content: string }[];
     active_polyfill_ids?: string[];
+    package_folder_name?: string;
   }): Promise<boolean> => {
     try {
       return await invoke<boolean>('clean_master_patch_cmd', {
@@ -304,6 +316,54 @@ export const TauriService = {
         merged_files: [],
         missing_active_mods: [],
       };
+    }
+  },
+
+  /**
+   * Lists all existing merged packages under Zomboid/mods/Z_PZModStudio_*
+   */
+  listMergedPackages: async (userZomboidDir: string, modListIniPath: string): Promise<MergedPackageInfoUI[]> => {
+    try {
+      return await invoke<MergedPackageInfoUI[]>('list_merged_packages_cmd', { userZomboidDir, modListIniPath });
+    } catch (err) {
+      console.error('Failed to list merged packages:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Creates a new named merged package (e.g. "Mix Mods" -> Z_PZModStudio_MixMods)
+   */
+  createMergedPackage: async (userZomboidDir: string, modListIniPath: string, name: string): Promise<MergedPackageInfoUI | null> => {
+    try {
+      return await invoke<MergedPackageInfoUI>('create_merged_package_cmd', { userZomboidDir, modListIniPath, name });
+    } catch (err) {
+      console.error('Failed to create merged package:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Renames an existing merged package
+   */
+  renameMergedPackage: async (userZomboidDir: string, modListIniPath: string, oldFolder: string, newName: string): Promise<MergedPackageInfoUI | null> => {
+    try {
+      return await invoke<MergedPackageInfoUI>('rename_merged_package_cmd', { userZomboidDir, modListIniPath, oldFolder, newName });
+    } catch (err) {
+      console.error('Failed to rename merged package:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Deletes a merged package directory from disk
+   */
+  deleteMergedPackage: async (userZomboidDir: string, modListIniPath: string, folderName: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('delete_merged_package_cmd', { userZomboidDir, modListIniPath, folderName });
+    } catch (err) {
+      console.error('Failed to delete merged package:', err);
+      return false;
     }
   },
 

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { VfsConflict } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, MasterPatchStatusInfoUI } from '../../services/tauri';
-import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, AlertCircle, Wand2, GripHorizontal, Sparkle, PackageCheck, Package, Unlock, RefreshCw } from 'lucide-react';
+import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI } from '../../services/tauri';
+import { GitCompare, CheckCircle2, AlertTriangle, FileCode, Check, EyeOff, Layers, ShieldCheck, FolderX, AlertCircle, Wand2, GripHorizontal, Sparkle, PackageCheck, Package, Unlock, RefreshCw, Plus, Edit2, Trash2, Box } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface MergerModuleProps {
@@ -33,6 +33,24 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [showScanDoneBanner, setShowScanDoneBanner] = useState<boolean>(false);
   const [patchStatus, setPatchStatus] = useState<MasterPatchStatusInfoUI | null>(null);
 
+  // Multi-Package State
+  const [packages, setPackages] = useState<MergedPackageInfoUI[]>([]);
+  const [selectedPackageFolder, setSelectedPackageFolder] = useState<string>('Z_PZModStudio_MergedPatch');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [newPackageName, setNewPackageName] = useState<string>('');
+  const [editingPackageFolder, setEditingPackageFolder] = useState<string | null>(null);
+  const [editingPackageName, setEditingPackageName] = useState<string>('');
+
+  const fetchPackages = useCallback(async () => {
+    if (paths.user_zomboid_dir) {
+      const list = await TauriService.listMergedPackages(paths.user_zomboid_dir, paths.mod_list_ini_path);
+      setPackages(list);
+      if (list.length > 0 && !list.some(p => p.folder_name === selectedPackageFolder)) {
+        setSelectedPackageFolder(list[0].folder_name);
+      }
+    }
+  }, [paths.user_zomboid_dir, paths.mod_list_ini_path, selectedPackageFolder]);
+
   const fetchPatchStatus = useCallback(async () => {
     if (paths.user_zomboid_dir) {
       const status = await TauriService.getMasterPatchStatus(paths.user_zomboid_dir, paths.mod_list_ini_path);
@@ -41,8 +59,43 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   }, [paths.user_zomboid_dir, paths.mod_list_ini_path]);
 
   useEffect(() => {
+    fetchPackages();
     fetchPatchStatus();
-  }, [fetchPatchStatus, conflicts]);
+  }, [fetchPackages, fetchPatchStatus, conflicts]);
+
+  const handleCreatePackageSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPackageName.trim()) return;
+    const pkg = await TauriService.createMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, newPackageName.trim());
+    if (pkg) {
+      setNewPackageName('');
+      setIsCreateModalOpen(false);
+      await fetchPackages();
+      setSelectedPackageFolder(pkg.folder_name);
+      await onRescan();
+    }
+  };
+
+  const handleRenamePackageSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPackageFolder || !editingPackageName.trim()) return;
+    const pkg = await TauriService.renameMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, editingPackageFolder, editingPackageName.trim());
+    if (pkg) {
+      setEditingPackageFolder(null);
+      setEditingPackageName('');
+      await fetchPackages();
+      setSelectedPackageFolder(pkg.folder_name);
+      await onRescan();
+    }
+  };
+
+  const handleDeletePackage = async (folderName: string) => {
+    if (confirm(`¿Estás seguro de que deseas eliminar el paquete "${folderName}" del disco?`)) {
+      await TauriService.deleteMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName);
+      await fetchPackages();
+      await onRescan();
+    }
+  };
 
   const handleCleanMasterPatch = async () => {
     setIsCleaning(true);
@@ -53,9 +106,11 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         pz_install_dir: paths.pz_install_dir,
         user_zomboid_dir: paths.user_zomboid_dir,
         mod_list_ini_path: paths.mod_list_ini_path,
+        package_folder_name: selectedPackageFolder,
       });
-      setCleanDoneMessage('Master Patch desempaquetado y eliminado con éxito. Se re-escanearon los mods activos.');
+      setCleanDoneMessage(`Paquete "${selectedPackageFolder}" desempaquetado con éxito. Se re-escanearon los mods activos.`);
       await fetchPatchStatus();
+      await fetchPackages();
       await onRescan();
     } catch (err) {
       console.error('Clean failed:', err);
@@ -81,11 +136,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         mod_list_ini_path: paths.mod_list_ini_path,
         merged_files: mergedFilesPayload,
         active_polyfill_ids: ['translator_fix', 'safe_gettext'],
+        package_folder_name: selectedPackageFolder,
       });
 
       if (res.success) {
-        setGenerateDoneMessage(`Master Patch empacado y generado con éxito en Zomboid/mods/Z_PZModStudio_MergedPatch.`);
+        setGenerateDoneMessage(`Paquete empacado y generado con éxito en Zomboid/mods/${selectedPackageFolder}.`);
         await fetchPatchStatus();
+        await fetchPackages();
       }
     } catch (err) {
       console.error('Generate failed:', err);
@@ -372,9 +429,150 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-slate-950 text-slate-200 select-none">
-      {/* File Conflict Sidebar */}
-      <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50 shrink-0">
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">
+      {/* Package Manager Header Selector Bar */}
+      <div className="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+          <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0 mr-2">
+            <Box className="w-4 h-4 text-emerald-400" />
+            <span>Paquetes de Fusión:</span>
+          </span>
+
+          {packages.map((pkg) => {
+            const isSelected = pkg.folder_name === selectedPackageFolder;
+            return (
+              <div
+                key={pkg.folder_name}
+                onClick={() => setSelectedPackageFolder(pkg.folder_name)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition shrink-0 ${
+                  isSelected
+                    ? 'bg-emerald-950/80 border-emerald-500/80 text-emerald-200 font-bold shadow'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <Package className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <span>{pkg.display_name}</span>
+                {pkg.is_packaged ? (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Empaquetado y Activo" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-amber-400" title="Desempaquetado (Modo Análisis)" />
+                )}
+
+                {/* Quick Actions */}
+                <div className="flex items-center gap-1 ml-1 opacity-80 hover:opacity-100">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingPackageFolder(pkg.folder_name);
+                      setEditingPackageName(pkg.display_name);
+                    }}
+                    className="p-0.5 hover:text-cyan-300"
+                    title="Renombrar paquete"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  {pkg.folder_name !== 'Z_PZModStudio_MergedPatch' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePackage(pkg.folder_name);
+                      }}
+                      className="p-0.5 hover:text-red-400"
+                      title="Eliminar paquete del disco"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>➕ Nuevo Paquete</span>
+        </button>
+      </div>
+
+      {/* Modal: Crear Nuevo Paquete */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleCreatePackageSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
+            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <Package className="w-5 h-5 text-emerald-400" />
+              <span>Crear Nuevo Paquete de Fusión</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Ingresa un nombre descriptivo para este paquete (ej. <b>"mix mods"</b> o <b>"B42 Weapons Patch"</b>). Se creará la carpeta nativa en tu directorio de mods.
+            </p>
+            <input
+              type="text"
+              value={newPackageName}
+              onChange={(e) => setNewPackageName(e.target.value)}
+              placeholder="ej: mix mods"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Crear Paquete
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: Renombrar Paquete */}
+      {editingPackageFolder && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleRenamePackageSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
+            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+              <Edit2 className="w-5 h-5 text-cyan-400" />
+              <span>Renombrar Paquete</span>
+            </h3>
+            <input
+              type="text"
+              value={editingPackageName}
+              onChange={(e) => setEditingPackageName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingPackageFolder(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Guardar Nombre
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* File Conflict Sidebar */}
+        <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50 shrink-0">
         <div className="p-3 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
             <GitCompare className="w-4 h-4 text-emerald-400" />
@@ -622,9 +820,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
-          No conflicts selected.
+          No hay conflictos seleccionados.
         </div>
       )}
+      </div>
     </div>
   );
 };

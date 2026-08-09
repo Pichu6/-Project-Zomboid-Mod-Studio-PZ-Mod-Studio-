@@ -46,7 +46,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     },
     {
       id: 'MERGER' as ActiveTab,
-      label: 'Script Merger',
+      label: 'Mod Merger',
       icon: GitCompare,
       badge: conflictCount > 0 ? conflictCount : null,
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',

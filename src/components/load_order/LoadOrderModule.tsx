@@ -980,6 +980,13 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             {mod.name}
                           </span>
 
+                          {mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier") && (
+                            <span className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700 shrink-0 shadow-sm">
+                              <Package className="w-3 h-3 text-emerald-400" />
+                              <span>PAQUETE DE FUSIÓN</span>
+                            </span>
+                          )}
+
                           {!mod.enabled && (
                             <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
                               OFF

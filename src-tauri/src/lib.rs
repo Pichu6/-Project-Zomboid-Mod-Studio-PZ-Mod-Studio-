@@ -133,6 +133,26 @@ fn get_master_patch_status_cmd(user_zomboid_dir: String, mod_list_ini_path: Stri
     patch_generator::get_master_patch_status(&user_zomboid_dir, &mod_list_ini_path)
 }
 
+#[tauri::command]
+fn list_merged_packages_cmd(user_zomboid_dir: String, mod_list_ini_path: String) -> Vec<patch_generator::MergedPackageInfo> {
+    patch_generator::list_merged_packages(&user_zomboid_dir, &mod_list_ini_path)
+}
+
+#[tauri::command]
+fn create_merged_package_cmd(user_zomboid_dir: String, mod_list_ini_path: String, name: String) -> Result<patch_generator::MergedPackageInfo, String> {
+    patch_generator::create_merged_package(&user_zomboid_dir, &mod_list_ini_path, &name)
+}
+
+#[tauri::command]
+fn rename_merged_package_cmd(user_zomboid_dir: String, mod_list_ini_path: String, old_folder: String, new_name: String) -> Result<patch_generator::MergedPackageInfo, String> {
+    patch_generator::rename_merged_package(&user_zomboid_dir, &mod_list_ini_path, &old_folder, &new_name)
+}
+
+#[tauri::command]
+fn delete_merged_package_cmd(user_zomboid_dir: String, mod_list_ini_path: String, folder_name: String) -> Result<bool, String> {
+    patch_generator::delete_merged_package(&user_zomboid_dir, &mod_list_ini_path, &folder_name)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -152,6 +172,10 @@ pub fn run() {
             generate_master_patch_cmd,
             clean_master_patch_cmd,
             get_master_patch_status_cmd,
+            list_merged_packages_cmd,
+            create_merged_package_cmd,
+            rename_merged_package_cmd,
+            delete_merged_package_cmd,
             pick_folder_cmd,
             pick_save_file_cmd,
             pick_open_file_cmd,
