@@ -43,14 +43,14 @@ interface LoadOrderModuleProps {
 }
 
 const PACKAGE_COLOR_PALETTES = [
-  { border: 'border-l-cyan-400', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-700' },
-  { border: 'border-l-purple-400', badge: 'bg-purple-950/80 text-purple-300 border-purple-700' },
-  { border: 'border-l-emerald-400', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-700' },
-  { border: 'border-l-amber-400', badge: 'bg-amber-950/80 text-amber-300 border-amber-700' },
-  { border: 'border-l-pink-400', badge: 'bg-pink-950/80 text-pink-300 border-pink-700' },
-  { border: 'border-l-indigo-400', badge: 'bg-indigo-950/80 text-indigo-300 border-indigo-700' },
-  { border: 'border-l-rose-400', badge: 'bg-rose-950/80 text-rose-300 border-rose-700' },
-  { border: 'border-l-teal-400', badge: 'bg-teal-950/80 text-teal-300 border-teal-700' },
+  { border: 'border-l-cyan-400', bgMatch: 'bg-cyan-950/25 hover:bg-cyan-950/40 border-cyan-900/40', badge: 'bg-cyan-950/90 text-cyan-300 border-cyan-700/60' },
+  { border: 'border-l-purple-400', bgMatch: 'bg-purple-950/25 hover:bg-purple-950/40 border-purple-900/40', badge: 'bg-purple-950/90 text-purple-300 border-purple-700/60' },
+  { border: 'border-l-emerald-400', bgMatch: 'bg-emerald-950/25 hover:bg-emerald-950/40 border-emerald-900/40', badge: 'bg-emerald-950/90 text-emerald-300 border-emerald-700/60' },
+  { border: 'border-l-amber-400', bgMatch: 'bg-amber-950/25 hover:bg-amber-950/40 border-amber-900/40', badge: 'bg-amber-950/90 text-amber-300 border-amber-700/60' },
+  { border: 'border-l-pink-400', bgMatch: 'bg-pink-950/25 hover:bg-pink-950/40 border-pink-900/40', badge: 'bg-pink-950/90 text-pink-300 border-pink-700/60' },
+  { border: 'border-l-indigo-400', bgMatch: 'bg-indigo-950/25 hover:bg-indigo-950/40 border-indigo-900/40', badge: 'bg-indigo-950/90 text-indigo-300 border-indigo-700/60' },
+  { border: 'border-l-rose-400', bgMatch: 'bg-rose-950/25 hover:bg-rose-950/40 border-rose-900/40', badge: 'bg-rose-950/90 text-rose-300 border-rose-700/60' },
+  { border: 'border-l-teal-400', bgMatch: 'bg-teal-950/25 hover:bg-teal-950/40 border-teal-900/40', badge: 'bg-teal-950/90 text-teal-300 border-teal-700/60' },
 ];
 
 const normalizeModId = (id: string): string => {
@@ -634,6 +634,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
                         : isSelected
                         ? 'bg-slate-800/90 border border-emerald-500/60 shadow-lg'
+                        : isMultiPackage && packageColor
+                        ? packageColor.bgMatch
                         : mod.enabled
                         ? 'bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800'
                         : 'bg-slate-950/40 opacity-60 hover:opacity-100 border border-slate-900/60'
@@ -692,6 +694,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           <span className={`truncate ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
                             {mod.name}
                           </span>
+
+                          {isMultiPackage && packageColor && (
+                            <span
+                              className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${packageColor.badge} shrink-0`}
+                              title={`Multi-mod Workshop package #${mod.workshop_id}`}
+                            >
+                              Pkg #{mod.workshop_id}
+                            </span>
+                          )}
 
                           {!mod.enabled && (
                             <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
