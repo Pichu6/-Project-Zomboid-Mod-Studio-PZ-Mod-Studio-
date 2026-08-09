@@ -76,11 +76,8 @@ pub fn auto_detect_paths() -> StudioPaths {
         String::new()
     };
 
-    let mod_list_ini_path = if mod_list_ini.exists() {
-        mod_list_ini.to_string_lossy().to_string()
-    } else {
-        String::new()
-    };
+    // Always provide target mod_list_ini_path under Zomboid/mods/ModListData.ini so path is never empty!
+    let mod_list_ini_path = mod_list_ini.to_string_lossy().to_string();
 
     let is_valid = !pz_install_dir.is_empty() && !user_zomboid_dir.is_empty();
 
@@ -108,11 +105,9 @@ pub fn validate_paths(mut paths: StudioPaths) -> StudioPaths {
         }
     }
 
-    if user_ok && (paths.mod_list_ini_path.is_empty() || !Path::new(&paths.mod_list_ini_path).exists()) {
+    if user_ok && paths.mod_list_ini_path.is_empty() {
         let candidate = Path::new(&paths.user_zomboid_dir).join("mods").join("ModListData.ini");
-        if candidate.exists() {
-            paths.mod_list_ini_path = candidate.to_string_lossy().to_string();
-        }
+        paths.mod_list_ini_path = candidate.to_string_lossy().to_string();
     }
 
     paths.is_valid = pz_ok && user_ok;
@@ -139,20 +134,12 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
         }
     }
 
-    if !paths.mod_list_ini_path.is_empty() && Path::new(&paths.mod_list_ini_path).exists() {
-        if let Ok(content) = fs::read_to_string(&paths.mod_list_ini_path) {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("activeMods=") {
-                    active_mods = trimmed[11..]
-                        .split(';')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty() && s != "Z_PZModStudio_MergedPatch")
-                        .collect();
-                    break;
-                }
-            }
-        }
+    if let Ok(ini_data) = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path) {
+        active_mods = ini_data
+            .active_mods
+            .into_iter()
+            .filter(|s| s != "Z_PZModStudio_MergedPatch")
+            .collect();
     }
 
     let workshop_dir = Path::new(&paths.workshop_dir);
