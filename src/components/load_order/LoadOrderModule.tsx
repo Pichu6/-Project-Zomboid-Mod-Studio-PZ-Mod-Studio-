@@ -607,6 +607,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const disabledDependencies = missingActiveDependenciesMap[mod.mod_id];
                 const hasDisabledDependency = disabledDependencies && disabledDependencies.length > 0;
 
+                const isConflictPartner =
+                  selectedMod &&
+                  activeConflictsMap[selectedMod.mod_id] &&
+                  activeConflictsMap[selectedMod.mod_id].some((c) => c.conflictingModId === mod.mod_id);
+
                 return (
                   <div
                     key={mod.mod_id}
@@ -617,8 +622,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
                       hasDisabledDependency
                         ? 'border-2 border-rose-500/80 bg-rose-950/30 shadow-md shadow-rose-950/30'
+                        : isConflictPartner
+                        ? 'border-2 border-amber-400 bg-amber-950/90 shadow-xl shadow-amber-900/60 ring-2 ring-amber-400/50 animate-pulse'
                         : hasExclusivityConflict
-                        ? 'border-2 border-amber-500/80 bg-amber-950/30 shadow-md shadow-amber-950/30'
+                        ? 'border-2 border-amber-500 bg-amber-950/50 shadow-lg shadow-amber-950/50'
                         : isMultiPackage && packageColor
                         ? `border-l-4 ${packageColor.border}`
                         : 'border-l border-l-transparent'
@@ -695,7 +702,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           {hasDisabledDependency && (
                             <span
                               className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 shrink-0 cursor-help"
-                              title={`⚠️ REQ LIBRARY DISABLED!\nThis mod is active, but required library [${disabledDependencies[0].name}] is currently DISABLED. Enable [${disabledDependencies[0].name}] for this mod to function.`}
+                              title={`⚠️ REQ LIBRARY DISABLED!\nThis mod is active, but required library [${disabledDependencies[0].name}] is currently DISABLED.`}
                             >
                               <AlertTriangle className="w-3 h-3 text-rose-400" />
                               <span>REQ OFF: {disabledDependencies[0].name}</span>
@@ -703,13 +710,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           )}
 
                           {hasExclusivityConflict && (
-                            <span
-                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 cursor-help"
-                              title={`⚠️ INCOMPATIBILITY WARNING!\nMutually exclusive sub-mod active alongside: [${conflictsForThisMod[0].conflictingModName}].`}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleJumpToMod(conflictsForThisMod[0].conflictingModId);
+                              }}
+                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 shrink-0 transition cursor-pointer"
+                              title={`⚠️ INCOMPATIBILITY WARNING!\nClick to jump, highlight & scroll to conflicting mod: [${conflictsForThisMod[0].conflictingModName}]`}
                             >
-                              <AlertTriangle className="w-3 h-3 text-amber-400" />
-                              <span>INCOMPATIBLE</span>
-                            </span>
+                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>INCOMPATIBLE (↗ {conflictsForThisMod[0].conflictingModName})</span>
+                            </button>
                           )}
                         </div>
                         <div className={`text-[9px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
