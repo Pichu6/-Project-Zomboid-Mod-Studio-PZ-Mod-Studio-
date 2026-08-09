@@ -128,6 +128,16 @@ pub fn generate_256x256_png_bytes() -> Vec<u8> {
     png
 }
 
+pub fn get_preview_png_bytes() -> Vec<u8> {
+    if let Ok(bytes) = fs::read("111.png") {
+        return bytes;
+    }
+    if let Ok(bytes) = fs::read(r"E:\PZ Mod Studio\111.png") {
+        return bytes;
+    }
+    generate_256x256_png_bytes()
+}
+
 /// Generates the synthetic master patch mod under Zomboid/mods/Z_PZModStudio_MergedPatch and updates ModListData.ini.
 pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     let mut target_dirs = Vec::new();
@@ -219,7 +229,7 @@ Events.OnMainMenuEnter.Add(function()
 end)
 "#;
 
-    let png_256 = generate_256x256_png_bytes();
+    let png_256 = get_preview_png_bytes();
 
     for patch_mod_dir in &target_dirs {
         fs::create_dir_all(patch_mod_dir).map_err(|e| e.to_string())?;
@@ -275,7 +285,7 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
         return Err("User Zomboid directory path is missing.".to_string());
     }
 
-    let png_256 = generate_256x256_png_bytes();
+    let png_256 = get_preview_png_bytes();
 
     // 1. Create Zomboid/Workshop/Z_PZModStudio_Carrier (Primary location read by PZ Workshop Upload UI)
     let workshop_item_dir = Path::new(user_zomboid_dir).join("Workshop").join("Z_PZModStudio_Carrier");
