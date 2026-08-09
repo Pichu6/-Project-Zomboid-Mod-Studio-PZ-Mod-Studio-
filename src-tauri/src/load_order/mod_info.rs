@@ -198,6 +198,12 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 
 pub fn ensure_master_patch_exists_on_disk(paths: &StudioPaths) {
     let mut target_dirs = Vec::new();
+    if let Some(ref carrier_id) = paths.carrier_workshop_id {
+        let clean_carrier = carrier_id.trim();
+        if !clean_carrier.is_empty() && !paths.workshop_dir.is_empty() {
+            target_dirs.push(Path::new(&paths.workshop_dir).join(clean_carrier).join("mods").join("Z_PZModStudio_MergedPatch"));
+        }
+    }
     if !paths.workshop_dir.is_empty() {
         target_dirs.push(Path::new(&paths.workshop_dir).join("9999999999").join("mods").join("Z_PZModStudio_MergedPatch"));
     }

@@ -8,6 +8,7 @@ export interface StudioPathsUI {
   workshop_dir: string;
   user_zomboid_dir: string;
   mod_list_ini_path: string;
+  carrier_workshop_id?: string;
   is_valid: boolean;
 }
 
@@ -241,6 +242,31 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
                   Browse...
                 </button>
+              </div>
+            </div>
+
+            {/* Card 4.5: Custom Carrier Workshop Mod Integration */}
+            <div className="bg-slate-900/80 border border-cyan-500/30 rounded-xl p-4 space-y-2 shadow">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-cyan-300 flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-cyan-400" />
+                  Carrier Workshop Mod ID (Optional Steam Workshop Carrier)
+                </label>
+                <span className="text-[10px] bg-cyan-950 text-cyan-300 font-bold px-2 py-0.5 rounded border border-cyan-800 font-mono">
+                  B42 Workshop Carrier
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                If you upload a mod or patch to Steam Workshop, enter its Workshop Item ID here (e.g. <code className="text-cyan-300">3123456789</code>). PZ Mod Studio will inject all 3-Way merged files and polyfills directly into your subscribed Workshop mod folder so Project Zomboid loads it natively in-game.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter Workshop Item ID (e.g. 3123456789)"
+                  value={formData.carrier_workshop_id || ''}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, carrier_workshop_id: e.target.value }))}
+                  className="flex-1 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg px-3 py-2 text-xs font-mono text-cyan-200"
+                />
               </div>
             </div>
 

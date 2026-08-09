@@ -136,8 +136,13 @@ export interface SandboxSession {
   error_cards: TranslatedErrorCard[];
 }
 
-// ==========================================
-// App Navigation State
-// ==========================================
+export interface StudioPathsUI {
+  pz_install_dir: string;
+  workshop_dir: string;
+  user_zomboid_dir: string;
+  mod_list_ini_path: string;
+  carrier_workshop_id?: string;
+  is_valid: boolean;
+}
 
 export type ActiveTab = 'MOD_LIST' | 'MERGER' | 'MONITOR' | 'SETTINGS';

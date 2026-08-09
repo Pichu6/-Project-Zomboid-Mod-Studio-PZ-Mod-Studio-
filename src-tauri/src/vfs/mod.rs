@@ -10,6 +10,7 @@ pub struct StudioPaths {
     pub workshop_dir: String,
     pub user_zomboid_dir: String,
     pub mod_list_ini_path: String,
+    pub carrier_workshop_id: Option<String>,
     pub is_valid: bool,
 }
 
@@ -86,6 +87,7 @@ pub fn auto_detect_paths() -> StudioPaths {
         workshop_dir,
         user_zomboid_dir,
         mod_list_ini_path,
+        carrier_workshop_id: None,
         is_valid,
     }
 }
