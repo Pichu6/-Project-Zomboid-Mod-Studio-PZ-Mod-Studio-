@@ -273,9 +273,24 @@ export const TauriService = {
   /**
    * Listens to translated crash error cards from Rust log watcher
    */
+  /**
+   * Listens to translated crash error cards from Rust log watcher
+   */
   listenSandboxErrorCards: async (callback: (card: TranslatedErrorCard) => void): Promise<UnlistenFn> => {
     return await listen<TranslatedErrorCard>('sandbox-error-card', (event) => {
       callback(event.payload);
     });
+  },
+
+  /**
+   * Prepares local carrier mod folder under Zomboid/mods/Z_PZModStudio_Carrier for Workshop uploading
+   */
+  prepareCarrierMod: async (userZomboidDir: string): Promise<string> => {
+    try {
+      return await invoke<string>('prepare_carrier_mod_cmd', { userZomboidDir });
+    } catch (err) {
+      console.error('Failed to prepare carrier mod folder:', err);
+      throw err;
+    }
   },
 };

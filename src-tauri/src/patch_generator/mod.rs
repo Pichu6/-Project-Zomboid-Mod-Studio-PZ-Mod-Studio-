@@ -179,3 +179,26 @@ end)
         polyfills_injected: polyfills_count,
     })
 }
+
+pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
+    if user_zomboid_dir.is_empty() {
+        return Err("User Zomboid directory path is missing.".to_string());
+    }
+    let carrier_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
+    fs::create_dir_all(&carrier_dir).map_err(|e| e.to_string())?;
+
+    let mod_info = "name=PZ Mod Studio Carrier Patch\r\n\
+id=Z_PZModStudio_MergedPatch\r\n\
+description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
+poster=poster.png\r\n\
+icon=icon.png\r\n\
+modversion=1.0.0\r\n\
+pzversion=41,42\r\n\
+author=PZ Mod Studio\r\n";
+
+    fs::write(carrier_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
+    let _ = fs::write(carrier_dir.join("poster.png"), VALID_POSTER_PNG);
+    let _ = fs::write(carrier_dir.join("icon.png"), VALID_POSTER_PNG);
+
+    Ok(carrier_dir.to_string_lossy().to_string())
+}

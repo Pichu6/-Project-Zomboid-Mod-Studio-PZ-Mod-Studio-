@@ -267,6 +267,20 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   onChange={(e) => setFormData((prev) => ({ ...prev, carrier_workshop_id: e.target.value }))}
                   className="flex-1 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg px-3 py-2 text-xs font-mono text-cyan-200"
                 />
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await TauriService.prepareCarrierMod(formData.user_zomboid_dir);
+                      alert(`✨ Carrier Mod folder prepared at:\n${res}\n\nSteps to upload:\n1. Open Project Zomboid\n2. Main Menu -> Workshop -> Upload Mod\n3. Select Z_PZModStudio_Carrier and click Upload\n4. Copy the assigned Workshop ID into this setting!`);
+                    } catch (err) {
+                      alert(`Error preparing carrier folder: ${err}`);
+                    }
+                  }}
+                  className="px-3 py-2 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-300 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Prepare Local Mod Folder for Workshop
+                </button>
               </div>
             </div>
 

@@ -9,7 +9,7 @@ use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
 use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
 use load_order::mod_info::{scan_all_installed_mods, ModManifest};
 use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
-use patch_generator::{generate_master_patch, MasterPatchRequest, MasterPatchResult};
+use patch_generator::{generate_master_patch, prepare_carrier_mod, MasterPatchRequest, MasterPatchResult};
 use sandbox::{launch_sandbox_and_watch, SandboxLaunchConfig};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -91,6 +91,11 @@ fn pick_folder_cmd(default_path: Option<String>) -> Option<String> {
 }
 
 #[tauri::command]
+fn prepare_carrier_mod_cmd(user_zomboid_dir: String) -> Result<String, String> {
+    prepare_carrier_mod(&user_zomboid_dir)
+}
+
+#[tauri::command]
 fn open_external_url_cmd(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("Failed to open URL in browser: {}", e))
 }
@@ -113,7 +118,8 @@ pub fn run() {
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             pick_folder_cmd,
-            open_external_url_cmd
+            open_external_url_cmd,
+            prepare_carrier_mod_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
