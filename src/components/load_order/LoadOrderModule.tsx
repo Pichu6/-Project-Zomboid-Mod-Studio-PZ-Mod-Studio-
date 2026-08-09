@@ -615,32 +615,107 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const handleAutoSortDependencies = () => {
-    const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.includes('MergedPatch');
+    const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.startsWith('Z_PZModStudio_');
 
-    const sorted = [...mods].sort((a, b) => {
-      if (isMasterPatch(a.mod_id)) return 1;
-      if (isMasterPatch(b.mod_id)) return -1;
+    // 1. Separate Master Patch / Fusion Packages
+    const regularMods = mods.filter((m) => !isMasterPatch(m.mod_id));
+    const masterPatchMods = mods.filter((m) => isMasterPatch(m.mod_id));
 
-      // 1. Dependency relationships take ABSOLUTE priority over category or Workshop ID!
-      const bRequiresA = b.dependencies.some((dep) => findInstalledDependencyInMods(dep, [a]) !== undefined);
-      const aRequiresB = a.dependencies.some((dep) => findInstalledDependencyInMods(dep, [b]) !== undefined);
+    // 2. Build Dependency Graph & In-Degree map
+    const inDegree: Map<string, number> = new Map();
+    const graph: Map<string, string[]> = new Map();
+    const modMap: Map<string, ModInfo> = new Map();
 
-      if (bRequiresA && !aRequiresB) return -1; // 'a' (framework/dependency) must load BEFORE 'b'!
-      if (aRequiresB && !bRequiresA) return 1;  // 'b' (framework/dependency) must load BEFORE 'a'!
-
-      // 2. Base Libraries come before general mods
-      if (a.is_library && !b.is_library) return -1;
-      if (!a.is_library && b.is_library) return 1;
-
-      // 3. Map mods come after general mods
-      if (a.is_map_mod && !b.is_map_mod) return 1;
-      if (!a.is_map_mod && b.is_map_mod) return -1;
-
-      // 4. Stable alphabetical sort tie-breaker by mod name
-      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    regularMods.forEach((m) => {
+      inDegree.set(m.mod_id, 0);
+      graph.set(m.mod_id, []);
+      modMap.set(m.mod_id, m);
     });
 
-    triggerReorder(sorted);
+    regularMods.forEach((m) => {
+      if (m.dependencies && m.dependencies.length > 0) {
+        m.dependencies.forEach((depRaw) => {
+          const parentMod = findInstalledDependencyInMods(depRaw, regularMods);
+          if (parentMod && parentMod.mod_id !== m.mod_id) {
+            // parentMod MUST load BEFORE m
+            graph.get(parentMod.mod_id)?.push(m.mod_id);
+            inDegree.set(m.mod_id, (inDegree.get(m.mod_id) || 0) + 1);
+          }
+        });
+      }
+    });
+
+    // 3. Kahn's Topological Sort with Mod Family Cohesion Priority
+    const sortedResult: ModInfo[] = [];
+    const availableNodes = new Set<string>();
+
+    inDegree.forEach((deg, id) => {
+      if (deg === 0) availableNodes.add(id);
+    });
+
+    let lastAddedMod: ModInfo | null = null;
+
+    while (availableNodes.size > 0) {
+      const candidates = Array.from(availableNodes).map((id) => modMap.get(id)!);
+
+      // Score candidates to pick the best next mod:
+      // - Prioritize mods belonging to the SAME WORKSHOP ITEM or MOD FAMILY prefix as lastAddedMod!
+      // - Prioritize Base Libraries over normal mods
+      // - Prioritize Normal mods over Map mods
+      // - Stable tie-breaker by name
+      candidates.sort((a, b) => {
+        if (lastAddedMod) {
+          const aSameWorkshop = a.workshop_id && a.workshop_id === lastAddedMod.workshop_id;
+          const bSameWorkshop = b.workshop_id && b.workshop_id === lastAddedMod.workshop_id;
+          if (aSameWorkshop && !bSameWorkshop) return -1;
+          if (!aSameWorkshop && bSameWorkshop) return 1;
+
+          // Check name prefix similarity (e.g. "Neat Building" and "Neat Building - UI Only")
+          const cleanLast = lastAddedMod.name.split('-')[0].trim().toLowerCase();
+          const aPrefixMatch = a.name.toLowerCase().startsWith(cleanLast);
+          const bPrefixMatch = b.name.toLowerCase().startsWith(cleanLast);
+          if (aPrefixMatch && !bPrefixMatch) return -1;
+          if (!aPrefixMatch && bPrefixMatch) return 1;
+        }
+
+        if (a.is_library && !b.is_library) return -1;
+        if (!a.is_library && b.is_library) return 1;
+
+        if (!a.is_map_mod && b.is_map_mod) return -1;
+        if (a.is_map_mod && !b.is_map_mod) return 1;
+
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+
+      const nextMod = candidates[0];
+      availableNodes.delete(nextMod.mod_id);
+      sortedResult.push(nextMod);
+      lastAddedMod = nextMod;
+
+      // Decrement in-degree for neighbors
+      const neighbors = graph.get(nextMod.mod_id) || [];
+      neighbors.forEach((neighborId) => {
+        const currentDeg = inDegree.get(neighborId) || 0;
+        const newDeg = Math.max(0, currentDeg - 1);
+        inDegree.set(neighborId, newDeg);
+        if (newDeg === 0) {
+          availableNodes.add(neighborId);
+        }
+      });
+    }
+
+    // Append any remaining mods (e.g. if circular dependencies exist)
+    const processedSet = new Set(sortedResult.map((m) => m.mod_id));
+    regularMods.forEach((m) => {
+      if (!processedSet.has(m.mod_id)) {
+        sortedResult.push(m);
+      }
+    });
+
+    // 4. Master Patch / Fusion packages go at the very bottom
+    const finalSorted = [...sortedResult, ...masterPatchMods];
+
+    triggerReorder(finalSorted);
     const isSilenced = localStorage.getItem('pz_hide_autosort_notice') === 'true';
     if (!isSilenced) {
       setShowAutoSortNotice(true);
