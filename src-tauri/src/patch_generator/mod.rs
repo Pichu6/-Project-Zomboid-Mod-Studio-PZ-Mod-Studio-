@@ -179,6 +179,8 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     mod_info_content.push_str("poster=poster.png\r\n");
     mod_info_content.push_str("icon=icon.png\r\n");
     mod_info_content.push_str("modversion=1.0.0\r\n");
+    mod_info_content.push_str("pzversion=41,42\r\n");
+    mod_info_content.push_str("versionMin=41.0\r\n");
     mod_info_content.push_str("author=PZ Mod Studio\r\n");
 
     let mut files_written = 0;
@@ -237,6 +239,7 @@ end)
     for patch_mod_dir in &target_dirs {
         fs::create_dir_all(patch_mod_dir).map_err(|e| e.to_string())?;
 
+        // 1. Top level mod.info and media/
         fs::write(patch_mod_dir.join("mod.info"), &mod_info_content).map_err(|e| e.to_string())?;
         let _ = fs::write(patch_mod_dir.join("poster.png"), &png_256);
         let _ = fs::write(patch_mod_dir.join("icon.png"), &png_256);
@@ -247,22 +250,51 @@ end)
         let _ = fs::write(media_dir.join("poster.png"), &png_256);
         let _ = fs::write(media_dir.join("icon.png"), &png_256);
 
+        // 2. Build 42 native subfolder structure (42/mod.info and 42/media/)
+        let dir_42 = patch_mod_dir.join("42");
+        let _ = fs::create_dir_all(&dir_42);
+        let _ = fs::write(dir_42.join("mod.info"), &mod_info_content);
+        let _ = fs::write(dir_42.join("poster.png"), &png_256);
+        let _ = fs::write(dir_42.join("icon.png"), &png_256);
+
+        let media_42_dir = dir_42.join("media");
+        let _ = fs::create_dir_all(&media_42_dir);
+        let _ = fs::write(media_42_dir.join("mod.info"), &mod_info_content);
+
+        // Write merged files to both top level and 42/ subfolder
         for file in &req.merged_files {
             let dest_path = patch_mod_dir.join(&file.relative_path);
             if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                let _ = fs::create_dir_all(parent);
             }
-            fs::write(dest_path, &file.content).map_err(|e| e.to_string())?;
+            let _ = fs::write(&dest_path, &file.content);
+
+            let dest_42_path = dir_42.join(&file.relative_path);
+            if let Some(parent) = dest_42_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(&dest_42_path, &file.content);
+
             files_written += 1;
         }
 
+        // Polyfills in both media/lua/shared and 42/media/lua/shared
         let polyfill_dir = media_dir.join("lua").join("shared");
-        fs::create_dir_all(&polyfill_dir).map_err(|e| e.to_string())?;
-        fs::write(polyfill_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfill_lua_content).map_err(|e| e.to_string())?;
+        let _ = fs::create_dir_all(&polyfill_dir);
+        let _ = fs::write(polyfill_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfill_lua_content);
 
+        let polyfill_42_dir = media_42_dir.join("lua").join("shared");
+        let _ = fs::create_dir_all(&polyfill_42_dir);
+        let _ = fs::write(polyfill_42_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfill_lua_content);
+
+        // UI Override shims
         let client_override_dir = media_dir.join("lua").join("client").join("OptionScreens");
-        fs::create_dir_all(&client_override_dir).map_err(|e| e.to_string())?;
-        fs::write(client_override_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content).map_err(|e| e.to_string())?;
+        let _ = fs::create_dir_all(&client_override_dir);
+        let _ = fs::write(client_override_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content);
+
+        let client_override_42_dir = media_42_dir.join("lua").join("client").join("OptionScreens");
+        let _ = fs::create_dir_all(&client_override_42_dir);
+        let _ = fs::write(client_override_42_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content);
     }
 
     // Update ModListData.ini to place Z_PZModStudio_MergedPatch at the end of load order

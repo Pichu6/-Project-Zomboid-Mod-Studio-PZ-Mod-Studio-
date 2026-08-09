@@ -175,6 +175,16 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("ModLoadOrderExporter.txt"), &active_lines);
             let _ = fs::write(saved_modlists_dir.join("PZModStudio.txt"), &active_lines);
+
+            // Also sync active mods to all existing save game folders (Zomboid/Saves/*/*/mods.txt and default.txt)
+            let saves_dir = zomboid_dir.join("Saves");
+            if saves_dir.exists() {
+                for entry in walkdir::WalkDir::new(&saves_dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+                    if entry.file_name() == "mods.txt" {
+                        let _ = fs::write(entry.path(), &default_txt_content);
+                    }
+                }
+            }
         }
     }
 
