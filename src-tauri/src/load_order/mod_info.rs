@@ -247,12 +247,12 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                     result_mods.push(manifest);
                     processed_ids.insert(key);
                 }
-            } else if !active_id.is_empty() {
-                // Mod in ini not found on disk
+            } else if active_id == "Z_PZModStudio_MergedPatch" {
+                // Keep PZ Mod Studio Master Patch active
                 result_mods.push(ModManifest {
                     id: active_id.clone(),
-                    name: active_id.clone(),
-                    description: Some("Active in ModListData.ini".to_string()),
+                    name: "PZ Mod Studio Master Patch".to_string(),
+                    description: Some("Auto-generated 3-Way compatibility patch and B42 polyfill layer".to_string()),
                     workshop_id: None,
                     require: Vec::new(),
                     icon_path: None,
@@ -263,6 +263,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                 });
                 processed_ids.insert(active_id);
             }
+            // If mod was unsubscribed and no longer exists on disk, skip it so it is cleaned up!
         }
     }
 

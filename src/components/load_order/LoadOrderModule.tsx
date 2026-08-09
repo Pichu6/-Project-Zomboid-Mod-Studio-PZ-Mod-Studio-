@@ -133,6 +133,34 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return { mapCount, libCount, scriptCount };
   }, [mods]);
 
+  const isMutuallyExclusiveVariant = (modA: ModInfo, modB: ModInfo): boolean => {
+    if (!modA.workshop_id || !modB.workshop_id || modA.workshop_id !== modB.workshop_id) {
+      return false;
+    }
+
+    const normA = normalizeModId(modA.mod_id);
+    const normB = normalizeModId(modB.mod_id);
+
+    const aRequiresB = modA.dependencies.some((d) => normalizeModId(d) === normB);
+    const bRequiresA = modB.dependencies.some((d) => normalizeModId(d) === normA);
+
+    if (aRequiresB || bRequiresA || modA.is_library || modB.is_library) {
+      return false;
+    }
+
+    const nameA = modA.name.toLowerCase();
+    const nameB = modB.name.toLowerCase();
+    const idA = modA.mod_id.toLowerCase();
+    const idB = modB.mod_id.toLowerCase();
+
+    const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext'];
+
+    const matchesA = variantKeywords.some((k) => nameA.includes(k) || idA.includes(k));
+    const matchesB = variantKeywords.some((k) => nameB.includes(k) || idB.includes(k));
+
+    return matchesA && matchesB;
+  };
+
   const activeConflictsMap = useMemo(() => {
     const map: Record<string, { conflictingModId: string; conflictingModName: string }[]> = {};
 
@@ -153,12 +181,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             const modA = pkgMods[i];
             const modB = pkgMods[j];
 
-            const nameA = modA.name.toLowerCase();
-            const nameB = modB.name.toLowerCase();
-            const isVariantA = nameA.includes('ui only') || nameA.includes('lite') || nameA.includes('base');
-            const isVariantB = nameB.includes('ui only') || nameB.includes('lite') || nameB.includes('base');
-
-            if (isVariantA || isVariantB) {
+            if (isMutuallyExclusiveVariant(modA, modB)) {
               if (!map[modA.mod_id]) map[modA.mod_id] = [];
               map[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name });
 
@@ -280,12 +303,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         }
 
         if (m.enabled && m.workshop_id === targetMod.workshop_id && m.mod_id !== modId) {
-          const nameA = targetMod.name.toLowerCase();
-          const nameB = m.name.toLowerCase();
-          const isVariantA = nameA.includes('ui only') || nameA.includes('lite') || nameA.includes('base');
-          const isVariantB = nameB.includes('ui only') || nameB.includes('lite') || nameB.includes('base');
-
-          if (isVariantA || isVariantB) {
+          if (isMutuallyExclusiveVariant(targetMod, m)) {
             return { ...m, enabled: false };
           }
         }

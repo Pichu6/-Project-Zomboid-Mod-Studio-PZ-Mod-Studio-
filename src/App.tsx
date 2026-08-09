@@ -168,7 +168,6 @@ export const App: React.FC = () => {
       prev.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r))
     );
     setErrorCards((prev) => prev.filter((card) => card.polyfill_rule_id_suggestion !== polyfillRuleId));
-    setActiveTab('SETTINGS');
   };
 
   const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
