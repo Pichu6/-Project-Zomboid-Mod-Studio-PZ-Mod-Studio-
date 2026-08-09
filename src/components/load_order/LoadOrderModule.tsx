@@ -466,6 +466,25 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     );
   }, [selectedMod, mods]);
 
+  const parentLibraries = useMemo(() => {
+    if (!selectedMod) return [];
+
+    const list: { raw: string; matchedMod?: ModInfo }[] = [];
+    const seenIds = new Set<string>();
+
+    if (selectedMod.dependencies && selectedMod.dependencies.length > 0) {
+      for (const reqRaw of selectedMod.dependencies) {
+        const matched = findInstalledDependencyInMods(reqRaw, mods);
+        if (matched) {
+          seenIds.add(matched.mod_id);
+        }
+        list.push({ raw: reqRaw, matchedMod: matched });
+      }
+    }
+
+    return list;
+  }, [selectedMod, mods]);
+
   const moveUp = (index: number) => {
     if (index <= 0) return;
     const newOrder = [...mods];
@@ -1404,37 +1423,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   </div>
 
                   <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
-                    <div className="col-span-4 text-slate-400 pt-0.5">Library Required by this Mod</div>
-                    <div className="col-span-8">
-                      {selectedMod.dependencies && selectedMod.dependencies.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {selectedMod.dependencies.map((reqRaw, idx) => {
-                            const matchedInstalledMod = findInstalledDependency(reqRaw);
-                            const isDepDisabled = matchedInstalledMod && !matchedInstalledMod.enabled;
-                            return (
-                              <button
-                                key={idx}
-                                onClick={() => handleJumpToDependency(reqRaw)}
-                                className={`font-bold transition cursor-pointer hover:underline ${
-                                  isDepDisabled
-                                    ? 'text-rose-400'
-                                    : matchedInstalledMod
-                                    ? 'text-emerald-400'
-                                    : 'text-red-400'
-                                }`}
-                              >
-                                {matchedInstalledMod ? matchedInstalledMod.name : reqRaw}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-slate-600 italic">None</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
                     <div className="col-span-4 text-slate-400 pt-0.5">Incompatible With</div>
                     <div className="col-span-8">
                       {selectedMod.incompatible && selectedMod.incompatible.length > 0 ? (
@@ -1451,11 +1439,53 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </div>
               </div>
 
-              {/* NEW SECTION: Reverse Dependents (Mods that require this library) with working jump & scroll */}
+              {/* SECTION 1: Base Libraries (Library Required by this Mod) */}
               <div className="space-y-1 border-t border-slate-800 pt-3">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-purple-400">
-                    <Link2 className="w-3.5 h-3.5" />
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                    <Package className="w-3.5 h-3.5 text-emerald-400" />
+                    Library Required by this Mod ({parentLibraries.length})
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {parentLibraries.length > 0 ? (
+                    parentLibraries.map((item, idx) => {
+                      const matched = item.matchedMod;
+                      const isDepDisabled = matched && !matched.enabled;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleJumpToDependency(item.raw)}
+                          className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition cursor-pointer flex items-center gap-2 shadow-sm ${
+                            isDepDisabled
+                              ? 'bg-rose-950/80 border-rose-700 text-rose-200 hover:border-rose-400 shadow'
+                              : matched
+                              ? 'bg-emerald-950/80 border-emerald-700 text-emerald-200 hover:border-emerald-400 shadow'
+                              : 'bg-red-950/80 border-red-700 text-red-200 hover:border-red-400 shadow'
+                          }`}
+                          title={
+                            matched
+                              ? `Haz clic para centrar e ir a la librería padre [${matched.name}] (${matched.enabled ? 'ACTIVA' : 'DESHABILITADA'})`
+                              : `Librería no instalada: ${item.raw} (Haz clic para buscar en Steam Workshop)`
+                          }
+                        >
+                          <span className={`w-2 h-2 rounded-full ${isDepDisabled ? 'bg-rose-400 animate-pulse' : matched ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                          <span>{matched ? matched.name : item.raw}</span>
+                          <ExternalLink className="w-3 h-3 text-emerald-400 shrink-0 ml-0.5" />
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">No base library required by this mod</span>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION 2: Reverse Dependents (Mods Requiring This Library) */}
+              <div className="space-y-1 border-t border-slate-800 pt-3">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-purple-400 font-bold">
+                    <Link2 className="w-3.5 h-3.5 text-purple-400" />
                     Mods Requiring This Library ({reverseDependents.length})
                   </span>
                 </label>
@@ -1465,12 +1495,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       <button
                         key={depMod.mod_id}
                         onClick={() => handleJumpToMod(depMod.mod_id)}
-                        className={`px-2.5 py-1 text-xs font-mono rounded-md border transition cursor-pointer flex items-center gap-1 ${
+                        className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition cursor-pointer flex items-center gap-2 shadow-sm ${
                           depMod.enabled
-                            ? 'bg-purple-950/60 border-purple-700 text-purple-200 hover:border-purple-400 font-bold shadow'
+                            ? 'bg-purple-950/80 border-purple-700 text-purple-200 hover:border-purple-400 shadow'
                             : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
                         }`}
-                        title={`Click to jump, highlight & scroll to [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
+                        title={`Haz clic para centrar e ir al mod hijo [${depMod.name}] (${depMod.enabled ? 'ACTIVO' : 'DESHABILITADO'})`}
                       >
                         <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                         <span>{depMod.name}</span>
