@@ -61,6 +61,23 @@ const normalizeModId = (id: string): string => {
     .trim();
 };
 
+const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo | undefined => {
+  const normReq = normalizeModId(reqRaw);
+  const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
+
+  return mods.find((m) => {
+    const normM = normalizeModId(m.mod_id);
+    const alphaM = normM.replace(/[^a-z0-9]/g, '');
+
+    return (
+      normM === normReq ||
+      alphaM === alphaReq ||
+      (alphaReq.length > 3 && alphaM.includes(alphaReq)) ||
+      (alphaM.length > 3 && alphaReq.includes(alphaM))
+    );
+  });
+};
+
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   paths,
   mods,
@@ -225,7 +242,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       if (m.enabled && m.dependencies && m.dependencies.length > 0) {
         const uninstalled: string[] = [];
         for (const depRaw of m.dependencies) {
-          const matched = findInstalledDependency(depRaw);
+          const matched = findInstalledDependencyInMods(depRaw, mods);
           if (!matched) {
             uninstalled.push(depRaw);
           }
@@ -464,20 +481,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const findInstalledDependency = (reqRaw: string): ModInfo | undefined => {
-    const normReq = normalizeModId(reqRaw);
-    const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
-
-    return mods.find((m) => {
-      const normM = normalizeModId(m.mod_id);
-      const alphaM = normM.replace(/[^a-z0-9]/g, '');
-
-      return (
-        normM === normReq ||
-        alphaM === alphaReq ||
-        (alphaReq.length > 3 && alphaM.includes(alphaReq)) ||
-        (alphaM.length > 3 && alphaReq.includes(alphaM))
-      );
-    });
+    return findInstalledDependencyInMods(reqRaw, mods);
   };
 
   /**
