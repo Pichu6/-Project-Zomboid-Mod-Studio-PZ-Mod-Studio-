@@ -236,7 +236,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     let is_library = require.is_empty() || id.to_lowercase().contains("lib") || id.to_lowercase().contains("manager") || id.to_lowercase().contains("framework");
     let is_map_mod = pack || tiledef || id.to_lowercase().contains("map");
 
-    Some(ModManifest {
+    let mut manifest = ModManifest {
         id,
         name: if name.is_empty() { "Unnamed Mod".to_string() } else { name },
         description,
@@ -252,7 +252,56 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         is_library,
         is_map_mod,
         enabled: false,
-    })
+    };
+
+    apply_known_dependency_heuristics(&mut manifest);
+    Some(manifest)
+}
+
+pub fn apply_known_dependency_heuristics(manifest: &mut ModManifest) {
+    let lower_id = manifest.id.to_lowercase();
+    let w_id = manifest.workshop_id.as_deref().unwrap_or("");
+
+    // 1. Brita's Weapon Pack (id: Brita, workshop: 2200148440)
+    if lower_id == "brita" || w_id == "2200148440" {
+        if !manifest.require.iter().any(|r| r.to_lowercase().contains("gunfighter")) {
+            manifest.require.push("Arsenal(26)GunFighter[MAIN MOD 2.0]".to_string());
+        }
+        if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
+            manifest.require.push("modoptions".to_string());
+        }
+    }
+
+    // 2. Arsenal(26) GunFighter (id: Arsenal(26)GunFighter[MAIN MOD 2.0], workshop: 2297098490)
+    if lower_id.contains("gunfighter") || w_id == "2297098490" {
+        if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
+            manifest.require.push("modoptions".to_string());
+        }
+    }
+
+    // 3. Brita's Armor Pack (id: Brita_Armor, workshop: 2460154811)
+    if lower_id == "brita_armor" || w_id == "2460154811" {
+        if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
+            manifest.require.push("modoptions".to_string());
+        }
+    }
+
+    // 4. Tsar / Autotsar vehicle & trailer mods
+    if lower_id.contains("autotsar") || lower_id.contains("aquatsar") || lower_id.contains("tsar") {
+        if lower_id != "tsarslib" && !manifest.require.iter().any(|r| r.to_lowercase() == "tsarslib") {
+            manifest.require.push("Tsarslib".to_string());
+        }
+    }
+
+    // 5. Vehicle Scene Customization
+    if lower_id.contains("vehiclescenecustomization") {
+        if !manifest.require.iter().any(|r| r.to_lowercase() == "tsarslib") {
+            manifest.require.push("Tsarslib".to_string());
+        }
+    }
+
+    // Recalculate is_library
+    manifest.is_library = manifest.require.is_empty() || lower_id.contains("lib") || lower_id.contains("manager") || lower_id.contains("framework");
 }
 
 pub fn get_all_user_zomboid_dirs(user_zomboid_dir: &str) -> Vec<std::path::PathBuf> {
@@ -371,6 +420,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                 if let Some(mut manifest) = parse_mod_info(entry.path()) {
                     let workshop_id = extract_workshop_id_from_path(entry.path());
                     manifest.workshop_id = workshop_id;
+                    apply_known_dependency_heuristics(&mut manifest);
                     all_mods_map.insert(manifest.id.clone(), manifest);
                 }
             }

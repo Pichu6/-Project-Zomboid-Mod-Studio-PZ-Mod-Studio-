@@ -437,9 +437,13 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const reverseDependents = useMemo(() => {
     if (!selectedMod) return [];
-    const selNorm = normalizeModId(selectedMod.mod_id);
     return mods.filter(
-      (m) => m.mod_id !== selectedMod.mod_id && m.dependencies.some((dep) => normalizeModId(dep) === selNorm)
+      (m) =>
+        m.mod_id !== selectedMod.mod_id &&
+        m.dependencies.some((dep) => {
+          const matched = findInstalledDependencyInMods(dep, [selectedMod]);
+          return matched !== undefined;
+        })
     );
   }, [selectedMod, mods]);
 
