@@ -218,6 +218,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return map;
   }, [mods]);
 
+  const missingUninstalledDependenciesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+
+    for (const m of mods) {
+      if (m.enabled && m.dependencies && m.dependencies.length > 0) {
+        const uninstalled: string[] = [];
+        for (const depRaw of m.dependencies) {
+          const matched = findInstalledDependency(depRaw);
+          if (!matched) {
+            uninstalled.push(depRaw);
+          }
+        }
+        if (uninstalled.length > 0) {
+          map[m.mod_id] = uninstalled;
+        }
+      }
+    }
+
+    return map;
+  }, [mods]);
+
   const loadOrderViolationsMap = useMemo(() => {
     const map: Record<string, { requiredModId: string; requiredModName: string; requiredModIndex: number }[]> = {};
 
@@ -254,10 +275,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [orderViolationCycleIdx, setOrderViolationCycleIdx] = useState(0);
   const [conflictCycleIdx, setConflictCycleIdx] = useState(0);
   const [missingDepCycleIdx, setMissingDepCycleIdx] = useState(0);
+  const [missingUninstalledCycleIdx, setMissingUninstalledCycleIdx] = useState(0);
 
   const orderViolationModIds = useMemo(() => Object.keys(loadOrderViolationsMap), [loadOrderViolationsMap]);
   const conflictModIds = useMemo(() => Object.keys(activeConflictsMap), [activeConflictsMap]);
   const missingDepModIds = useMemo(() => Object.keys(missingActiveDependenciesMap), [missingActiveDependenciesMap]);
+  const missingUninstalledModIds = useMemo(() => Object.keys(missingUninstalledDependenciesMap), [missingUninstalledDependenciesMap]);
 
   const handleCycleOrderViolations = () => {
     if (orderViolationModIds.length === 0) return;
@@ -278,6 +301,13 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const nextIdx = (missingDepCycleIdx + 1) % missingDepModIds.length;
     setMissingDepCycleIdx(nextIdx);
     handleJumpToMod(missingDepModIds[nextIdx]);
+  };
+
+  const handleCycleMissingUninstalled = () => {
+    if (missingUninstalledModIds.length === 0) return;
+    const nextIdx = (missingUninstalledCycleIdx + 1) % missingUninstalledModIds.length;
+    setMissingUninstalledCycleIdx(nextIdx);
+    handleJumpToMod(missingUninstalledModIds[nextIdx]);
   };
 
   const handleFixLoadOrderViolation = (modId: string, requiredModId: string) => {
@@ -557,56 +587,77 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <span>Total Sub-mods: <b className="text-slate-200">{mods.length}</b></span>
             <span>•</span>
             <span>Active: <b className="text-emerald-400">{activeCount}</b></span>
-            {orderViolationModIds.length > 0 && (
+            {/* Grave 1: Dependencies missing (Red) */}
+            {missingUninstalledModIds.length > 0 && (
               <>
                 <span>•</span>
                 <button
-                  onClick={handleCycleOrderViolations}
-                  className="flex items-center gap-1.5 text-orange-400 font-bold bg-orange-500/10 hover:bg-orange-500/20 px-2 py-0.5 rounded border border-orange-500/40 transition cursor-pointer shadow-sm group"
-                  title="Haz clic para recorrer y centrar los mods con orden de carga incorrecto"
+                  onClick={handleCycleMissingUninstalled}
+                  className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
+                  title="Haz clic para recorrer los mods con dependencias faltantes (no instaladas)"
                 >
-                  <AlertTriangle className="w-3 h-3 text-orange-400 group-hover:scale-110 transition" />
-                  <span>
-                    {orderViolationModIds.length} {orderViolationModIds.length === 1 ? 'Error de Orden' : 'Errores de Orden'}
-                  </span>
-                  <span className="text-[10px] text-orange-300 font-mono bg-orange-950/80 px-1 py-0.2 rounded border border-orange-700/50 ml-0.5">
-                    {orderViolationCycleIdx + 1}/{orderViolationModIds.length} ⚙️
+                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
+                  <span>Dependencies missing</span>
+                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
+                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.2 rounded border border-red-700/50 ml-0.5">
+                    {missingUninstalledCycleIdx + 1}/{missingUninstalledModIds.length} ⚙️
                   </span>
                 </button>
               </>
             )}
+
+            {/* Grave 2: Dependencies off (Red) */}
+            {missingDepModIds.length > 0 && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={handleCycleMissingDeps}
+                  className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
+                  title="Haz clic para recorrer los mods con librerías desactivadas"
+                >
+                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
+                  <span>Dependencies off</span>
+                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
+                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.2 rounded border border-red-700/50 ml-0.5">
+                    {missingDepCycleIdx + 1}/{missingDepModIds.length} ⚙️
+                  </span>
+                </button>
+              </>
+            )}
+
+            {/* Medio 1: Incompatibility (Yellow) */}
             {conflictModIds.length > 0 && (
               <>
                 <span>•</span>
                 <button
                   onClick={handleCycleConflicts}
-                  className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group"
-                  title="Haz clic para recorrer y centrar los mods con incompatibilidades exclusivas"
+                  className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
+                  title="Haz clic para recorrer los mods con incompatibilidades exclusivas"
                 >
-                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition" />
-                  <span>
-                    {conflictModIds.length} {conflictModIds.length === 1 ? 'Incompatibilidad' : 'Incompatibilidades'}
-                  </span>
+                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
+                  <span>Incompatibility</span>
+                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.2 rounded border border-amber-700/50 ml-0.5">
                     {conflictCycleIdx + 1}/{conflictModIds.length} ⚙️
                   </span>
                 </button>
               </>
             )}
-            {missingDepModIds.length > 0 && (
+
+            {/* Medio 2: List Order (Yellow) */}
+            {orderViolationModIds.length > 0 && (
               <>
                 <span>•</span>
                 <button
-                  onClick={handleCycleMissingDeps}
-                  className="flex items-center gap-1.5 text-rose-400 font-bold bg-rose-500/10 hover:bg-rose-500/20 px-2 py-0.5 rounded border border-rose-500/40 transition cursor-pointer shadow-sm group"
-                  title="Haz clic para recorrer y centrar los mods con librerías desactivadas"
+                  onClick={handleCycleOrderViolations}
+                  className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
+                  title="Haz clic para recorrer los mods con orden de carga incorrecto"
                 >
-                  <AlertTriangle className="w-3 h-3 text-rose-400 group-hover:scale-110 transition" />
-                  <span>
-                    {missingDepModIds.length} {missingDepModIds.length === 1 ? 'Librería Desactivada' : 'Librerías Desactivadas'}
-                  </span>
-                  <span className="text-[10px] text-rose-300 font-mono bg-rose-950/80 px-1 py-0.2 rounded border border-rose-700/50 ml-0.5">
-                    {missingDepCycleIdx + 1}/{missingDepModIds.length} ⚙️
+                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
+                  <span>List Order</span>
+                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
+                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.2 rounded border border-amber-700/50 ml-0.5">
+                    {orderViolationCycleIdx + 1}/{orderViolationModIds.length} ⚙️
                   </span>
                 </button>
               </>
@@ -739,14 +790,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const isMultiPackage = mod.workshop_id ? multiModPackageMap[mod.workshop_id] : false;
                 const packageColor = mod.workshop_id ? workshopColorMap[mod.workshop_id] : null;
 
-                const conflictsForThisMod = activeConflictsMap[mod.mod_id];
-                const hasExclusivityConflict = conflictsForThisMod && conflictsForThisMod.length > 0;
-
                 const disabledDependencies = missingActiveDependenciesMap[mod.mod_id];
                 const hasDisabledDependency = disabledDependencies && disabledDependencies.length > 0;
 
+                const uninstalledDependencies = missingUninstalledDependenciesMap[mod.mod_id];
+                const hasMissingUninstalledDep = uninstalledDependencies && uninstalledDependencies.length > 0;
+
                 const orderViolationsForThisMod = loadOrderViolationsMap[mod.mod_id];
                 const hasOrderViolation = orderViolationsForThisMod && orderViolationsForThisMod.length > 0;
+
+                const conflictsForThisMod = activeConflictsMap[mod.mod_id];
+                const hasExclusivityConflict = conflictsForThisMod && conflictsForThisMod.length > 0;
 
                 const isConflictPartner =
                   selectedMod &&
@@ -761,14 +815,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
-                      hasOrderViolation
-                        ? 'border-2 border-orange-500 bg-orange-950/50 shadow-lg shadow-orange-950/50 ring-1 ring-orange-500/40'
-                        : hasDisabledDependency
-                        ? 'border-2 border-rose-500/80 bg-rose-950/30 shadow-md shadow-rose-950/30'
+                      hasMissingUninstalledDep || hasDisabledDependency
+                        ? 'border-2 border-red-500 bg-red-950/40 shadow-md shadow-red-950/40'
                         : isConflictPartner
                         ? 'border-2 border-amber-400 bg-amber-950/90 shadow-xl shadow-amber-900/60 ring-2 ring-amber-400/50 animate-pulse'
-                        : hasExclusivityConflict
-                        ? 'border-2 border-amber-500 bg-amber-950/50 shadow-lg shadow-amber-950/50'
+                        : hasExclusivityConflict || hasOrderViolation
+                        ? 'border-2 border-amber-500 bg-amber-950/40 shadow-md shadow-amber-950/30'
                         : isMultiPackage && packageColor
                         ? `border-l-4 ${packageColor.border}`
                         : 'border-l border-l-transparent'
@@ -807,7 +859,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       </button>
                     </div>
 
-                    {/* Mod Title, Type Icon & Warning Badges */}
+                    {/* Mod Title, Type Icon & Compact Dual Warning Badges */}
                     <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
                       <div
                         className={`w-6 h-6 rounded border flex items-center justify-center shrink-0 ${
@@ -832,9 +884,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         )}
                       </div>
 
-                      <div className="overflow-hidden">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`truncate ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
+                      <div className="overflow-hidden flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className={`truncate min-w-0 flex-1 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
                             {mod.name}
                           </span>
 
@@ -844,41 +896,67 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </span>
                           )}
 
-                          {hasDisabledDependency && (
-                            <span
-                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 shrink-0 cursor-help"
-                              title={`⚠️ LIBRERÍA BASE DESACTIVADA\n\nEste mod está activo, pero la librería requerida [${disabledDependencies[0].name}] se encuentra DESACTIVADA.\n\nHaz clic en el mod en el inspector para activarla.`}
-                            >
-                              <AlertTriangle className="w-3 h-3 text-rose-400" />
-                              <span>REQ OFF</span>
-                            </span>
-                          )}
-
-                          {hasOrderViolation && (
+                          {/* Grave 1: Dependencies missing (Red) */}
+                          {hasMissingUninstalledDep && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleJumpToMod(orderViolationsForThisMod[0].requiredModId);
+                                handleJumpToDependency(uninstalledDependencies[0]);
                               }}
-                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-orange-500/20 hover:bg-orange-500/40 text-orange-300 border border-orange-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ ORDEN INCORRECTO\n\nEste mod está cargando en la posición #${originalIndex + 1}, ANTES de su dependencia [${orderViolationsForThisMod[0].requiredModName}] (Posición #${orderViolationsForThisMod[0].requiredModIndex + 1}).\n\nHaz clic para saltar a la dependencia y corregir el orden.`}
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/60 shrink-0 transition cursor-pointer shadow-sm"
+                              title={`⚠️ DEPENDENCIAS FALTANTES\n\nEste mod requiere [${uninstalledDependencies[0]}], que no está instalado.`}
                             >
-                              <AlertTriangle className="w-3 h-3 text-orange-400 shrink-0" />
-                              <span>DEBE IR DESPUÉS DE: {orderViolationsForThisMod[0].requiredModName} ↗</span>
+                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                              <span>Dependencies missing</span>
+                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
                             </button>
                           )}
 
+                          {/* Grave 2: Dependencies off (Red) */}
+                          {hasDisabledDependency && !hasMissingUninstalledDep && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleJumpToMod(disabledDependencies[0].mod_id);
+                              }}
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/60 shrink-0 transition cursor-pointer shadow-sm"
+                              title={`⚠️ DEPENDENCIAS DESACTIVADAS\n\nEste mod requiere [${disabledDependencies[0].name}], que está deshabilitada.`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                              <span>Dependencies off</span>
+                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                            </button>
+                          )}
+
+                          {/* Medio 1: Incompatibility (Yellow) */}
                           {hasExclusivityConflict && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleJumpToMod(conflictsForThisMod[0].conflictingModId);
                               }}
-                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 shrink-0 transition cursor-pointer"
-                              title={`⚠️ ADVERTENCIA DE INCOMPATIBILIDAD\n\nEste sub-mod es mutuamente exclusivo y está activo junto a: [${conflictsForThisMod[0].conflictingModName}].\n\nAmbos pertenecen al mismo paquete de la Workshop. Haz clic para saltar al mod en conflicto y solucionarlo.`}
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/60 shrink-0 transition cursor-pointer shadow-sm"
+                              title={`⚠️ INCOMPATIBILIDAD DETECTADA\n\nMutuamente exclusivo con: [${conflictsForThisMod[0].conflictingModName}].`}
                             >
                               <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>INCOMPATIBLE ↗</span>
+                              <span>Incompatibility</span>
+                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                            </button>
+                          )}
+
+                          {/* Medio 2: List Order (Yellow) */}
+                          {hasOrderViolation && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleJumpToMod(orderViolationsForThisMod[0].requiredModId);
+                              }}
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/60 shrink-0 transition cursor-pointer shadow-sm"
+                              title={`⚠️ ORDEN DE CARGA INCORRECTO\n\nCarga antes de [${orderViolationsForThisMod[0].requiredModName}]. Debe ir DESPUÉS.`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>List Order</span>
+                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                             </button>
                           )}
                         </div>
