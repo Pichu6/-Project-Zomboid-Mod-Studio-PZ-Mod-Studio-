@@ -38,7 +38,7 @@ export const App: React.FC = () => {
         // Scan all subscribed Workshop & local mods on disk
         const allSubscribedMods = await TauriService.scanAllInstalledMods(savedProfile);
         if (allSubscribedMods.length > 0) {
-          setMods(allSubscribedMods);
+          setMods([...allSubscribedMods]);
         }
       }
     };
@@ -66,7 +66,7 @@ export const App: React.FC = () => {
       setConflicts(scannedConflicts);
       const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
       if (allSubscribedMods.length > 0) {
-        setMods(allSubscribedMods);
+        setMods([...allSubscribedMods]);
       }
     }
   };
@@ -75,7 +75,7 @@ export const App: React.FC = () => {
     if (paths.is_valid) {
       const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
       if (allSubscribedMods.length > 0) {
-        setMods(allSubscribedMods);
+        setMods([...allSubscribedMods]);
       }
     }
   };
@@ -149,7 +149,7 @@ export const App: React.FC = () => {
   };
 
   const handleReorderMods = (newOrder: ModInfo[]) => {
-    setMods(newOrder);
+    setMods([...newOrder]);
     const activeModIds = newOrder.filter((m) => m.enabled).map((m) => m.mod_id);
     TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
   };
@@ -159,7 +159,7 @@ export const App: React.FC = () => {
       const updated = prev.map((m) => (m.mod_id === modId ? { ...m, enabled: !m.enabled } : m));
       const activeModIds = updated.filter((m) => m.enabled).map((m) => m.mod_id);
       TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
-      return updated;
+      return [...updated];
     });
   };
 
@@ -180,7 +180,7 @@ export const App: React.FC = () => {
 
       const allSubscribedMods = await TauriService.scanAllInstalledMods(saved);
       if (allSubscribedMods.length > 0) {
-        setMods(allSubscribedMods);
+        setMods([...allSubscribedMods]);
       }
     }
   };
@@ -195,7 +195,7 @@ export const App: React.FC = () => {
 
       const allSubscribedMods = await TauriService.scanAllInstalledMods(saved);
       if (allSubscribedMods.length > 0) {
-        setMods(allSubscribedMods);
+        setMods([...allSubscribedMods]);
       }
     }
   };

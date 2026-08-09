@@ -82,7 +82,7 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
 }
 
 /// Writes active mod load order list back to Zomboid/mods/default.txt (Project Zomboid's actual primary active mods file)
-/// in 100% valid quoted Lua string format (`mod = "ModID",`), preventing Lua syntax crashes on IDs with slashes/digits.
+/// using exact Project Zomboid Lua table format (`mod = ModID,`), as well as ModListData.ini, loadorder.ini, and modgroups.ini.
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let path = Path::new(ini_path);
     if let Some(parent) = path.parent() {
@@ -106,10 +106,14 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             }
         }
 
-        // 1. Primary write to Zomboid/mods/default.txt in 100% valid Lua string syntax!
+        // 1. Primary write to Zomboid/mods/default.txt in exact Project Zomboid Lua table format!
         let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
         for mod_id in active_mods {
-            default_txt_content.push_str(&format!("    mod = \"{}\",\n", mod_id));
+            if mod_id.contains('/') || mod_id.contains('\\') || mod_id.contains(' ') {
+                default_txt_content.push_str(&format!("    mod = \"{}\",\n", mod_id));
+            } else {
+                default_txt_content.push_str(&format!("    mod = {},\n", mod_id));
+            }
         }
         default_txt_content.push_str("}\n\nmaps\n{\n}\n");
 
