@@ -12,7 +12,12 @@ pub struct ModManifest {
     pub name: String,
     pub description: Option<String>,
     pub workshop_id: Option<String>,
+    pub author: Option<String>,
+    pub version: Option<String>,
+    pub pzversion: Option<String>,
+    pub url: Option<String>,
     pub require: Vec<String>,
+    pub incompatible: Vec<String>,
     pub icon_path: Option<String>,
     pub poster_url: Option<String>,
     pub is_library: bool,
@@ -83,7 +88,12 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     let mut id = String::new();
     let mut name = String::new();
     let mut description = None;
+    let mut author = None;
+    let mut version = None;
+    let mut pzversion = None;
+    let mut url = None;
     let mut require = Vec::new();
+    let mut incompatible = Vec::new();
     let mut poster_file = String::new();
     let mut icon_file = String::new();
     let mut pack = false;
@@ -102,9 +112,53 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
             if !desc_val.is_empty() {
                 description = Some(desc_val);
             }
+        } else if trimmed.starts_with("author=") {
+            let auth = clean_text_encoding(trimmed[7..].trim());
+            if !auth.is_empty() {
+                author = Some(auth);
+            }
+        } else if trimmed.starts_with("modversion=") {
+            let v = trimmed[11..].trim().to_string();
+            if !v.is_empty() {
+                version = Some(v);
+            }
+        } else if trimmed.starts_with("version=") {
+            let v = trimmed[8..].trim().to_string();
+            if !v.is_empty() && version.is_none() {
+                version = Some(v);
+            }
+        } else if trimmed.starts_with("pzversion=") {
+            let v = trimmed[10..].trim().to_string();
+            if !v.is_empty() {
+                pzversion = Some(v);
+            }
+        } else if trimmed.starts_with("versionMin=") {
+            let v = trimmed[11..].trim().to_string();
+            if !v.is_empty() && pzversion.is_none() {
+                pzversion = Some(v);
+            }
+        } else if trimmed.starts_with("url=") {
+            let u = trimmed[4..].trim().to_string();
+            if !u.is_empty() {
+                url = Some(u);
+            }
         } else if trimmed.starts_with("require=") {
             let req_str = trimmed[8..].trim();
             require = req_str
+                .split(',')
+                .map(|s| sanitize_mod_id(s))
+                .filter(|s| !s.is_empty())
+                .collect();
+        } else if trimmed.starts_with("incompatible=") {
+            let inc_str = trimmed[13..].trim();
+            incompatible = inc_str
+                .split(',')
+                .map(|s| sanitize_mod_id(s))
+                .filter(|s| !s.is_empty())
+                .collect();
+        } else if trimmed.starts_with("incompatibleWith=") {
+            let inc_str = trimmed[17..].trim();
+            incompatible = inc_str
                 .split(',')
                 .map(|s| sanitize_mod_id(s))
                 .filter(|s| !s.is_empty())
@@ -151,7 +205,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 
             for cand in poster_candidates.into_iter().flatten() {
                 if cand.exists() {
-                    poster_url = Some(cand.to_string_lossy().replace('\\', "/"));
+                    poster_url = Some(cand.to_string_lossy().to_string());
                     break;
                 }
             }
@@ -169,7 +223,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 
             for cand in icon_candidates.into_iter().flatten() {
                 if cand.exists() {
-                    icon_path = Some(cand.to_string_lossy().replace('\\', "/"));
+                    icon_path = Some(cand.to_string_lossy().to_string());
                     break;
                 }
             }
@@ -187,7 +241,12 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         name: if name.is_empty() { "Unnamed Mod".to_string() } else { name },
         description,
         workshop_id: None,
+        author,
+        version,
+        pzversion,
+        url,
         require,
+        incompatible,
         icon_path,
         poster_url,
         is_library,
@@ -342,7 +401,12 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                     name: "PZ Mod Studio Master Patch".to_string(),
                     description: Some("Auto-generated 3-Way compatibility patch and B42 polyfill layer".to_string()),
                     workshop_id: None,
+                    author: Some("PZ Mod Studio".to_string()),
+                    version: Some("1.0.0".to_string()),
+                    pzversion: Some("42.0".to_string()),
+                    url: None,
                     require: Vec::new(),
+                    incompatible: Vec::new(),
                     icon_path: None,
                     poster_url: None,
                     is_library: false,

@@ -83,10 +83,12 @@ export interface ModInfo {
   workshop_id?: string;
   author?: string;
   version?: string;
+  pzversion?: string;
   icon_path?: string;
   poster_url?: string;
   url?: string;
   dependencies: string[]; // require= directives
+  incompatible?: string[]; // incompatible= directives
   enabled: boolean;
   is_library?: boolean;
   is_map_mod?: boolean;

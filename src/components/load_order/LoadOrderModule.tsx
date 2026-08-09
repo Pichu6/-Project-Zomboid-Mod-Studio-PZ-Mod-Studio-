@@ -78,6 +78,76 @@ const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo
   });
 };
 
+const renderPZRichText = (text?: string): React.ReactNode => {
+  if (!text) return <span className="text-slate-500 italic">No description provided in mod.info manifest.</span>;
+
+  let cleanText = text.replace(/<LINE>/gi, '\n');
+  const parts = cleanText.split(/(<[^>]+>)/g);
+
+  let currentSize = 'small';
+  let currentColor = 'inherit';
+  let currentAlign = 'left';
+
+  const elements: React.ReactNode[] = [];
+
+  parts.forEach((part, index) => {
+    if (!part) return;
+
+    if (part.startsWith('<') && part.endsWith('>')) {
+      const tagContent = part.slice(1, -1).trim();
+      const upperTag = tagContent.toUpperCase();
+
+      if (upperTag.startsWith('SIZE:')) {
+        const sizeVal = upperTag.split(':')[1].toLowerCase();
+        currentSize = sizeVal;
+      } else if (upperTag.startsWith('RGB:')) {
+        const rgbStr = tagContent.slice(4).trim();
+        const rgbVals = rgbStr.split(',').map((v) => parseFloat(v.trim()));
+        if (rgbVals.length >= 3 && !isNaN(rgbVals[0])) {
+          const r = rgbVals[0] <= 1.0 ? Math.round(rgbVals[0] * 255) : Math.round(rgbVals[0]);
+          const g = rgbVals[1] <= 1.0 ? Math.round(rgbVals[1] * 255) : Math.round(rgbVals[1]);
+          const b = rgbVals[2] <= 1.0 ? Math.round(rgbVals[2] * 255) : Math.round(rgbVals[2]);
+          const a = rgbVals.length >= 4 ? rgbVals[3] : 1;
+          currentColor = `rgba(${r}, ${g}, ${b}, ${a})`;
+        }
+      } else if (upperTag === 'LEFT') {
+        currentAlign = 'left';
+      } else if (upperTag === 'CENTRE' || upperTag === 'CENTER') {
+        currentAlign = 'center';
+      } else if (upperTag === 'RIGHT') {
+        currentAlign = 'right';
+      }
+    } else {
+      const fontSizeClass =
+        currentSize === 'large'
+          ? 'text-sm font-bold tracking-wide block my-1'
+          : currentSize === 'medium'
+          ? 'text-xs font-bold tracking-wide block my-0.5'
+          : 'text-[11px] leading-relaxed';
+
+      const lines = part.split('\n');
+      lines.forEach((line, lIdx) => {
+        if (line) {
+          elements.push(
+            <span
+              key={`${index}-${lIdx}`}
+              className={`${fontSizeClass} inline-block`}
+              style={{ color: currentColor === 'inherit' ? undefined : currentColor, textAlign: currentAlign as any }}
+            >
+              {line}
+            </span>
+          );
+        }
+        if (lIdx < lines.length - 1) {
+          elements.push(<br key={`${index}-br-${lIdx}`} />);
+        }
+      });
+    }
+  });
+
+  return <div className="space-y-0.5 font-sans leading-relaxed text-slate-200 select-text whitespace-pre-wrap">{elements}</div>;
+};
+
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   paths,
   mods,
@@ -1188,90 +1258,157 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </div>
               )}
 
-              {/* Poster / Workshop Thumbnail Display */}
-              <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
-                {selectedMod.poster_url && !imageError ? (
-                  <img
-                    src={convertFileSrc(selectedMod.poster_url)}
-                    alt={selectedMod.name}
-                    className="w-full h-full object-cover rounded-xl"
-                    onError={() => setImageError(true)}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-4 text-center space-y-2">
-                    <div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center shadow">
-                      {selectedMod.is_map_mod ? (
-                        <MapPin className="w-6 h-6 text-amber-400" />
-                      ) : selectedMod.is_library ? (
-                        <Package className="w-6 h-6 text-purple-400" />
-                      ) : (
-                        <ListOrdered className="w-6 h-6 text-cyan-400" />
-                      )}
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 line-clamp-1 max-w-[220px]">
-                      {selectedMod.name}
-                    </span>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                      <span>{selectedMod.is_map_mod ? 'Map Tile / Map Mod' : selectedMod.is_library ? 'Framework / Base Library' : 'Script / Gameplay Mod'}</span>
-                    </div>
+              {/* Top Section: Split Description (Left) + Poster Thumbnail Frame (Right) */}
+              <div className="grid grid-cols-12 gap-3 items-start">
+                {/* Left Description Box with Parsed RichText */}
+                <div className="col-span-12 sm:col-span-7 space-y-1">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Mod Overview & Description
+                  </label>
+                  <div className="p-3 bg-slate-950/90 rounded-xl text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 h-48 overflow-y-auto select-text shadow-inner">
+                    {renderPZRichText(selectedMod.description)}
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Mod Description */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Description
-                </label>
-                <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto select-text whitespace-pre-wrap">
-                  {selectedMod.description || 'No description provided in mod.info manifest.'}
+                {/* Right Poster Image Frame (256x256 image with fallback) */}
+                <div className="col-span-12 sm:col-span-5 space-y-1">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Mod Poster
+                  </label>
+                  <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
+                    {selectedMod.poster_url && !imageError ? (
+                      <img
+                        src={convertFileSrc(selectedMod.poster_url)}
+                        alt={selectedMod.name}
+                        className="w-full h-full object-cover rounded-xl"
+                        onError={() => setImageError(true)}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-3 text-center space-y-2">
+                        <div className="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center shadow">
+                          {selectedMod.is_map_mod ? (
+                            <MapPin className="w-5 h-5 text-amber-400" />
+                          ) : selectedMod.is_library ? (
+                            <Package className="w-5 h-5 text-purple-400" />
+                          ) : (
+                            <ListOrdered className="w-5 h-5 text-cyan-400" />
+                          )}
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-200 line-clamp-1 max-w-[150px]">
+                          {selectedMod.name}
+                        </span>
+                        <div className="text-[9px] text-slate-400 font-mono">
+                          <span>{selectedMod.is_map_mod ? 'Map Tile' : selectedMod.is_library ? 'Framework' : 'Script Mod'}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Clickable Dependencies (Sanitized matching against installed mods) */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Required Dependencies (<code className="text-emerald-400">require=</code>)
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedMod.dependencies && selectedMod.dependencies.length > 0 ? (
-                    selectedMod.dependencies.map((reqRaw, rIdx) => {
-                      const matchedInstalledMod = findInstalledDependency(reqRaw);
-                      const cleanReqId = normalizeModId(reqRaw);
-                      const isDepDisabled = matchedInstalledMod && !matchedInstalledMod.enabled;
-                      const displayName = matchedInstalledMod ? matchedInstalledMod.name : cleanReqId;
+              {/* Bottom Section: In-Game Style Metadata Table Grid */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-xl overflow-hidden text-xs shadow-md">
+                <div className="bg-slate-900/90 px-3.5 py-2 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                  <span>Mod Metadata Details</span>
+                  <span className="text-[10px] font-mono text-emerald-400 font-normal">PZ Build 42 Manifest</span>
+                </div>
+                <div className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Status</div>
+                    <div className={`col-span-8 font-bold ${selectedMod.enabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {selectedMod.enabled ? 'Enabled' : 'Disabled'}
+                    </div>
+                  </div>
 
-                      return (
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Version</div>
+                    <div className="col-span-8 text-slate-200">{selectedMod.version || '1.0'}</div>
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Author</div>
+                    <div className="col-span-8 text-cyan-300 font-bold">{selectedMod.author || 'Unknown'}</div>
+                  </div>
+
+                  {selectedMod.url && (
+                    <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                      <div className="col-span-4 text-slate-400">Homepage</div>
+                      <div className="col-span-8">
                         <button
-                          key={rIdx}
-                          onClick={() => handleJumpToDependency(reqRaw)}
-                          className={`px-2.5 py-1 text-xs rounded-md border font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                            isDepDisabled
-                              ? 'bg-rose-950/80 border-rose-700 text-rose-300 hover:border-rose-500 font-bold shadow'
-                              : matchedInstalledMod
-                              ? 'bg-slate-950 hover:bg-slate-800 border-cyan-800 text-cyan-300 hover:border-cyan-500 font-bold'
-                              : 'bg-red-950/40 hover:bg-red-900/60 border-red-800 text-red-400 hover:text-red-300'
-                          }`}
-                          title={
-                            isDepDisabled
-                              ? `⚠️ LIBRERÍA DESACTIVADA: [${displayName}] - Haz clic para ver y activar`
-                              : matchedInstalledMod
-                              ? `Mod Instalado: [${displayName}] - Haz clic para saltar a este mod`
-                              : `Dependencia no encontrada. Haz clic para buscar en Steam Workshop`
-                          }
+                          onClick={() => TauriService.openExternalUrl(selectedMod.url!)}
+                          className="text-cyan-400 hover:underline font-mono truncate max-w-full text-left"
                         >
-                          {isDepDisabled ? (
-                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                          ) : !matchedInstalledMod ? (
-                            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                          ) : null}
-                          <span>{displayName}</span>
+                          {selectedMod.url}
                         </button>
-                      );
-                    })
-                  ) : (
-                    <span className="text-xs text-slate-500 italic">No dependencies required</span>
+                      </div>
+                    </div>
                   )}
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Mod ID</div>
+                    <div className="col-span-8 text-emerald-400 font-bold">{selectedMod.mod_id}</div>
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Workshop ID</div>
+                    <div className="col-span-8 text-slate-300">{selectedMod.workshop_id || 'Built-in / Local'}</div>
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Source</div>
+                    <div className="col-span-8 text-slate-300">{selectedMod.workshop_id ? 'Steam Workshop' : 'Local Directory'}</div>
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
+                    <div className="col-span-4 text-slate-400">Zomboid Version</div>
+                    <div className="col-span-8 text-slate-300">{selectedMod.pzversion || '42.0+'}</div>
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
+                    <div className="col-span-4 text-slate-400 pt-0.5">Dependencies</div>
+                    <div className="col-span-8">
+                      {selectedMod.dependencies && selectedMod.dependencies.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedMod.dependencies.map((reqRaw, idx) => {
+                            const matchedInstalledMod = findInstalledDependency(reqRaw);
+                            const isDepDisabled = matchedInstalledMod && !matchedInstalledMod.enabled;
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => handleJumpToDependency(reqRaw)}
+                                className={`font-bold transition cursor-pointer hover:underline ${
+                                  isDepDisabled
+                                    ? 'text-rose-400'
+                                    : matchedInstalledMod
+                                    ? 'text-emerald-400'
+                                    : 'text-red-400'
+                                }`}
+                              >
+                                {matchedInstalledMod ? matchedInstalledMod.name : reqRaw}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-slate-600 italic">None</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
+                    <div className="col-span-4 text-slate-400 pt-0.5">Incompatible With</div>
+                    <div className="col-span-8">
+                      {selectedMod.incompatible && selectedMod.incompatible.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedMod.incompatible.map((incRaw, idx) => (
+                            <span key={idx} className="text-amber-400 font-bold">{incRaw}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-600 italic">-</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
