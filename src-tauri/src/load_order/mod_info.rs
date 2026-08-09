@@ -129,33 +129,51 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     let mut icon_path = None;
 
     if let Some(dir) = parent_dir {
-        // Try declared poster file, or search poster.png, poster.jpg, preview.png
-        let poster_candidates = vec![
-            if !poster_file.is_empty() { Some(dir.join(&poster_file)) } else { None },
-            Some(dir.join("poster.png")),
-            Some(dir.join("Poster.png")),
-            Some(dir.join("poster.jpg")),
-            Some(dir.join("Poster.jpg")),
-            Some(dir.join("preview.png")),
-            Some(dir.join("preview.jpg")),
-        ];
+        let mut dirs_to_check = vec![dir.to_path_buf()];
+        if let Some(p) = dir.parent() {
+            dirs_to_check.push(p.to_path_buf());
+            if let Some(gp) = p.parent() {
+                dirs_to_check.push(gp.to_path_buf());
+            }
+        }
 
-        for cand in poster_candidates.into_iter().flatten() {
-            if cand.exists() {
-                poster_url = Some(cand.to_string_lossy().replace('\\', "/"));
+        for search_dir in &dirs_to_check {
+            let poster_candidates = vec![
+                if !poster_file.is_empty() { Some(search_dir.join(&poster_file)) } else { None },
+                Some(search_dir.join("poster.png")),
+                Some(search_dir.join("Poster.png")),
+                Some(search_dir.join("poster.jpg")),
+                Some(search_dir.join("Poster.jpg")),
+                Some(search_dir.join("preview.png")),
+                Some(search_dir.join("preview.jpg")),
+                Some(search_dir.join("icon.png")),
+            ];
+
+            for cand in poster_candidates.into_iter().flatten() {
+                if cand.exists() {
+                    poster_url = Some(cand.to_string_lossy().replace('\\', "/"));
+                    break;
+                }
+            }
+            if poster_url.is_some() {
                 break;
             }
         }
 
-        let icon_candidates = vec![
-            if !icon_file.is_empty() { Some(dir.join(&icon_file)) } else { None },
-            Some(dir.join("icon.png")),
-            Some(dir.join("Icon.png")),
-        ];
+        for search_dir in &dirs_to_check {
+            let icon_candidates = vec![
+                if !icon_file.is_empty() { Some(search_dir.join(&icon_file)) } else { None },
+                Some(search_dir.join("icon.png")),
+                Some(search_dir.join("Icon.png")),
+            ];
 
-        for cand in icon_candidates.into_iter().flatten() {
-            if cand.exists() {
-                icon_path = Some(cand.to_string_lossy().replace('\\', "/"));
+            for cand in icon_candidates.into_iter().flatten() {
+                if cand.exists() {
+                    icon_path = Some(cand.to_string_lossy().replace('\\', "/"));
+                    break;
+                }
+            }
+            if icon_path.is_some() {
                 break;
             }
         }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus } from 'lucide-react';
+import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus, Bell } from 'lucide-react';
 import { PolyfillRule } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -29,6 +29,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'PATHS' | 'POLYFILLS'>('PATHS');
   const [formData, setFormData] = useState<StudioPathsUI>(paths);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [noticeSilenced, setNoticeSilenced] = useState<boolean>(
+    localStorage.getItem('pz_hide_autosort_notice') === 'true'
+  );
+
+  const handleRestoreNotice = () => {
+    localStorage.removeItem('pz_hide_autosort_notice');
+    setNoticeSilenced(false);
+  };
 
   const handlePickFolder = async (field: keyof StudioPathsUI, currentVal: string) => {
     const selectedFolder = await TauriService.pickFolder(currentVal);
@@ -233,6 +241,45 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
                   Browse...
                 </button>
+              </div>
+            </div>
+
+            {/* Card 5: App Notification Preferences */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Bell className="w-4 h-4 text-cyan-400" />
+                  Notificaciones de la Aplicación
+                </label>
+                <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${noticeSilenced ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'}`}>
+                  {noticeSilenced ? 'Auto-Sort Silenciado' : 'Notificaciones Activas'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Controla la visibilidad de la ventana modal emergente al presionar "Auto-Sort Dependencies".
+              </p>
+              <div className="pt-1 flex items-center justify-between">
+                <span className="text-xs text-slate-300">
+                  {noticeSilenced ? 'Has marcado "No volver a mostrar este mensaje".' : 'El mensaje informativo de auto-sort se mostrará al ordenar.'}
+                </span>
+                {noticeSilenced ? (
+                  <button
+                    onClick={handleRestoreNotice}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                  >
+                    Restaurar Notificación de Auto-Sort
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('pz_hide_autosort_notice', 'true');
+                      setNoticeSilenced(true);
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
+                  >
+                    Silenciar Notificación
+                  </button>
+                )}
               </div>
             </div>
           </div>

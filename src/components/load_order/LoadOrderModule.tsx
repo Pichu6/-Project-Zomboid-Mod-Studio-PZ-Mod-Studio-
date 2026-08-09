@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
@@ -76,6 +76,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [assigningModId, setAssigningModId] = useState<string | null>(null);
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
+  const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
+  const [workshopDetails, setWorkshopDetails] = useState<{ posterUrl?: string; description?: string } | null>(null);
+  const [isLoadingWorkshop, setIsLoadingWorkshop] = useState<boolean>(false);
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -84,6 +88,45 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     await onRefreshMods();
     setTimeout(() => setIsRefreshing(false), 500);
   };
+
+  const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
+
+  // Live Steam Workshop Metadata Scraper (Poster Image & Full Web Description)
+  useEffect(() => {
+    if (!selectedMod?.workshop_id) {
+      setWorkshopDetails(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingWorkshop(true);
+
+    fetch(`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMod.workshop_id}`)
+      .then((res) => res.text())
+      .then((html) => {
+        if (!isMounted) return;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        const imgEl = doc.querySelector('#headerImage') as HTMLImageElement;
+        const descEl = doc.querySelector('#highlight_target_text') as HTMLElement;
+
+        const posterUrl = imgEl?.src || undefined;
+        const description = descEl?.innerText?.trim() || undefined;
+
+        setWorkshopDetails({ posterUrl, description });
+      })
+      .catch(() => {
+        if (isMounted) setWorkshopDetails(null);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingWorkshop(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedMod?.workshop_id]);
 
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -196,8 +239,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
     );
   }, [mods, searchQuery]);
-
-  const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
 
   const reverseDependents = useMemo(() => {
     if (!selectedMod) return [];
@@ -326,7 +367,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     });
 
     onReorder(sorted);
-    alert('✨ Auto-Sort & Package Grouping Complete!\n- Sub-mods of the same Workshop Package grouped TOGETHER.\n- Base libraries moved to TOP.\n- Required dependencies placed BEFORE dependent mods.\n- Map mods placed NEAR BOTTOM.\n- PZ Mod Studio Master Patch placed LAST at bottom for final override!');
+    const isSilenced = localStorage.getItem('pz_hide_autosort_notice') === 'true';
+    if (!isSilenced) {
+      setShowAutoSortNotice(true);
+    }
   };
 
   const findInstalledDependency = (reqRaw: string): ModInfo | undefined => {
@@ -439,6 +483,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const activeCount = mods.filter((m) => m.enabled).length;
   const activeConflictsCount = Object.keys(activeConflictsMap).length;
   const missingDepsCount = Object.keys(missingActiveDependenciesMap).length;
+
+  const activePosterUrl = selectedMod?.poster_url
+    ? convertFileSrc(selectedMod.poster_url)
+    : workshopDetails?.posterUrl;
+
+  const activeDescription = workshopDetails?.description || selectedMod?.description;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
@@ -916,12 +966,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               )}
 
               {/* Poster / Workshop Thumbnail Display */}
-              <div className="h-44 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
-                {selectedMod.poster_url ? (
+              <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
+                {isLoadingWorkshop ? (
+                  <div className="flex flex-col items-center justify-center text-cyan-400 space-y-2 p-4 text-center">
+                    <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
+                    <span className="text-xs font-mono text-slate-400">Cargando portada de Steam Workshop...</span>
+                  </div>
+                ) : activePosterUrl ? (
                   <img
-                    src={convertFileSrc(selectedMod.poster_url)}
+                    src={activePosterUrl}
                     alt={selectedMod.name}
-                    className="w-full h-full object-cover rounded-lg"
+                    className="w-full h-full object-cover rounded-xl"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
                     }}
@@ -940,7 +995,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   Description
                 </label>
                 <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto select-text whitespace-pre-wrap">
-                  {selectedMod.description || 'No description provided in mod.info manifest.'}
+                  {activeDescription || 'No description provided in mod.info manifest.'}
                 </div>
               </div>
 
@@ -1035,6 +1090,55 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           )}
         </div>
       </div>
+
+      {/* In-App Auto-Sort Notice Modal */}
+      {showAutoSortNotice && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                <Wand2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">✨ Ordenamiento Automático Completado</h3>
+                <p className="text-xs text-slate-400">Prioridad y jerarquía de dependencias aplicadas</p>
+              </div>
+            </div>
+
+            <ul className="text-xs text-slate-300 space-y-2 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-sans leading-relaxed">
+              <li className="flex items-center gap-2 text-emerald-300">📦 Sub-mods del mismo paquete agrupados juntos.</li>
+              <li className="flex items-center gap-2">📚 Librerías base movidas AL INICIO (Prioridad de carga).</li>
+              <li className="flex items-center gap-2">🔗 Dependencias requeridas colocadas ANTES de sus dependientes.</li>
+              <li className="flex items-center gap-2">🗺️ Mods de mapas ubicados CERCA DEL FINAL.</li>
+              <li className="flex items-center gap-2 font-bold text-amber-300">🛡️ PZ Mod Studio Master Patch colocado ÚLTIMO al final.</li>
+            </ul>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800 gap-4">
+              <label className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={dontShowNoticeChecked}
+                  onChange={(e) => setDontShowNoticeChecked(e.target.checked)}
+                  className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-0 w-4 h-4 cursor-pointer"
+                />
+                <span>No volver a mostrar este mensaje</span>
+              </label>
+
+              <button
+                onClick={() => {
+                  if (dontShowNoticeChecked) {
+                    localStorage.setItem('pz_hide_autosort_notice', 'true');
+                  }
+                  setShowAutoSortNotice(false);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer shrink-0"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
