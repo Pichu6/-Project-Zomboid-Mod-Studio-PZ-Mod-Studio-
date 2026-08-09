@@ -220,74 +220,67 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return { mapCount, libCount, scriptCount };
   }, [mods]);
 
+  const isExactOrSanitizedMatch = (id1: string, id2: string): boolean => {
+    const n1 = normalizeModId(id1);
+    const n2 = normalizeModId(id2);
+    if (n1 === n2) return true;
+    const a1 = n1.replace(/[^a-z0-9]/g, '');
+    const a2 = n2.replace(/[^a-z0-9]/g, '');
+    return a1 === a2;
+  };
+
   const isMutuallyExclusiveVariant = (modA: ModInfo, modB: ModInfo): boolean => {
+    if (modA.mod_id === modB.mod_id) return false;
+
     // 1. Check explicit incompatibility lists from mod.info or heuristics
-    if (modA.incompatible && modA.incompatible.some((inc: string) => findInstalledDependencyInMods(inc, [modB]) !== undefined)) {
+    if (modA.incompatible && modA.incompatible.some((inc: string) => isExactOrSanitizedMatch(inc, modB.mod_id))) {
       return true;
     }
-    if (modB.incompatible && modB.incompatible.some((inc: string) => findInstalledDependencyInMods(inc, [modA]) !== undefined)) {
+    if (modB.incompatible && modB.incompatible.some((inc: string) => isExactOrSanitizedMatch(inc, modA.mod_id))) {
       return true;
     }
 
-    if (!modA.workshop_id || !modB.workshop_id || modA.workshop_id !== modB.workshop_id) {
-      return false;
+    // 2. Check if both mods belong to the same Workshop item (e.g. 2297098490)
+    if (modA.workshop_id && modB.workshop_id && modA.workshop_id === modB.workshop_id) {
+      const aRequiresB = modA.dependencies.some((d) => isExactOrSanitizedMatch(d, modB.mod_id));
+      const bRequiresA = modB.dependencies.some((d) => isExactOrSanitizedMatch(d, modA.mod_id));
+
+      if (aRequiresB || bRequiresA || modA.is_map_mod || modB.is_map_mod) {
+        return false;
+      }
+
+      const nameA = modA.name.toLowerCase();
+      const nameB = modB.name.toLowerCase();
+      const idA = modA.mod_id.toLowerCase();
+      const idB = modB.mod_id.toLowerCase();
+
+      const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only', 'main mod', '2.0', '1.0', 'gunfighter'];
+
+      const matchesA = variantKeywords.some((k) => nameA.includes(k) || idA.includes(k));
+      const matchesB = variantKeywords.some((k) => nameB.includes(k) || idB.includes(k));
+
+      return matchesA || matchesB;
     }
 
-    const normA = normalizeModId(modA.mod_id);
-    const normB = normalizeModId(modB.mod_id);
-
-    const aRequiresB = modA.dependencies.some((d) => normalizeModId(d) === normB || findInstalledDependencyInMods(d, [modB]) !== undefined);
-    const bRequiresA = modB.dependencies.some((d) => normalizeModId(d) === normA || findInstalledDependencyInMods(d, [modA]) !== undefined);
-
-    if (aRequiresB || bRequiresA) {
-      return false;
-    }
-
-    if (modA.is_map_mod || modB.is_map_mod) {
-      return false;
-    }
-
-    const nameA = modA.name.toLowerCase();
-    const nameB = modB.name.toLowerCase();
-    const idA = modA.mod_id.toLowerCase();
-    const idB = modB.mod_id.toLowerCase();
-
-    const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only', 'main mod', '2.0', '1.0', 'gunfighter'];
-
-    const matchesA = variantKeywords.some((k) => nameA.includes(k) || idA.includes(k));
-    const matchesB = variantKeywords.some((k) => nameB.includes(k) || idB.includes(k));
-
-    return matchesA || matchesB;
+    return false;
   };
 
   const activeConflictsMap = useMemo(() => {
     const map: Record<string, { conflictingModId: string; conflictingModName: string }[]> = {};
 
     const activeMods = mods.filter((m) => m.enabled);
-    const activeByPackage: Record<string, ModInfo[]> = {};
 
-    for (const m of activeMods) {
-      if (m.workshop_id) {
-        if (!activeByPackage[m.workshop_id]) activeByPackage[m.workshop_id] = [];
-        activeByPackage[m.workshop_id].push(m);
-      }
-    }
+    for (let i = 0; i < activeMods.length; i++) {
+      for (let j = i + 1; j < activeMods.length; j++) {
+        const modA = activeMods[i];
+        const modB = activeMods[j];
 
-    for (const pkgMods of Object.values(activeByPackage)) {
-      if (pkgMods.length > 1) {
-        for (let i = 0; i < pkgMods.length; i++) {
-          for (let j = i + 1; j < pkgMods.length; j++) {
-            const modA = pkgMods[i];
-            const modB = pkgMods[j];
+        if (isMutuallyExclusiveVariant(modA, modB)) {
+          if (!map[modA.mod_id]) map[modA.mod_id] = [];
+          map[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name });
 
-            if (isMutuallyExclusiveVariant(modA, modB)) {
-              if (!map[modA.mod_id]) map[modA.mod_id] = [];
-              map[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name });
-
-              if (!map[modB.mod_id]) map[modB.mod_id] = [];
-              map[modB.mod_id].push({ conflictingModId: modA.mod_id, conflictingModName: modA.name });
-            }
-          }
+          if (!map[modB.mod_id]) map[modB.mod_id] = [];
+          map[modB.mod_id].push({ conflictingModId: modA.mod_id, conflictingModName: modA.name });
         }
       }
     }
