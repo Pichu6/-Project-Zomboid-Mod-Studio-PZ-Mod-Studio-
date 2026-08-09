@@ -198,6 +198,9 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 
 pub fn ensure_master_patch_exists_on_disk(paths: &StudioPaths) {
     let mut target_dirs = Vec::new();
+    if !paths.workshop_dir.is_empty() {
+        target_dirs.push(Path::new(&paths.workshop_dir).join("9999999999").join("mods").join("Z_PZModStudio_MergedPatch"));
+    }
     if !paths.user_zomboid_dir.is_empty() {
         target_dirs.push(Path::new(&paths.user_zomboid_dir).join("mods").join("Z_PZModStudio_MergedPatch"));
         target_dirs.push(Path::new(&paths.user_zomboid_dir).join("Lua").join("mods").join("Z_PZModStudio_MergedPatch"));
@@ -213,6 +216,7 @@ poster=poster.png\r\n\
 icon=icon.png\r\n\
 modversion=1.0.0\r\n\
 pzversion=41,42\r\n\
+url=https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-\r\n\
 author=PZ Mod Studio\r\n";
 
     for patch_dir in target_dirs {

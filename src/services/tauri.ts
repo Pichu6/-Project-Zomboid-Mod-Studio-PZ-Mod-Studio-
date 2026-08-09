@@ -234,6 +234,7 @@ export const TauriService = {
    * Generates the synthetic master patch mod under Zomboid/mods/Z_PZModStudio_MergedPatch
    */
   generateMasterPatch: async (req: {
+    workshop_dir?: string;
     pz_install_dir?: string;
     user_zomboid_dir: string;
     mod_list_ini_path: string;

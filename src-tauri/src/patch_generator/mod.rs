@@ -11,6 +11,7 @@ pub struct MergedFilePayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterPatchRequest {
+    pub workshop_dir: Option<String>,
     pub pz_install_dir: Option<String>,
     pub user_zomboid_dir: String,
     pub mod_list_ini_path: String,
@@ -41,6 +42,11 @@ pub(crate) const VALID_POSTER_PNG: &[u8] = &[
 /// Generates the synthetic master patch mod under Zomboid/mods/Z_PZModStudio_MergedPatch and updates ModListData.ini.
 pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     let mut target_dirs = Vec::new();
+    if let Some(ref ws_dir) = req.workshop_dir {
+        if !ws_dir.is_empty() {
+            target_dirs.push(Path::new(ws_dir).join("9999999999").join("mods").join("Z_PZModStudio_MergedPatch"));
+        }
+    }
     if !req.user_zomboid_dir.is_empty() {
         target_dirs.push(Path::new(&req.user_zomboid_dir).join("mods").join("Z_PZModStudio_MergedPatch"));
         target_dirs.push(Path::new(&req.user_zomboid_dir).join("Lua").join("mods").join("Z_PZModStudio_MergedPatch"));
