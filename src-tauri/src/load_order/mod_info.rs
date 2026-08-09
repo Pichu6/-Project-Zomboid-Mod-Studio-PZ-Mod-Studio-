@@ -290,7 +290,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
 }
 
 fn extract_workshop_id_from_path(path: &Path) -> Option<String> {
-    let path_str = path.to_string_lossy();
+    let path_str = path.to_string_lossy().replace('/', "\\");
     if let Some(idx) = path_str.find("108600\\") {
         let rest = &path_str[idx + 7..];
         if let Some(end_idx) = rest.find('\\') {

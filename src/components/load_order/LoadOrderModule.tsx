@@ -21,7 +21,6 @@ import {
   Package,
   MapPin,
   ExternalLink,
-  BookOpen,
   Layers,
   FolderX,
   ShieldCheck,
@@ -78,8 +77,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
   const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
-  const [workshopDetails, setWorkshopDetails] = useState<{ posterUrl?: string; description?: string } | null>(null);
-  const [isLoadingWorkshop, setIsLoadingWorkshop] = useState<boolean>(false);
+  const [imageError, setImageError] = useState<boolean>(false);
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -91,42 +89,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
 
-  // Live Steam Workshop Metadata Scraper (Poster Image & Full Web Description)
+  // Reset image error state whenever selected mod changes
   useEffect(() => {
-    if (!selectedMod?.workshop_id) {
-      setWorkshopDetails(null);
-      return;
-    }
-
-    let isMounted = true;
-    setIsLoadingWorkshop(true);
-
-    fetch(`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMod.workshop_id}`)
-      .then((res) => res.text())
-      .then((html) => {
-        if (!isMounted) return;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-
-        const imgEl = doc.querySelector('#headerImage') as HTMLImageElement;
-        const descEl = doc.querySelector('#highlight_target_text') as HTMLElement;
-
-        const posterUrl = imgEl?.src || undefined;
-        const description = descEl?.innerText?.trim() || undefined;
-
-        setWorkshopDetails({ posterUrl, description });
-      })
-      .catch(() => {
-        if (isMounted) setWorkshopDetails(null);
-      })
-      .finally(() => {
-        if (isMounted) setIsLoadingWorkshop(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedMod?.workshop_id]);
+    setImageError(false);
+  }, [selectedModId]);
 
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -483,12 +449,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const activeCount = mods.filter((m) => m.enabled).length;
   const activeConflictsCount = Object.keys(activeConflictsMap).length;
   const missingDepsCount = Object.keys(missingActiveDependenciesMap).length;
-
-  const activePosterUrl = selectedMod?.poster_url
-    ? convertFileSrc(selectedMod.poster_url)
-    : workshopDetails?.posterUrl;
-
-  const activeDescription = workshopDetails?.description || selectedMod?.description;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
@@ -967,24 +927,30 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
               {/* Poster / Workshop Thumbnail Display */}
               <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
-                {isLoadingWorkshop ? (
-                  <div className="flex flex-col items-center justify-center text-cyan-400 space-y-2 p-4 text-center">
-                    <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
-                    <span className="text-xs font-mono text-slate-400">Cargando portada de Steam Workshop...</span>
-                  </div>
-                ) : activePosterUrl ? (
+                {selectedMod.poster_url && !imageError ? (
                   <img
-                    src={activePosterUrl}
+                    src={convertFileSrc(selectedMod.poster_url)}
                     alt={selectedMod.name}
                     className="w-full h-full object-cover rounded-xl"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
+                    onError={() => setImageError(true)}
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center text-slate-600 space-y-2 p-4 text-center">
-                    <BookOpen className="w-8 h-8 text-slate-700" />
-                    <span className="text-xs font-mono text-slate-500">No Workshop Poster Available</span>
+                  <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-4 text-center space-y-2">
+                    <div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center shadow">
+                      {selectedMod.is_map_mod ? (
+                        <MapPin className="w-6 h-6 text-amber-400" />
+                      ) : selectedMod.is_library ? (
+                        <Package className="w-6 h-6 text-purple-400" />
+                      ) : (
+                        <ListOrdered className="w-6 h-6 text-cyan-400" />
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-slate-200 line-clamp-1 max-w-[220px]">
+                      {selectedMod.name}
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+                      <span>{selectedMod.is_map_mod ? 'Map Tile / Map Mod' : selectedMod.is_library ? 'Framework / Base Library' : 'Script / Gameplay Mod'}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -995,7 +961,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   Description
                 </label>
                 <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 max-h-48 overflow-y-auto select-text whitespace-pre-wrap">
-                  {activeDescription || 'No description provided in mod.info manifest.'}
+                  {selectedMod.description || 'No description provided in mod.info manifest.'}
                 </div>
               </div>
 
