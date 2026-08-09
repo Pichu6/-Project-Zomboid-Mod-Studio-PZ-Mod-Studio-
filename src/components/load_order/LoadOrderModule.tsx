@@ -682,7 +682,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
                       <div className="overflow-hidden">
                         <div className="flex items-center gap-1.5">
-                          <span className={`truncate ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-500 line-through decoration-slate-700'}`}>
+                          <span className={`truncate ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
                             {mod.name}
                           </span>
 
