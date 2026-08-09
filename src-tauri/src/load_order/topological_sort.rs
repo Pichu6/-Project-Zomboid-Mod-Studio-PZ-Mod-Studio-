@@ -13,28 +13,36 @@ fn find_manifest_id_by_req<'a>(req: &str, manifests: &'a [ModManifest]) -> Optio
     let clean_req = req.trim().to_lowercase();
     let sanitized_req = sanitize_mod_id(&clean_req);
 
-    // PASS 1: Prioritize an ENABLED mod match!
-    for m in manifests {
-        if m.enabled {
-            let clean_m = m.id.trim().to_lowercase();
-            let sanitized_m = sanitize_mod_id(&clean_m);
-
-            if clean_m == clean_req || sanitized_m == sanitized_req || (sanitized_req.len() > 3 && sanitized_m.contains(&sanitized_req)) {
-                return Some(&m.id);
-            }
-        }
-    }
-
-    // PASS 2: Fallback to disabled mods if no enabled mod matched
-    for m in manifests {
+    let is_match = |m: &ModManifest| -> bool {
         let clean_m = m.id.trim().to_lowercase();
         let sanitized_m = sanitize_mod_id(&clean_m);
+        clean_m == clean_req || sanitized_m == sanitized_req || (sanitized_req.len() > 3 && sanitized_m.contains(&sanitized_req))
+    };
 
-        if clean_m == clean_req || sanitized_m == sanitized_req || (sanitized_req.len() > 3 && sanitized_m.contains(&sanitized_req)) {
-            return Some(&m.id);
-        }
+    let candidates: Vec<&'a ModManifest> = manifests.iter().filter(|m| is_match(m)).collect();
+    if candidates.is_empty() {
+        return None;
     }
-    None
+    if candidates.len() == 1 {
+        return Some(&candidates[0].id);
+    }
+
+    // 1. Prioritize enabled candidate
+    if let Some(enabled_cand) = candidates.iter().find(|c| c.enabled) {
+        return Some(&enabled_cand.id);
+    }
+
+    // 2. Prefer candidate with "main" or "2.0" in ID/name
+    if let Some(main_cand) = candidates.iter().find(|c| {
+        let id_lower = c.id.to_lowercase();
+        let name_lower = c.name.to_lowercase();
+        id_lower.contains("main") || id_lower.contains("2.0") || name_lower.contains("main") || name_lower.contains("2.0")
+    }) {
+        return Some(&main_cand.id);
+    }
+
+    // 3. Fallback to first candidate
+    Some(&candidates[0].id)
 }
 
 /// Performs topological sort on mod manifests based on require= directives.

@@ -93,12 +93,26 @@ const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo
     return false;
   };
 
-  // PASS 1: Prioritize an ENABLED mod match!
-  const enabledMatch = mods.find((m) => m.enabled && matchCandidate(m));
-  if (enabledMatch) return enabledMatch;
+  const candidates = mods.filter(matchCandidate);
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
 
-  // PASS 2: Fallback to any installed mod match (including disabled)
-  return mods.find(matchCandidate);
+  // 1. If any candidate is ENABLED, return the enabled one!
+  const enabledCandidate = candidates.find((c) => c.enabled);
+  if (enabledCandidate) return enabledCandidate;
+
+  // 2. If multiple candidates are disabled, prefer the one with "main" or "2.0" in its ID/name
+  const mainCandidate = candidates.find(
+    (c) =>
+      c.mod_id.toLowerCase().includes('main') ||
+      c.mod_id.toLowerCase().includes('2.0') ||
+      c.name.toLowerCase().includes('main') ||
+      c.name.toLowerCase().includes('2.0')
+  );
+  if (mainCandidate) return mainCandidate;
+
+  // 3. Fallback to first candidate
+  return candidates[0];
 };
 
 const renderPZRichText = (text?: string): React.ReactNode => {
