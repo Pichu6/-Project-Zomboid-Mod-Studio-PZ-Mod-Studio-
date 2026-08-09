@@ -29,6 +29,7 @@ import {
   X,
   ShieldAlert,
   Link2,
+  Save,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -199,11 +200,22 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [assigningModId, setAssigningModId] = useState<string | null>(null);
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
   const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
   const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const handleSaveExplicitly = async () => {
+    setIsSaving(true);
+    const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
+    await TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
+    setSaveToast('💾 ¡ModListData.ini guardado!');
+    setIsSaving(false);
+    setTimeout(() => setSaveToast(null), 3000);
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -813,13 +825,23 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
         <div className="flex items-center gap-3">
           <button
+            onClick={handleSaveExplicitly}
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer shrink-0"
+            title="Guardar el orden de carga activo en ModListData.ini"
+          >
+            <Save className={`w-4 h-4 text-emerald-100 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>Guardar</span>
+          </button>
+
+          <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
             title="Re-scan Workshop directory for newly subscribed/unsubscribed mods"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>Refresh Subscribed</span>
+            <span>Refresh</span>
           </button>
 
           <div className="relative flex items-center">
@@ -870,6 +892,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Save Notification Toast */}
+      {saveToast && (
+        <div className="fixed top-16 right-8 bg-emerald-950/90 border border-emerald-500/80 text-emerald-200 px-4 py-2 rounded-xl text-xs font-bold shadow-2xl z-50 flex items-center gap-2 animate-fade-in">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{saveToast}</span>
+        </div>
+      )}
 
       {/* Icon Legend Bar */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-xs text-slate-400">
