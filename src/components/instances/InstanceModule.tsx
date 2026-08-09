@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw } from 'lucide-react';
+import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw, Edit3, X, Save } from 'lucide-react';
 import { ModInfo, StudioPathsUI, AppInstance } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -19,6 +19,12 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
   const [newInstanceDesc, setNewInstanceDesc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Edit Modal State
+  const [editingInstance, setEditingInstance] = useState<AppInstance | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [updateModsOnEdit, setUpdateModsOnEdit] = useState(false);
 
   const activeMods = mods.filter((m) => m.enabled);
 
@@ -62,6 +68,34 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       await loadInstances();
     } catch (err: any) {
       alert(`Error al crear instancia: ${err}`);
+    }
+  };
+
+  const handleOpenEdit = (inst: AppInstance) => {
+    setEditingInstance(inst);
+    setEditName(inst.name);
+    setEditDesc(inst.description || '');
+    setUpdateModsOnEdit(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingInstance || !editName.trim()) return;
+
+    try {
+      const updated: AppInstance = {
+        ...editingInstance,
+        name: editName.trim(),
+        description: editDesc.trim() || undefined,
+        active_mod_ids: updateModsOnEdit ? activeMods.map((m) => m.mod_id) : editingInstance.active_mod_ids,
+        load_order: updateModsOnEdit ? mods.map((m) => m.mod_id) : editingInstance.load_order,
+      };
+
+      await TauriService.updateInstance(paths.user_zomboid_dir, updated);
+      setStatusMessage(`✨ Instancia '${updated.name}' actualizada con éxito.`);
+      setEditingInstance(null);
+      await loadInstances();
+    } catch (err: any) {
+      alert(`Error al actualizar instancia: ${err}`);
     }
   };
 
@@ -222,6 +256,14 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                     )}
 
                     <button
+                      onClick={() => handleOpenEdit(inst)}
+                      className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl transition cursor-pointer"
+                      title="Editar instancia"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
                       onClick={() => handleDeleteInstance(inst)}
                       className="p-2 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 rounded-xl transition cursor-pointer"
                       title="Eliminar instancia"
@@ -247,6 +289,82 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
           )}
         </div>
       </div>
+
+      {/* Edit Instance Modal */}
+      {editingInstance && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-emerald-400" />
+                <span>Editar Instancia</span>
+              </h3>
+              <button
+                onClick={() => setEditingInstance(null)}
+                className="text-slate-400 hover:text-slate-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Nombre de la Instancia
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Descripción
+                </label>
+                <textarea
+                  rows={3}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  id="updateModsChk"
+                  checked={updateModsOnEdit}
+                  onChange={(e) => setUpdateModsOnEdit(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="updateModsChk" className="text-xs text-slate-300 cursor-pointer">
+                  Actualizar los mods de esta instancia con la configuración activa actual ({activeMods.length} mods activos)
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow"
+              >
+                <Save className="w-4 h-4" />
+                <span>Guardar Cambios</span>
+              </button>
+              <button
+                onClick={() => setEditingInstance(null)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

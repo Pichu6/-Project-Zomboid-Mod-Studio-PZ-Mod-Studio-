@@ -364,4 +364,8 @@ export const TauriService = {
   deleteInstance: async (userZomboidDir: string, instanceId: string): Promise<void> => {
     return await invoke('delete_instance', { userZomboidDir, instanceId });
   },
+
+  updateInstance: async (userZomboidDir: string, instance: any): Promise<any> => {
+    return await invoke('update_instance', { userZomboidDir, instance });
+  },
 };

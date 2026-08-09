@@ -143,3 +143,20 @@ pub fn delete_instance(user_zomboid_dir: String, instance_id: String) -> Result<
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn update_instance(
+    user_zomboid_dir: String,
+    instance: AppInstance,
+) -> Result<AppInstance, String> {
+    let dir = get_instances_dir(&user_zomboid_dir);
+    let instance_file = dir.join(format!("{}.json", instance.id));
+    if !instance_file.exists() {
+        return Err("La instancia a actualizar no existe.".to_string());
+    }
+
+    let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
+    fs::write(&instance_file, json).map_err(|e| e.to_string())?;
+
+    Ok(instance)
+}

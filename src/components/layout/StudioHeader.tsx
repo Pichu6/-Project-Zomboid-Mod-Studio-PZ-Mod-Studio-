@@ -1,16 +1,18 @@
 import React from 'react';
-import { Shield, Play, Activity } from 'lucide-react';
+import { Shield, Play, Activity, Layers } from 'lucide-react';
 
 interface StudioHeaderProps {
   conflictCount: number;
   polyfillCount: number;
   onRunSandbox: () => void;
+  onOpenInstanceSelector?: () => void;
 }
 
 export const StudioHeader: React.FC<StudioHeaderProps> = ({
   conflictCount,
   polyfillCount,
   onRunSandbox,
+  onOpenInstanceSelector,
 }) => {
   return (
     <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between select-none shrink-0 shadow-md">
@@ -34,6 +36,17 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
 
       {/* Center Status Indicators */}
       <div className="hidden md:flex items-center gap-4 text-xs">
+        {onOpenInstanceSelector && (
+          <button
+            onClick={onOpenInstanceSelector}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950 hover:bg-slate-800 border border-emerald-800/80 text-emerald-300 font-mono text-xs transition cursor-pointer"
+            title="Cambiar o seleccionar perfil de instancia"
+          >
+            <Layers className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Perfil de Instancia</span>
+          </button>
+        )}
+
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
           <span className="text-slate-400 font-mono">Virtual Conflicts:</span>

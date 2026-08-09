@@ -9,7 +9,7 @@ pub mod vfs;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
 use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
-use instance_manager::{activate_instance, create_instance, delete_instance, list_instances};
+use instance_manager::{activate_instance, create_instance, delete_instance, list_instances, update_instance};
 use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
 use load_order::mod_info::{scan_all_installed_mods, ModManifest};
 use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
@@ -154,7 +154,8 @@ pub fn run() {
             list_instances,
             create_instance,
             activate_instance,
-            delete_instance
+            delete_instance,
+            update_instance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

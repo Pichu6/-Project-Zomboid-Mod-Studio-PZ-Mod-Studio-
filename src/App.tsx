@@ -12,6 +12,8 @@ import { TauriService } from './services/tauri';
 import { PresetModule } from './components/presets/PresetModule';
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
+import { InitialInstanceModal } from './components/instances/InitialInstanceModal';
+import { AppInstance } from './types';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MOD_LIST');
@@ -19,6 +21,7 @@ export const App: React.FC = () => {
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
+  const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
 
   // Studio Directory Paths State (Persistent Profile)
   const [paths, setPaths] = useState<StudioPathsUI>({
@@ -44,10 +47,25 @@ export const App: React.FC = () => {
         if (allSubscribedMods.length > 0) {
           setMods([...allSubscribedMods]);
         }
+
+        // Open Instance Selector if saved instances exist
+        const existingInstances = await TauriService.listInstances(savedProfile.user_zomboid_dir);
+        if (existingInstances.length > 0) {
+          setIsInstanceModalOpen(true);
+        }
       }
     };
     initPaths();
   }, []);
+
+  const handleSelectInstance = async (inst: AppInstance) => {
+    try {
+      await TauriService.activateInstance(paths.user_zomboid_dir, inst.id);
+      handleApplyPresetLoadOrder(inst.load_order, inst.active_mod_ids);
+    } catch (err) {
+      console.error('Failed to activate instance:', err);
+    }
+  };
 
   // Listen to realtime sandbox logs & error cards from Rust watcher
   useEffect(() => {
@@ -260,6 +278,7 @@ export const App: React.FC = () => {
         conflictCount={conflicts.length}
         polyfillCount={rules.filter((r) => r.enabled).length}
         onRunSandbox={handleRunSandbox}
+        onOpenInstanceSelector={() => setIsInstanceModalOpen(true)}
       />
 
       {/* Main Studio Body */}
@@ -342,6 +361,15 @@ export const App: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Initial Instance Selection Modal */}
+      <InitialInstanceModal
+        isOpen={isInstanceModalOpen}
+        onClose={() => setIsInstanceModalOpen(false)}
+        paths={paths}
+        onSelectInstance={handleSelectInstance}
+        onCreateNewInstanceClick={() => setActiveTab('INSTANCES')}
+      />
     </div>
   );
 };
