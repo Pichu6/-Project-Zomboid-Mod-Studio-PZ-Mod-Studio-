@@ -67,7 +67,7 @@ const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo
   const normReq = normalizeModId(cleanReq);
   const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
 
-  return mods.find((m) => {
+  const matchCandidate = (m: ModInfo): boolean => {
     // 1. Direct match on Mod ID
     const normM = normalizeModId(m.mod_id);
     if (normM === normReq) return true;
@@ -91,7 +91,14 @@ const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo
     if (alphaM.length > 3 && alphaReq.includes(alphaM)) return true;
 
     return false;
-  });
+  };
+
+  // PASS 1: Prioritize an ENABLED mod match!
+  const enabledMatch = mods.find((m) => m.enabled && matchCandidate(m));
+  if (enabledMatch) return enabledMatch;
+
+  // PASS 2: Fallback to any installed mod match (including disabled)
+  return mods.find(matchCandidate);
 };
 
 const renderPZRichText = (text?: string): React.ReactNode => {

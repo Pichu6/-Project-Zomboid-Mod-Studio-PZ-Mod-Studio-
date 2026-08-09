@@ -13,6 +13,19 @@ fn find_manifest_id_by_req<'a>(req: &str, manifests: &'a [ModManifest]) -> Optio
     let clean_req = req.trim().to_lowercase();
     let sanitized_req = sanitize_mod_id(&clean_req);
 
+    // PASS 1: Prioritize an ENABLED mod match!
+    for m in manifests {
+        if m.enabled {
+            let clean_m = m.id.trim().to_lowercase();
+            let sanitized_m = sanitize_mod_id(&clean_m);
+
+            if clean_m == clean_req || sanitized_m == sanitized_req || (sanitized_req.len() > 3 && sanitized_m.contains(&sanitized_req)) {
+                return Some(&m.id);
+            }
+        }
+    }
+
+    // PASS 2: Fallback to disabled mods if no enabled mod matched
     for m in manifests {
         let clean_m = m.id.trim().to_lowercase();
         let sanitized_m = sanitize_mod_id(&clean_m);
