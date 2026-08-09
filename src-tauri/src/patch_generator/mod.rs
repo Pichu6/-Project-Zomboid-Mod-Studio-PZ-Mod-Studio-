@@ -67,7 +67,30 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     let polyfills_count = req.active_polyfill_ids.len();
     fs::write(polyfill_dir.join("Z_PZModStudio_Polyfills.lua"), polyfill_lua_content).map_err(|e| e.to_string())?;
 
-    // 5. Update ModListData.ini to place Z_PZModStudio_MergedPatch at the end of load order
+    // 5. Ingame UI Protection Override (Like Avast taking control of Windows Defender!)
+    // Overrides in-game ModLoadOrderUI.onAuto so primitive in-game auto-sort is locked and protected
+    let client_override_dir = patch_mod_dir.join("media").join("lua").join("client").join("OptionScreens");
+    fs::create_dir_all(&client_override_dir).map_err(|e| e.to_string())?;
+
+    let ui_override_content = r#"-- Z_PZModStudio_UIOverride.lua
+-- Takes control of in-game auto-sort button to protect PZ Mod Studio Master Patch load order!
+
+Events.OnMainMenuEnter.Add(function()
+    print("[PZ Mod Studio] Active: Taking control of load order management.")
+    
+    if ModLoadOrderUI then
+        ModLoadOrderUI.onAuto = function(self)
+            local text = "PZ Mod Studio Control Active:\nLoad order is managed automatically by PZ Mod Studio.\nIn-game primitive re-sorting is locked to preserve Master Patch overrides."
+            local modal = ISModalDialog:new(0, 0, 420, 160, text, false, nil, nil)
+            modal:initialise()
+            modal:addToUIManager()
+        end
+    end
+end)
+"#;
+    fs::write(client_override_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content).map_err(|e| e.to_string())?;
+
+    // 6. Update ModListData.ini to place Z_PZModStudio_MergedPatch at the end of load order
     if !req.mod_list_ini_path.is_empty() {
         if let Ok(mut mod_list) = read_mod_list_ini(&req.mod_list_ini_path) {
             let patch_id = "Z_PZModStudio_MergedPatch".to_string();
