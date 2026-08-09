@@ -1,16 +1,22 @@
 pub mod diff_engine;
+pub mod instance_manager;
 pub mod load_order;
 pub mod patch_generator;
+pub mod preset_manager;
 pub mod sandbox;
+pub mod server_manager;
 pub mod vfs;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
 use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
+use instance_manager::{activate_instance, create_instance, delete_instance, list_instances};
 use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
 use load_order::mod_info::{scan_all_installed_mods, ModManifest};
 use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
 use patch_generator::{generate_master_patch, prepare_carrier_mod, MasterPatchRequest, MasterPatchResult};
+use preset_manager::{check_missing_preset_mods, export_preset_file, import_preset_file};
 use sandbox::{launch_sandbox_and_watch, SandboxLaunchConfig};
+use server_manager::{create_new_server_config, list_server_configs, sync_client_to_server};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use vfs::{auto_detect_paths, scan_conflicts, validate_paths, StudioPaths, VfsConflictRaw};
@@ -91,6 +97,23 @@ fn pick_folder_cmd(default_path: Option<String>) -> Option<String> {
 }
 
 #[tauri::command]
+fn pick_save_file_cmd(default_name: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new().add_filter("PZ Mod Studio Preset", &["pzpack", "json"]);
+    if let Some(name) = default_name {
+        dialog = dialog.set_file_name(&name);
+    }
+    dialog.save_file().map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn pick_open_file_cmd() -> Option<String> {
+    rfd::FileDialog::new()
+        .add_filter("PZ Mod Studio Preset", &["pzpack", "json"])
+        .pick_file()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn prepare_carrier_mod_cmd(user_zomboid_dir: String) -> Result<String, String> {
     prepare_carrier_mod(&user_zomboid_dir)
 }
@@ -118,8 +141,20 @@ pub fn run() {
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             pick_folder_cmd,
+            pick_save_file_cmd,
+            pick_open_file_cmd,
             open_external_url_cmd,
-            prepare_carrier_mod_cmd
+            prepare_carrier_mod_cmd,
+            export_preset_file,
+            import_preset_file,
+            check_missing_preset_mods,
+            list_server_configs,
+            sync_client_to_server,
+            create_new_server_config,
+            list_instances,
+            create_instance,
+            activate_instance,
+            delete_instance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -271,7 +271,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   onClick={async () => {
                     try {
                       const res = await TauriService.prepareCarrierMod(formData.user_zomboid_dir);
-                      alert(`✨ Carrier Mod folder prepared at:\n${res}\n\nSteps to upload:\n1. Open Project Zomboid\n2. Main Menu -> Workshop -> Upload Mod\n3. Select Z_PZModStudio_Carrier and click Upload\n4. Copy the assigned Workshop ID into this setting!`);
+                      alert(`✨ Carpetas del Mod Preparadas Correctamente:\n${res}\n\nEstructura corregida con mod.info válido (sin carpeta Contents intermedia):\n\nOpción 1 (Mod Local offline):\n1. Abre Project Zomboid\n2. Menú Principal -> MODS\n3. Activa 'Z_PZ Mod Studio Master Patch' o 'PZ Mod Studio Carrier Patch'. ¡Ya aparece directamente en el juego!\n\nOpción 2 (Subir a Steam Workshop):\n1. Abre Project Zomboid\n2. Menú Principal -> Workshop -> Editor de Mods / Subir Mod\n3. Selecciona 'PZ Mod Studio Carrier Patch' y haz clic en Subir\n4. Copia el ID de Workshop asignado en esta casilla para sincronizarlo automáticamente.`);
                     } catch (err) {
                       alert(`Error preparing carrier folder: ${err}`);
                     }

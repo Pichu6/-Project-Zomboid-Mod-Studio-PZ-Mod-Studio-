@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveTab } from '../../types';
-import { GitCompare, ListOrdered, Settings, Activity } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Package, Server, Layers } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -20,6 +20,27 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       id: 'MOD_LIST' as ActiveTab,
       label: 'Mod List',
       icon: ListOrdered,
+      badge: null,
+      badgeColor: '',
+    },
+    {
+      id: 'PRESETS' as ActiveTab,
+      label: 'Presets (.pzpack)',
+      icon: Package,
+      badge: null,
+      badgeColor: '',
+    },
+    {
+      id: 'SERVERS' as ActiveTab,
+      label: 'Servidores',
+      icon: Server,
+      badge: null,
+      badgeColor: '',
+    },
+    {
+      id: 'INSTANCES' as ActiveTab,
+      label: 'Instancias',
+      icon: Layers,
       badge: null,
       badgeColor: '',
     },

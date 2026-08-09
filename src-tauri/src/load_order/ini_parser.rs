@@ -34,8 +34,25 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
     let default_txt = resolve_default_txt_path(ini_path);
     let mut active_mods = Vec::new();
 
-    // 1. Check Zomboid/mods/default.txt first
-    if default_txt.exists() {
+    // 0. Check Zomboid/mods.txt first (Project Zomboid Build 42 primary active mods list)
+    if let Some(mods_dir) = default_txt.parent() {
+        if let Some(z_dir) = mods_dir.parent() {
+            let mods_txt_path = z_dir.join("mods.txt");
+            if mods_txt_path.exists() {
+                if let Ok(content) = fs::read_to_string(&mods_txt_path) {
+                    for line in content.lines() {
+                        let clean = sanitize_mod_id(line);
+                        if !clean.is_empty() {
+                            active_mods.push(clean);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 1. Check Zomboid/mods/default.txt second if mods.txt yielded 0 active mods
+    if active_mods.is_empty() && default_txt.exists() {
         if let Ok(content) = fs::read_to_string(&default_txt) {
             let mut in_mods_block = false;
             for line in content.lines() {

@@ -293,4 +293,75 @@ export const TauriService = {
       throw err;
     }
   },
+
+  // ==========================================
+  // Presets & Steam Workshop Sync (.pzpack)
+  // ==========================================
+  pickSaveFile: async (defaultName?: string): Promise<string | null> => {
+    try {
+      return await invoke<string | null>('pick_save_file_cmd', { defaultName });
+    } catch (err) {
+      return null;
+    }
+  },
+
+  pickOpenFile: async (): Promise<string | null> => {
+    try {
+      return await invoke<string | null>('pick_open_file_cmd');
+    } catch (err) {
+      return null;
+    }
+  },
+
+  exportPresetFile: async (preset: any, filePath: string): Promise<void> => {
+    return await invoke('export_preset_file', { preset, filePath });
+  },
+
+  importPresetFile: async (filePath: string): Promise<any> => {
+    return await invoke('import_preset_file', { filePath });
+  },
+
+  checkMissingPresetMods: async (preset: any, userZomboidDir: string, workshopDir: string): Promise<any> => {
+    return await invoke('check_missing_preset_mods', { preset, userZomboidDir, workshopDir });
+  },
+
+  // ==========================================
+  // Server Manager & Dedicated Sync
+  // ==========================================
+  listServerConfigs: async (userZomboidDir: string): Promise<any[]> => {
+    return await invoke('list_server_configs', { userZomboidDir });
+  },
+
+  syncClientToServer: async (filePath: string, activeModIds: string[], activeWorkshopIds: string[]): Promise<void> => {
+    return await invoke('sync_client_to_server', { filePath, activeModIds, activeWorkshopIds });
+  },
+
+  createNewServerConfig: async (userZomboidDir: string, serverName: string): Promise<any> => {
+    return await invoke('create_new_server_config', { userZomboidDir, serverName });
+  },
+
+  // ==========================================
+  // Modrinth-Style Instance & Profile Manager
+  // ==========================================
+  listInstances: async (userZomboidDir: string): Promise<any[]> => {
+    return await invoke('list_instances', { userZomboidDir });
+  },
+
+  createInstance: async (
+    userZomboidDir: string,
+    name: string,
+    description: string | undefined,
+    activeModIds: string[],
+    loadOrder: string[]
+  ): Promise<any> => {
+    return await invoke('create_instance', { userZomboidDir, name, description, activeModIds, loadOrder });
+  },
+
+  activateInstance: async (userZomboidDir: string, instanceId: string): Promise<void> => {
+    return await invoke('activate_instance', { userZomboidDir, instanceId });
+  },
+
+  deleteInstance: async (userZomboidDir: string, instanceId: string): Promise<void> => {
+    return await invoke('delete_instance', { userZomboidDir, instanceId });
+  },
 };

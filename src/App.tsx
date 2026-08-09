@@ -9,6 +9,10 @@ import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
 import { TauriService } from './services/tauri';
 
+import { PresetModule } from './components/presets/PresetModule';
+import { ServerModule } from './components/server/ServerModule';
+import { InstanceModule } from './components/instances/InstanceModule';
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MOD_LIST');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
@@ -175,6 +179,30 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleApplyPresetLoadOrder = (presetLoadOrder: string[], activeIds: string[]) => {
+    setMods((prev) => {
+      const modMap = new Map(prev.map((m) => [m.mod_id, m]));
+      const activeSet = new Set(activeIds);
+
+      const reordered: ModInfo[] = [];
+      presetLoadOrder.forEach((id) => {
+        const found = modMap.get(id);
+        if (found) {
+          reordered.push({ ...found, enabled: activeSet.has(id) });
+          modMap.delete(id);
+        }
+      });
+
+      // Append remaining mods
+      modMap.forEach((m) => {
+        reordered.push({ ...m, enabled: activeSet.has(m.mod_id) });
+      });
+
+      TauriService.writeModListIni(paths.mod_list_ini_path, activeIds);
+      return reordered;
+    });
+  };
+
   const handleApplyFix = async (polyfillRuleId: string) => {
     const updatedRules = rules.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r));
     setRules(updatedRules);
@@ -245,7 +273,7 @@ export const App: React.FC = () => {
         />
 
         {/* Tab Modules */}
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-y-auto p-6">
           {activeTab === 'MOD_LIST' && (
             <LoadOrderModule
               paths={paths}
@@ -255,6 +283,29 @@ export const App: React.FC = () => {
               onRefreshMods={handleRefreshMods}
               onGoToSettings={() => setActiveTab('SETTINGS')}
               onLoadMockups={handleLoadModMockups}
+            />
+          )}
+
+          {activeTab === 'PRESETS' && (
+            <PresetModule
+              paths={paths}
+              mods={mods}
+              onApplyPresetLoadOrder={handleApplyPresetLoadOrder}
+            />
+          )}
+
+          {activeTab === 'SERVERS' && (
+            <ServerModule
+              paths={paths}
+              mods={mods}
+            />
+          )}
+
+          {activeTab === 'INSTANCES' && (
+            <InstanceModule
+              paths={paths}
+              mods={mods}
+              onApplyInstanceLoadOrder={handleApplyPresetLoadOrder}
             />
           )}
 

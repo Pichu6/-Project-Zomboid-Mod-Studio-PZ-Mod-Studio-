@@ -128,6 +128,8 @@ pub fn generate_256x256_png_bytes() -> Vec<u8> {
     png
 }
 
+static EMBEDDED_PREVIEW_PNG: &[u8] = include_bytes!("../../../111.png");
+
 pub fn get_preview_png_bytes() -> Vec<u8> {
     if let Ok(bytes) = fs::read("111.png") {
         return bytes;
@@ -135,7 +137,7 @@ pub fn get_preview_png_bytes() -> Vec<u8> {
     if let Ok(bytes) = fs::read(r"E:\PZ Mod Studio\111.png") {
         return bytes;
     }
-    generate_256x256_png_bytes()
+    EMBEDDED_PREVIEW_PNG.to_vec()
 }
 
 /// Generates the synthetic master patch mod under Zomboid/mods/Z_PZModStudio_MergedPatch and updates ModListData.ini.
@@ -154,9 +156,9 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
             target_dirs.push(Path::new(ws_dir).join("9999999999").join("mods").join("Z_PZModStudio_MergedPatch"));
         }
     }
-    if !req.user_zomboid_dir.is_empty() {
-        target_dirs.push(Path::new(&req.user_zomboid_dir).join("mods").join("Z_PZModStudio_MergedPatch"));
-        target_dirs.push(Path::new(&req.user_zomboid_dir).join("Lua").join("mods").join("Z_PZModStudio_MergedPatch"));
+    for user_dir in crate::load_order::mod_info::get_all_user_zomboid_dirs(&req.user_zomboid_dir) {
+        target_dirs.push(user_dir.join("mods").join("Z_PZModStudio_MergedPatch"));
+        target_dirs.push(user_dir.join("Lua").join("mods").join("Z_PZModStudio_MergedPatch"));
     }
     if let Some(ref install_dir) = req.pz_install_dir {
         if !install_dir.is_empty() {
@@ -177,7 +179,6 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     mod_info_content.push_str("poster=poster.png\r\n");
     mod_info_content.push_str("icon=icon.png\r\n");
     mod_info_content.push_str("modversion=1.0.0\r\n");
-    mod_info_content.push_str("pzversion=41,42\r\n");
     mod_info_content.push_str("author=PZ Mod Studio\r\n");
 
     let mut files_written = 0;
@@ -289,20 +290,24 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
 
     let png_256 = get_preview_png_bytes();
 
+    let all_user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
+    let primary_user_dir = &all_user_dirs[0];
+
     // 1. Create Zomboid/Workshop/PZModStudioCarrier (Primary location read by PZ Workshop Upload UI)
-    let workshop_item_dir = Path::new(user_zomboid_dir).join("Workshop").join("PZModStudioCarrier");
+    let workshop_item_dir = primary_user_dir.join("Workshop").join("PZModStudioCarrier");
     let _ = fs::remove_dir_all(&workshop_item_dir);
     fs::create_dir_all(&workshop_item_dir).map_err(|e| e.to_string())?;
 
-    let workshop_txt = "version=2\r\n\
-title=PZ Mod Studio Carrier Patch\r\n\
-description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
-tags=Build 42\r\n\
-visibility=public\r\n";
+    let workshop_txt = format!(
+        "version=2\r\ntitle={}\r\ndescription={}\r\ntags=Build 41,Build 42\r\nvisibility=public\r\n",
+        "PZ Mod Studio Carrier Patch",
+        "Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims."
+    );
 
-    fs::write(workshop_item_dir.join("workshop.txt"), workshop_txt).map_err(|e| e.to_string())?;
+    fs::write(workshop_item_dir.join("workshop.txt"), &workshop_txt).map_err(|e| e.to_string())?;
     let _ = fs::write(workshop_item_dir.join("preview.png"), &png_256);
 
+    // CRITICAL: Project Zomboid Workshop upload tool REQUIRES Contents/ folder at root of Workshop item directory!
     let carrier_mod_dir = workshop_item_dir.join("Contents").join("mods").join("PZModStudioCarrier");
     fs::create_dir_all(&carrier_mod_dir).map_err(|e| e.to_string())?;
 
@@ -310,25 +315,41 @@ visibility=public\r\n";
     fs::create_dir_all(&media_dir).map_err(|e| e.to_string())?;
     let _ = fs::write(media_dir.join("carrier_shim.lua"), "-- PZ Mod Studio Carrier Shim\nif not Z_PZModStudio_Polyfills then Z_PZModStudio_Polyfills = {} end\n");
 
-    let mod_info = "name=PZ Mod Studio Carrier Patch\r\n\
-id=PZModStudioCarrier\r\n\
-description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
-poster=poster.png\r\n\
-icon=icon.png\r\n\
-modversion=1.0.0\r\n\
-pzversion=42.0\r\n\
-versionMin=42.0\r\n\
-author=PZ Mod Studio\r\n";
+    let mod_info = format!(
+        "name={}\r\nid={}\r\ndescription={}\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\nauthor=PZ Mod Studio\r\n",
+        "PZModStudio Carrier Patch",
+        "PZModStudioCarrier",
+        "Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims."
+    );
 
-    fs::write(carrier_mod_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
+    fs::write(carrier_mod_dir.join("mod.info"), &mod_info).map_err(|e| e.to_string())?;
     let _ = fs::write(carrier_mod_dir.join("poster.png"), &png_256);
     let _ = fs::write(carrier_mod_dir.join("icon.png"), &png_256);
 
-    // 2. Also create Zomboid/mods/PZModStudioCarrier as secondary backup
-    let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("PZModStudioCarrier");
-    if let Ok(_) = fs::create_dir_all(&local_mods_dir) {
-        let _ = fs::write(local_mods_dir.join("mod.info"), mod_info);
-        let _ = fs::write(local_mods_dir.join("poster.png"), &png_256);
+    // 2. Also populate ALL user Zomboid/mods/ directories for direct in-game local mod list detection!
+    for z_dir in &all_user_dirs {
+        let local_carrier_dir = z_dir.join("mods").join("PZModStudioCarrier");
+        if let Ok(_) = fs::create_dir_all(&local_carrier_dir) {
+            let _ = fs::write(local_carrier_dir.join("mod.info"), &mod_info);
+            let _ = fs::write(local_carrier_dir.join("poster.png"), &png_256);
+            let _ = fs::write(local_carrier_dir.join("icon.png"), &png_256);
+            let local_media = local_carrier_dir.join("media").join("lua").join("shared");
+            let _ = fs::create_dir_all(&local_media);
+            let _ = fs::write(local_media.join("carrier_shim.lua"), "-- PZ Mod Studio Carrier Shim\nif not Z_PZModStudio_Polyfills then Z_PZModStudio_Polyfills = {} end\n");
+        }
+
+        let local_master_dir = z_dir.join("mods").join("Z_PZModStudio_MergedPatch");
+        if let Ok(_) = fs::create_dir_all(&local_master_dir) {
+            let master_info = format!(
+                "name={}\r\nid={}\r\ndescription={}\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\nauthor=PZ Mod Studio\r\n",
+                "Z_PZModStudio Master Patch",
+                "Z_PZModStudio_MergedPatch",
+                "Auto-generated 3-Way compatibility patch and polyfill layer generated by Project Zomboid Mod Studio."
+            );
+            let _ = fs::write(local_master_dir.join("mod.info"), &master_info);
+            let _ = fs::write(local_master_dir.join("poster.png"), &png_256);
+            let _ = fs::write(local_master_dir.join("icon.png"), &png_256);
+        }
     }
 
     // 3. Also populate common install dirs for PZ -debug mode compatibility
@@ -344,11 +365,12 @@ author=PZ Mod Studio\r\n";
             for sub in &["Workshop", "media/workshop"] {
                 let debug_ws = install_path.join(sub).join("PZModStudioCarrier");
                 if let Ok(_) = fs::create_dir_all(debug_ws.join("Contents").join("mods").join("PZModStudioCarrier")) {
-                    let _ = fs::write(debug_ws.join("workshop.txt"), workshop_txt);
+                    let _ = fs::write(debug_ws.join("workshop.txt"), &workshop_txt);
                     let _ = fs::write(debug_ws.join("preview.png"), &png_256);
                     let c_mod = debug_ws.join("Contents").join("mods").join("PZModStudioCarrier");
-                    let _ = fs::write(c_mod.join("mod.info"), mod_info);
+                    let _ = fs::write(c_mod.join("mod.info"), &mod_info);
                     let _ = fs::write(c_mod.join("poster.png"), &png_256);
+                    let _ = fs::write(c_mod.join("icon.png"), &png_256);
                 }
             }
         }

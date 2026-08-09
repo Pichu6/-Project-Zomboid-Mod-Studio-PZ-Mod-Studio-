@@ -147,4 +147,48 @@ export interface StudioPathsUI {
   is_valid: boolean;
 }
 
-export type ActiveTab = 'MOD_LIST' | 'MERGER' | 'MONITOR' | 'SETTINGS';
+// ==========================================
+// Module 5: Presets, Server Manager & Instances
+// ==========================================
+
+export interface PresetModEntry {
+  mod_id: string;
+  name: string;
+  workshop_id?: string;
+  enabled: boolean;
+}
+
+export interface ModPreset {
+  id: string;
+  name: string;
+  description?: string;
+  author?: string;
+  created_at: string;
+  mods: PresetModEntry[];
+  load_order: string[];
+}
+
+export interface MissingModsReport {
+  missing_mods: PresetModEntry[];
+  installed_count: number;
+  total_count: number;
+}
+
+export interface PZServerConfig {
+  name: string;
+  file_path: string;
+  mods: string[];
+  workshop_items: string[];
+}
+
+export interface AppInstance {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  is_active: boolean;
+  active_mod_ids: string[];
+  load_order: string[];
+}
+
+export type ActiveTab = 'MOD_LIST' | 'PRESETS' | 'SERVERS' | 'INSTANCES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
