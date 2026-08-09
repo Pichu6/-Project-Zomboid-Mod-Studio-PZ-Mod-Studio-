@@ -41,35 +41,38 @@ pub fn auto_detect_paths() -> StudioPaths {
     let user_zomboid = user_home.join("Zomboid");
     let mod_list_ini = user_zomboid.join("mods").join("ModListData.ini");
 
-    let pz_install_candidates = vec![
-        r"C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid",
-        r"C:\Program Files\Steam\steamapps\common\ProjectZomboid",
-        r"D:\SteamLibrary\steamapps\common\ProjectZomboid",
-        r"E:\SteamLibrary\steamapps\common\ProjectZomboid",
-        r"F:\SteamLibrary\steamapps\common\ProjectZomboid",
-        r"G:\SteamLibrary\steamapps\common\ProjectZomboid",
-    ];
+    let mut pz_install_dir = String::new();
+    let mut workshop_dir = String::new();
 
-    let workshop_candidates = vec![
-        r"C:\Program Files (x86)\Steam\steamapps\workshop\content\108600",
-        r"C:\Program Files\Steam\steamapps\workshop\content\108600",
-        r"D:\SteamLibrary\steamapps\workshop\content\108600",
-        r"E:\SteamLibrary\steamapps\workshop\content\108600",
-        r"F:\SteamLibrary\steamapps\workshop\content\108600",
-        r"G:\SteamLibrary\steamapps\workshop\content\108600",
-    ];
+    let drives = vec!["C", "D", "E", "F", "G", "H", "I", "J", "K", "Z"];
 
-    let pz_install_dir = pz_install_candidates
-        .into_iter()
-        .find(|p| Path::new(p).exists())
-        .unwrap_or("")
-        .to_string();
+    for drive in drives {
+        let base_roots = vec![
+            format!("{}:\\Program Files (x86)\\Steam", drive),
+            format!("{}:\\Program Files\\Steam", drive),
+            format!("{}:\\Steam", drive),
+            format!("{}:\\SteamLibrary", drive),
+            format!("{}:\\Juegos", drive),
+            format!("{}:\\Juegos\\Steam", drive),
+            format!("{}:\\Games", drive),
+            format!("{}:\\Games\\Steam", drive),
+        ];
 
-    let workshop_dir = workshop_candidates
-        .into_iter()
-        .find(|p| Path::new(p).exists())
-        .unwrap_or("")
-        .to_string();
+        for root in &base_roots {
+            let root_path = Path::new(root);
+            if root_path.exists() {
+                let workshop_p = root_path.join("steamapps").join("workshop").join("content").join("108600");
+                if workshop_p.exists() && workshop_dir.is_empty() {
+                    workshop_dir = workshop_p.to_string_lossy().to_string();
+                }
+
+                let pz_p = root_path.join("steamapps").join("common").join("ProjectZomboid");
+                if pz_p.exists() && pz_install_dir.is_empty() {
+                    pz_install_dir = pz_p.to_string_lossy().to_string();
+                }
+            }
+        }
+    }
 
     let user_zomboid_dir = if user_zomboid.exists() {
         user_zomboid.to_string_lossy().to_string()
@@ -77,9 +80,7 @@ pub fn auto_detect_paths() -> StudioPaths {
         String::new()
     };
 
-    // Always provide target mod_list_ini_path under Zomboid/mods/ModListData.ini so path is never empty!
     let mod_list_ini_path = mod_list_ini.to_string_lossy().to_string();
-
     let is_valid = !pz_install_dir.is_empty() && !user_zomboid_dir.is_empty();
 
     StudioPaths {
