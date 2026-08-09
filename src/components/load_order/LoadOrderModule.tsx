@@ -1388,7 +1388,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   </div>
 
                   <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
-                    <div className="col-span-4 text-slate-400 pt-0.5">Dependencies</div>
+                    <div className="col-span-4 text-slate-400 pt-0.5">Library Required by this Mod</div>
                     <div className="col-span-8">
                       {selectedMod.dependencies && selectedMod.dependencies.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -1440,7 +1440,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-purple-400">
                     <Link2 className="w-3.5 h-3.5" />
-                    Dependents (Mods requiring this library) ({reverseDependents.length})
+                    Mods Requiring This Library ({reverseDependents.length})
                   </span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 pt-1">
