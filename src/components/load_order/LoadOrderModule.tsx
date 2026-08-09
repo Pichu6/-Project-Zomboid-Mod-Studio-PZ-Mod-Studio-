@@ -713,10 +713,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           {hasDisabledDependency && (
                             <span
                               className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 shrink-0 cursor-help"
-                              title={`⚠️ REQ LIBRARY DISABLED!\nThis mod is active, but required library [${disabledDependencies[0].name}] is currently DISABLED.`}
+                              title={`⚠️ LIBRERÍA BASE DESACTIVADA\n\nEste mod está activo, pero la librería requerida [${disabledDependencies[0].name}] se encuentra DESACTIVADA.\n\nHaz clic en el mod en el inspector para activarla.`}
                             >
                               <AlertTriangle className="w-3 h-3 text-rose-400" />
-                              <span>REQ OFF: {disabledDependencies[0].name}</span>
+                              <span>REQ OFF</span>
                             </span>
                           )}
 
@@ -727,10 +727,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                                 handleJumpToMod(conflictsForThisMod[0].conflictingModId);
                               }}
                               className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 shrink-0 transition cursor-pointer"
-                              title={`⚠️ INCOMPATIBILITY WARNING!\nClick to jump, highlight & scroll to conflicting mod: [${conflictsForThisMod[0].conflictingModName}]`}
+                              title={`⚠️ ADVERTENCIA DE INCOMPATIBILIDAD\n\nEste sub-mod es mutuamente exclusivo y está activo junto a: [${conflictsForThisMod[0].conflictingModName}].\n\nAmbos pertenecen al mismo paquete de la Workshop. Haz clic para saltar al mod en conflicto y solucionarlo.`}
                             >
                               <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>INCOMPATIBLE (↗ {conflictsForThisMod[0].conflictingModName})</span>
+                              <span>INCOMPATIBLE ↗</span>
                             </button>
                           )}
                         </div>
@@ -854,7 +854,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   )}
                 </div>
 
-                <h3 className="text-base font-bold text-slate-100">{selectedMod.name}</h3>
+                <h3
+                  onClick={() => handleJumpToMod(selectedMod.mod_id)}
+                  className="text-base font-bold text-slate-100 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1.5"
+                  title="Haz clic para centrar e iluminar este mod en la lista izquierda"
+                >
+                  <span>{selectedMod.name}</span>
+                  <span className="text-xs text-slate-500 font-mono font-normal">↗</span>
+                </h3>
                 <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
               </div>
 
@@ -863,19 +870,28 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <div className="p-3 bg-rose-950/60 border-2 border-rose-500/80 rounded-xl space-y-2 text-xs">
                   <div className="flex items-center gap-2 font-bold text-rose-300">
                     <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span>Missing Base Library Warning</span>
+                    <span>Advertencia: Librería Base Desactivada</span>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
-                    This mod is currently active, but required library{' '}
-                    <b className="text-rose-300">[{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</b> is DISABLED!
+                    Este mod está activo pero requiere la librería{' '}
+                    <b className="text-rose-300">[{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</b> que está DESACTIVADA.
                   </p>
-                  <button
-                    onClick={() => handleToggleSingleMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>1-Click Enable Required Library: [{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</span>
-                  </button>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleToggleSingleMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Activar Librería</span>
+                    </button>
+                    <button
+                      onClick={() => handleJumpToMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800 rounded-lg text-xs font-bold transition cursor-pointer"
+                      title="Saltar a la librería en la lista"
+                    >
+                      <span>Ver Mod ↗</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -884,18 +900,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <div className="p-3 bg-amber-950/60 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs">
                   <div className="flex items-center gap-2 font-bold text-amber-300">
                     <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Incompatibility Warning Detected</span>
+                    <span>Advertencia: Incompatibilidad Detectada</span>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
-                    This mod is currently active alongside mutually exclusive sub-mod:{' '}
+                    Mutuamente exclusivo con:{' '}
                     <b className="text-amber-300">[{activeConflictsMap[selectedMod.mod_id][0].conflictingModName}]</b>.
                   </p>
-                  <button
-                    onClick={() => handleToggleSingleMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
-                  >
-                    <span>Disable Conflicting Sibling Mod</span>
-                  </button>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleJumpToMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      <span>Ver Mod en Conflicto ↗</span>
+                    </button>
+                    <button
+                      onClick={() => handleToggleSingleMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                      title="Desactivar la variante en conflicto"
+                    >
+                      <span>Desactivar</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -939,36 +964,37 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       const matchedInstalledMod = findInstalledDependency(reqRaw);
                       const cleanReqId = normalizeModId(reqRaw);
                       const isDepDisabled = matchedInstalledMod && !matchedInstalledMod.enabled;
+                      const displayName = matchedInstalledMod ? matchedInstalledMod.name : cleanReqId;
 
                       return (
                         <button
                           key={rIdx}
                           onClick={() => handleJumpToDependency(reqRaw)}
-                          className={`px-2.5 py-1 text-xs font-mono rounded-md border font-medium transition cursor-pointer flex items-center gap-1 ${
+                          className={`px-2.5 py-1 text-xs rounded-md border font-medium transition cursor-pointer flex items-center gap-1.5 ${
                             isDepDisabled
-                              ? 'bg-rose-950/80 border-rose-700 text-rose-300 hover:border-rose-500 font-bold'
+                              ? 'bg-rose-950/80 border-rose-700 text-rose-300 hover:border-rose-500 font-bold shadow'
                               : matchedInstalledMod
-                              ? 'bg-slate-950 hover:bg-slate-800 border-cyan-800 text-cyan-300 hover:border-cyan-500'
+                              ? 'bg-slate-950 hover:bg-slate-800 border-cyan-800 text-cyan-300 hover:border-cyan-500 font-bold'
                               : 'bg-red-950/40 hover:bg-red-900/60 border-red-800 text-red-400 hover:text-red-300'
                           }`}
                           title={
                             isDepDisabled
-                              ? `⚠️ DISABLED: [${matchedInstalledMod.name}] - Click to jump & enable!`
+                              ? `⚠️ LIBRERÍA DESACTIVADA: [${displayName}] - Haz clic para ver y activar`
                               : matchedInstalledMod
-                              ? `Installed: [${matchedInstalledMod.name}] - Click to highlight & scroll`
-                              : 'Missing dependency! Click to search on Steam Workshop'
+                              ? `Mod Instalado: [${displayName}] - Haz clic para saltar a este mod`
+                              : `Dependencia no encontrada. Haz clic para buscar en Steam Workshop`
                           }
                         >
                           {isDepDisabled ? (
-                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                           ) : !matchedInstalledMod ? (
-                            <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
                           ) : null}
-                          <span>{cleanReqId}</span>
+                          <span>{displayName}</span>
                           {matchedInstalledMod ? (
-                            <span className="text-[9px] text-cyan-400 font-bold">↗</span>
+                            <span className="text-[10px] text-cyan-400 font-bold">↗</span>
                           ) : (
-                            <ExternalLink className="w-3 h-3 text-red-400" />
+                            <ExternalLink className="w-3.5 h-3.5 text-red-400" />
                           )}
                         </button>
                       );
