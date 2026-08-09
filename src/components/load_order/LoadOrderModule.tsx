@@ -42,9 +42,6 @@ interface LoadOrderModuleProps {
   onLoadMockups: (mockMods: ModInfo[]) => void;
 }
 
-/**
- * Palette of distinct neon border & badge styling classes for multi-mod Workshop packages.
- */
 const PACKAGE_COLOR_PALETTES = [
   { border: 'border-l-cyan-400', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-700' },
   { border: 'border-l-purple-400', badge: 'bg-purple-950/80 text-purple-300 border-purple-700' },
@@ -56,9 +53,6 @@ const PACKAGE_COLOR_PALETTES = [
   { border: 'border-l-teal-400', badge: 'bg-teal-950/80 text-teal-300 border-teal-700' },
 ];
 
-/**
- * Normalizes mod ID for strict comparison by stripping slashes, backslashes, quotes, and space.
- */
 const normalizeModId = (id: string): string => {
   return id
     .trim()
@@ -91,7 +85,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  // Group mods by workshop_id to detect multi-mod Workshop packages
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const m of mods) {
@@ -117,7 +110,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return { multiModPackageMap: multiMap, workshopColorMap: colorMap, uniqueWorkshopIds: uniqueWorkshopCount };
   }, [mods]);
 
-  // Calculate live Counts for Map Mods, Base Libraries, and Script Mods
   const modCategoryCounts = useMemo(() => {
     let mapCount = 0;
     let libCount = 0;
@@ -132,7 +124,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return { mapCount, libCount, scriptCount };
   }, [mods]);
 
-  // Detect active mutually exclusive sub-mod conflicts in real time
   const activeConflictsMap = useMemo(() => {
     const map: Record<string, { conflictingModId: string; conflictingModName: string }[]> = {};
 
@@ -173,7 +164,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return map;
   }, [mods]);
 
-  // Detect missing/disabled required dependencies for each active mod
   const missingActiveDependenciesMap = useMemo(() => {
     const map: Record<string, ModInfo[]> = {};
 
@@ -196,7 +186,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return map;
   }, [mods]);
 
-  // Filter mods in real time based on search query
   const filteredMods = useMemo(() => {
     if (!searchQuery.trim()) return mods;
     const query = searchQuery.toLowerCase().trim();
@@ -210,7 +199,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
 
-  // Reverse Dependents: Find all mods that require the currently selected mod
   const reverseDependents = useMemo(() => {
     if (!selectedMod) return [];
     const selNorm = normalizeModId(selectedMod.mod_id);
@@ -272,9 +260,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTargetPosInput('');
   };
 
-  /**
-   * Smart Toggle: If enabling a mod with conflicting sub-mods, auto-disables sibling variants!
-   */
   const handleToggleSingleMod = (modId: string) => {
     const targetMod = mods.find((m) => m.mod_id === modId);
     if (!targetMod) return;
@@ -305,17 +290,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     }
   };
 
-  /**
-   * Enables ALL mods 100% without discrimination.
-   */
   const handleEnableAllWithoutDiscrimination = (enable: boolean) => {
     const updated = mods.map((m) => ({ ...m, enabled: enable }));
     onReorder(updated);
   };
 
-  /**
-   * Auto-sorts active mods using Project Zomboid load order precedence rules + Package Grouping Cohesion.
-   */
   const handleAutoSortDependencies = () => {
     const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.includes('MergedPatch');
 
@@ -367,6 +346,29 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     });
   };
 
+  /**
+   * Helper to jump to any mod in the list: clears search query, selects it, highlights row with cyan glow, and scrolls smoothly to it!
+   */
+  const handleJumpToMod = (targetModId: string) => {
+    const targetMod = mods.find((m) => m.mod_id === targetModId || normalizeModId(m.mod_id) === normalizeModId(targetModId));
+    const finalId = targetMod ? targetMod.mod_id : targetModId;
+
+    setSearchQuery(''); // Clear search query so target mod is guaranteed visible in DOM
+    setSelectedModId(finalId);
+    setHighlightedModId(finalId);
+
+    setTimeout(() => {
+      const targetElem = modRowRefs.current[finalId];
+      if (targetElem) {
+        targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+
+    setTimeout(() => {
+      setHighlightedModId(null);
+    }, 3000);
+  };
+
   const handleJumpToDependency = (depModIdRaw: string) => {
     const targetMod = findInstalledDependency(depModIdRaw);
 
@@ -377,18 +379,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       return;
     }
 
-    setSearchQuery('');
-    setSelectedModId(targetMod.mod_id);
-    setHighlightedModId(targetMod.mod_id);
-
-    const targetElem = modRowRefs.current[targetMod.mod_id];
-    if (targetElem) {
-      targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    setTimeout(() => {
-      setHighlightedModId(null);
-    }, 3000);
+    handleJumpToMod(targetMod.mod_id);
   };
 
   // State 1: Invalid paths guard
@@ -954,7 +945,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </div>
               </div>
 
-              {/* NEW SECTION: Reverse Dependents (Mods that require this library) */}
+              {/* NEW SECTION: Reverse Dependents (Mods that require this library) with working jump & scroll */}
               <div className="space-y-1 border-t border-slate-800 pt-3">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-purple-400">
@@ -967,20 +958,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     reverseDependents.map((depMod) => (
                       <button
                         key={depMod.mod_id}
-                        onClick={() => {
-                          setSelectedModId(depMod.mod_id);
-                          setHighlightedModId(depMod.mod_id);
-                          setTimeout(() => setHighlightedModId(null), 3000);
-                        }}
+                        onClick={() => handleJumpToMod(depMod.mod_id)}
                         className={`px-2.5 py-1 text-xs font-mono rounded-md border transition cursor-pointer flex items-center gap-1 ${
                           depMod.enabled
-                            ? 'bg-purple-950/60 border-purple-700 text-purple-200 hover:border-purple-400 font-bold'
+                            ? 'bg-purple-950/60 border-purple-700 text-purple-200 hover:border-purple-400 font-bold shadow'
                             : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
                         }`}
-                        title={`Click to jump to [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
+                        title={`Click to jump, highlight & scroll to [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
                       >
                         <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                         <span>{depMod.name}</span>
+                        <span className="text-[9px] text-purple-400 font-bold">↗</span>
                       </button>
                     ))
                   ) : (
