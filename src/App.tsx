@@ -118,6 +118,7 @@ export const App: React.FC = () => {
       const activePolyfillIds = updatedRules.filter((r) => r.enabled).map((r) => r.id);
 
       const result = await TauriService.generateMasterPatch({
+        pz_install_dir: paths.pz_install_dir,
         user_zomboid_dir: paths.user_zomboid_dir,
         mod_list_ini_path: paths.mod_list_ini_path,
         merged_files: mergedFilesPayload,
@@ -180,6 +181,7 @@ export const App: React.FC = () => {
 
     if (paths.is_valid && paths.user_zomboid_dir) {
       await TauriService.generateMasterPatch({
+        pz_install_dir: paths.pz_install_dir,
         user_zomboid_dir: paths.user_zomboid_dir,
         mod_list_ini_path: paths.mod_list_ini_path,
         merged_files: conflicts.map((c) => ({ relative_path: c.relative_path, content: c.merged_output || c.base_content })),
