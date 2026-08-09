@@ -303,10 +303,17 @@ visibility=public\r\n";
     let carrier_mod_dir = workshop_item_dir.join("Contents").join("mods").join("Z_PZModStudio_Carrier");
     fs::create_dir_all(&carrier_mod_dir).map_err(|e| e.to_string())?;
 
+    let media_dir = carrier_mod_dir.join("media").join("lua").join("shared");
+    fs::create_dir_all(&media_dir).map_err(|e| e.to_string())?;
+    let _ = fs::write(media_dir.join("carrier_shim.lua"), "-- PZ Mod Studio Carrier Shim\nif not Z_PZModStudio_Polyfills then Z_PZModStudio_Polyfills = {} end\n");
+
     let mod_info = "name=PZ Mod Studio Carrier Patch\r\n\
-id=Z_PZModStudio_MergedPatch\r\n\
+id=Z_PZModStudio_Carrier\r\n\
 description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
-poster=poster.png\r\n";
+poster=poster.png\r\n\
+modversion=1.0.0\r\n\
+pzversion=41,42\r\n\
+author=PZ Mod Studio\r\n";
 
     fs::write(carrier_mod_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
     let _ = fs::write(carrier_mod_dir.join("poster.png"), &png_256);
