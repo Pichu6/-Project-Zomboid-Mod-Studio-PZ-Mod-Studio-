@@ -184,10 +184,23 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
     if user_zomboid_dir.is_empty() {
         return Err("User Zomboid directory path is missing.".to_string());
     }
-    let carrier_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
-    fs::create_dir_all(&carrier_dir).map_err(|e| e.to_string())?;
 
-    let mod_info = "name=PZ Mod Studio Carrier Patch\r\n\
+    // 1. Create Zomboid/Workshop/Z_PZModStudio_Carrier (Primary location read by PZ Workshop Upload UI)
+    let workshop_item_dir = Path::new(user_zomboid_dir).join("Workshop").join("Z_PZModStudio_Carrier");
+    fs::create_dir_all(&workshop_item_dir).map_err(|e| e.to_string())?;
+
+    let workshop_txt = "title=PZ Mod Studio Carrier Patch\r\n\
+description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
+tags=Build 41,Build 42,Framework\r\n\
+visibility=public\r\n";
+
+    fs::write(workshop_item_dir.join("workshop.txt"), workshop_txt).map_err(|e| e.to_string())?;
+    let _ = fs::write(workshop_item_dir.join("preview.png"), VALID_POSTER_PNG);
+
+    let carrier_mod_dir = workshop_item_dir.join("mods").join("Z_PZModStudio_MergedPatch");
+    fs::create_dir_all(&carrier_mod_dir).map_err(|e| e.to_string())?;
+
+    let mod_info = "name=Z_PZ Mod Studio Master Patch\r\n\
 id=Z_PZModStudio_MergedPatch\r\n\
 description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
 poster=poster.png\r\n\
@@ -196,9 +209,17 @@ modversion=1.0.0\r\n\
 pzversion=41,42\r\n\
 author=PZ Mod Studio\r\n";
 
-    fs::write(carrier_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
-    let _ = fs::write(carrier_dir.join("poster.png"), VALID_POSTER_PNG);
-    let _ = fs::write(carrier_dir.join("icon.png"), VALID_POSTER_PNG);
+    fs::write(carrier_mod_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
+    let _ = fs::write(carrier_mod_dir.join("poster.png"), VALID_POSTER_PNG);
+    let _ = fs::write(carrier_mod_dir.join("icon.png"), VALID_POSTER_PNG);
 
-    Ok(carrier_dir.to_string_lossy().to_string())
+    // 2. Also create Zomboid/mods/Z_PZModStudio_Carrier as secondary backup
+    let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
+    if let Ok(_) = fs::create_dir_all(&local_mods_dir) {
+        let _ = fs::write(local_mods_dir.join("mod.info"), mod_info);
+        let _ = fs::write(local_mods_dir.join("poster.png"), VALID_POSTER_PNG);
+        let _ = fs::write(local_mods_dir.join("icon.png"), VALID_POSTER_PNG);
+    }
+
+    Ok(workshop_item_dir.to_string_lossy().to_string())
 }
