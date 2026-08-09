@@ -294,10 +294,10 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
     let _ = fs::remove_dir_all(&workshop_item_dir);
     fs::create_dir_all(&workshop_item_dir).map_err(|e| e.to_string())?;
 
-    let workshop_txt = "version=1\r\n\
+    let workshop_txt = "version=2\r\n\
 title=PZ Mod Studio Carrier Patch\r\n\
 description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
-tags=\r\n\
+tags=Build 42\r\n\
 visibility=public\r\n";
 
     fs::write(workshop_item_dir.join("workshop.txt"), workshop_txt).map_err(|e| e.to_string())?;
@@ -313,10 +313,16 @@ visibility=public\r\n";
     let mod_info = "name=PZ Mod Studio Carrier Patch\r\n\
 id=Z_PZModStudio_Carrier\r\n\
 description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
-poster=poster.png\r\n";
+poster=poster.png\r\n\
+icon=icon.png\r\n\
+modversion=1.0.0\r\n\
+pzversion=42\r\n\
+versionMin=42.0.0\r\n\
+author=PZ Mod Studio\r\n";
 
     fs::write(carrier_mod_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
     let _ = fs::write(carrier_mod_dir.join("poster.png"), &png_256);
+    let _ = fs::write(carrier_mod_dir.join("icon.png"), &png_256);
 
     // 2. Also create Zomboid/mods/Z_PZModStudio_Carrier as secondary backup
     let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
