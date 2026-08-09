@@ -112,7 +112,7 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
     for mod_id in active_mods {
         let clean_id = sanitize_mod_id(mod_id);
         if !clean_id.is_empty() {
-            default_txt_content.push_str(&format!("    mod = {},\n", clean_id));
+            default_txt_content.push_str(&format!("    mod = \"{}\",\n", clean_id));
         }
     }
     default_txt_content.push_str("}\n\nmaps\n{\n}\n");

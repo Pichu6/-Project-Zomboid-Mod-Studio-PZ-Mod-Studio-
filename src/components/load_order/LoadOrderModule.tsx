@@ -153,12 +153,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const idA = modA.mod_id.toLowerCase();
     const idB = modB.mod_id.toLowerCase();
 
-    const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext'];
+    const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only'];
 
     const matchesA = variantKeywords.some((k) => nameA.includes(k) || idA.includes(k));
     const matchesB = variantKeywords.some((k) => nameB.includes(k) || idB.includes(k));
 
-    return matchesA && matchesB;
+    return matchesA || matchesB;
   };
 
   const activeConflictsMap = useMemo(() => {
