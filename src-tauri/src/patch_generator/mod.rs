@@ -292,9 +292,10 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
     let _ = fs::remove_dir_all(&workshop_item_dir);
     fs::create_dir_all(&workshop_item_dir).map_err(|e| e.to_string())?;
 
-    let workshop_txt = "title=PZ Mod Studio Carrier Patch\r\n\
+    let workshop_txt = "version=1\r\n\
+title=PZ Mod Studio Carrier Patch\r\n\
 description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
-tags=Build 41,Build 42,Framework\r\n\
+tags=\r\n\
 visibility=public\r\n";
 
     fs::write(workshop_item_dir.join("workshop.txt"), workshop_txt).map_err(|e| e.to_string())?;
