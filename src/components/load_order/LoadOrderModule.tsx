@@ -29,6 +29,7 @@ import {
   X,
   ShieldAlert,
   Link2,
+  Undo2,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -43,9 +44,9 @@ interface LoadOrderModuleProps {
 
 const PACKAGE_COLOR_PALETTES = [
   { border: 'border-l-cyan-400', bgMatch: 'bg-cyan-950/25 hover:bg-cyan-950/40 border-cyan-900/40', badge: 'bg-cyan-950/90 text-cyan-300 border-cyan-700/60' },
-  { border: 'border-l-purple-400', bgMatch: 'bg-purple-950/25 hover:bg-purple-950/40 border-purple-900/40', badge: 'bg-purple-950/90 text-purple-300 border-purple-700/60' },
   { border: 'border-l-emerald-400', bgMatch: 'bg-emerald-950/25 hover:bg-emerald-950/40 border-emerald-900/40', badge: 'bg-emerald-950/90 text-emerald-300 border-emerald-700/60' },
   { border: 'border-l-amber-400', bgMatch: 'bg-amber-950/25 hover:bg-amber-950/40 border-amber-900/40', badge: 'bg-amber-950/90 text-amber-300 border-amber-700/60' },
+  { border: 'border-l-purple-400', bgMatch: 'bg-purple-950/25 hover:bg-purple-950/40 border-purple-900/40', badge: 'bg-purple-950/90 text-purple-300 border-purple-700/60' },
   { border: 'border-l-pink-400', bgMatch: 'bg-pink-950/25 hover:bg-pink-950/40 border-pink-900/40', badge: 'bg-pink-950/90 text-pink-300 border-pink-700/60' },
   { border: 'border-l-indigo-400', bgMatch: 'bg-indigo-950/25 hover:bg-indigo-950/40 border-indigo-900/40', badge: 'bg-indigo-950/90 text-indigo-300 border-indigo-700/60' },
   { border: 'border-l-rose-400', bgMatch: 'bg-rose-950/25 hover:bg-rose-950/40 border-rose-900/40', badge: 'bg-rose-950/90 text-rose-300 border-rose-700/60' },
@@ -62,19 +63,35 @@ const normalizeModId = (id: string): string => {
 };
 
 const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo | undefined => {
-  const normReq = normalizeModId(reqRaw);
+  if (!reqRaw || !reqRaw.trim()) return undefined;
+  const cleanReq = reqRaw.trim();
+  const normReq = normalizeModId(cleanReq);
   const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
 
   return mods.find((m) => {
+    // 1. Direct match on Mod ID
     const normM = normalizeModId(m.mod_id);
-    const alphaM = normM.replace(/[^a-z0-9]/g, '');
+    if (normM === normReq) return true;
 
-    return (
-      normM === normReq ||
-      alphaM === alphaReq ||
-      (alphaReq.length > 3 && alphaM.includes(alphaReq)) ||
-      (alphaM.length > 3 && alphaReq.includes(alphaM))
-    );
+    // 2. Direct match on Workshop ID
+    if (m.workshop_id && m.workshop_id.trim() === cleanReq) return true;
+
+    // 3. Direct match on Mod Name
+    const normName = normalizeModId(m.name);
+    if (normName === normReq) return true;
+
+    // 4. Alpha-numeric match (ignores punctuation/dashes/brackets)
+    const alphaM = normM.replace(/[^a-z0-9]/g, '');
+    const alphaName = normName.replace(/[^a-z0-9]/g, '');
+
+    if (alphaM.length > 0 && alphaM === alphaReq) return true;
+    if (alphaName.length > 0 && alphaName === alphaReq) return true;
+
+    // 5. Substring alpha match for longer IDs (>3 chars)
+    if (alphaReq.length > 3 && (alphaM.includes(alphaReq) || alphaName.includes(alphaReq))) return true;
+    if (alphaM.length > 3 && alphaReq.includes(alphaM)) return true;
+
+    return false;
   });
 };
 
@@ -570,12 +587,18 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return findInstalledDependencyInMods(reqRaw, mods);
   };
 
+  const [jumpHistory, setJumpHistory] = useState<string[]>([]);
+
   /**
    * Helper to jump to any mod in the list: clears search query, selects it, highlights row with cyan glow, and scrolls smoothly to it!
    */
-  const handleJumpToMod = (targetModId: string) => {
+  const handleJumpToMod = (targetModId: string, pushHistory: boolean = true) => {
     const targetMod = mods.find((m) => m.mod_id === targetModId || normalizeModId(m.mod_id) === normalizeModId(targetModId));
     const finalId = targetMod ? targetMod.mod_id : targetModId;
+
+    if (pushHistory && selectedModId && selectedModId !== finalId) {
+      setJumpHistory((prev) => [...prev, selectedModId]);
+    }
 
     setSearchQuery(''); // Clear search query so target mod is guaranteed visible in DOM
     setSelectedModId(finalId);
@@ -591,6 +614,13 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTimeout(() => {
       setHighlightedModId(null);
     }, 3000);
+  };
+
+  const handleGoBack = () => {
+    if (jumpHistory.length === 0) return;
+    const previousModId = jumpHistory[jumpHistory.length - 1];
+    setJumpHistory((prev) => prev.slice(0, prev.length - 1));
+    handleJumpToMod(previousModId, false);
   };
 
   const handleJumpToDependency = (depModIdRaw: string) => {
@@ -1153,6 +1183,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           {selectedMod ? (
             <div className="flex-1 flex flex-col overflow-y-auto space-y-4 pr-1">
               <div className="border-b border-slate-800 pb-3 space-y-1">
+                {jumpHistory.length > 0 && (
+                  <div className="pb-1">
+                    <button
+                      onClick={handleGoBack}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-purple-200 border border-purple-600 rounded-lg text-xs font-bold transition shadow cursor-pointer"
+                      title="Volver al mod anterior o mod padre en el inspector"
+                    >
+                      <Undo2 className="w-4 h-4 text-purple-300" />
+                      <span>↩️ Volver al Mod Padre</span>
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
