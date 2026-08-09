@@ -218,6 +218,82 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return map;
   }, [mods]);
 
+  const loadOrderViolationsMap = useMemo(() => {
+    const map: Record<string, { requiredModId: string; requiredModName: string; requiredModIndex: number }[]> = {};
+
+    const modIndexMap: Record<string, number> = {};
+    mods.forEach((m, idx) => {
+      modIndexMap[normalizeModId(m.mod_id)] = idx;
+    });
+
+    mods.forEach((m, currentIdx) => {
+      if (!m.enabled || !m.dependencies || m.dependencies.length === 0) return;
+
+      for (const depRaw of m.dependencies) {
+        const normReq = normalizeModId(depRaw);
+        const reqMod = mods.find((target) => normalizeModId(target.mod_id) === normReq);
+
+        if (reqMod && reqMod.enabled) {
+          const requiredIdx = modIndexMap[normReq];
+          // Load Order Violation: 'm' is ABOVE 'reqMod' in active load order (currentIdx < requiredIdx)
+          if (currentIdx < requiredIdx) {
+            if (!map[m.mod_id]) map[m.mod_id] = [];
+            map[m.mod_id].push({
+              requiredModId: reqMod.mod_id,
+              requiredModName: reqMod.name,
+              requiredModIndex: requiredIdx,
+            });
+          }
+        }
+      }
+    });
+
+    return map;
+  }, [mods]);
+
+  const [orderViolationCycleIdx, setOrderViolationCycleIdx] = useState(0);
+  const [conflictCycleIdx, setConflictCycleIdx] = useState(0);
+  const [missingDepCycleIdx, setMissingDepCycleIdx] = useState(0);
+
+  const orderViolationModIds = useMemo(() => Object.keys(loadOrderViolationsMap), [loadOrderViolationsMap]);
+  const conflictModIds = useMemo(() => Object.keys(activeConflictsMap), [activeConflictsMap]);
+  const missingDepModIds = useMemo(() => Object.keys(missingActiveDependenciesMap), [missingActiveDependenciesMap]);
+
+  const handleCycleOrderViolations = () => {
+    if (orderViolationModIds.length === 0) return;
+    const nextIdx = (orderViolationCycleIdx + 1) % orderViolationModIds.length;
+    setOrderViolationCycleIdx(nextIdx);
+    handleJumpToMod(orderViolationModIds[nextIdx]);
+  };
+
+  const handleCycleConflicts = () => {
+    if (conflictModIds.length === 0) return;
+    const nextIdx = (conflictCycleIdx + 1) % conflictModIds.length;
+    setConflictCycleIdx(nextIdx);
+    handleJumpToMod(conflictModIds[nextIdx]);
+  };
+
+  const handleCycleMissingDeps = () => {
+    if (missingDepModIds.length === 0) return;
+    const nextIdx = (missingDepCycleIdx + 1) % missingDepModIds.length;
+    setMissingDepCycleIdx(nextIdx);
+    handleJumpToMod(missingDepModIds[nextIdx]);
+  };
+
+  const handleFixLoadOrderViolation = (modId: string, requiredModId: string) => {
+    const currentIdx = mods.findIndex((m) => m.mod_id === modId);
+    const requiredIdx = mods.findIndex((m) => m.mod_id === requiredModId);
+    if (currentIdx === -1 || requiredIdx === -1) return;
+
+    const newOrder = [...mods];
+    const [movedMod] = newOrder.splice(currentIdx, 1);
+    const newReqIdx = newOrder.findIndex((m) => m.mod_id === requiredModId);
+    newOrder.splice(newReqIdx + 1, 0, movedMod);
+
+    onReorder(newOrder);
+    handleJumpToMod(movedMod.mod_id);
+  };
+
   const filteredMods = useMemo(() => {
     if (!searchQuery.trim()) return mods;
     const query = searchQuery.toLowerCase().trim();
@@ -465,8 +541,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }
 
   const activeCount = mods.filter((m) => m.enabled).length;
-  const activeConflictsCount = Object.keys(activeConflictsMap).length;
-  const missingDepsCount = Object.keys(missingActiveDependenciesMap).length;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
@@ -483,22 +557,58 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <span>Total Sub-mods: <b className="text-slate-200">{mods.length}</b></span>
             <span>•</span>
             <span>Active: <b className="text-emerald-400">{activeCount}</b></span>
-            {activeConflictsCount > 0 && (
+            {orderViolationModIds.length > 0 && (
               <>
                 <span>•</span>
-                <span className="flex items-center gap-1 text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                  <AlertTriangle className="w-3 h-3 text-amber-400" />
-                  {activeConflictsCount} Exclusivity Warnings
-                </span>
+                <button
+                  onClick={handleCycleOrderViolations}
+                  className="flex items-center gap-1.5 text-orange-400 font-bold bg-orange-500/10 hover:bg-orange-500/20 px-2 py-0.5 rounded border border-orange-500/40 transition cursor-pointer shadow-sm group"
+                  title="Haz clic para recorrer y centrar los mods con orden de carga incorrecto"
+                >
+                  <AlertTriangle className="w-3 h-3 text-orange-400 group-hover:scale-110 transition" />
+                  <span>
+                    {orderViolationModIds.length} {orderViolationModIds.length === 1 ? 'Error de Orden' : 'Errores de Orden'}
+                  </span>
+                  <span className="text-[10px] text-orange-300 font-mono bg-orange-950/80 px-1 py-0.2 rounded border border-orange-700/50 ml-0.5">
+                    {orderViolationCycleIdx + 1}/{orderViolationModIds.length} ⚙️
+                  </span>
+                </button>
               </>
             )}
-            {missingDepsCount > 0 && (
+            {conflictModIds.length > 0 && (
               <>
                 <span>•</span>
-                <span className="flex items-center gap-1 text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
-                  <AlertTriangle className="w-3 h-3 text-rose-400" />
-                  {missingDepsCount} Missing Library Warnings
-                </span>
+                <button
+                  onClick={handleCycleConflicts}
+                  className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group"
+                  title="Haz clic para recorrer y centrar los mods con incompatibilidades exclusivas"
+                >
+                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition" />
+                  <span>
+                    {conflictModIds.length} {conflictModIds.length === 1 ? 'Incompatibilidad' : 'Incompatibilidades'}
+                  </span>
+                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.2 rounded border border-amber-700/50 ml-0.5">
+                    {conflictCycleIdx + 1}/{conflictModIds.length} ⚙️
+                  </span>
+                </button>
+              </>
+            )}
+            {missingDepModIds.length > 0 && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={handleCycleMissingDeps}
+                  className="flex items-center gap-1.5 text-rose-400 font-bold bg-rose-500/10 hover:bg-rose-500/20 px-2 py-0.5 rounded border border-rose-500/40 transition cursor-pointer shadow-sm group"
+                  title="Haz clic para recorrer y centrar los mods con librerías desactivadas"
+                >
+                  <AlertTriangle className="w-3 h-3 text-rose-400 group-hover:scale-110 transition" />
+                  <span>
+                    {missingDepModIds.length} {missingDepModIds.length === 1 ? 'Librería Desactivada' : 'Librerías Desactivadas'}
+                  </span>
+                  <span className="text-[10px] text-rose-300 font-mono bg-rose-950/80 px-1 py-0.2 rounded border border-rose-700/50 ml-0.5">
+                    {missingDepCycleIdx + 1}/{missingDepModIds.length} ⚙️
+                  </span>
+                </button>
               </>
             )}
           </p>
@@ -635,6 +745,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const disabledDependencies = missingActiveDependenciesMap[mod.mod_id];
                 const hasDisabledDependency = disabledDependencies && disabledDependencies.length > 0;
 
+                const orderViolationsForThisMod = loadOrderViolationsMap[mod.mod_id];
+                const hasOrderViolation = orderViolationsForThisMod && orderViolationsForThisMod.length > 0;
+
                 const isConflictPartner =
                   selectedMod &&
                   activeConflictsMap[selectedMod.mod_id] &&
@@ -648,7 +761,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
-                      hasDisabledDependency
+                      hasOrderViolation
+                        ? 'border-2 border-orange-500 bg-orange-950/50 shadow-lg shadow-orange-950/50 ring-1 ring-orange-500/40'
+                        : hasDisabledDependency
                         ? 'border-2 border-rose-500/80 bg-rose-950/30 shadow-md shadow-rose-950/30'
                         : isConflictPartner
                         ? 'border-2 border-amber-400 bg-amber-950/90 shadow-xl shadow-amber-900/60 ring-2 ring-amber-400/50 animate-pulse'
@@ -737,6 +852,20 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                               <AlertTriangle className="w-3 h-3 text-rose-400" />
                               <span>REQ OFF</span>
                             </span>
+                          )}
+
+                          {hasOrderViolation && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleJumpToMod(orderViolationsForThisMod[0].requiredModId);
+                              }}
+                              className="flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-orange-500/20 hover:bg-orange-500/40 text-orange-300 border border-orange-500/60 shrink-0 transition cursor-pointer shadow-sm"
+                              title={`⚠️ ORDEN INCORRECTO\n\nEste mod está cargando en la posición #${originalIndex + 1}, ANTES de su dependencia [${orderViolationsForThisMod[0].requiredModName}] (Posición #${orderViolationsForThisMod[0].requiredModIndex + 1}).\n\nHaz clic para saltar a la dependencia y corregir el orden.`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-orange-400 shrink-0" />
+                              <span>DEBE IR DESPUÉS DE: {orderViolationsForThisMod[0].requiredModName} ↗</span>
+                            </button>
                           )}
 
                           {hasExclusivityConflict && (
@@ -883,6 +1012,41 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </h3>
                 <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
               </div>
+
+              {/* Load Order Violation Warning Card */}
+              {loadOrderViolationsMap[selectedMod.mod_id] && loadOrderViolationsMap[selectedMod.mod_id].length > 0 && (
+                <div className="p-3 bg-orange-950/70 border-2 border-orange-500 rounded-xl space-y-2 text-xs shadow-lg">
+                  <div className="flex items-center justify-between font-bold text-orange-300">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-orange-400 shrink-0" />
+                      <span>Advertencia: Orden de Carga Incorrecto</span>
+                    </div>
+                    <span className="text-[10px] font-mono bg-orange-900/80 text-orange-200 px-2 py-0.5 rounded border border-orange-600">
+                      Posición #{mods.findIndex((m) => m.mod_id === selectedMod.mod_id) + 1}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-200 leading-relaxed">
+                    Este mod está cargando <b>ANTES</b> de su dependencia requerida{' '}
+                    <b className="text-orange-300">[{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}]</b> (Posición #{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModIndex + 1}). Debe ser colocado <b>DESPUÉS</b> en la lista para evitar errores.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleFixLoadOrderViolation(selectedMod.mod_id, loadOrderViolationsMap[selectedMod.mod_id][0].requiredModId)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      <span>Mover Después de {loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}</span>
+                    </button>
+                    <button
+                      onClick={() => handleJumpToMod(loadOrderViolationsMap[selectedMod.mod_id][0].requiredModId)}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-orange-300 border border-orange-800 rounded-lg text-xs font-bold transition cursor-pointer"
+                      title="Saltar a la dependencia requerida"
+                    >
+                      <span>Ver Dep ↗</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Disabled Dependency Warning Card */}
               {missingActiveDependenciesMap[selectedMod.mod_id] && missingActiveDependenciesMap[selectedMod.mod_id].length > 0 && (
