@@ -21,7 +21,7 @@ pub struct ModManifest {
 }
 
 /// Helper function to sanitize and clean raw mod ID strings.
-fn sanitize_mod_id(raw: &str) -> String {
+pub fn sanitize_mod_id(raw: &str) -> String {
     raw.trim()
         .trim_matches('\\')
         .trim_matches('/')

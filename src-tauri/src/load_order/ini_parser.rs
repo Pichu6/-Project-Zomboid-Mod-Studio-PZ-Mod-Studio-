@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::load_order::mod_info::sanitize_mod_id;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModListData {
@@ -57,8 +58,9 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
                         .trim_end_matches(',')
                         .trim();
 
-                    if !raw_id.is_empty() && raw_id != "{" && raw_id != "}" {
-                        active_mods.push(raw_id.to_string());
+                    let clean_id = sanitize_mod_id(raw_id);
+                    if !clean_id.is_empty() && clean_id != "{" && clean_id != "}" {
+                        active_mods.push(clean_id);
                     }
                 }
             }
@@ -76,7 +78,7 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
                     if parts.len() == 2 {
                         active_mods = parts[1]
                             .split(';')
-                            .map(|s| s.trim().to_string())
+                            .map(|s| sanitize_mod_id(s.trim()))
                             .filter(|s| !s.is_empty())
                             .collect();
                     }
@@ -92,7 +94,7 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
 }
 
 /// Writes active mod load order list back to Zomboid/mods/default.txt (Project Zomboid's actual primary active mods file)
-/// using exact Project Zomboid Lua table format (`mod = ModID,`), as well as ModListData.ini, loadorder.ini, and modgroups.ini.
+/// in exact Project Zomboid Lua table format (`mod = ModID,` sanitized without quotes), as well as ModListData.ini, loadorder.ini, and modgroups.ini.
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let default_txt_path = resolve_default_txt_path(ini_path);
 
@@ -105,13 +107,12 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
         }
     }
 
-    // 1. Primary write to Zomboid/mods/default.txt in exact Project Zomboid Lua table format!
+    // 1. Primary write to Zomboid/mods/default.txt in exact native Project Zomboid Lua format!
     let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
     for mod_id in active_mods {
-        if mod_id.contains('/') || mod_id.contains('\\') || mod_id.contains(' ') {
-            default_txt_content.push_str(&format!("    mod = \"{}\",\n", mod_id));
-        } else {
-            default_txt_content.push_str(&format!("    mod = {},\n", mod_id));
+        let clean_id = sanitize_mod_id(mod_id);
+        if !clean_id.is_empty() {
+            default_txt_content.push_str(&format!("    mod = {},\n", clean_id));
         }
     }
     default_txt_content.push_str("}\n\nmaps\n{\n}\n");
@@ -124,7 +125,8 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             let lua_dir = zomboid_dir.join("Lua");
             let _ = fs::create_dir_all(&lua_dir);
 
-            let mods_joined = active_mods.join(";");
+            let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
+            let mods_joined = clean_mods.join(";");
             let ini_content = format!("[ModList]\nactiveMods={}\n", mods_joined);
             let _ = fs::write(lua_dir.join("ModListData.ini"), &ini_content);
 
@@ -134,7 +136,7 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
             let modgroups_content = format!("[ModGroups]\nactive={}\n", mods_joined);
             let _ = fs::write(lua_dir.join("modgroups.ini"), modgroups_content);
 
-            let active_lines = active_mods.join("\n");
+            let active_lines = clean_mods.join("\n");
             let _ = fs::write(lua_dir.join("ModLoadOrderSorter.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("mod_order.txt"), &active_lines);
             let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
