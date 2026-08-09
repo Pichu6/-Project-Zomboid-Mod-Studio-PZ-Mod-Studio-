@@ -277,6 +277,15 @@ pub fn apply_known_dependency_heuristics(manifest: &mut ModManifest) {
         if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
             manifest.require.push("modoptions".to_string());
         }
+        if lower_id.contains("2.0") || lower_id.contains("main") {
+            if !manifest.incompatible.iter().any(|i| i.to_lowercase() == "arsenal(26)gunfighter") {
+                manifest.incompatible.push("Arsenal(26)GunFighter".to_string());
+            }
+        } else {
+            if !manifest.incompatible.iter().any(|i| i.to_lowercase().contains("main mod 2.0")) {
+                manifest.incompatible.push("Arsenal(26)GunFighter[MAIN MOD 2.0]".to_string());
+            }
+        }
     }
 
     // 3. Brita's Armor Pack (id: Brita_Armor, workshop: 2460154811)

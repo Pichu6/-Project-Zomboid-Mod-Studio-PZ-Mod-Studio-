@@ -221,6 +221,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }, [mods]);
 
   const isMutuallyExclusiveVariant = (modA: ModInfo, modB: ModInfo): boolean => {
+    // 1. Check explicit incompatibility lists from mod.info or heuristics
+    if (modA.incompatible && modA.incompatible.some((inc: string) => findInstalledDependencyInMods(inc, [modB]) !== undefined)) {
+      return true;
+    }
+    if (modB.incompatible && modB.incompatible.some((inc: string) => findInstalledDependencyInMods(inc, [modA]) !== undefined)) {
+      return true;
+    }
+
     if (!modA.workshop_id || !modB.workshop_id || modA.workshop_id !== modB.workshop_id) {
       return false;
     }
@@ -228,10 +236,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const normA = normalizeModId(modA.mod_id);
     const normB = normalizeModId(modB.mod_id);
 
-    const aRequiresB = modA.dependencies.some((d) => normalizeModId(d) === normB);
-    const bRequiresA = modB.dependencies.some((d) => normalizeModId(d) === normA);
+    const aRequiresB = modA.dependencies.some((d) => normalizeModId(d) === normB || findInstalledDependencyInMods(d, [modB]) !== undefined);
+    const bRequiresA = modB.dependencies.some((d) => normalizeModId(d) === normA || findInstalledDependencyInMods(d, [modA]) !== undefined);
 
-    if (aRequiresB || bRequiresA || modA.is_library || modB.is_library) {
+    if (aRequiresB || bRequiresA) {
+      return false;
+    }
+
+    if (modA.is_map_mod || modB.is_map_mod) {
       return false;
     }
 
@@ -240,7 +252,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const idA = modA.mod_id.toLowerCase();
     const idB = modB.mod_id.toLowerCase();
 
-    const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only'];
+    const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only', 'main mod', '2.0', '1.0', 'gunfighter'];
 
     const matchesA = variantKeywords.some((k) => nameA.includes(k) || idA.includes(k));
     const matchesB = variantKeywords.some((k) => nameB.includes(k) || idB.includes(k));
