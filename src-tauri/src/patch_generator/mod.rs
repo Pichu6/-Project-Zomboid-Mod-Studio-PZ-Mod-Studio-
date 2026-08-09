@@ -289,8 +289,8 @@ pub fn prepare_carrier_mod(user_zomboid_dir: &str) -> Result<String, String> {
 
     let png_256 = get_preview_png_bytes();
 
-    // 1. Create Zomboid/Workshop/Z_PZModStudio_Carrier (Primary location read by PZ Workshop Upload UI)
-    let workshop_item_dir = Path::new(user_zomboid_dir).join("Workshop").join("Z_PZModStudio_Carrier");
+    // 1. Create Zomboid/Workshop/PZModStudioCarrier (Primary location read by PZ Workshop Upload UI)
+    let workshop_item_dir = Path::new(user_zomboid_dir).join("Workshop").join("PZModStudioCarrier");
     let _ = fs::remove_dir_all(&workshop_item_dir);
     fs::create_dir_all(&workshop_item_dir).map_err(|e| e.to_string())?;
 
@@ -324,8 +324,8 @@ author=PZ Mod Studio\r\n";
     let _ = fs::write(carrier_mod_dir.join("poster.png"), &png_256);
     let _ = fs::write(carrier_mod_dir.join("icon.png"), &png_256);
 
-    // 2. Also create Zomboid/mods/Z_PZModStudio_Carrier as secondary backup
-    let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
+    // 2. Also create Zomboid/mods/PZModStudioCarrier as secondary backup
+    let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("PZModStudioCarrier");
     if let Ok(_) = fs::create_dir_all(&local_mods_dir) {
         let _ = fs::write(local_mods_dir.join("mod.info"), mod_info);
         let _ = fs::write(local_mods_dir.join("poster.png"), &png_256);
@@ -341,13 +341,15 @@ author=PZ Mod Studio\r\n";
     for pz_dir in &pz_installs {
         let install_path = Path::new(pz_dir);
         if install_path.exists() {
-            let debug_ws = install_path.join("Workshop").join("Z_PZModStudio_Carrier");
-            if let Ok(_) = fs::create_dir_all(debug_ws.join("Contents").join("mods").join("Z_PZModStudio_Carrier")) {
-                let _ = fs::write(debug_ws.join("workshop.txt"), workshop_txt);
-                let _ = fs::write(debug_ws.join("preview.png"), &png_256);
-                let c_mod = debug_ws.join("Contents").join("mods").join("Z_PZModStudio_Carrier");
-                let _ = fs::write(c_mod.join("mod.info"), mod_info);
-                let _ = fs::write(c_mod.join("poster.png"), &png_256);
+            for sub in &["Workshop", "media/workshop"] {
+                let debug_ws = install_path.join(sub).join("PZModStudioCarrier");
+                if let Ok(_) = fs::create_dir_all(debug_ws.join("Contents").join("mods").join("PZModStudioCarrier")) {
+                    let _ = fs::write(debug_ws.join("workshop.txt"), workshop_txt);
+                    let _ = fs::write(debug_ws.join("preview.png"), &png_256);
+                    let c_mod = debug_ws.join("Contents").join("mods").join("PZModStudioCarrier");
+                    let _ = fs::write(c_mod.join("mod.info"), mod_info);
+                    let _ = fs::write(c_mod.join("poster.png"), &png_256);
+                }
             }
         }
     }
