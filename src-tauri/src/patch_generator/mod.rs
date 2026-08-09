@@ -305,8 +305,6 @@ visibility=public\r\n";
     let merged_mod_dir = workshop_item_dir.join("Contents").join("mods").join("Z_PZModStudio_MergedPatch");
     fs::create_dir_all(&merged_mod_dir).map_err(|e| e.to_string())?;
 
-    let contents_dir = workshop_item_dir.join("Contents");
-
     let mod_info = "name=PZ Mod Studio Carrier Patch\r\n\
 id=Z_PZModStudio_MergedPatch\r\n\
 description=Carrier mod container for PZ Mod Studio 3-Way merges and B42 polyfill shims.\r\n\
@@ -323,10 +321,6 @@ author=PZ Mod Studio\r\n";
     fs::write(merged_mod_dir.join("mod.info"), mod_info).map_err(|e| e.to_string())?;
     let _ = fs::write(merged_mod_dir.join("poster.png"), &png_256);
     let _ = fs::write(merged_mod_dir.join("icon.png"), &png_256);
-
-    let _ = fs::write(contents_dir.join("mod.info"), mod_info);
-    let _ = fs::write(contents_dir.join("poster.png"), &png_256);
-    let _ = fs::write(contents_dir.join("icon.png"), &png_256);
 
     // 2. Also create Zomboid/mods/Z_PZModStudio_Carrier as secondary backup
     let local_mods_dir = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Carrier");
