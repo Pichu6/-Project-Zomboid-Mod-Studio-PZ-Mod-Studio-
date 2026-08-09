@@ -1090,7 +1090,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   title="Haz clic para centrar e iluminar este mod en la lista izquierda"
                 >
                   <span>{selectedMod.name}</span>
-                  <span className="text-xs text-slate-500 font-mono font-normal">↗</span>
                 </h3>
                 <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
               </div>
@@ -1124,7 +1123,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-orange-300 border border-orange-800 rounded-lg text-xs font-bold transition cursor-pointer"
                       title="Saltar a la dependencia requerida"
                     >
-                      <span>Ver Dep ↗</span>
+                      <span>Ver Dep</span>
                     </button>
                   </div>
                 </div>
@@ -1154,7 +1153,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800 rounded-lg text-xs font-bold transition cursor-pointer"
                       title="Saltar a la librería en la lista"
                     >
-                      <span>Ver Mod ↗</span>
+                      <span>Ver Mod</span>
                     </button>
                   </div>
                 </div>
@@ -1176,7 +1175,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       onClick={() => handleJumpToMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
                     >
-                      <span>Ver Mod en Conflicto ↗</span>
+                      <span>Ver Mod en Conflicto</span>
                     </button>
                     <button
                       onClick={() => handleToggleSingleMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
@@ -1267,11 +1266,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
                           ) : null}
                           <span>{displayName}</span>
-                          {matchedInstalledMod ? (
-                            <span className="text-[10px] text-cyan-400 font-bold">↗</span>
-                          ) : (
-                            <ExternalLink className="w-3.5 h-3.5 text-red-400" />
-                          )}
                         </button>
                       );
                     })
@@ -1304,7 +1298,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       >
                         <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                         <span>{depMod.name}</span>
-                        <span className="text-[9px] text-purple-400 font-bold">↗</span>
                       </button>
                     ))
                   ) : (
