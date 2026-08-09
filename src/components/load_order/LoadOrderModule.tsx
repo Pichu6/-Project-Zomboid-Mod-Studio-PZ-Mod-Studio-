@@ -326,6 +326,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return map;
   }, [mods]);
 
+  const legacyB41ModsMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const m of mods) {
+      if (m.pzversion) {
+        const cleanV = m.pzversion.trim();
+        if (cleanV.startsWith('41') || cleanV.startsWith('40') || cleanV === '41' || cleanV === '40') {
+          map[m.mod_id] = true;
+        }
+      }
+    }
+    return map;
+  }, [mods]);
+
   const loadOrderViolationsMap = useMemo(() => {
     const map: Record<string, { requiredModId: string; requiredModName: string; requiredModIndex: number }[]> = {};
 
@@ -1033,6 +1046,18 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                               <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                             </button>
                           )}
+
+                          {/* Medio 3: Legacy B41 Mod (Yellow) */}
+                          {legacyB41ModsMap[mod.mod_id] && (
+                            <span
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/60 shrink-0 shadow-sm"
+                              title={`⚠️ MOD DE BUILD 41 DETECTADO\n\nEste mod [${mod.name}] fue desarrollado para Project Zomboid Build 41 (${mod.pzversion}). Puede presentar incompatibilidades en Build 42.`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>Build 41 Legacy</span>
+                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                            </span>
+                          )}
                         </div>
                         <div className={`text-[9px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
                           ID: {mod.mod_id}
@@ -1255,6 +1280,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       <span>Desactivar</span>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Legacy Build 41 Warning Card */}
+              {legacyB41ModsMap[selectedMod.mod_id] && (
+                <div className="p-3 bg-amber-950/70 border-2 border-amber-500 rounded-xl space-y-2 text-xs shadow-lg">
+                  <div className="flex items-center justify-between font-bold text-amber-300">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Advertencia: Mod Antiguo de Build 41 ({selectedMod.pzversion || 'Build 41'})</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-200 leading-relaxed">
+                    Este mod fue diseñado para <b>Build 41</b>. Puede requerir soluciones de compatibilidad o polyfills de Lua para la <b>Build 42</b>. Ve a la pestaña <b>Script Merger</b> para analizar y generar parches automáticos.
+                  </p>
                 </div>
               )}
 
