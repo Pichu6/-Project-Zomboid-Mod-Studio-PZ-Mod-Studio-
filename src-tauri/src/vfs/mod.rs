@@ -118,32 +118,44 @@ pub fn validate_paths(mut paths: StudioPaths) -> StudioPaths {
 }
 
 /// Scans active mods to detect relative file path collisions.
-/// Filters out conflicts that have already been resolved by Master Patch (Z_PZModStudio_MergedPatch).
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     let mut file_map: HashMap<String, Vec<CompetingModFileRaw>> = HashMap::new();
     let mut active_mods: Vec<String> = Vec::new();
-
-    // Collect relative paths already patched inside Z_PZModStudio_MergedPatch
-    let mut master_patched_files: HashSet<String> = HashSet::new();
-    let master_patch_dir = Path::new(&paths.user_zomboid_dir).join("mods").join("Z_PZModStudio_MergedPatch");
-
-    if master_patch_dir.exists() {
-        for entry in WalkDir::new(&master_patch_dir).into_iter().filter_map(|e| e.ok()) {
-            if entry.path().is_file() {
-                if let Some(rel) = extract_relative_media_path(entry.path()) {
-                    master_patched_files.insert(rel);
-                }
-            }
-        }
-    }
 
     if let Ok(ini_data) = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path) {
         active_mods = ini_data
             .active_mods
             .into_iter()
-            .filter(|s| s != "Z_PZModStudio_MergedPatch")
+            .filter(|s| s != "Z_PZModStudio_MergedPatch" && s != "PZModStudioCarrier")
             .collect();
     }
+
+    let is_mod_active = |resolved_id: &str, path: &Path| -> bool {
+        if active_mods.is_empty() {
+            return true;
+        }
+
+        let clean_target = resolved_id.trim().to_lowercase();
+        let sanitized_target = crate::load_order::mod_info::sanitize_mod_id(&clean_target);
+
+        for active in &active_mods {
+            let clean_act = active.trim().to_lowercase();
+            let sanitized_act = crate::load_order::mod_info::sanitize_mod_id(&clean_act);
+
+            if clean_act == clean_target || sanitized_act == sanitized_target {
+                return true;
+            }
+        }
+
+        // Fallback: check workshop numeric id from path
+        if let Some(ws_id) = extract_mod_id_from_path(path) {
+            if active_mods.contains(&ws_id) {
+                return true;
+            }
+        }
+
+        false
+    };
 
     let workshop_dir = Path::new(&paths.workshop_dir);
     if workshop_dir.exists() {
@@ -151,15 +163,13 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
             let path = entry.path();
             if path.is_file() {
                 let path_str = path.to_string_lossy();
-                if path_str.ends_with(".lua") || path_str.ends_with(".txt") {
+                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) && !path_str.contains("Z_PZModStudio_MergedPatch") {
                     if let Some(rel_path) = extract_relative_media_path(path) {
-                        // Skip if this file has already been merged into Master Patch
-                        if master_patched_files.contains(&rel_path) {
-                            continue;
-                        }
+                        let mod_id = resolve_specific_mod_id(path)
+                            .or_else(|| extract_mod_id_from_path(path))
+                            .unwrap_or_else(|| "workshop_mod".to_string());
 
-                        let mod_id = extract_mod_id_from_path(path).unwrap_or_else(|| "workshop_mod".to_string());
-                        if active_mods.is_empty() || active_mods.contains(&mod_id) {
+                        if is_mod_active(&mod_id, path) {
                             let mod_name = resolve_specific_mod_name(path, &mod_id);
                             if let Ok(content) = fs::read_to_string(path) {
                                 file_map.entry(rel_path).or_default().push(CompetingModFileRaw {
@@ -182,15 +192,16 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
             let path = entry.path();
             if path.is_file() {
                 let path_str = path.to_string_lossy();
-                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) && !path_str.contains("Z_PZModStudio_MergedPatch") {
+                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) 
+                   && !path_str.contains("Z_PZModStudio_MergedPatch") 
+                   && !path_str.contains("Z_PZModStudio_Carrier")
+                   && !path_str.contains("PZModStudioCarrier") {
                     if let Some(rel_path) = extract_relative_media_path(path) {
-                        // Skip if this file has already been merged into Master Patch
-                        if master_patched_files.contains(&rel_path) {
-                            continue;
-                        }
+                        let mod_id = resolve_specific_mod_id(path)
+                            .or_else(|| extract_local_mod_id(path))
+                            .unwrap_or_else(|| "local_mod".to_string());
 
-                        let mod_id = extract_local_mod_id(path).unwrap_or_else(|| "local_mod".to_string());
-                        if active_mods.is_empty() || active_mods.contains(&mod_id) {
+                        if is_mod_active(&mod_id, path) {
                             let mod_name = resolve_specific_mod_name(path, &mod_id);
                             if let Ok(content) = fs::read_to_string(path) {
                                 file_map.entry(rel_path).or_default().push(CompetingModFileRaw {
@@ -277,6 +288,29 @@ fn find_first_differing_line(base: &str, files: &[CompetingModFileRaw]) -> usize
     }
 
     1
+}
+
+fn resolve_specific_mod_id(file_path: &Path) -> Option<String> {
+    let mut current = file_path.parent();
+    while let Some(dir) = current {
+        let info_path = dir.join("mod.info");
+        if info_path.exists() {
+            if let Ok(content) = fs::read_to_string(&info_path) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("id=") {
+                        let id_val = trimmed[3..].trim().to_string();
+                        if !id_val.is_empty() {
+                            return Some(id_val);
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        current = dir.parent();
+    }
+    None
 }
 
 fn resolve_specific_mod_name(file_path: &Path, fallback_mod_id: &str) -> String {
