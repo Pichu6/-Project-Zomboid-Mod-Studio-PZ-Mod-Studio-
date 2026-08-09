@@ -9,7 +9,7 @@ pub struct ModListData {
 }
 
 /// Reads active mods from Zomboid/mods/default.txt (Project Zomboid's primary active mods file)
-/// supporting all syntax variants (`mod = FH,`, `mod "FH",`, `mod = "FH",`).
+/// supporting all syntax variants (`mod = FH,`, `mod "FH",`, `mod = "FH",`, `mod 'FH',`).
 pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
     let ini_p = Path::new(ini_path);
     let mut active_mods = Vec::new();
@@ -82,7 +82,7 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
 }
 
 /// Writes active mod load order list back to Zomboid/mods/default.txt (Project Zomboid's actual primary active mods file)
-/// in exact Project Zomboid Lua table format (`mod = ModID,`), as well as ModListData.ini, loadorder.ini, and modgroups.ini.
+/// in 100% valid quoted Lua string format (`mod = "ModID",`), preventing Lua syntax crashes on IDs with slashes/digits.
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let path = Path::new(ini_path);
     if let Some(parent) = path.parent() {
@@ -99,12 +99,17 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
 
         if let Some(mods_dir) = default_txt_path.parent() {
             let _ = fs::create_dir_all(mods_dir);
+            // Ensure Build 42 migration lock file reset-mods-42_00.txt exists so game never wipes default.txt!
+            let lock_file = mods_dir.join("reset-mods-42_00.txt");
+            if !lock_file.exists() {
+                let _ = fs::write(&lock_file, "If this file does not exist, default.txt will be reset to empty (no mods active).");
+            }
         }
 
-        // 1. Primary write to Zomboid/mods/default.txt in exact Project Zomboid Lua table format!
+        // 1. Primary write to Zomboid/mods/default.txt in 100% valid Lua string syntax!
         let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
         for mod_id in active_mods {
-            default_txt_content.push_str(&format!("    mod = {},\n", mod_id));
+            default_txt_content.push_str(&format!("    mod = \"{}\",\n", mod_id));
         }
         default_txt_content.push_str("}\n\nmaps\n{\n}\n");
 
