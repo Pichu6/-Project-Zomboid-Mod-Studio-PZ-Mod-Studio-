@@ -92,7 +92,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const handleDeletePackage = async (folderName: string) => {
     if (confirm(`¿Estás seguro de que deseas eliminar el paquete "${folderName}" del disco?`)) {
       await TauriService.deleteMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName);
-      await fetchPackages();
+      if (paths.user_zomboid_dir) {
+        const remainingPackages = await TauriService.listMergedPackages(paths.user_zomboid_dir, paths.mod_list_ini_path);
+        setPackages(remainingPackages);
+        if (remainingPackages.length > 0) {
+          setSelectedPackageFolder(remainingPackages[0].folder_name);
+        }
+      }
       await onRescan();
     }
   };

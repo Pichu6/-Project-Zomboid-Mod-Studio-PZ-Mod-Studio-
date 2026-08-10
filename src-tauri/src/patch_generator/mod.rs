@@ -566,7 +566,23 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
             if path.is_dir() {
                 let folder_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
                 if folder_name.starts_with("Z_PZModStudio_") && !folder_name.contains("Carrier") {
-                    let display_name = folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " ");
+                    let display_name = if let Ok(info_str) = fs::read_to_string(path.join("mod.info")) {
+                        let mut parsed_name = None;
+                        for line in info_str.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with("name=") {
+                                let val = trimmed[5..].trim().to_string();
+                                if !val.is_empty() {
+                                    parsed_name = Some(val);
+                                    break;
+                                }
+                            }
+                        }
+                        parsed_name.unwrap_or_else(|| folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " "))
+                    } else {
+                        folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " ")
+                    };
+
                     let meta_path = path.join("patch_metadata.json");
                     
                     let (is_packaged, created_at, packaged_mods, merged_files) = if meta_path.exists() {
@@ -595,18 +611,6 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
                 }
             }
         }
-    }
-
-    if packages.is_empty() {
-        packages.push(MergedPackageInfo {
-            folder_name: "Z_PZModStudio_MergedPatch".to_string(),
-            display_name: "Master Patch".to_string(),
-            mod_id: "Z_PZModStudio_MergedPatch".to_string(),
-            is_packaged: false,
-            created_at: None,
-            packaged_mods: Vec::new(),
-            merged_files: Vec::new(),
-        });
     }
 
     packages
