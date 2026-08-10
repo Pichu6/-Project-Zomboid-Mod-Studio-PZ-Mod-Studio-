@@ -7,13 +7,15 @@ interface StudioSidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   conflictCount: number;
   errorCardCount: number;
+  draftPackageCount?: number;
 }
 
 export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   activeTab,
   setActiveTab,
-  conflictCount,
+  conflictCount: _conflictCount,
   errorCardCount,
+  draftPackageCount = 0,
 }) => {
   const navItems = [
     {
@@ -27,7 +29,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       id: 'MERGER' as ActiveTab,
       label: 'Mod Merger',
       icon: GitCompare,
-      badge: conflictCount > 0 ? conflictCount : null,
+      badge: draftPackageCount > 0 ? draftPackageCount : null,
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
     },
     {

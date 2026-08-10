@@ -615,11 +615,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               <div className="flex items-center gap-2 pt-1">
                 <button
                   onClick={handleGenerateMasterPatch}
-                  disabled={isGenerating}
-                  className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold py-2.5 px-4 rounded-lg transition cursor-pointer shadow-lg"
+                  disabled={isGenerating || !!patchStatus?.is_packaged}
+                  className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2.5 px-4 rounded-lg transition shadow-lg ${
+                    patchStatus?.is_packaged
+                      ? 'bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-800'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white cursor-pointer'
+                  }`}
+                  title={patchStatus?.is_packaged ? 'El paquete ya está empaquetado y publicado. Haz clic en "Des-mergear / Abrir para Editar" para modificarlo.' : 'Empaqueta y publica el paquete en la Mod List'}
                 >
                   <Package className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                  <span>{isGenerating ? 'Empaquetando...' : '📦 Empaquetar y Publicar en Mod List'}</span>
+                  <span>{isGenerating ? 'Empaquetando...' : patchStatus?.is_packaged ? '📦 Ya Empaquetado y Publicado' : '📦 Empaquetar y Publicar en Mod List'}</span>
                 </button>
 
                 {patchStatus?.is_packaged && (

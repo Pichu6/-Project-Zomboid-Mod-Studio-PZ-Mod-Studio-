@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard } from './types';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
@@ -31,6 +31,7 @@ export const App: React.FC = () => {
     files_written: number;
     polyfills_injected: number;
   } | null>(null);
+  const [draftPackageCount, setDraftPackageCount] = useState<number>(0);
 
   // Studio Directory Paths State (Persistent Profile)
   const [paths, setPaths] = useState<StudioPathsUI>({
@@ -40,6 +41,22 @@ export const App: React.FC = () => {
     mod_list_ini_path: '',
     is_valid: false,
   });
+
+  const refreshDraftPackageCount = useCallback(async () => {
+    if (paths.is_valid && paths.user_zomboid_dir) {
+      try {
+        const pkgs = await TauriService.listMergedPackages(paths.user_zomboid_dir, paths.mod_list_ini_path);
+        const openDrafts = pkgs.filter((p) => !p.is_packaged).length;
+        setDraftPackageCount(openDrafts);
+      } catch (e) {
+        console.error("Failed to list merged packages for draft count:", e);
+      }
+    }
+  }, [paths.is_valid, paths.user_zomboid_dir, paths.mod_list_ini_path]);
+
+  useEffect(() => {
+    refreshDraftPackageCount();
+  }, [refreshDraftPackageCount, mods]);
 
   // Load saved profile or auto-detect paths from Rust backend on initial load
   useEffect(() => {
@@ -333,6 +350,7 @@ export const App: React.FC = () => {
           setActiveTab={setActiveTab}
           conflictCount={conflicts.length}
           errorCardCount={errorCards.length}
+          draftPackageCount={draftPackageCount}
         />
 
         {/* Tab Modules */}
