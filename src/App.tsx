@@ -111,7 +111,32 @@ export const App: React.FC = () => {
     if (paths.is_valid) {
       const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
       if (allSubscribedMods.length > 0) {
-        setMods([...allSubscribedMods]);
+        const scannedMap = new Map<string, ModInfo>();
+        allSubscribedMods.forEach((m) => scannedMap.set(m.mod_id, m));
+
+        const updatedMods: ModInfo[] = [];
+
+        // 1. Maintain existing load order and enabled states, refreshing metadata from disk
+        for (const existing of mods) {
+          const scanned = scannedMap.get(existing.mod_id);
+          if (scanned) {
+            updatedMods.push({
+              ...scanned,
+              enabled: existing.enabled, // Preserve user's toggled ON/OFF state!
+            });
+            scannedMap.delete(existing.mod_id);
+          }
+        }
+
+        // 2. Append newly subscribed mods to the bottom of the list (disabled by default)
+        for (const [_, newMod] of scannedMap) {
+          updatedMods.push({
+            ...newMod,
+            enabled: false,
+          });
+        }
+
+        setMods(updatedMods);
       }
     }
   };
