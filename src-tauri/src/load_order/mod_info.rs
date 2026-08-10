@@ -479,18 +479,24 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
             for entry in WalkDir::new(&user_mods_path).max_depth(8).into_iter().filter_map(|e| e.ok()) {
                 if entry.file_name() == "mod.info" {
                     if let Some(manifest) = parse_mod_info(entry.path()) {
-                        // Synthetic fusion packages in DRAFT mode must NOT appear in Mod List tab!
+                        // Synthetic fusion packages that are NOT explicitly PUBLICADO (is_packaged == true) must NOT appear in Mod List tab!
                         if manifest.id.starts_with("Z_PZModStudio_") && !manifest.id.contains("Carrier") {
                             let mod_dir = entry.path().parent().unwrap_or(entry.path());
                             let meta_path = mod_dir.join("patch_metadata.json");
                             if meta_path.exists() {
                                 if let Ok(meta_str) = fs::read_to_string(&meta_path) {
                                     if let Ok(meta_json) = serde_json::from_str::<serde_json::Value>(&meta_str) {
-                                        if meta_json["is_packaged"].as_bool() == Some(false) {
-                                            continue; // Skip DRAFT package!
+                                        if meta_json["is_packaged"].as_bool() != Some(true) {
+                                            continue; // Skip DRAFT / un-packaged package!
                                         }
+                                    } else {
+                                        continue;
                                     }
+                                } else {
+                                    continue;
                                 }
+                            } else {
+                                continue;
                             }
                         }
                         all_mods_map.insert(manifest.id.clone(), manifest);

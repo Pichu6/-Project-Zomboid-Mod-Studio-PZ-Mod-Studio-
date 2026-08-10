@@ -536,63 +536,76 @@ pub fn get_master_patch_status(user_zomboid_dir: &str, mod_list_ini_path: &str, 
 
 pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) -> Vec<MergedPackageInfo> {
     let mut packages = Vec::new();
+    let mut seen_folders = std::collections::HashSet::new();
+
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if user_dirs.is_empty() {
         return packages;
     }
-    let mods_dir = user_dirs[0].join("mods");
-    if !mods_dir.exists() {
-        return packages;
-    }
 
-    if let Ok(entries) = fs::read_dir(&mods_dir) {
-        for entry in entries.filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_dir() {
-                let folder_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                if folder_name.starts_with("Z_PZModStudio_") && !folder_name.contains("Carrier") {
-                    let display_name = if let Ok(info_str) = fs::read_to_string(path.join("mod.info")) {
-                        let mut parsed_name = None;
-                        for line in info_str.lines() {
-                            let trimmed = line.trim();
-                            if trimmed.starts_with("name=") {
-                                let val = trimmed[5..].trim().to_string();
-                                if !val.is_empty() {
-                                    parsed_name = Some(val);
-                                    break;
+    for user_dir in &user_dirs {
+        let mods_dir = user_dir.join("mods");
+        if !mods_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&mods_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    let folder_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    if folder_name.starts_with("Z_PZModStudio_") && !folder_name.contains("Carrier") {
+                        if !seen_folders.insert(folder_name.clone()) {
+                            continue;
+                        }
+
+                        let display_name = if let Ok(info_str) = fs::read_to_string(path.join("mod.info")) {
+                            let mut parsed_name = None;
+                            for line in info_str.lines() {
+                                let trimmed = line.trim();
+                                if trimmed.starts_with("name=") {
+                                    let val = trimmed[5..].trim().to_string();
+                                    if !val.is_empty() {
+                                        parsed_name = Some(val);
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                        parsed_name.unwrap_or_else(|| folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " "))
-                    } else {
-                        folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " ")
-                    };
+                            parsed_name.unwrap_or_else(|| {
+                                let clean = folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " ");
+                                format!("PZ Mod Studio Patch: {}", clean)
+                            })
+                        } else {
+                            let clean = folder_name["Z_PZModStudio_".len()..].to_string().replace('_', " ");
+                            format!("PZ Mod Studio Patch: {}", clean)
+                        };
 
-                    let meta_path = path.join("patch_metadata.json");
-                    
-                    let (is_packaged, created_at, packaged_mods, merged_files) = if meta_path.exists() {
-                        if let Ok(content) = fs::read_to_string(&meta_path) {
-                            if let Ok(meta) = serde_json::from_str::<MasterPatchMetadata>(&content) {
-                                (meta.is_packaged, Some(meta.created_at), meta.packaged_mod_ids, meta.merged_file_paths)
+                        let meta_path = path.join("patch_metadata.json");
+                        
+                        let (is_packaged, created_at, packaged_mods, merged_files) = if meta_path.exists() {
+                            if let Ok(content) = fs::read_to_string(&meta_path) {
+                                if let Ok(meta) = serde_json::from_str::<MasterPatchMetadata>(&content) {
+                                    (meta.is_packaged, Some(meta.created_at), meta.packaged_mod_ids, meta.merged_file_paths)
+                                } else {
+                                    (false, None, Vec::new(), Vec::new())
+                                }
                             } else {
                                 (false, None, Vec::new(), Vec::new())
                             }
                         } else {
                             (false, None, Vec::new(), Vec::new())
-                        }
-                    } else {
-                        (false, None, Vec::new(), Vec::new())
-                    };
+                        };
 
-                    packages.push(MergedPackageInfo {
-                        folder_name: folder_name.clone(),
-                        display_name,
-                        mod_id: folder_name,
-                        is_packaged,
-                        created_at,
-                        packaged_mods,
-                        merged_files,
-                    });
+                        packages.push(MergedPackageInfo {
+                            folder_name: folder_name.clone(),
+                            display_name,
+                            mod_id: folder_name,
+                            is_packaged,
+                            created_at,
+                            packaged_mods,
+                            merged_files,
+                        });
+                    }
                 }
             }
         }
@@ -602,12 +615,12 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
 }
 
 pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, name: &str) -> Result<MergedPackageInfo, String> {
-    let clean_name = name.trim().replace(' ', "_");
-    if clean_name.is_empty() {
+    let clean_sub = name.trim().replace("PZ Mod Studio Patch: ", "").replace(' ', "_");
+    if clean_sub.is_empty() {
         return Err("El nombre del paquete no puede estar vacío.".to_string());
     }
-    let folder_name = format!("Z_PZModStudio_{}", clean_name);
-    let display_name = name.trim().to_string();
+    let folder_name = format!("Z_PZModStudio_{}", clean_sub);
+    let display_name = format!("PZ Mod Studio Patch: {}", clean_sub.replace('_', " "));
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if user_dirs.is_empty() {
@@ -656,30 +669,34 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
 }
 
 pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, old_folder: &str, new_name: &str) -> Result<MergedPackageInfo, String> {
-    let clean_new = new_name.trim().replace(' ', "_");
-    if clean_new.is_empty() {
+    let clean_sub = new_name.trim().replace("PZ Mod Studio Patch: ", "").replace(' ', "_");
+    if clean_sub.is_empty() {
         return Err("El nuevo nombre no puede estar vacío.".to_string());
     }
-    let new_folder = format!("Z_PZModStudio_{}", clean_new);
+    let new_folder = format!("Z_PZModStudio_{}", clean_sub);
+    let display_name = format!("PZ Mod Studio Patch: {}", clean_sub.replace('_', " "));
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if user_dirs.is_empty() {
         return Err("Directorio Zomboid no válido.".to_string());
     }
-    let old_path = user_dirs[0].join("mods").join(old_folder);
-    let new_path = user_dirs[0].join("mods").join(&new_folder);
-
-    if old_path.exists() {
-        fs::rename(&old_path, &new_path).map_err(|e| e.to_string())?;
-    } else {
-        fs::create_dir_all(&new_path).map_err(|e| e.to_string())?;
-    }
 
     let mod_info_content = format!(
         "name={}\r\nid={}\r\ndescription=Paquete de fusión de compatibilidad sintetizado por PZ Mod Studio.\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\npzversion=41,42\r\nversionMin=41.0\r\nauthor=PZ Mod Studio\r\n",
-        new_name.trim(), new_folder
+        display_name, new_folder
     );
-    let _ = fs::write(new_path.join("mod.info"), &mod_info_content);
+
+    for dir in &user_dirs {
+        let old_p = dir.join("mods").join(old_folder);
+        let new_p = dir.join("mods").join(&new_folder);
+        if old_p.exists() {
+            let _ = fs::rename(&old_p, &new_p);
+            let _ = fs::write(new_p.join("mod.info"), &mod_info_content);
+        } else {
+            let _ = fs::create_dir_all(&new_p);
+            let _ = fs::write(new_p.join("mod.info"), &mod_info_content);
+        }
+    }
 
     if !mod_list_ini_path.is_empty() {
         if let Ok(mut mod_list) = read_mod_list_ini(mod_list_ini_path) {
@@ -694,7 +711,7 @@ pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, ol
 
     Ok(MergedPackageInfo {
         folder_name: new_folder.clone(),
-        display_name: new_name.trim().to_string(),
+        display_name,
         mod_id: new_folder,
         is_packaged: false,
         created_at: None,
