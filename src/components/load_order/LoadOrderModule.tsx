@@ -389,22 +389,25 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     });
 
     mods.forEach((m, currentIdx) => {
-      if (!m.enabled || !m.dependencies || m.dependencies.length === 0) return;
+      if (!m.enabled) return;
+      const allOrderingDeps = [...(m.dependencies || []), ...(m.load_mod_after || [])];
+      if (allOrderingDeps.length === 0) return;
 
-      for (const depRaw of m.dependencies) {
-        const normReq = normalizeModId(depRaw);
-        const reqMod = mods.find((target) => normalizeModId(target.mod_id) === normReq);
+      for (const depRaw of allOrderingDeps) {
+        const reqMod = findInstalledDependencyInMods(depRaw, mods);
 
         if (reqMod && reqMod.enabled) {
-          const requiredIdx = modIndexMap[normReq];
+          const requiredIdx = mods.findIndex((t) => t.mod_id === reqMod.mod_id);
           // Load Order Violation: 'm' is ABOVE 'reqMod' in active load order (currentIdx < requiredIdx)
-          if (currentIdx < requiredIdx) {
+          if (requiredIdx !== -1 && currentIdx < requiredIdx) {
             if (!map[m.mod_id]) map[m.mod_id] = [];
-            map[m.mod_id].push({
-              requiredModId: reqMod.mod_id,
-              requiredModName: reqMod.name,
-              requiredModIndex: requiredIdx,
-            });
+            if (!map[m.mod_id].some((v) => v.requiredModId === reqMod.mod_id)) {
+              map[m.mod_id].push({
+                requiredModId: reqMod.mod_id,
+                requiredModName: reqMod.name,
+                requiredModIndex: requiredIdx,
+              });
+            }
           }
         }
       }
@@ -613,8 +616,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     });
 
     regularMods.forEach((m) => {
-      if (m.dependencies && m.dependencies.length > 0) {
-        m.dependencies.forEach((depRaw) => {
+      const allOrderingDeps = [...(m.dependencies || []), ...(m.load_mod_after || [])];
+      if (allOrderingDeps.length > 0) {
+        allOrderingDeps.forEach((depRaw) => {
           const parentMod = findInstalledDependencyInMods(depRaw, regularMods);
           if (parentMod && parentMod.mod_id !== m.mod_id) {
             // parentMod MUST load BEFORE m

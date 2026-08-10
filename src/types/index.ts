@@ -88,6 +88,7 @@ export interface ModInfo {
   poster_url?: string;
   url?: string;
   dependencies: string[]; // require= directives
+  load_mod_after?: string[]; // loadModAfter= directives (optional ordering hints)
   incompatible?: string[]; // incompatible= directives
   enabled: boolean;
   is_library?: boolean;

@@ -70,6 +70,16 @@ pub fn sort_dependencies_topologically(manifests: &[ModManifest]) -> DependencyA
                 }
             }
         }
+
+        // Optional load_mod_after ordering hints (do NOT trigger missing_deps if target is absent!)
+        for after in &m.load_mod_after {
+            if let Some(target_id) = find_manifest_id_by_req(after, manifests) {
+                if target_id != m.id {
+                    graph.entry(target_id.to_string()).or_default().push(m.id.clone());
+                    *in_degree.entry(m.id.clone()).or_insert(0) += 1;
+                }
+            }
+        }
     }
 
     // Kahn's algorithm for topological sorting

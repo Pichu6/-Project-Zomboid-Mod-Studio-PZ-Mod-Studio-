@@ -17,6 +17,7 @@ pub struct ModManifest {
     pub pzversion: Option<String>,
     pub url: Option<String>,
     pub require: Vec<String>,
+    pub load_mod_after: Vec<String>,
     pub incompatible: Vec<String>,
     pub icon_path: Option<String>,
     pub poster_url: Option<String>,
@@ -93,6 +94,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     let mut pzversion = None;
     let mut url = None;
     let mut require = Vec::new();
+    let mut load_mod_after = Vec::new();
     let mut incompatible = Vec::new();
     let mut poster_file = String::new();
     let mut icon_file = String::new();
@@ -154,16 +156,16 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
             let req_str = trimmed[13..].trim();
             for s in req_str.split(',') {
                 let clean = sanitize_mod_id(s);
-                if !clean.is_empty() && !require.contains(&clean) {
-                    require.push(clean);
+                if !clean.is_empty() && !load_mod_after.contains(&clean) {
+                    load_mod_after.push(clean);
                 }
             }
         } else if trimmed.starts_with("load_mod_after=") {
             let req_str = trimmed[15..].trim();
             for s in req_str.split(',') {
                 let clean = sanitize_mod_id(s);
-                if !clean.is_empty() && !require.contains(&clean) {
-                    require.push(clean);
+                if !clean.is_empty() && !load_mod_after.contains(&clean) {
+                    load_mod_after.push(clean);
                 }
             }
         } else if trimmed.starts_with("incompatible=") {
@@ -263,6 +265,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         pzversion,
         url,
         require,
+        load_mod_after,
         incompatible,
         icon_path,
         poster_url,
@@ -512,6 +515,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                     pzversion: Some("42.0".to_string()),
                     url: None,
                     require: Vec::new(),
+                    load_mod_after: Vec::new(),
                     incompatible: Vec::new(),
                     icon_path: None,
                     poster_url: None,
