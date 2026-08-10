@@ -1062,8 +1062,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const isHighlighted = mod.mod_id === highlightedModId;
                 const isAssigningThis = assigningModId === mod.mod_id;
 
-                const isMultiPackage = mod.workshop_id ? multiModPackageMap[mod.workshop_id] : false;
-                const packageColor = mod.workshop_id ? workshopColorMap[mod.workshop_id] : null;
+                const isMultiPackage = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? multiModPackageMap[mod.workshop_id] : false;
+                const packageColor = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? workshopColorMap[mod.workshop_id] : null;
 
                 const disabledDependencies = missingActiveDependenciesMap[mod.mod_id];
                 const hasDisabledDependency = disabledDependencies && disabledDependencies.length > 0;

@@ -566,7 +566,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </button>
           </div>
         </div>
-      ) : patchStatus?.is_packaged || conflicts.length === 0 ? (
+      ) : (patchStatus?.is_packaged ?? currentPackage?.is_packaged) || conflicts.length === 0 ? (
         /* State 2: 0 real conflicts found (Clean Screen) */
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-slate-200">
           <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl relative overflow-hidden">
