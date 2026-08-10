@@ -724,13 +724,48 @@ pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, ol
     })
 }
 
+fn force_remove_dir_all(path: &Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let entry_path = entry.path();
+                if entry_path.is_dir() {
+                    let _ = force_remove_dir_all(&entry_path);
+                } else {
+                    if let Ok(metadata) = fs::metadata(&entry_path) {
+                        let mut permissions = metadata.permissions();
+                        if permissions.readonly() {
+                            permissions.set_readonly(false);
+                            let _ = fs::set_permissions(&entry_path, permissions);
+                        }
+                    }
+                    let _ = fs::remove_file(&entry_path);
+                }
+            }
+        }
+        let _ = fs::remove_dir(path);
+    } else {
+        if let Ok(metadata) = fs::metadata(path) {
+            let mut permissions = metadata.permissions();
+            if permissions.readonly() {
+                permissions.set_readonly(false);
+                let _ = fs::set_permissions(path, permissions);
+            }
+        }
+        let _ = fs::remove_file(path);
+    }
+    Ok(())
+}
+
 pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, folder_name: &str) -> Result<bool, String> {
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     for dir in &user_dirs {
-        let pkg_dir = dir.join("mods").join(folder_name);
-        if pkg_dir.exists() {
-            let _ = fs::remove_dir_all(&pkg_dir);
-        }
+        let _ = force_remove_dir_all(&dir.join("mods").join(folder_name));
+        let _ = force_remove_dir_all(&dir.join("Lua").join("mods").join(folder_name));
+        let _ = force_remove_dir_all(&dir.join("Workshop").join("PZModStudioCarrier").join("Contents").join("mods").join(folder_name));
     }
 
     if !mod_list_ini_path.is_empty() {

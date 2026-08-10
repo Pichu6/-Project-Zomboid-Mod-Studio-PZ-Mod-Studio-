@@ -40,6 +40,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [newPackageName, setNewPackageName] = useState<string>('');
   const [editingPackageFolder, setEditingPackageFolder] = useState<string | null>(null);
   const [editingPackageName, setEditingPackageName] = useState<string>('');
+  const [isUnpackageModalOpen, setIsUnpackageModalOpen] = useState<boolean>(false);
 
   const fetchPackages = useCallback(async () => {
     if (paths.user_zomboid_dir) {
@@ -498,6 +499,52 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       )}
 
+      {/* Modal: Des-mergear / Abrir Paquete para Editar */}
+      {isUnpackageModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in text-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <Unlock className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">⚠️ ¿Abrir Paquete para Edición?</h3>
+                <p className="text-xs text-slate-400 mt-0.5">El paquete pasará a modo Borrador (DRAFT).</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2 text-xs text-slate-300">
+              <p>
+                Al abrir el paquete <b className="text-emerald-400 font-mono">{currentPackage?.display_name}</b>, sus archivos se des-mergearán para permitir modificar sus conflictos.
+              </p>
+              <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-mono leading-relaxed">
+                ⚠️ <b>Aviso de Visibilidad:</b> Mientras este paquete esté en borrador, <b>NO será visible ni estará activo en la Mod List del juego ni de la app</b> hasta que presiones "Empaquetar y Publicar".
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsUnpackageModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsUnpackageModalOpen(false);
+                  await handleCleanMasterPatch();
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow transition"
+              >
+                Confirmar y Abrir Paquete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* State 1: Directory Setup Missing */}
       {!paths.is_valid ? (
         <div className="flex-1 flex items-center justify-center p-6 text-slate-200">
@@ -577,7 +624,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
                 {patchStatus?.is_packaged && (
                   <button
-                    onClick={handleCleanMasterPatch}
+                    onClick={() => setIsUnpackageModalOpen(true)}
                     disabled={isCleaning}
                     className="flex items-center justify-center gap-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-xs font-bold py-2.5 px-4 rounded-lg border border-amber-700/60 transition cursor-pointer shadow"
                     title="Desempaqueta y quita el paquete de la Mod List"

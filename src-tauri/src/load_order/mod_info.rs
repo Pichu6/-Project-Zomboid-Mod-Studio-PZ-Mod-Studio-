@@ -197,6 +197,16 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         return None;
     }
 
+    // Clean synthetic master patch / package display name for exact 1-to-1 match across Mod List and Mod Merger
+    if id.starts_with("Z_PZModStudio_") {
+        if name.starts_with("PZ Mod Studio Patch: ") {
+            name = name["PZ Mod Studio Patch: ".len()..].to_string();
+        } else if name == "Z_PZModStudio Master Patch" {
+            let clean_sub = id["Z_PZModStudio_".len()..].to_string();
+            name = clean_sub.replace('_', " ");
+        }
+    }
+
     // Robust search for poster and icon images in mod directory
     let mut poster_url = None;
     let mut icon_path = None;
@@ -445,8 +455,6 @@ end
 /// Scans all subscribed Workshop & local mods recursively without depth limits.
 /// Preserves exact ModListData.ini load order for active mods, and sorts remaining mods deterministically.
 pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
-    ensure_master_patch_exists_on_disk(paths);
-
     let mut all_mods_map: std::collections::HashMap<String, ModManifest> = std::collections::HashMap::new();
 
     // 1. Scan Steam Workshop mods (content/108600/) with depth 8
