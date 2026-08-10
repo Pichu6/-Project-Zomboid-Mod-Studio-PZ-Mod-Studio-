@@ -396,7 +396,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       for (const depRaw of allOrderingDeps) {
         const reqMod = findInstalledDependencyInMods(depRaw, mods);
 
-        if (reqMod && reqMod.enabled) {
+        if (reqMod) {
           const requiredIdx = mods.findIndex((t) => t.mod_id === reqMod.mod_id);
           // Load Order Violation: 'm' is ABOVE 'reqMod' in active load order (currentIdx < requiredIdx)
           if (requiredIdx !== -1 && currentIdx < requiredIdx) {
@@ -1139,11 +1139,16 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       <div className="overflow-hidden flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 overflow-hidden">
                           <span className={`truncate min-w-0 flex-1 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
-                            {mod.name}
+                            {mod.mod_id.startsWith("Z_PZModStudio_")
+                              ? mod.name.replace(/^PZ Mod Studio Patch:\s*/i, "")
+                              : mod.name}
                           </span>
 
                           {mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier") && (
-                            <span className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700 shrink-0 shadow-sm">
+                            <span
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700 shrink-0 shadow-sm cursor-help"
+                              title={`Paquete de Fusión Sintético: ${mod.mod_id}\nContiene los parches de compatibilidad creados en Mod Merger.`}
+                            >
                               <Package className="w-3 h-3 text-emerald-400" />
                               <span>PAQUETE DE FUSIÓN</span>
                             </span>
