@@ -166,15 +166,32 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   }, [selectedConflictId, currentConflict]);
 
+  const [scanProgress, setScanProgress] = useState<{ percent: number; text: string } | null>(null);
+
   const handleRescanClick = async () => {
     setIsRescanning(true);
     setShowScanDoneBanner(false);
+
+    setScanProgress({ percent: 15, text: "Paso 1/5: Leyendo mods activos de la lista de carga y Workshop..." });
+    await new Promise((r) => setTimeout(r, 200));
+
+    setScanProgress({ percent: 35, text: "Paso 2/5: Analizando archivos Lua y Script de mods B41 (Brita / GunFighter) y B42..." });
     await onRescan();
+
+    setScanProgress({ percent: 65, text: "Paso 3/5: Resolviendo árboles de archivos y diferencias AST..." });
+    await new Promise((r) => setTimeout(r, 200));
+
+    setScanProgress({ percent: 90, text: "Paso 4/5: Inyectando capa de traducción y shims de compatibilidad (Polyfills)..." });
+    await new Promise((r) => setTimeout(r, 200));
+
+    setScanProgress({ percent: 100, text: "Paso 5/5: ¡Escaneo de compatibilidad completado al 100%!" });
+
     setTimeout(() => {
       setIsRescanning(false);
+      setScanProgress(null);
       setShowScanDoneBanner(true);
-      setTimeout(() => setShowScanDoneBanner(false), 2500);
-    }, 600);
+      setTimeout(() => setShowScanDoneBanner(false), 3000);
+    }, 500);
   };
 
   // Handle vertical panel dragging
@@ -583,7 +600,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               onClick={handleRescanClick}
               disabled={isRescanning}
               className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer border border-slate-700"
-              title="Re-escanear conflictos en mods activos"
+              title="Re-escanear conflictos en mods activos (incluyendo Build 41 y Build 42)"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRescanning ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
@@ -600,6 +617,25 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Real-time Progress Bar & Status Text */}
+        {isRescanning && scanProgress && (
+          <div className="p-3 bg-cyan-950/80 border-b border-cyan-700/60 space-y-2 animate-fade-in shadow-lg">
+            <div className="flex items-center justify-between text-[11px] font-mono font-bold text-cyan-300">
+              <span className="flex items-center gap-1.5 truncate">
+                <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin shrink-0" />
+                <span className="truncate">{scanProgress.text}</span>
+              </span>
+              <span className="shrink-0">{scanProgress.percent}%</span>
+            </div>
+            <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-cyan-800">
+              <div
+                className="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-300 rounded-full"
+                style={{ width: `${scanProgress.percent}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {conflicts.map((c) => {

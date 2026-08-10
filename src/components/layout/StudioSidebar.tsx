@@ -24,6 +24,13 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       badgeColor: '',
     },
     {
+      id: 'MERGER' as ActiveTab,
+      label: 'Mod Merger',
+      icon: GitCompare,
+      badge: conflictCount > 0 ? conflictCount : null,
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    },
+    {
       id: 'PRESETS' as ActiveTab,
       label: 'Presets (.pzpack)',
       icon: Package,
@@ -43,13 +50,6 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: Layers,
       badge: null,
       badgeColor: '',
-    },
-    {
-      id: 'MERGER' as ActiveTab,
-      label: 'Mod Merger',
-      icon: GitCompare,
-      badge: conflictCount > 0 ? conflictCount : null,
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
     },
     {
       id: 'MONITOR' as ActiveTab,

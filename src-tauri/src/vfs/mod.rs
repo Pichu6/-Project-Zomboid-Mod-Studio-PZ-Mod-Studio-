@@ -137,19 +137,23 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
 
         let clean_target = resolved_id.trim().to_lowercase();
         let sanitized_target = crate::load_order::mod_info::sanitize_mod_id(&clean_target);
+        let alpha_target: String = clean_target.chars().filter(|c| c.is_alphanumeric()).collect();
 
         for active in &active_mods {
             let clean_act = active.trim().to_lowercase();
             let sanitized_act = crate::load_order::mod_info::sanitize_mod_id(&clean_act);
+            let alpha_act: String = clean_act.chars().filter(|c| c.is_alphanumeric()).collect();
 
-            if clean_act == clean_target || sanitized_act == sanitized_target {
+            if clean_act == clean_target 
+                || sanitized_act == sanitized_target 
+                || (!alpha_target.is_empty() && alpha_target == alpha_act) {
                 return true;
             }
         }
 
         // Fallback: check workshop numeric id from path
         if let Some(ws_id) = extract_mod_id_from_path(path) {
-            if active_mods.contains(&ws_id) {
+            if active_mods.iter().any(|a| a == &ws_id) {
                 return true;
             }
         }
