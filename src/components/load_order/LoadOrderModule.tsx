@@ -311,26 +311,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       if (isA20 !== isB20) return true;
     }
 
-    // 3. Check if both mods belong to the same Workshop item (e.g. 2297098490)
-    if (modA.workshop_id && modB.workshop_id && modA.workshop_id === modB.workshop_id) {
-      const aRequiresB = modA.dependencies.some((d) => isExactOrSanitizedMatch(d, modB.mod_id));
-      const bRequiresA = modB.dependencies.some((d) => isExactOrSanitizedMatch(d, modA.mod_id));
-
-      if (aRequiresB || bRequiresA || modA.is_map_mod || modB.is_map_mod) {
-        return false;
-      }
-
-      const nameA = modA.name.toLowerCase();
-      const nameB = modB.name.toLowerCase();
-
-      const variantKeywords = ['ui only', 'lite', 'easy', 'hard', 'standalone', 'legacy', 'compat', 'retext', 'only', 'main mod', '2.0', '1.0', 'gunfighter'];
-
-      const matchesA = variantKeywords.some((k) => nameA.includes(k) || idA.includes(k));
-      const matchesB = variantKeywords.some((k) => nameB.includes(k) || idB.includes(k));
-
-      return matchesA || matchesB;
-    }
-
     return false;
   };
 
