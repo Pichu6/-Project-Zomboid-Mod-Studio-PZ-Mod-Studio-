@@ -637,6 +637,16 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       // - Prioritize Base Libraries over normal mods
       // - Prioritize Normal mods over Map mods
       // - Stable tie-breaker by name
+      const getModFamilyPriority = (name: string, id: string): number => {
+        const lower = (name + " " + id).toLowerCase();
+        if (lower.includes("neatui_framework") || lower.includes("neatui framework")) return 0;
+        if (lower.includes("neat_building") || lower.includes("neat building")) return 10;
+        if (lower.includes("neat_crafting") || lower.includes("neat crafting")) return 20;
+        if (lower.includes("neat_rocco") || lower.includes("neat rocco")) return 30;
+        if (lower.includes("neatui_hairstyler") || lower.includes("neatui hairstyler")) return 40;
+        return 100;
+      };
+
       const getModRoleRank = (name: string, id: string): number => {
         const lower = (name + " " + id).toLowerCase();
         if (lower.includes("framework") || lower.includes("library") || lower.includes("core") || lower.includes("manager") || lower.includes("api")) return 0;
@@ -648,6 +658,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       };
 
       candidates.sort((a, b) => {
+        const famA = getModFamilyPriority(a.name, a.mod_id);
+        const famB = getModFamilyPriority(b.name, b.mod_id);
+        if (famA !== famB) return famA - famB;
+
         if (lastAddedMod) {
           const aSameWorkshop = a.workshop_id && a.workshop_id === lastAddedMod.workshop_id;
           const bSameWorkshop = b.workshop_id && b.workshop_id === lastAddedMod.workshop_id;
