@@ -222,7 +222,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await onRefreshMods();
-    setHasUnsavedChanges(false);
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
