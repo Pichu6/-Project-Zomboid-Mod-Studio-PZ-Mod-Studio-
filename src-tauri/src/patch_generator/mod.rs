@@ -315,14 +315,43 @@ end)
         let _ = fs::write(client_override_42_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content);
     }
 
-    // Update ModListData.ini to place clean_pkg_name at the end of load order
+    // 1. Ensure all OTHER synthetic fusion packages on disk are marked as DRAFT (is_packaged = false)
+    for user_dir in &target_dirs {
+        if let Some(parent_mods) = user_dir.parent() {
+            if parent_mods.exists() {
+                if let Ok(entries) = fs::read_dir(parent_mods) {
+                    for entry in entries.filter_map(|e| e.ok()) {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            let folder_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                            if folder_name.starts_with("Z_PZModStudio_") && !folder_name.contains("Carrier") && folder_name != clean_pkg_name {
+                                let other_meta_path = path.join("patch_metadata.json");
+                                if other_meta_path.exists() {
+                                    if let Ok(content) = fs::read_to_string(&other_meta_path) {
+                                        if let Ok(mut meta) = serde_json::from_str::<MasterPatchMetadata>(&content) {
+                                            meta.is_packaged = false;
+                                            if let Ok(new_json) = serde_json::to_string_pretty(&meta) {
+                                                let _ = fs::write(&other_meta_path, &new_json);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Update ModListData.ini to place clean_pkg_name at the end of load order and remove any other synthetic packages
     if !req.mod_list_ini_path.is_empty() {
         if let Ok(mut mod_list) = read_mod_list_ini(&req.mod_list_ini_path) {
-            mod_list.active_mods.retain(|id| id != &clean_pkg_name);
+            mod_list.active_mods.retain(|id| !id.starts_with("Z_PZModStudio_") || id == "PZModStudioCarrier");
             mod_list.active_mods.push(clean_pkg_name.clone());
             let _ = write_mod_list_ini(&req.mod_list_ini_path, &mod_list.active_mods);
 
-            // Write patch_metadata.json
+            // Write patch_metadata.json for the newly active published package
             let merged_file_paths: Vec<String> = req.merged_files.iter().map(|f| f.relative_path.clone()).collect();
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
