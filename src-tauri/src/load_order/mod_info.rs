@@ -252,8 +252,16 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         }
     }
 
-    let is_library = require.is_empty() || id.to_lowercase().contains("lib") || id.to_lowercase().contains("manager") || id.to_lowercase().contains("framework");
-    let is_map_mod = pack || tiledef || id.to_lowercase().contains("map");
+    let lower_id = id.to_lowercase();
+    let is_addon_or_patch = lower_id.contains("addon") || lower_id.contains("patch") || lower_id.contains("compat") || lower_id.contains("ext");
+    let is_library = !is_addon_or_patch && (
+        lower_id.contains("lib") ||
+        lower_id.contains("manager") ||
+        lower_id.contains("framework") ||
+        lower_id.contains("api") ||
+        lower_id.contains("core")
+    );
+    let is_map_mod = pack || tiledef || lower_id.contains("map");
 
     let mut manifest = ModManifest {
         id,

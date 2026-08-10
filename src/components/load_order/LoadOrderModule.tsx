@@ -637,6 +637,16 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       // - Prioritize Base Libraries over normal mods
       // - Prioritize Normal mods over Map mods
       // - Stable tie-breaker by name
+      const getModRoleRank = (name: string, id: string): number => {
+        const lower = (name + " " + id).toLowerCase();
+        if (lower.includes("framework") || lower.includes("library") || lower.includes("core") || lower.includes("manager") || lower.includes("api")) return 0;
+        if (!lower.includes("ui") && !lower.includes("pack") && !lower.includes("addon") && !lower.includes("xp") && !lower.includes("compat") && !lower.includes("railings")) return 1; // Base Mod
+        if (lower.includes("ui")) return 2;
+        if (lower.includes("pack") || lower.includes("compat") || lower.includes("railings")) return 3;
+        if (lower.includes("addon") || lower.includes("xp")) return 4;
+        return 5;
+      };
+
       candidates.sort((a, b) => {
         if (lastAddedMod) {
           const aSameWorkshop = a.workshop_id && a.workshop_id === lastAddedMod.workshop_id;
@@ -650,7 +660,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           const bPrefixMatch = b.name.toLowerCase().startsWith(cleanLast);
           if (aPrefixMatch && !bPrefixMatch) return -1;
           if (!aPrefixMatch && bPrefixMatch) return 1;
+
+          if (aPrefixMatch && bPrefixMatch) {
+            const rankA = getModRoleRank(a.name, a.mod_id);
+            const rankB = getModRoleRank(b.name, b.mod_id);
+            if (rankA !== rankB) return rankA - rankB;
+          }
         }
+
+        const rankA = getModRoleRank(a.name, a.mod_id);
+        const rankB = getModRoleRank(b.name, b.mod_id);
+        if (rankA !== rankB) return rankA - rankB;
 
         if (a.is_library && !b.is_library) return -1;
         if (!a.is_library && b.is_library) return 1;
