@@ -9,7 +9,7 @@ interface MergerModuleProps {
   conflicts: VfsConflict[];
   paths: StudioPathsUI;
   onResolveConflict: (conflictId: string, resolvedCode: string) => void;
-  onOptimizeAndResolve: () => void;
+  onOptimizeAndResolve: (packageFolderName?: string) => void;
   onGoToSettings: () => void;
   onRescan: () => Promise<void> | void;
   onLoadMockups?: (mockups: VfsConflict[]) => void;
@@ -566,7 +566,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             </button>
           </div>
         </div>
-      ) : conflicts.length === 0 ? (
+      ) : patchStatus?.is_packaged || conflicts.length === 0 ? (
         /* State 2: 0 real conflicts found (Clean Screen) */
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-slate-200">
           <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl relative overflow-hidden">
@@ -782,7 +782,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 </span>
 
                 <button
-                  onClick={onOptimizeAndResolve}
+                  onClick={() => onOptimizeAndResolve(selectedPackageFolder)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
                   title="Fusión Automática: Combina las funciones y tablas de TODOS los mods activos en un solo parche"
                 >

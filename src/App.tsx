@@ -158,7 +158,7 @@ export const App: React.FC = () => {
   };
 
   // Magic Button: Auto-Merge & Generate Master Patch on Disk!
-  const handleOptimizeAndResolve = async () => {
+  const handleOptimizeAndResolve = async (packageFolderName?: string) => {
     const totalCount = conflicts.length;
 
     const updatedRules = rules.map((r) => ({
@@ -183,6 +183,7 @@ export const App: React.FC = () => {
         mod_list_ini_path: paths.mod_list_ini_path,
         merged_files: mergedFilesPayload,
         active_polyfill_ids: activePolyfillIds,
+        package_folder_name: packageFolderName,
       });
 
       // Clear conflicts from list since they are now resolved into Master Patch on disk!
