@@ -352,7 +352,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">
       {/* Package Manager Header Selector Bar (ALWAYS VISIBLE AT TOP) */}
       <div className="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between gap-4 shrink-0 shadow-md">
-        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+        <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto py-0.5">
           <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0 mr-2">
             <Box className="w-4 h-4 text-emerald-400" />
             <span>Paquetes de Fusión:</span>

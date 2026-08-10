@@ -477,11 +477,21 @@ pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
     Ok(true)
 }
 
-/// Reads the current packaging status for a given fusion package from patch_metadata.json
 pub fn get_master_patch_status(user_zomboid_dir: &str, mod_list_ini_path: &str, package_folder_name: Option<String>) -> MasterPatchStatusInfo {
     let target_folder = package_folder_name
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "Z_PZModStudio_MergedPatch".to_string());
+
+    let clean_sub = target_folder
+        .replace("PZ Mod Studio Patch: ", "")
+        .replace("Z_PZModStudio_", "");
+    let clean_sub = clean_sub.trim().to_string();
+
+    let candidates = vec![
+        target_folder.clone(),
+        format!("Z_PZModStudio_{}", clean_sub),
+        format!("Z_PZModStudio_{}", clean_sub.replace(' ', "_")),
+    ];
 
     let all_user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if all_user_dirs.is_empty() {
@@ -494,19 +504,33 @@ pub fn get_master_patch_status(user_zomboid_dir: &str, mod_list_ini_path: &str, 
         };
     }
 
-    let patch_dir = all_user_dirs[0].join("mods").join(&target_folder);
-    let meta_path = patch_dir.join("patch_metadata.json");
+    let mut meta_path = None;
+    let mut actual_folder = candidates[0].clone();
+
+    for user_dir in &all_user_dirs {
+        for cand in &candidates {
+            let p = user_dir.join("mods").join(cand).join("patch_metadata.json");
+            if p.exists() {
+                meta_path = Some(p);
+                actual_folder = cand.clone();
+                break;
+            }
+        }
+        if meta_path.is_some() {
+            break;
+        }
+    }
 
     let active_mods: Vec<String> = if !mod_list_ini_path.is_empty() {
         read_mod_list_ini(mod_list_ini_path)
-            .map(|data| data.active_mods.into_iter().filter(|s| s != &target_folder).collect())
+            .map(|data| data.active_mods.into_iter().filter(|s| !candidates.contains(s)).collect())
             .unwrap_or_default()
     } else {
         Vec::new()
     };
 
-    if meta_path.exists() {
-        if let Ok(content) = fs::read_to_string(&meta_path) {
+    if let Some(ref m_path) = meta_path {
+        if let Ok(content) = fs::read_to_string(m_path) {
             if let Ok(meta) = serde_json::from_str::<MasterPatchMetadata>(&content) {
                 let missing: Vec<String> = active_mods
                     .iter()
