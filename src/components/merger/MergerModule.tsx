@@ -53,10 +53,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
   const fetchPatchStatus = useCallback(async () => {
     if (paths.user_zomboid_dir) {
-      const status = await TauriService.getMasterPatchStatus(paths.user_zomboid_dir, paths.mod_list_ini_path);
+      const status = await TauriService.getMasterPatchStatus(paths.user_zomboid_dir, paths.mod_list_ini_path, selectedPackageFolder);
       setPatchStatus(status);
     }
-  }, [paths.user_zomboid_dir, paths.mod_list_ini_path]);
+  }, [paths.user_zomboid_dir, paths.mod_list_ini_path, selectedPackageFolder]);
 
   useEffect(() => {
     fetchPackages();

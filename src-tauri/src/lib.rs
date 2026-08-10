@@ -129,8 +129,8 @@ fn clean_master_patch_cmd(req: MasterPatchRequest) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn get_master_patch_status_cmd(user_zomboid_dir: String, mod_list_ini_path: String) -> patch_generator::MasterPatchStatusInfo {
-    patch_generator::get_master_patch_status(&user_zomboid_dir, &mod_list_ini_path)
+fn get_master_patch_status_cmd(user_zomboid_dir: String, mod_list_ini_path: String, package_folder_name: Option<String>) -> patch_generator::MasterPatchStatusInfo {
+    patch_generator::get_master_patch_status(&user_zomboid_dir, &mod_list_ini_path, package_folder_name)
 }
 
 #[tauri::command]

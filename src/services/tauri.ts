@@ -302,11 +302,12 @@ export const TauriService = {
   /**
    * Reads current packaging status and metadata for Z_PZModStudio_MergedPatch
    */
-  getMasterPatchStatus: async (userZomboidDir: string, modListIniPath: string): Promise<MasterPatchStatusInfoUI> => {
+  getMasterPatchStatus: async (userZomboidDir: string, modListIniPath: string, packageFolderName?: string): Promise<MasterPatchStatusInfoUI> => {
     try {
       return await invoke<MasterPatchStatusInfoUI>('get_master_patch_status_cmd', {
         userZomboidDir,
         modListIniPath,
+        packageFolderName: packageFolderName || null,
       });
     } catch (err) {
       console.error('Failed to get master patch status:', err);
