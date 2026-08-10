@@ -126,7 +126,7 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
         active_mods = ini_data
             .active_mods
             .into_iter()
-            .filter(|s| s != "Z_PZModStudio_MergedPatch" && s != "PZModStudioCarrier")
+            .filter(|s| !s.starts_with("Z_PZModStudio_") && s != "PZModStudioCarrier")
             .collect();
     }
 

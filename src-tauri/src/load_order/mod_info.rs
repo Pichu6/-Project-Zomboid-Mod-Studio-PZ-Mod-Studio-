@@ -197,14 +197,14 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         return None;
     }
 
-    // Clean synthetic master patch / package display name for exact 1-to-1 match across Mod List and Mod Merger
-    if id.starts_with("Z_PZModStudio_") {
-        if name.starts_with("PZ Mod Studio Patch: ") {
-            name = name["PZ Mod Studio Patch: ".len()..].to_string();
-        } else if name == "Z_PZModStudio Master Patch" {
-            let clean_sub = id["Z_PZModStudio_".len()..].to_string();
-            name = clean_sub.replace('_', " ");
-        }
+    // Format synthetic package display name uniformly as "PZ Mod Studio Patch: <name>" across Mod List, Mod Merger, and game
+    if id.starts_with("Z_PZModStudio_") && !id.contains("Carrier") {
+        let clean_sub = if id.starts_with("Z_PZModStudio_") {
+            id["Z_PZModStudio_".len()..].to_string().replace('_', " ")
+        } else {
+            name.clone()
+        };
+        name = format!("PZ Mod Studio Patch: {}", clean_sub);
     }
 
     // Robust search for poster and icon images in mod directory
