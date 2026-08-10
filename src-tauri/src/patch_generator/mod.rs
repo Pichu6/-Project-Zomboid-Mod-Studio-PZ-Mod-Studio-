@@ -669,12 +669,26 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
 }
 
 pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, old_folder: &str, new_name: &str) -> Result<MergedPackageInfo, String> {
-    let clean_sub = new_name.trim().replace("PZ Mod Studio Patch: ", "").replace(' ', "_");
-    if clean_sub.is_empty() {
+    let clean_old_sub = old_folder
+        .replace("PZ Mod Studio Patch: ", "")
+        .replace("Z_PZModStudio_", "");
+    let clean_old_sub = clean_old_sub.trim();
+
+    let old_candidates = vec![
+        old_folder.to_string(),
+        format!("Z_PZModStudio_{}", clean_old_sub),
+        format!("Z_PZModStudio_{}", clean_old_sub.replace(' ', "_")),
+    ];
+
+    let clean_new_sub = new_name
+        .replace("PZ Mod Studio Patch: ", "")
+        .trim()
+        .replace(' ', "_");
+    if clean_new_sub.is_empty() {
         return Err("El nuevo nombre no puede estar vacío.".to_string());
     }
-    let new_folder = format!("Z_PZModStudio_{}", clean_sub);
-    let display_name = format!("PZ Mod Studio Patch: {}", clean_sub.replace('_', " "));
+    let new_folder = format!("Z_PZModStudio_{}", clean_new_sub);
+    let display_name = format!("PZ Mod Studio Patch: {}", clean_new_sub.replace('_', " "));
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if user_dirs.is_empty() {
@@ -687,21 +701,20 @@ pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, ol
     );
 
     for dir in &user_dirs {
-        let old_p = dir.join("mods").join(old_folder);
-        let new_p = dir.join("mods").join(&new_folder);
-        if old_p.exists() {
-            let _ = fs::rename(&old_p, &new_p);
-            let _ = fs::write(new_p.join("mod.info"), &mod_info_content);
-        } else {
-            let _ = fs::create_dir_all(&new_p);
-            let _ = fs::write(new_p.join("mod.info"), &mod_info_content);
+        for old_target in &old_candidates {
+            let old_p = dir.join("mods").join(old_target);
+            let new_p = dir.join("mods").join(&new_folder);
+            if old_p.exists() {
+                let _ = fs::rename(&old_p, &new_p);
+                let _ = fs::write(new_p.join("mod.info"), &mod_info_content);
+            }
         }
     }
 
     if !mod_list_ini_path.is_empty() {
         if let Ok(mut mod_list) = read_mod_list_ini(mod_list_ini_path) {
             for id in &mut mod_list.active_mods {
-                if id == old_folder {
+                if old_candidates.contains(id) {
                     *id = new_folder.clone();
                 }
             }
@@ -757,11 +770,24 @@ fn force_remove_dir_all(path: &Path) -> std::io::Result<()> {
 }
 
 pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, folder_name: &str) -> Result<bool, String> {
+    let clean_sub = folder_name
+        .replace("PZ Mod Studio Patch: ", "")
+        .replace("Z_PZModStudio_", "");
+    let clean_sub = clean_sub.trim();
+
+    let candidates = vec![
+        folder_name.to_string(),
+        format!("Z_PZModStudio_{}", clean_sub),
+        format!("Z_PZModStudio_{}", clean_sub.replace(' ', "_")),
+    ];
+
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     for dir in &user_dirs {
-        let _ = force_remove_dir_all(&dir.join("mods").join(folder_name));
-        let _ = force_remove_dir_all(&dir.join("Lua").join("mods").join(folder_name));
-        let _ = force_remove_dir_all(&dir.join("Workshop").join("PZModStudioCarrier").join("Contents").join("mods").join(folder_name));
+        for target in &candidates {
+            let _ = force_remove_dir_all(&dir.join("mods").join(target));
+            let _ = force_remove_dir_all(&dir.join("Lua").join("mods").join(target));
+            let _ = force_remove_dir_all(&dir.join("Workshop").join("PZModStudioCarrier").join("Contents").join("mods").join(target));
+        }
     }
 
     // ALSO purge from common Steam install paths and workshop content folders!
@@ -776,15 +802,17 @@ pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, fo
         r"E:\SteamLibrary\steamapps\common\ProjectZomboid\mods",
     ];
     for cp in &common_paths {
-        let p = Path::new(cp).join(folder_name);
-        if p.exists() {
-            let _ = force_remove_dir_all(&p);
+        for target in &candidates {
+            let p = Path::new(cp).join(target);
+            if p.exists() {
+                let _ = force_remove_dir_all(&p);
+            }
         }
     }
 
     if !mod_list_ini_path.is_empty() {
         if let Ok(mut mod_list) = read_mod_list_ini(mod_list_ini_path) {
-            mod_list.active_mods.retain(|id| id != folder_name);
+            mod_list.active_mods.retain(|id| !candidates.contains(id));
             let _ = write_mod_list_ini(mod_list_ini_path, &mod_list.active_mods);
         }
     }
