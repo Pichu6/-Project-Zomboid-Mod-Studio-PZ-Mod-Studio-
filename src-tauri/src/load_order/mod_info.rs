@@ -144,11 +144,28 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
             }
         } else if trimmed.starts_with("require=") {
             let req_str = trimmed[8..].trim();
-            require = req_str
-                .split(',')
-                .map(|s| sanitize_mod_id(s))
-                .filter(|s| !s.is_empty())
-                .collect();
+            for s in req_str.split(',') {
+                let clean = sanitize_mod_id(s);
+                if !clean.is_empty() && !require.contains(&clean) {
+                    require.push(clean);
+                }
+            }
+        } else if trimmed.starts_with("loadModAfter=") {
+            let req_str = trimmed[13..].trim();
+            for s in req_str.split(',') {
+                let clean = sanitize_mod_id(s);
+                if !clean.is_empty() && !require.contains(&clean) {
+                    require.push(clean);
+                }
+            }
+        } else if trimmed.starts_with("load_mod_after=") {
+            let req_str = trimmed[15..].trim();
+            for s in req_str.split(',') {
+                let clean = sanitize_mod_id(s);
+                if !clean.is_empty() && !require.contains(&clean) {
+                    require.push(clean);
+                }
+            }
         } else if trimmed.starts_with("incompatible=") {
             let inc_str = trimmed[13..].trim();
             incompatible = inc_str

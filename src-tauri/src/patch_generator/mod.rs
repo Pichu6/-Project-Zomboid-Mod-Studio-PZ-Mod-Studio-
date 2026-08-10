@@ -223,8 +223,8 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     mod_info_content.push_str("poster=poster.png\r\n");
     mod_info_content.push_str("icon=icon.png\r\n");
     mod_info_content.push_str("modversion=1.0.0\r\n");
-    mod_info_content.push_str("pzversion=41,42\r\n");
-    mod_info_content.push_str("versionMin=41.0\r\n");
+    mod_info_content.push_str("pzversion=42.0,41.78\r\n");
+    mod_info_content.push_str("versionMin=42.0\r\n");
     mod_info_content.push_str("author=PZ Mod Studio\r\n");
 
     let mut files_written = 0;
