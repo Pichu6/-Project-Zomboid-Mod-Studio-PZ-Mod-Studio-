@@ -68,52 +68,42 @@ const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo
   const normReq = normalizeModId(cleanReq);
   const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
 
-  const matchCandidate = (m: ModInfo): boolean => {
-    // 1. Direct match on Mod ID
+  // 1. Pass 1: Exact match on Mod ID, Workshop ID, or exact Mod Name FIRST!
+  const exactMatch = mods.find((m) => {
     const normM = normalizeModId(m.mod_id);
-    if (normM === normReq) return true;
-
-    // 2. Direct match on Workshop ID
-    if (m.workshop_id && m.workshop_id.trim() === cleanReq) return true;
-
-    // 3. Direct match on Mod Name
     const normName = normalizeModId(m.name);
+    if (normM === normReq) return true;
+    if (m.workshop_id && m.workshop_id.trim() === cleanReq) return true;
     if (normName === normReq) return true;
-
-    // 4. Alpha-numeric match (ignores punctuation/dashes/brackets)
-    const alphaM = normM.replace(/[^a-z0-9]/g, '');
-    const alphaName = normName.replace(/[^a-z0-9]/g, '');
-
-    if (alphaM.length > 0 && alphaM === alphaReq) return true;
-    if (alphaName.length > 0 && alphaName === alphaReq) return true;
-
-    // 5. Substring alpha match for longer IDs (>3 chars)
-    if (alphaReq.length > 3 && (alphaM.includes(alphaReq) || alphaName.includes(alphaReq))) return true;
-    if (alphaM.length > 3 && alphaReq.includes(alphaM)) return true;
-
     return false;
-  };
+  });
+  if (exactMatch) return exactMatch;
 
-  const candidates = mods.filter(matchCandidate);
-  if (candidates.length === 0) return undefined;
-  if (candidates.length === 1) return candidates[0];
+  // 2. Pass 2: Full Alphanumeric Match (ignores punctuation/dashes/brackets)
+  const alphaMatches = mods.filter((m) => {
+    const alphaM = normalizeModId(m.mod_id).replace(/[^a-z0-9]/g, '');
+    const alphaName = normalizeModId(m.name).replace(/[^a-z0-9]/g, '');
+    return (alphaM.length > 0 && alphaM === alphaReq) || (alphaName.length > 0 && alphaName === alphaReq);
+  });
+  if (alphaMatches.length === 1) return alphaMatches[0];
+  if (alphaMatches.length > 1) {
+    const enabled = alphaMatches.find((c) => c.enabled);
+    if (enabled) return enabled;
+    return alphaMatches[0];
+  }
 
-  // 1. If any candidate is ENABLED, return the enabled one!
-  const enabledCandidate = candidates.find((c) => c.enabled);
-  if (enabledCandidate) return enabledCandidate;
+  // 3. Pass 3: Prefix match (only if no exact or full alphanumeric match exists)
+  const prefixMatches = mods.filter((m) => {
+    const normM = normalizeModId(m.mod_id);
+    return normM.startsWith(normReq + "_") || normM.startsWith(normReq + "-");
+  });
+  if (prefixMatches.length > 0) {
+    const enabled = prefixMatches.find((c) => c.enabled);
+    if (enabled) return enabled;
+    return prefixMatches[0];
+  }
 
-  // 2. If multiple candidates are disabled, prefer the one with "main" or "2.0" in its ID/name
-  const mainCandidate = candidates.find(
-    (c) =>
-      c.mod_id.toLowerCase().includes('main') ||
-      c.mod_id.toLowerCase().includes('2.0') ||
-      c.name.toLowerCase().includes('main') ||
-      c.name.toLowerCase().includes('2.0')
-  );
-  if (mainCandidate) return mainCandidate;
-
-  // 3. Fallback to first candidate
-  return candidates[0];
+  return undefined;
 };
 
 const renderPZRichText = (text?: string): React.ReactNode => {

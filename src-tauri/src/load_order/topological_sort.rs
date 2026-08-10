@@ -13,35 +13,31 @@ fn find_manifest_id_by_req<'a>(req: &str, manifests: &'a [ModManifest]) -> Optio
     let clean_req = req.trim().to_lowercase();
     let sanitized_req = sanitize_mod_id(&clean_req);
 
-    let is_match = |m: &ModManifest| -> bool {
+    // 1. Pass 1: Exact match on ID or sanitized ID FIRST!
+    if let Some(exact) = manifests.iter().find(|m| {
         let clean_m = m.id.trim().to_lowercase();
         let sanitized_m = sanitize_mod_id(&clean_m);
-        clean_m == clean_req || sanitized_m == sanitized_req || (sanitized_req.len() > 3 && sanitized_m.contains(&sanitized_req))
-    };
+        clean_m == clean_req || sanitized_m == sanitized_req
+    }) {
+        return Some(&exact.id);
+    }
 
-    let candidates: Vec<&'a ModManifest> = manifests.iter().filter(|m| is_match(m)).collect();
+    // 2. Pass 2: Filter candidates by prefix matching
+    let candidates: Vec<&'a ModManifest> = manifests.iter().filter(|m| {
+        let clean_m = m.id.trim().to_lowercase();
+        let sanitized_m = sanitize_mod_id(&clean_m);
+        sanitized_m.starts_with(&format!("{}_", sanitized_req)) || sanitized_m.starts_with(&format!("{}-", sanitized_req))
+    }).collect();
+
     if candidates.is_empty() {
         return None;
     }
-    if candidates.len() == 1 {
-        return Some(&candidates[0].id);
-    }
 
-    // 1. Prioritize enabled candidate
+    // Prioritize enabled candidate
     if let Some(enabled_cand) = candidates.iter().find(|c| c.enabled) {
         return Some(&enabled_cand.id);
     }
 
-    // 2. Prefer candidate with "main" or "2.0" in ID/name
-    if let Some(main_cand) = candidates.iter().find(|c| {
-        let id_lower = c.id.to_lowercase();
-        let name_lower = c.name.to_lowercase();
-        id_lower.contains("main") || id_lower.contains("2.0") || name_lower.contains("main") || name_lower.contains("2.0")
-    }) {
-        return Some(&main_cand.id);
-    }
-
-    // 3. Fallback to first candidate
     Some(&candidates[0].id)
 }
 
