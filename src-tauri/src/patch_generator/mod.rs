@@ -187,34 +187,13 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
         clean_pkg_name.clone()
     };
 
-    let mut target_dirs = Vec::new();
-    if let (Some(ref carrier_id), Some(ref ws_dir)) = (&req.carrier_workshop_id, &req.workshop_dir) {
-        let clean_c = carrier_id.trim();
-        if !clean_c.is_empty() && !ws_dir.is_empty() {
-            target_dirs.push(Path::new(ws_dir).join(clean_c).join("Contents").join("mods").join(&clean_pkg_name));
-            target_dirs.push(Path::new(ws_dir).join(clean_c).join("mods").join(&clean_pkg_name));
-        }
-    }
-    if let Some(ref ws_dir) = req.workshop_dir {
-        if !ws_dir.is_empty() {
-            target_dirs.push(Path::new(ws_dir).join("9999999999").join("mods").join(&clean_pkg_name));
-        }
-    }
-    for user_dir in crate::load_order::mod_info::get_all_user_zomboid_dirs(&req.user_zomboid_dir) {
-        target_dirs.push(user_dir.join("mods").join(&clean_pkg_name));
-        target_dirs.push(user_dir.join("Lua").join("mods").join(&clean_pkg_name));
-    }
-    if let Some(ref install_dir) = req.pz_install_dir {
-        if !install_dir.is_empty() {
-            target_dirs.push(Path::new(install_dir).join("mods").join(&clean_pkg_name));
-        }
-    }
-
-    if target_dirs.is_empty() {
+    let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(&req.user_zomboid_dir);
+    if user_dirs.is_empty() {
         return Err("No valid Zomboid directories provided to generate master patch.".to_string());
     }
 
-    let primary_dir = target_dirs[0].clone();
+    let primary_dir = user_dirs[0].join("mods").join(&clean_pkg_name);
+    let target_dirs = vec![primary_dir.clone()];
 
     let mut mod_info_content = String::new();
     mod_info_content.push_str(&format!("name=PZ Mod Studio Patch: {}\r\n", display_name));
@@ -766,6 +745,24 @@ pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, fo
         let _ = force_remove_dir_all(&dir.join("mods").join(folder_name));
         let _ = force_remove_dir_all(&dir.join("Lua").join("mods").join(folder_name));
         let _ = force_remove_dir_all(&dir.join("Workshop").join("PZModStudioCarrier").join("Contents").join("mods").join(folder_name));
+    }
+
+    // ALSO purge from common Steam install paths and workshop content folders!
+    let common_paths = [
+        r"G:\Juegos\steamapps\workshop\content\108600\9999999999\mods",
+        r"G:\Juegos\steamapps\common\ProjectZomboid\mods",
+        r"C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\9999999999\mods",
+        r"C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\mods",
+        r"D:\SteamLibrary\steamapps\workshop\content\108600\9999999999\mods",
+        r"D:\SteamLibrary\steamapps\common\ProjectZomboid\mods",
+        r"E:\SteamLibrary\steamapps\workshop\content\108600\9999999999\mods",
+        r"E:\SteamLibrary\steamapps\common\ProjectZomboid\mods",
+    ];
+    for cp in &common_paths {
+        let p = Path::new(cp).join(folder_name);
+        if p.exists() {
+            let _ = force_remove_dir_all(&p);
+        }
     }
 
     if !mod_list_ini_path.is_empty() {

@@ -1162,9 +1162,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       <div className="overflow-hidden flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 overflow-hidden">
                           <span className={`truncate min-w-0 flex-1 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
-                            {mod.mod_id.startsWith("Z_PZModStudio_")
-                              ? mod.name.replace(/^PZ Mod Studio Patch:\s*/i, "")
-                              : mod.name}
+                            {mod.name}
                           </span>
 
                           {mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier") && (
