@@ -251,22 +251,17 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     polyfill_lua_content.push_str("    end\n");
     polyfill_lua_content.push_str("end\n\n");
 
-    polyfill_lua_content.push_str("function Z_PZModStudio_Polyfills.safeGetText(str)\n");
-    polyfill_lua_content.push_str("    if not str then return \"\" end\n");
-    polyfill_lua_content.push_str("    local clean = string.gsub(str, \"%%\", \"%%%%\")\n");
     polyfill_lua_content.push_str("    if zombie and zombie.core and zombie.core.Translator then\n");
     polyfill_lua_content.push_str("        local status, res = pcall(zombie.core.Translator.getText, clean)\n");
     polyfill_lua_content.push_str("        if status and res then return res end\n");
     polyfill_lua_content.push_str("    end\n");
     polyfill_lua_content.push_str("    return tostring(str)\n");
     polyfill_lua_content.push_str("end\n\n");
-
-    let ui_override_content = r#"-- Z_PZModStudio_UIOverride.lua
--- Takes control of in-game auto-sort button to protect PZ Mod Studio Master Patch load order!
-
-Events.OnMainMenuEnter.Add(function()
-    print("[PZ Mod Studio] Active: Taking control of load order management.")
     
+    let ui_override_content = r#"
+-- PZ Mod Studio In-Game Load Order & Master Patch Lock
+local Events = Events or triggerEvent
+Events.OnGameStart.Add(function()
     if ModLoadOrderUI then
         ModLoadOrderUI.onAuto = function(self)
             local text = "PZ Mod Studio Control Active:\nLoad order is managed automatically by PZ Mod Studio.\nIn-game primitive re-sorting is locked to preserve Master Patch overrides."
@@ -341,12 +336,11 @@ end)
         let _ = fs::write(client_override_42_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content);
     }
 
-    // Update ModListData.ini to place Z_PZModStudio_MergedPatch at the end of load order
+    // Update ModListData.ini to place clean_pkg_name at the end of load order
     if !req.mod_list_ini_path.is_empty() {
         if let Ok(mut mod_list) = read_mod_list_ini(&req.mod_list_ini_path) {
-            let patch_id = "Z_PZModStudio_MergedPatch".to_string();
-            mod_list.active_mods.retain(|id| id != &patch_id);
-            mod_list.active_mods.push(patch_id);
+            mod_list.active_mods.retain(|id| id != &clean_pkg_name);
+            mod_list.active_mods.push(clean_pkg_name.clone());
             let _ = write_mod_list_ini(&req.mod_list_ini_path, &mod_list.active_mods);
 
             // Write patch_metadata.json
@@ -634,7 +628,7 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
     fs::create_dir_all(&pkg_dir).map_err(|e| e.to_string())?;
 
     let mod_info_content = format!(
-        "name=PZ Mod Studio Patch: {}\r\nid={}\r\ndescription=Paquete de fusión de compatibilidad.\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\npzversion=41,42\r\nversionMin=41.0\r\nauthor=PZ Mod Studio\r\n",
+        "name={}\r\nid={}\r\ndescription=Paquete de fusión de compatibilidad sintetizado por PZ Mod Studio.\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\npzversion=41,42\r\nversionMin=41.0\r\nauthor=PZ Mod Studio\r\n",
         display_name, folder_name
     );
     let _ = fs::write(pkg_dir.join("mod.info"), &mod_info_content);
@@ -693,7 +687,7 @@ pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, ol
     }
 
     let mod_info_content = format!(
-        "name=PZ Mod Studio Patch: {}\r\nid={}\r\ndescription=Paquete de fusión de compatibilidad.\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\npzversion=41,42\r\nversionMin=41.0\r\nauthor=PZ Mod Studio\r\n",
+        "name={}\r\nid={}\r\ndescription=Paquete de fusión de compatibilidad sintetizado por PZ Mod Studio.\r\nposter=poster.png\r\nicon=icon.png\r\nmodversion=1.0.0\r\npzversion=41,42\r\nversionMin=41.0\r\nauthor=PZ Mod Studio\r\n",
         new_name.trim(), new_folder
     );
     let _ = fs::write(new_path.join("mod.info"), &mod_info_content);
@@ -722,8 +716,8 @@ pub fn rename_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, ol
 
 pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, folder_name: &str) -> Result<bool, String> {
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
-    if !user_dirs.is_empty() {
-        let pkg_dir = user_dirs[0].join("mods").join(folder_name);
+    for dir in &user_dirs {
+        let pkg_dir = dir.join("mods").join(folder_name);
         if pkg_dir.exists() {
             let _ = fs::remove_dir_all(&pkg_dir);
         }

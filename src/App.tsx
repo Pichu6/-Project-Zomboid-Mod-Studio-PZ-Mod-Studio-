@@ -15,6 +15,8 @@ import { InstanceModule } from './components/instances/InstanceModule';
 import { InitialInstanceModal } from './components/instances/InitialInstanceModal';
 import { AppInstance } from './types';
 
+import { Sparkles, CheckCircle2 } from 'lucide-react';
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('MOD_LIST');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
@@ -23,6 +25,12 @@ export const App: React.FC = () => {
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
   const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
   const [isInitialLaunchModal, setIsInitialLaunchModal] = useState(true);
+  const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
+    patch_mod_dir: string;
+    total_conflicts: number;
+    files_written: number;
+    polyfills_injected: number;
+  } | null>(null);
 
   // Studio Directory Paths State (Persistent Profile)
   const [paths, setPaths] = useState<StudioPathsUI>({
@@ -181,9 +189,12 @@ export const App: React.FC = () => {
       setConflicts([]);
 
       if (result.success) {
-        alert(`✨ Auto-Merge Complete & All Conflicts Resolved!\n\n- Master Patch Mod generated at:\n${result.patch_mod_dir}\n- Total conflicts resolved into patch: ${totalCount}\n- Merged files written: ${result.files_written}\n- Active polyfills injected: ${result.polyfills_injected}\n- ModListData.ini load order updated!`);
-      } else {
-        alert('✨ Auto-Merge Complete!\n- Conflicts merged AST-aware.\n- Polyfills enabled.');
+        setAutoMergeResultModal({
+          patch_mod_dir: result.patch_mod_dir,
+          total_conflicts: totalCount,
+          files_written: result.files_written,
+          polyfills_injected: result.polyfills_injected,
+        });
       }
     }
   };
@@ -403,6 +414,54 @@ export const App: React.FC = () => {
         onCreateNewInstanceClick={() => setActiveTab('INSTANCES')}
         isInitialLaunch={isInitialLaunchModal}
       />
+
+      {/* Sleek Native Auto-Merge Completion Modal */}
+      {autoMergeResultModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-fade-in text-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <span>✨ Auto-Merge Completado con Éxito</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Todos los conflictos de scripts fueron resueltos en el parche de fusión.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs font-mono">
+              <div className="text-emerald-400 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Parche Generado en Disco:</span>
+              </div>
+              <div className="p-2 bg-slate-900 rounded border border-slate-800 text-[11px] text-slate-300 break-all select-all font-mono">
+                {autoMergeResultModal.patch_mod_dir}
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1 text-slate-300">
+                <div className="p-2 bg-slate-900/60 rounded border border-slate-800/80">
+                  <span className="text-slate-400 text-[10px] block">Conflictos Resueltos</span>
+                  <b className="text-emerald-400 text-sm">{autoMergeResultModal.total_conflicts}</b>
+                </div>
+                <div className="p-2 bg-slate-900/60 rounded border border-slate-800/80">
+                  <span className="text-slate-400 text-[10px] block">Archivos Fusionados</span>
+                  <b className="text-emerald-400 text-sm">{autoMergeResultModal.files_written}</b>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                onClick={() => setAutoMergeResultModal(null)}
+                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg transition"
+              >
+                Aceptar y Continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
