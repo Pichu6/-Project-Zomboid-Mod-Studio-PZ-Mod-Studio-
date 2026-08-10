@@ -334,121 +334,17 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     );
   }
 
-  // State 2: 0 real conflicts found (Clean Screen)
-  if (conflicts.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200">
-        <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl relative overflow-hidden">
-          <div className={`w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner transition-all duration-300 ${
-            isRescanning ? 'scale-110 border-cyan-400 text-cyan-400 animate-pulse' : ''
-          }`}>
-            <ShieldCheck className={`w-8 h-8 ${isRescanning ? 'animate-bounce text-cyan-400' : ''}`} />
-          </div>
-
-          <div>
-            <h3 className="text-lg font-bold text-slate-100">All Clean! No Script Conflicts Detected</h3>
-            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Your active mod list in <code className="text-emerald-400 font-mono">ModListData.ini</code> has zero relative file path collisions. All installed mods will run smoothly!
-            </p>
-          </div>
-
-          {/* Master Patch Management Banner */}
-          <div className="p-4 bg-slate-950/90 border border-slate-800 rounded-xl space-y-3 text-left">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                {patchStatus?.is_packaged ? (
-                  <>
-                    <PackageCheck className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400 font-bold">Estado: Master Patch EMPAQUETADO y Activo</span>
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="w-4 h-4 text-amber-400" />
-                    <span className="text-amber-400 font-bold">Estado: Master Patch DESEMPAQUETADO (Modo Análisis)</span>
-                  </>
-                )}
-              </span>
-              {patchStatus?.is_packaged && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
-                  {patchStatus.merged_files.length} Archivos Fusionados en Disco
-                </span>
-              )}
-            </div>
-
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              {patchStatus?.is_packaged
-                ? 'El mod sintético Z_PZModStudio_MergedPatch está empaquetado en disco y cargándose en Project Zomboid. Puedes desempaquetarlo en cualquier momento para revisar conflictos o agregar mods nuevos.'
-                : 'El paquete está desempaquetado y abierto en Modo Análisis. Revisa las diferencias comparativas en pantalla y presiona "Empaquetar Master Patch" cuando estés listo para generar el parche final.'}
-            </p>
-
-            {patchStatus?.missing_active_mods && patchStatus.missing_active_mods.length > 0 && patchStatus.is_packaged && (
-              <div className="p-2.5 bg-amber-950/50 border border-amber-500/40 rounded-lg text-amber-300 text-[11px] font-mono flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>
-                  Hay <b>{patchStatus.missing_active_mods.length} mods activos nuevos</b> que no están incluidos en la fusión empaquetada actual. Se recomienda re-empaquetar.
-                </span>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={handleGenerateMasterPatch}
-                disabled={isGenerating}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold py-2.5 px-4 rounded-lg transition cursor-pointer shadow-lg"
-              >
-                <Package className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                <span>{isGenerating ? 'Empaquetando...' : '📦 Empaquetar Master Patch'}</span>
-              </button>
-
-              {patchStatus?.is_packaged && (
-                <button
-                  onClick={handleCleanMasterPatch}
-                  disabled={isCleaning}
-                  className="flex items-center justify-center gap-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-xs font-bold py-2.5 px-4 rounded-lg border border-amber-700/60 transition cursor-pointer shadow"
-                  title="Desempaqueta y borra el mod Z_PZModStudio_MergedPatch del disco"
-                >
-                  <Unlock className="w-4 h-4 text-amber-400" />
-                  <span>{isCleaning ? 'Limpiando...' : '🔓 Desempaquetar Patch'}</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {generateDoneMessage && (
-            <div className="p-3 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>{generateDoneMessage}</span>
-            </div>
-          )}
-
-          {cleanDoneMessage && (
-            <div className="p-3 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>{cleanDoneMessage}</span>
-            </div>
-          )}
-
-          {showScanDoneBanner && (
-            <div className="flex items-center justify-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[11px] font-mono animate-fade-in">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Scan Complete: 0 Unresolved Conflicts Found</span>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Helper to extract conflicting line snippet for breakdown box
   const getLineSnippet = (text: string, lineIndex: number): string => {
     const lines = text.split('\n');
     return lines[lineIndex - 1]?.trim() || '(empty or end of file)';
   };
 
+  const currentPackage = packages.find((p) => p.folder_name === selectedPackageFolder) || packages[0];
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">
-      {/* Package Manager Header Selector Bar */}
-      <div className="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between gap-4 shrink-0">
+      {/* Package Manager Header Selector Bar (ALWAYS VISIBLE AT TOP) */}
+      <div className="bg-slate-900 border-b border-slate-800 p-3 flex items-center justify-between gap-4 shrink-0 shadow-md">
         <div className="flex items-center gap-2 overflow-x-auto py-0.5">
           <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0 mr-2">
             <Box className="w-4 h-4 text-emerald-400" />
@@ -460,7 +356,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             return (
               <div
                 key={pkg.folder_name}
-                onClick={() => setSelectedPackageFolder(pkg.folder_name)}
+                onClick={() => {
+                  setSelectedPackageFolder(pkg.folder_name);
+                  fetchPatchStatus();
+                }}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition shrink-0 ${
                   isSelected
                     ? 'bg-emerald-950/80 border-emerald-500/80 text-emerald-200 font-bold shadow'
@@ -470,31 +369,37 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 <Package className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-400' : 'text-slate-500'}`} />
                 <span>{pkg.display_name}</span>
                 {pkg.is_packaged ? (
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Empaquetado y Activo" />
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0" title="Empaquetado y Publicado en Mod List">
+                    PUBLICADO
+                  </span>
                 ) : (
-                  <span className="w-2 h-2 rounded-full bg-amber-400" title="Desempaquetado (Modo Análisis)" />
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0" title="Desempaquetado (Modo Análisis - Borrador)">
+                    DRAFT
+                  </span>
                 )}
 
                 {/* Quick Actions */}
                 <div className="flex items-center gap-1 ml-1 opacity-80 hover:opacity-100">
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingPackageFolder(pkg.folder_name);
                       setEditingPackageName(pkg.display_name);
                     }}
-                    className="p-0.5 hover:text-cyan-300"
+                    className="p-0.5 hover:text-cyan-300 transition cursor-pointer"
                     title="Renombrar paquete"
                   >
                     <Edit2 className="w-3 h-3" />
                   </button>
-                  {pkg.folder_name !== 'Z_PZModStudio_MergedPatch' && (
+                  {packages.length > 1 && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeletePackage(pkg.folder_name);
                       }}
-                      className="p-0.5 hover:text-red-400"
+                      className="p-0.5 hover:text-red-400 transition cursor-pointer"
                       title="Eliminar paquete del disco"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -524,14 +429,14 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               <span>Crear Nuevo Paquete de Fusión</span>
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Ingresa un nombre descriptivo para este paquete (ej. <b>"mix mods"</b> o <b>"B42 Weapons Patch"</b>). Se creará la carpeta nativa en tu directorio de mods.
+              Ingresa un nombre descriptivo para este paquete (ej. <b>"MergedPatch1"</b> o <b>"Mi Parche B42"</b>). Se creará la carpeta nativa en tu directorio de mods.
             </p>
             <input
               type="text"
               value={newPackageName}
               onChange={(e) => setNewPackageName(e.target.value)}
-              placeholder="ej: mix mods"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+              placeholder="ej: MergedPatch1"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none font-mono"
               autoFocus
             />
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -565,7 +470,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               type="text"
               value={editingPackageName}
               onChange={(e) => setEditingPackageName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none font-mono"
               autoFocus
             />
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -587,8 +492,123 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* File Conflict Sidebar */}
+      {/* State 1: Directory Setup Missing */}
+      {!paths.is_valid ? (
+        <div className="flex-1 flex items-center justify-center p-6 text-slate-200">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-4 shadow-xl">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-100">Setup Required: Game Directory</h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Project Zomboid installation directory could not be auto-detected. Please configure your paths in App Settings to scan active mods.
+              </p>
+            </div>
+            <button
+              onClick={onGoToSettings}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs py-2.5 rounded-lg shadow transition cursor-pointer"
+            >
+              Configure Directory Paths in Settings
+            </button>
+          </div>
+        </div>
+      ) : conflicts.length === 0 ? (
+        /* State 2: 0 real conflicts found (Clean Screen) */
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-slate-200">
+          <div className="max-w-lg w-full bg-slate-900/80 border border-emerald-500/30 rounded-2xl p-8 text-center space-y-5 shadow-xl relative overflow-hidden">
+            <div className={`w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner transition-all duration-300 ${
+              isRescanning ? 'scale-110 border-cyan-400 text-cyan-400 animate-pulse' : ''
+            }`}>
+              <ShieldCheck className={`w-8 h-8 ${isRescanning ? 'animate-bounce text-cyan-400' : ''}`} />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-slate-100">Paquete Seleccionado: {currentPackage?.display_name || selectedPackageFolder}</h3>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                Tu lista de mods activos no tiene colisiones directas no resueltas. ¡Todos tus mods instalados funcionarán de forma fluida!
+              </p>
+            </div>
+
+            {/* Master Patch Management Banner */}
+            <div className="p-4 bg-slate-950/90 border border-slate-800 rounded-xl space-y-3 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  {patchStatus?.is_packaged ? (
+                    <>
+                      <PackageCheck className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-bold">Estado: {currentPackage?.display_name} PUBLICADO (Empaquetado)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="w-4 h-4 text-amber-400" />
+                      <span className="text-amber-400 font-bold">Estado: {currentPackage?.display_name} DRAFT (Desempaquetado)</span>
+                    </>
+                  )}
+                </span>
+                {patchStatus?.is_packaged && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                    {patchStatus.merged_files.length} Archivos Fusionados
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                {patchStatus?.is_packaged
+                  ? `El paquete "${currentPackage?.display_name}" está empaquetado en disco y publicado en la Mod List. Puedes desempaquetarlo para modificar o agregar mods.`
+                  : `El paquete "${currentPackage?.display_name}" está en modo borrador/análisis. Presiona "Empaquetar" para compilar y publicarlo en la Mod List.`}
+              </p>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={handleGenerateMasterPatch}
+                  disabled={isGenerating}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold py-2.5 px-4 rounded-lg transition cursor-pointer shadow-lg"
+                >
+                  <Package className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+                  <span>{isGenerating ? 'Empaquetando...' : '📦 Empaquetar y Publicar en Mod List'}</span>
+                </button>
+
+                {patchStatus?.is_packaged && (
+                  <button
+                    onClick={handleCleanMasterPatch}
+                    disabled={isCleaning}
+                    className="flex items-center justify-center gap-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-xs font-bold py-2.5 px-4 rounded-lg border border-amber-700/60 transition cursor-pointer shadow"
+                    title="Desempaqueta y quita el paquete de la Mod List"
+                  >
+                    <Unlock className="w-4 h-4 text-amber-400" />
+                    <span>{isCleaning ? 'Limpiando...' : '🔓 Des-mergear / Abrir para Editar'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {generateDoneMessage && (
+              <div className="p-3 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{generateDoneMessage}</span>
+              </div>
+            )}
+
+            {cleanDoneMessage && (
+              <div className="p-3 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{cleanDoneMessage}</span>
+              </div>
+            )}
+
+            {showScanDoneBanner && (
+              <div className="p-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-mono animate-fade-in text-left flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>Escaneo completo: Mods analizados e integrados con éxito.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* State 3: Workspace View with Conflicts */
+        <div className="flex-1 flex overflow-hidden">
+          {/* File Conflict Sidebar */}
         <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-900/50 shrink-0">
         <div className="p-3 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
@@ -860,6 +880,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         </div>
       )}
       </div>
+      )}
     </div>
   );
 };
