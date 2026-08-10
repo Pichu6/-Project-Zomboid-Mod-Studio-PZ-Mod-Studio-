@@ -94,6 +94,23 @@ export const App: React.FC = () => {
     };
   }, [rules]);
 
+  // Auto-Sync: Automatically re-scan & update UI when user alt-tabs back from game!
+  useEffect(() => {
+    const handleWindowFocus = async () => {
+      if (paths.is_valid) {
+        const refreshedMods = await TauriService.scanAllInstalledMods(paths);
+        if (refreshedMods.length > 0) {
+          setMods([...refreshedMods]);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [paths]);
+
   const handleRescan = async () => {
     if (paths.is_valid) {
       const scannedConflicts = await TauriService.scanConflicts(paths);
