@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Sparkles } from 'lucide-react';
+import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
 import { PolyfillRule } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -78,7 +78,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   };
 
   const getMcpConfigSnippet = () => {
-    const binaryPath = 'e:\\PZ Mod Studio\\src-tauri\\target\\debug\\pz-mcp-server.exe';
+    const binaryPath = 'E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe';
     if (selectedMcpClient === 'CLAUDE') {
       return JSON.stringify(
         {
@@ -689,15 +689,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 </div>
               </div>
 
-              {selectedMcpClient === 'VSCODE_LOCAL' && (
-                <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <span>
-                    <b>Compatible with Local Models:</b> You can use <b>Ollama</b> or <b>LM Studio</b> with models like <i>Qwen 2.5 Coder, DeepSeek Coder or Llama 3.1</i> in VS Code via Roo Code or Cline. The local model will run MCP tools directly on your PC with no API costs or internet connection.
-                  </span>
-                </div>
-              )}
-
               {/* JSON Code Box */}
               <div className="relative bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
                 <button
@@ -723,14 +714,111 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 <pre>{getMcpConfigSnippet()}</pre>
               </div>
 
-              <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-slate-300">Executable Path:</span>
+              {/* Step-by-Step Instructions per Client */}
+              {selectedMcpClient === 'CLAUDE' && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span>How to setup in Claude Desktop:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
+                    <li>Open <b>Claude Desktop</b> and go to <b>File &gt; Settings</b> (or press <kbd className="px-1 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-200">Ctrl + ,</kbd>).</li>
+                    <li>Select the <b>Developer</b> tab and click <b>Edit Config</b> to open <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">claude_desktop_config.json</code>.</li>
+                    <li>Paste the JSON configuration above inside the file and save it.</li>
+                    <li>Restart Claude Desktop. In new chats, you will see a <b>🔨 Hammer</b> icon with 22 PZ Mod Studio tools!</li>
+                  </ol>
+                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
+                    💬 <b>Example Prompt:</b> <i>"Read console.txt to diagnose why Project Zomboid crashed"</i> or <i>"Sort my mod load order"</i>.
+                  </div>
+                </div>
+              )}
+
+              {selectedMcpClient === 'CURSOR' && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span>How to setup in Cursor / Windsurf IDE:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
+                    <li>Open <b>Cursor Settings</b> (Gear icon) &gt; <b>Features</b> &gt; <b>MCP</b>.</li>
+                    <li>Click <b>+ Add New MCP Server</b>.</li>
+                    <li>Set <b>Type</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">command</code>, <b>Name</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">pz-mod-studio</code>, and <b>Command</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">E:\PZ Mod Studio\PZ-Mod-Studio-Portable\pz-mcp-server.exe</code>.</li>
+                    <li>The status dot will turn green (Enabled), exposing Lua AST and live diagnostics to the Agent.</li>
+                  </ol>
+                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
+                    💬 <b>Example Prompt:</b> <i>"@pz-mod-studio scan active mod collisions in VFS and merge conflicting scripts"</i>.
+                  </div>
+                </div>
+              )}
+
+              {selectedMcpClient === 'VSCODE_LOCAL' && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span>How to setup in VS Code (Roo Code / Cline with Local or Cloud LLMs):</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
+                    <li>Install the <b>Roo Code</b> or <b>Cline</b> extension from the VS Code Marketplace.</li>
+                    <li>Click the extension icon on the sidebar, click the <b>MCP Servers (Plugs)</b> tab at the top and choose <b>Configure MCP</b>.</li>
+                    <li>Paste the JSON snippet above into <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">cline_mcp_settings.json</code> / <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">roo_mcp_settings.json</code>.</li>
+                    <li>You can use Cloud models (Claude 3.7 / GPT-4o) or 100% Offline with <b>Ollama / LM Studio</b> (e.g. <i>Qwen 2.5 Coder</i>).</li>
+                  </ol>
+                  <div className="p-2 rounded bg-emerald-950/30 border border-emerald-900/60 text-[11px] text-emerald-200">
+                    🔒 <b>100% Offline Modding:</b> Local models can query PZ Mod Studio VFS collision tools and parse Lua without needing any internet connection.
+                  </div>
+                </div>
+              )}
+
+              {selectedMcpClient === 'ANTIGRAVITY' && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span>How to setup in Antigravity / Gemini CLI:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
+                    <li>Open your Antigravity or Gemini CLI configuration file (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">.gemini/settings.json</code> or user settings).</li>
+                    <li>Paste the configuration snippet under the <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">"mcpServers"</code> section.</li>
+                    <li>Antigravity automatically discovers and connects all 22 tools and 8 resources without any manual intervention.</li>
+                  </ol>
+                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
+                    💬 <b>Example Prompt:</b> <i>"Inspect console.txt and generate a master polyfill patch for missing tables"</i>.
+                  </div>
+                </div>
+              )}
+
+              {selectedMcpClient === 'OPENAI_CODEX' && (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span>How to setup in OpenAI / Codex / Custom GPT MCP Bridges:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
+                    <li>Configure your MCP-compatible client or local stdio bridge with the command executable.</li>
+                    <li>The server will expose tool definitions compliant with the <b>JSON-RPC 2.0 MCP standard (2024-11-05)</b>.</li>
+                    <li>Ensure the process is spawned with standard I/O pipes (stdio).</li>
+                  </ol>
+                </div>
+              )}
+
+              {/* FAQ / How Stdio Works Card */}
+              <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-lg text-xs text-amber-200 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                  <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Important: Do NOT run pz-mcp-server.exe directly by double-clicking</span>
+                </div>
+                <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                  If you double-click <code className="bg-slate-950 px-1 py-0.5 rounded font-mono text-[10px] text-amber-200">pz-mcp-server.exe</code>, a black command prompt will open and stay blank. <b>This is completely normal.</b> The MCP server communicates silently over <code className="font-mono text-amber-100 font-semibold">stdio</code> (JSON-RPC) with AI agents. You do not need to keep it open; your AI assistant (Claude, Cursor, Antigravity) will launch and close it automatically in the background whenever you send prompts in chat.
+                </p>
+              </div>
+
+              <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">
+                <span className="font-semibold text-slate-300">Portable Executable:</span>
                 <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
-                  e:\PZ Mod Studio\src-tauri\target\debug\pz-mcp-server.exe
+                  E:\PZ Mod Studio\PZ-Mod-Studio-Portable\pz-mcp-server.exe
                 </code>
                 <span>or via CLI flag:</span>
                 <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
-                  pz-mod-studio.exe --mcp
+                  Project-Zomboid-Mod-Studio.exe --mcp
                 </code>
               </div>
             </div>
