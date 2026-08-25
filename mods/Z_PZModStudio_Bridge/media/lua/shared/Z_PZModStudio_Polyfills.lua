@@ -224,6 +224,90 @@ if Events and Events.OnMainMenuEnter and not Events.OnMainMenuEnter._pzms_wrappe
 end
 
 -- ----------------------------------------------------------------------------
+-- 4.3 Safe getOnlinePlayers() Metatable Proxy (Shields against Java IndexOutOfBoundsException)
+-- ----------------------------------------------------------------------------
+if _G and _G.getOnlinePlayers and not _G._pzms_online_players_wrapped then
+    _G._pzms_online_players_wrapped = true
+    local orig_getOnlinePlayers = _G.getOnlinePlayers
+    _G.getOnlinePlayers = function(...)
+        local list = orig_getOnlinePlayers(...)
+        if not list then return list end
+        
+        local proxy = {}
+        local mt = {
+            __index = function(t, k)
+                if k == "get" then
+                    return function(self, idx)
+                        if idx == nil or type(idx) ~= "number" or idx < 0 then return nil end
+                        local sz = 0
+                        if list.size then
+                            local ok, s = pcall(function() return list:size() end)
+                            if ok and type(s) == "number" then sz = s end
+                        end
+                        if idx >= sz then return nil end
+                        local ok, res = pcall(function() return list:get(idx) end)
+                        if ok then return res end
+                        return nil
+                    end
+                elseif k == "size" then
+                    return function(self)
+                        if list.size then
+                            local ok, s = pcall(function() return list:size() end)
+                            if ok and type(s) == "number" then return s end
+                        end
+                        return 0
+                    end
+                elseif k == "isEmpty" then
+                    return function(self)
+                        if list.size then
+                            local ok, s = pcall(function() return list:size() end)
+                            if ok and type(s) == "number" then return s == 0 end
+                        end
+                        return true
+                    end
+                elseif k == "_raw" or k == "rawList" then
+                    return list
+                else
+                    local val = list[k]
+                    if type(val) == "function" then
+                        return function(self, ...)
+                            return val(list, ...)
+                        end
+                    end
+                    return val
+                end
+            end,
+            __len = function(t)
+                if list.size then
+                    local ok, s = pcall(function() return list:size() end)
+                    if ok and type(s) == "number" then return s end
+                end
+                return 0
+            end
+        }
+        setmetatable(proxy, mt)
+        return proxy
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- 4.4 OnPlayerUpdate Exception Suppression (Prevents 60 FPS exponential error cascades)
+-- ----------------------------------------------------------------------------
+if Events and Events.OnPlayerUpdate and not Events.OnPlayerUpdate._pzms_wrapped then
+    Events.OnPlayerUpdate._pzms_wrapped = true
+    local orig_player_update_add = Events.OnPlayerUpdate.Add
+    Events.OnPlayerUpdate.Add = function(func)
+        if type(func) ~= "function" then return end
+        orig_player_update_add(function(player, ...)
+            local status, err = pcall(func, player, ...)
+            if not status and err then
+                -- Silently catch frame-by-frame player loop errors to protect FPS
+            end
+        end)
+    end
+end
+
+-- ----------------------------------------------------------------------------
 -- 5. Late Hook Initialization (Events.OnGameBoot) for Monkey-Patching Chain
 -- ----------------------------------------------------------------------------
 local function initB42Polyfills()
