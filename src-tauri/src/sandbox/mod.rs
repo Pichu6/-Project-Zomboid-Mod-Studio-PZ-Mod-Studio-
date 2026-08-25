@@ -299,6 +299,39 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             recommended_action: "Apply Universal Master Polyfills to protect game loops and callframe stacktraces.".to_string(),
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
+    } else if line.contains("IndexOutOfBoundsException") || line.contains("Index 0 out of bounds") {
+        Some(TranslatedErrorPayload {
+            id: format!("err_{}", counter),
+            raw_error: line.to_string(),
+            source_file: Some("java/util/ArrayList.java".to_string()),
+            line_number: None,
+            title: "Multiplayer Java ArrayList Out of Bounds (B42)".to_string(),
+            explanation: "A mod accessed IsoPlayer.getPlayers() or getOnlinePlayers() index 0 while the Java player collection was empty during a render/tick loop in Multiplayer.".to_string(),
+            recommended_action: "Apply Universal Master Polyfills (Safe ArrayList Proxy & getOnlinePlayers shield).".to_string(),
+            polyfill_rule_id_suggestion: Some("B42_DAILY_REPORT_SAFETY".to_string()),
+        })
+    } else if line.contains("FancyHandwork") || line.contains("fancyMP") || line.contains("aFancyHandwork") {
+        Some(TranslatedErrorPayload {
+            id: format!("err_{}", counter),
+            raw_error: line.to_string(),
+            source_file: Some("media/lua/client/aFancyHandwork.lua".to_string()),
+            line_number: Some(336),
+            title: "Fancy Handwork Multiplayer Hand Sync Safety".to_string(),
+            explanation: "Fancy Handwork fancyMP loop threw an uncaught error when evaluating local/remote player hand objects on tick.".to_string(),
+            recommended_action: "Apply Universal Master Polyfills to guard FancyHandwork callbacks safely.".to_string(),
+            polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
+        })
+    } else if line.contains("SaucedCarts") || line.contains("Pushable Carts") {
+        Some(TranslatedErrorPayload {
+            id: format!("err_{}", counter),
+            raw_error: line.to_string(),
+            source_file: Some("media/lua/client/SaucedCarts.lua".to_string()),
+            line_number: None,
+            title: "SaucedCarts Pushable Carts Multiplayer Sync".to_string(),
+            explanation: "Pushable Carts vehicle/entity interaction threw a null pointer exception during multiplayer state updates.".to_string(),
+            recommended_action: "Apply Universal Master Polyfills to guard SaucedCarts interop.".to_string(),
+            polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
+        })
     } else if line.contains("duplicate recipe") || line.contains("duplicate item") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
@@ -690,6 +723,12 @@ end
 Events.OnTick.Add(Bridge.OnTick)
 print("[PZModStudio_Bridge] Live Companion Mod Initialized successfully!")
 "#;
+
+    let shared_lua_dir = target_mod_dir.join("media").join("lua").join("shared");
+    let _ = std::fs::create_dir_all(&shared_lua_dir);
+
+    let polyfills_content = crate::patch_generator::generate_master_polyfill_lua();
+    let _ = std::fs::write(shared_lua_dir.join("Z_PZModStudio_Polyfills.lua"), polyfills_content);
 
     let _ = std::fs::write(target_mod_dir.join("mod.info"), mod_info_content);
     let _ = std::fs::write(client_lua_dir.join("PZModStudio_Bridge.lua"), lua_script_content);

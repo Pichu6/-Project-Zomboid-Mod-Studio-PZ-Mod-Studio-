@@ -1,36 +1,36 @@
-# 09 — Control del Proceso y Bridge IPC en Vivo
+# 09 — Game Process Control & Live IPC Bridge
 
-Este capítulo describe cómo un agente de inteligencia artificial o una herramienta externa (como **PZ Mod Studio**) puede controlar el ciclo de vida del ejecutable `ProjectZomboid64.exe` y comunicarse bidireccionalmente con una partida en vivo mediante un **puente IPC (*Inter-Process Communication*)**.
+This chapter explains how an AI Agent or external tooling (such as **PZ Mod Studio**) can manage the lifecycle of `ProjectZomboid64.exe` and communicate bidireccionaly with an active game session via an **Inter-Process Communication (IPC) Bridge**.
 
 ---
 
-## 1. Control del Proceso de Project Zomboid
+## 1. Project Zomboid Process Control
 
-### Argumentos de Línea de Comandos Clave:
-| Flag CLI | Propósito |
+### Key Command-Line Flags:
+| CLI Flag | Purpose |
 | :--- | :--- |
-| `-debug` | Habilita el menú de depuración en el juego, panel de trucos, recarga de Lua y visor de excepciones en pantalla. |
-| `-windowed` | Fuerza la ejecución en modo ventana (ideal para pruebas automatizadas). |
-| `-nosteam` | Inicia el juego sin autenticación activa de Steam (permite instancias locales rápidas). |
-| `-debugtranslation` | Genera `translationProblems.txt` para validar claves de idioma. |
+| `-debug` | Enables the in-game debug menu, cheat options, Lua reload shortcuts, and on-screen exception viewers. |
+| `-windowed` | Forces the game into windowed mode (ideal for automated developer workflows). |
+| `-nosteam` | Runs the game without active Steam client authentication (useful for isolated testing). |
+| `-debugtranslation` | Generates `translationProblems.txt` for translation key verification. |
 
-### Ciclo de Control desde Rust / Backend:
-1. **Detección:** Escaneo del árbol de procesos del sistema operativo (`tasklist` en Windows) buscando `ProjectZomboid64.exe` y capturando su Process ID (PID).
-2. **Lanzamiento:** Creación del proceso hijo con `std::process::Command::new("ProjectZomboid64.exe").arg("-debug").spawn()`.
-3. **Terminación:** Envío de señal de cierre o terminación forzosa con `taskkill /PID <pid> /F`.
+### Process Lifecycle in Rust:
+1. **Detection:** Scans the operating system process tree (`tasklist` on Windows) for `ProjectZomboid64.exe` and captures its Process ID (PID).
+2. **Launch:** Spawns a child process with `std::process::Command::new("ProjectZomboid64.exe").arg("-debug").spawn()`.
+3. **Termination:** Issues graceful termination signals or force kills with `taskkill /PID <pid> /F`.
 
 ---
 
-## 2. Arquitectura del Companion Mod: `Z_PZModStudio_Bridge`
+## 2. Companion Mod Architecture: `Z_PZModStudio_Bridge`
 
-Dado que el motor no expone un socket REPL por defecto en partidas de un solo jugador, implementamos un **Bridge IPC basado en archivo de intercambio sincronizado**:
+Because the vanilla engine does not expose a local REPL socket in singleplayer mode, we implement a **Synchronized File-Based IPC Bridge**:
 
 ```
 ┌─────────────────────────┐                        ┌─────────────────────────┐
 │     AI AGENT / MCP      │                        │  PROJECT ZOMBOID (GAME) │
 └────────────┬────────────┘                        └────────────┬────────────┘
              │                                                  │
-             │ 1. Escribe pz_ipc_queue.json                     │
+             │ 1. Writes pz_ipc_queue.json                      │
              ├─────────────────────────────────┐                │
              │                                 │                │
              │                                 ▼                │
@@ -38,8 +38,8 @@ Dado que el motor no expone un socket REPL por defecto en partidas de un solo ju
              │                  │  Zomboid/pz_ipc_queue.json   ││
              │                  └──────────────┬───────────────┘│
              │                                 │                │
-             │                                 │ 2. Events.OnTick (Cada 30 frames)
-             │                                 │    Lee y procesa comandos
+             │                                 │ 2. Events.OnTick (Every 30 frames)
+             │                                 │    Polls & executes commands
              │                                 ▼                │
              │                  ┌──────────────────────────────┐│
              │                  │    PZModStudio_Bridge.lua    │├┘
@@ -48,24 +48,24 @@ Dado que el motor no expone un socket REPL por defecto en partidas de un solo ju
              │                  │  - loadstring(lua_code)()    │
              │                  └──────────────┬───────────────┘
              │                                 │
-             │                                 │ 3. Escribe resultado
+             │                                 │ 3. Writes execution result
              │                                 ▼
              │                  ┌──────────────────────────────┐
              │                  │   Zomboid/pz_ipc_resp.json   │
              │                  └──────────────┬───────────────┘
              │                                 │
-             │ 4. Lee respuesta y confirma     │
+             │ 4. Reads response & confirms    │
              │◄────────────────────────────────┘
              ▼
 ```
 
 ---
 
-## 3. Especificación del Protocolo JSON IPC
+## 3. JSON IPC Protocol Specification
 
-El archivo `C:/Users/<Usuario>/Zomboid/pz_ipc_queue.json` contiene una lista de comandos a ejecutar:
+The command queue file at `C:/Users/<User>/Zomboid/pz_ipc_queue.json` receives command objects:
 
-### 1. Comando: Equipar / Dar Ítems (`give_item`)
+### 1. Give / Equip Item (`give_item`)
 ```json
 {
   "id": "cmd_001",
@@ -75,9 +75,9 @@ El archivo `C:/Users/<Usuario>/Zomboid/pz_ipc_queue.json` contiene una lista de 
   "equip": "primary"
 }
 ```
-*Efecto en el juego:* Añade un hacha al inventario del jugador y la equipa en su mano principal de forma instantánea.
+*Effect:* Instantiates the item and equips it into the primary hand of the player character.
 
-### 2. Comando: Teletransporte (`teleport`)
+### 2. Teleport Character (`teleport`)
 ```json
 {
   "id": "cmd_002",
@@ -87,9 +87,9 @@ El archivo `C:/Users/<Usuario>/Zomboid/pz_ipc_queue.json` contiene una lista de 
   "z": 0
 }
 ```
-*Efecto en el juego:* Mueve al jugador a las coordenadas indicadas en el mapa.
+*Effect:* Instantly teleports the local player to target grid coordinates.
 
-### 3. Comando: Modificación de Estados (`set_stat`)
+### 3. Modify Player Stats (`set_stat`)
 ```json
 {
   "id": "cmd_003",
@@ -100,23 +100,23 @@ El archivo `C:/Users/<Usuario>/Zomboid/pz_ipc_queue.json` contiene una lista de 
   "thirst": 0.0
 }
 ```
-*Efecto en el juego:* Activa el modo dios y restablece los niveles de salud, hambre y sed.
+*Effect:* Sets godmode and resets health, hunger, and thirst stats.
 
-### 4. Comando: Ejecución de Código Lua Dinámico (`eval_lua`)
+### 4. Dynamic Lua Evaluation (`eval_lua`)
 ```json
 {
   "id": "cmd_004",
   "action": "eval_lua",
-  "code": "local p = getPlayer(); p:Say('¡Comando ejecutado desde el Agente!'); HaloTextHelper.addText(p, 'AI Link Active', 0, 255, 0);"
+  "code": "local p = getPlayer(); p:Say('AI Command Executed!'); HaloTextHelper.addText(p, 'AI Link Active', 0, 255, 0);"
 }
 ```
-*Efecto en el juego:* Ejecuta cualquier fragmento de código Lua en tiempo real dentro del entorno de la partida.
+*Effect:* Executes arbitrary Lua code in the live game environment.
 
 ---
 
-## 4. Estructura del Script del Companion Mod
+## 4. Companion Mod Script Implementation
 
-El mod `Z_PZModStudio_Bridge` se ubica en la carpeta de mods del usuario (`Zomboid/mods/Z_PZModStudio_Bridge/`):
+The `Z_PZModStudio_Bridge` mod resides inside the user's mod directory (`Zomboid/mods/Z_PZModStudio_Bridge/`):
 
 ```lua
 -- media/lua/client/PZModStudio_Bridge.lua
@@ -127,7 +127,7 @@ Bridge.RESP_PATH = "pz_ipc_resp.json"
 
 function Bridge.OnTick()
     Bridge.tickCounter = Bridge.tickCounter + 1
-    -- Sondea el archivo cada 30 ticks (aproximadamente cada 0.5s)
+    -- Poll the queue every 30 ticks (~0.5s)
     if Bridge.tickCounter % 30 ~= 0 then return end
 
     local player = getPlayer()
@@ -145,10 +145,10 @@ function Bridge.OnTick()
     fileReader:close()
 
     if content ~= "" and content ~= "{}" then
-        -- Procesar comando JSON
+        -- Process JSON payload
         Bridge.ProcessCommand(content, player)
         
-        -- Limpiar cola
+        -- Flush queue
         local fileWriter = getFileWriter(Bridge.IPC_PATH, true, false)
         if fileWriter then
             fileWriter:write("{}")
@@ -158,7 +158,7 @@ function Bridge.OnTick()
 end
 
 function Bridge.ProcessCommand(jsonStr, player)
-    -- Parsear comando y ejecutar acción (AddItem, Teleport, eval_lua)
+    -- Parse command object and trigger actions (AddItem, Teleport, eval_lua)
 end
 
 Events.OnTick.Add(Bridge.OnTick)

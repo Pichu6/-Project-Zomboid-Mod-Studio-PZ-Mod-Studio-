@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="111.png" alt="Project Zomboid Mod Studio Logo" width="160" />
 
@@ -13,7 +13,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-purple.svg)]()
 [![GitHub release](https://img.shields.io/github/v/release/Pichu6/Project-Zomboid-Mod-Studio?color=emerald)](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases)
 
-[**Download Portable (.exe)**](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md) • [**Forum Post Tutorial**](FORUM_POST_THE_INDIE_STONE.md)
+[**Download Portable (.exe)**](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md)
 
 </div>
 
@@ -106,15 +106,15 @@ For complete tool documentation, see [**`AGENTS.md`**](AGENTS.md).
 
 The repository includes a comprehensive, modular 9-chapter wiki detailing Project Zomboid's internal architecture:
 
-- [**01. Engine Architecture, JVM & Kahlua VM**](docs/01-arquitectura-motor-kahlua-java.md)
-- [**02. Lua Script Lifecycle & Event Bus**](docs/02-ciclo-vida-lua-y-eventos.md)
-- [**03. Item Definitions, Crafting & Fluid API (B42)**](docs/03-crafting-items-y-fluidos-b42.md)
-- [**04. UI Hierarchy, Context Menus & Timed Actions**](docs/04-ui-context-menu-y-timedactions.md)
-- [**05. Loot Distribution & Procedural Spawning**](docs/05-distribucion-de-botin-y-spawns.md)
-- [**06. ModData Persistence, Networking & Security**](docs/06-networking-moddata-y-seguridad.md)
-- [**07. FMOD Audio, JSON Translations & 3D Z-Levels**](docs/07-sonido-traducciones-y-espacio-b42.md)
-- [**08. Crash Diagnostics, VFS & 3-Way AST Merging**](docs/08-diagnostico-de-crashes-y-vfs.md)
-- [**09. Game Process Control & Live IPC Bridge**](docs/09-control-del-juego-y-bridge-ipc.md)
+- [**01. Engine Architecture, JVM & Kahlua VM**](docs/01-engine-architecture-kahlua-jvm.md)
+- [**02. Lua Script Lifecycle & Event Bus**](docs/02-lua-lifecycle-and-events.md)
+- [**03. Item Definitions, Crafting & Fluid API (B42)**](docs/03-crafting-items-and-fluids-b42.md)
+- [**04. UI Hierarchy, Context Menus & Timed Actions**](docs/04-ui-context-menu-and-timedactions.md)
+- [**05. Loot Distribution & Procedural Spawning**](docs/05-loot-distribution-and-spawns.md)
+- [**06. ModData Persistence, Networking & Security**](docs/06-networking-moddata-and-security.md)
+- [**07. FMOD Audio, JSON Translations & 3D Z-Levels**](docs/07-sound-translations-and-b42-space.md)
+- [**08. Crash Diagnostics, VFS & 3-Way AST Merging**](docs/08-crash-diagnostics-and-vfs.md)
+- [**09. Game Process Control & Live IPC Bridge**](docs/09-game-control-and-ipc-bridge.md)
 
 See the [**Documentation Index**](docs/INDEX.md) for full details.
 

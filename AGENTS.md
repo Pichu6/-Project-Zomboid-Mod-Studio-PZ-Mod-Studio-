@@ -1,35 +1,35 @@
 # Project Zomboid Mod Studio — AI Agent & MCP Integration Guide
 
-Este archivo sirve como **guía maestra de referencia técnica para agentes de IA** (Antigravity, Claude, Cursor, Cline, Windsurf, Roo Code, etc.) que trabajen en este repositorio o que se conecten a **PZ Mod Studio** a través del protocolo **Model Context Protocol (MCP)**.
+This file serves as the **master technical reference guide for AI Agents** (Antigravity, Claude, Cursor, Cline, Windsurf, Roo Code, etc.) working on this repository or connecting to **PZ Mod Studio** via the **Model Context Protocol (MCP)**.
 
 ---
 
-## 1. 🏗️ Arquitectura General del Proyecto
+## 1. 🏗️ Overall Project Architecture
 
 - **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Monaco Editor, Lucide Icons.
-- **Backend:** Tauri 2.0 (Rust) con crates especializadas:
-  - `full_moon`: Parsing de AST y análisis estático de código Lua.
-  - `similar`: Algoritmos de diffing línea por línea y bloque por bloque.
-  - `dirs-next` / `walkdir`: Resolución y escaneo recursivo del sistema de archivos.
-- **Servidor MCP:** Implementado en Rust puro (`src-tauri/src/mcp/`) bajo el estándar **MCP 2024-11-05 (JSON-RPC 2.0 sobre stdio)**.
+- **Backend:** Tauri 2.0 (Rust) with specialized crates:
+  - `full_moon`: AST parsing and static analysis for Lua code.
+  - `similar`: Line-by-line and chunk-by-chunk diffing algorithms.
+  - `dirs-next` / `walkdir`: Filesystem resolution and recursive scanning.
+- **MCP Server:** Pure Rust implementation (`src-tauri/src/mcp/`) adhering to the **MCP 2024-11-05 (JSON-RPC 2.0 over stdio)** standard.
 
 ---
 
-## 2. 🔌 Cómo Conectar un Agente al Servidor MCP
+## 2. 🔌 Connecting an Agent to the MCP Server
 
-El servidor MCP puede ejecutarse como un binario de consola dedicado o mediante el flag `--mcp` del ejecutable principal.
+The MCP server can be launched as a dedicated console binary or via the `--mcp` CLI flag on the main executable.
 
-### Rutas de los Ejecutables
-- **Binario de consola directo (Recomendado para MCP):**
+### Executable Paths
+- **Direct console binary (Recommended for MCP):**
   `e:\PZ Mod Studio\src-tauri\target\debug\pz-mcp-server.exe`
-- **Compilación en Release:**
+- **Release build:**
   `e:\PZ Mod Studio\src-tauri\target\release\pz-mcp-server.exe`
-- **Flag CLI del ejecutable principal:**
+- **Main application CLI flag:**
   `e:\PZ Mod Studio\src-tauri\target\debug\pz-mod-studio.exe --mcp`
 
-### Fragmento de Configuración JSON
+### JSON Configuration Snippets
 
-#### Para Antigravity / Gemini CLI (`.gemini/settings.json`):
+#### For Antigravity / Gemini CLI (`.gemini/settings.json`):
 ```json
 {
   "mcpServers": {
@@ -41,7 +41,7 @@ El servidor MCP puede ejecutarse como un binario de consola dedicado o mediante 
 }
 ```
 
-#### Para Claude Desktop (`claude_desktop_config.json`):
+#### For Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -53,7 +53,7 @@ El servidor MCP puede ejecutarse como un binario de consola dedicado o mediante 
 }
 ```
 
-#### Para Cursor / Windsurf / VS Code (`mcp.json`):
+#### For Cursor / Windsurf / VS Code (`mcp.json`):
 ```json
 {
   "mcpServers": {
@@ -67,83 +67,82 @@ El servidor MCP puede ejecutarse como un binario de consola dedicado o mediante 
 
 ---
 
-## 3. 🛠️ Catálogo de Herramientas MCP (*Tools*)
+## 3. 🛠️ MCP Tool Catalog (*Tools*)
 
-Cualquier cliente MCP conectado puede invocar las siguientes herramientas vía `tools/call`:
+Connected MCP clients can invoke the following tools via `tools/call`:
 
-### Diagnóstico, Monitor Center y Control de Procesos
-| Herramienta | Parámetros | Descripción |
+### Diagnostics, Monitor Center & Process Control
+| Tool | Parameters | Description |
 | :--- | :--- | :--- |
-| `get_game_status` | `{}` | Comprueba si `ProjectZomboid64.exe` está en ejecución y devuelve su Process ID (PID). |
-| `launch_game` | `debug_mode` (bool), `windowed` (bool), `nosteam` (bool), `extra_args` (array) | Lanza el proceso `ProjectZomboid64.exe` con flags configurables de depuración y modo ventana. |
-| `terminate_game` | `pid` (int opcional), `force` (bool default true) | Cierra o fuerza la terminación del proceso de Project Zomboid. |
-| `send_game_ipc_command` | `command` (object requerido: `give_item`, `eval_lua`, `set_godmode`, etc.) | Envía un comando a la partida en vivo a través del companion mod `Z_PZModStudio_Bridge`. |
-| `get_game_ipc_response` | `{}` | Lee la respuesta de ejecución más reciente emitida por el companion mod. |
-| `install_bridge_companion_mod` | `user_zomboid_dir` (opcional) | Instala el companion mod `Z_PZModStudio_Bridge` en `Zomboid/mods` para habilitar el bridge IPC. |
-| `get_monitor_logs` | `max_lines` (int, default 100)<br>`errors_only` (bool)<br>`user_zomboid_dir` (string opcional) | Lee y filtra las líneas recientes del archivo de log activo `console.txt`. |
-| `list_available_logs` | `user_zomboid_dir` (opcional) | Lista todos los archivos de log de sesiones en disco (`console.txt` y `Zomboid/Logs/`). |
-| `read_log_file` | `file_path` (string requerido)<br>`max_lines` (int)<br>`errors_only` (bool) | Lee cualquier archivo de log específico con filtrado de excepciones. |
-| `get_crash_diagnostics` | `user_zomboid_dir` (string opcional) | Parsea excepciones Java/Lua y genera tarjetas de diagnóstico de Build 41 & 42 con soluciones y polyfills sugeridos. |
+| `get_game_status` | `{}` | Checks whether `ProjectZomboid64.exe` is running and returns its Process ID (PID). |
+| `launch_game` | `debug_mode` (bool), `windowed` (bool), `nosteam` (bool), `extra_args` (array) | Launches `ProjectZomboid64.exe` with configurable debug flags and windowed mode. |
+| `terminate_game` | `pid` (int optional), `force` (bool default true) | Closes or forcefully terminates the Project Zomboid process. |
+| `send_game_ipc_command` | `command` (object: `give_item`, `eval_lua`, `set_godmode`, etc.) | Sends a command to the active game session through the companion mod `Z_PZModStudio_Bridge`. |
+| `get_game_ipc_response` | `{}` | Reads the latest execution response returned by the companion mod. |
+| `install_bridge_companion_mod` | `user_zomboid_dir` (optional) | Installs the companion mod `Z_PZModStudio_Bridge` into `Zomboid/mods` to enable the IPC bridge. |
+| `get_monitor_logs` | `max_lines` (int, default 100)<br>`errors_only` (bool)<br>`user_zomboid_dir` (string optional) | Reads and filters recent lines from the active log file `console.txt`. |
+| `list_available_logs` | `user_zomboid_dir` (optional) | Lists all session log files on disk (`console.txt` and `Zomboid/Logs/`). |
+| `read_log_file` | `file_path` (string required)<br>`max_lines` (int)<br>`errors_only` (bool) | Reads a specific log file with exception filtering. |
+| `get_crash_diagnostics` | `user_zomboid_dir` (string optional) | Parses Java/Lua exceptions and generates Build 41 & 42 diagnostic cards with recommended fixes and polyfills. |
 
-### Rutas, Mods, Perfiles y Orden de Carga
-| Herramienta | Parámetros | Descripción |
+### Paths, Mods, Profiles & Load Order
+| Tool | Parameters | Description |
 | :--- | :--- | :--- |
-| `get_studio_paths` | `{}` | Auto-detecta y devuelve las rutas de instalación del juego, Steam Workshop y carpeta Zomboid del usuario. |
-| `list_installed_mods` | `pz_install_dir`, `user_zomboid_dir`, `workshop_dir` (opcionales) | Escanea y lista todos los mods de Steam Workshop y locales con sus metadatos e IDs. |
-| `sort_mod_load_order` | Mismos parámetros de rutas | Ejecuta la ordenación topológica y detecta dependencias circulares o faltantes. |
-| `scan_mod_conflicts` | Mismos parámetros de rutas | Escanea el sistema de archivos virtual (VFS) para detectar colisiones entre mods y el juego base. |
-| `list_mod_profiles` | `user_zomboid_dir` (opcional) | Lista todos los perfiles de mods guardados, sus mods activos y orden de carga. |
-| `create_mod_profile` | `name` (string requerido)<br>`description` (string)<br>`active_mod_ids` (array)<br>`load_order` (array) | Crea un nuevo perfil independiente de combinación de mods. |
-| `activate_mod_profile` | `profile_id` (string requerido) | Activa un perfil de mods y lo escribe en `default.txt` / `ModListData.ini`. |
+| `get_studio_paths` | `{}` | Auto-detects and returns installation paths for the game, Steam Workshop, and user Zomboid folder. |
+| `list_installed_mods` | `pz_install_dir`, `user_zomboid_dir`, `workshop_dir` (optional) | Scans and lists all installed Steam Workshop and local mods along with metadata and IDs. |
+| `sort_mod_load_order` | Same path parameters | Executes topological dependency sorting and detects circular or missing dependencies. |
+| `scan_mod_conflicts` | Same path parameters | Scans the Virtual File System (VFS) to detect collisions between mods and the vanilla base game. |
+| `list_mod_profiles` | `user_zomboid_dir` (optional) | Lists all saved mod profiles, active mod IDs, and custom load orders. |
+| `create_mod_profile` | `name` (string required)<br>`description` (string)<br>`active_mod_ids` (array)<br>`load_order` (array) | Creates a new independent mod combination profile. |
+| `activate_mod_profile` | `profile_id` (string required) | Activates a mod profile and writes it directly to `default.txt` / `ModListData.ini`. |
 
-### Motor de Fusión y Generador de Parches
-| Herramienta | Parámetros | Descripción |
+### Merge Engine & Patch Generator
+| Tool | Parameters | Description |
 | :--- | :--- | :--- |
-| `validate_lua_syntax` | `code` (string requerido) | Valida sintaxis Lua usando el parser AST (`full_moon`), indicando línea y columna exacta en caso de error. |
-| `merge_lua_scripts` | `base`, `target_a`, `target_b` (strings requeridos) | Ejecuta un 3-way AST merge entre código base y dos variantes de mods en conflicto. |
-| `list_merged_packages` | `user_zomboid_dir`, `mod_list_ini_path` (opcionales) | Lista todos los paquetes de parches y fusiones (`Z_PZModStudio_*`) del sistema. |
-| `get_master_patch_status` | `user_zomboid_dir`, `package_folder_name` (opcionales) | Consulta el estado del paquete maestro `Z_PZModStudio_MasterPatch` y las resoluciones guardadas. |
-| `save_draft_resolution` | `relative_path`, `resolved_content` (requeridos)<br>`package_folder_name`, `status` (opcionales) | Guarda una resolución de código directamente en el paquete del parche maestro. |
+| `validate_lua_syntax` | `code` (string required) | Validates Lua syntax using the AST parser (`full_moon`), providing exact line and column numbers on error. |
+| `merge_lua_scripts` | `base`, `target_a`, `target_b` (strings required) | Performs a 3-way AST merge between a base script and two conflicting mod variants. |
+| `list_merged_packages` | `user_zomboid_dir`, `mod_list_ini_path` (optional) | Lists all patch and merged packages (`Z_PZModStudio_*`) registered in the system. |
+| `get_master_patch_status` | `user_zomboid_dir`, `package_folder_name` (optional) | Queries the status of the `Z_PZModStudio_MasterPatch` package and saved resolutions. |
+| `save_draft_resolution` | `relative_path`, `resolved_content` (required)<br>`package_folder_name`, `status` (optional) | Saves a resolved code draft directly into the master patch package. |
 
 ---
 
-## 4. 📚 Catálogo de Recursos MCP (*Resources*)
+## 4. 📚 MCP Resource Catalog (*Resources*)
 
-Lectura pasiva disponible vía `resources/read`:
+Passive read endpoints available via `resources/read`:
 
-1. `pz://monitor/console-log`: Contenido en tiempo real del archivo `console.txt`.
-2. `pz://mods/installed-summary`: Resumen en JSON de los mods detectados y orden de carga.
-3. `pz://paths/config`: Configuración de rutas del sistema (`StudioPaths`).
-4. `pz://patches/status`: Estado del paquete de parche maestro y borradores.
-
----
-
-## 5. 🧠 Base de Conocimiento Técnico & Wiki Modular (`docs/`)
-
-Para profundizar en cualquier aspecto del motor, consulte la [**Wiki Técnica Modular**](docs/INDEX.md):
-
-- **[01. Motor, JVM y Kahlua VM](docs/01-arquitectura-motor-kahlua-java.md):** Tipos Java vs Lua (List vs Table, 0 vs 1 based).
-- **[02. Ciclo de Vida Lua y Eventos](docs/02-ciclo-vida-lua-y-eventos.md):** Fases `shared`/`client`/`server`, orden alfabético y Monkey Patching.
-- **[03. Items, Crafting y Fluidos B42](docs/03-crafting-items-y-fluidos-b42.md):** `craftRecipe`, `Tags`, herencia física y `FluidContainer`.
-- **[04. UI y Timed Actions](docs/04-ui-context-menu-y-timedactions.md):** `ISUIElement`, `OnFillWorldObjectContextMenu` y máquina de estados `ISBaseTimedAction`.
-- **[05. Distribución de Botín](docs/05-distribucion-de-botin-y-spawns.md):** `ItemPickerJava`, `ProceduralDistributions.lua` y APIs de contenedores.
-- **[06. ModData y Networking](docs/06-networking-moddata-y-seguridad.md):** Persistencia, sincronización de red y atestación CHAP.
-- **[07. Sonido, Traducciones JSON y Espacio 3D](docs/07-sonido-traducciones-y-espacio-b42.md):** FMOD, formato JSON (B42.15+) y coordenadas Z (-32 a +32).
-- **[08. Diagnóstico de Crashes y VFS](docs/08-diagnostico-de-crashes-y-vfs.md):** Taxonomía de errores en `console.txt` y 3-way AST merge.
-- **[09. Control del Proceso y Bridge IPC](docs/09-control-del-juego-y-bridge-ipc.md):** Control de `ProjectZomboid64.exe` y ejecución de comandos en vivo.
+1. `pz://monitor/console-log`: Real-time streaming content of `console.txt`.
+2. `pz://mods/installed-summary`: JSON summary of detected mods and load order.
+3. `pz://paths/config`: System path configuration (`StudioPaths`).
+4. `pz://patches/status`: Master patch package and draft resolution status.
 
 ---
 
-## 6. 💻 Comandos de Desarrollo y Compilación
+## 5. 🧠 Technical Knowledge Base & Modular Wiki (`docs/`)
+
+For in-depth architectural details, refer to the [**Modular Technical Wiki**](docs/INDEX.md):
+
+- **[01. Engine Architecture, JVM & Kahlua VM](docs/01-engine-architecture-kahlua-jvm.md):** Java vs Lua types (List vs Table, 0-based vs 1-based indexing).
+- **[02. Lua Script Lifecycle & Event Bus](docs/02-lua-lifecycle-and-events.md):** `shared`/`client`/`server` phases, alphabetical order, and Monkey Patching.
+- **[03. Item Definitions, Crafting & Fluid API (B42)](docs/03-crafting-items-and-fluids-b42.md):** `craftRecipe`, `Tags`, physical inheritance, and `FluidContainer`.
+- **[04. UI Hierarchy, Context Menus & Timed Actions](docs/04-ui-context-menu-and-timedactions.md):** `ISUIElement`, `OnFillWorldObjectContextMenu`, and `ISBaseTimedAction` state machine.
+- **[05. Loot Distribution & Procedural Spawning](docs/05-loot-distribution-and-spawns.md):** `ItemPickerJava`, `ProceduralDistributions.lua`, and container APIs.
+- **[06. ModData Persistence, Networking & Security](docs/06-networking-moddata-and-security.md):** Persistence scopes, client-server sync, and CHAP anti-cheat attestation.
+- **[07. FMOD Audio, JSON Translations & 3D Z-Levels](docs/07-sound-translations-and-b42-space.md):** Sound scripts, mandatory JSON format (B42.15+), and Z-coordinates (-32 to +32).
+- **[08. Crash Diagnostics, VFS & 3-Way AST Merging](docs/08-crash-diagnostics-and-vfs.md):** `console.txt` error taxonomy and 3-way AST merge.
+- **[09. Game Process Control & Live IPC Bridge](docs/09-game-control-and-ipc-bridge.md):** `ProjectZomboid64.exe` lifecycle control and live in-game execution.
+
+---
+
+## 6. 💻 Development & Build Commands
 
 ```powershell
-# Compilar el servidor MCP independiente (Rápido, sin GUI):
+# Compile the standalone MCP server (Fast, no GUI):
 cargo build --bin pz-mcp-server --manifest-path "src-tauri/Cargo.toml"
 
-# Compilar y ejecutar la aplicación gráfica completa:
+# Run the full desktop application in development mode:
 npm run tauri dev
 
-# Compilar frontend para producción:
+# Build production bundle:
 npm run build
 ```
-

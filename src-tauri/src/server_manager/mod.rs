@@ -335,6 +335,10 @@ pub fn launch_dedicated_server(
         let child = cmd.spawn().map_err(|e| format!("Failed to spawn dedicated server: {}", e))?;
         let child_pid = child.id();
 
+        // Clean stale player telemetry from prior sessions
+        let _ = fs::remove_file(primary_user_dir.join("Lua").join("pz_server_players.json"));
+        let _ = fs::remove_file(primary_user_dir.join("pz_server_players.json"));
+
         // Save server state to JSON
         let state = DedicatedServerStatus {
             is_running: true,
@@ -392,6 +396,9 @@ pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Res
         cmd1.args(&["/F", "/IM", "java.exe"]);
         cmd1.creation_flags(0x08000000); // CREATE_NO_WINDOW
         let _ = cmd1.output();
+
+        let _ = fs::remove_file(primary_user_dir.join("Lua").join("pz_server_players.json"));
+        let _ = fs::remove_file(primary_user_dir.join("pz_server_players.json"));
 
         if state_file.exists() {
             let _ = fs::remove_file(state_file);
@@ -569,10 +576,24 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
     };
 
     if let Some(pf) = target_players_file {
-        if let Ok(content) = fs::read_to_string(&pf) {
-            if let Ok(list) = serde_json::from_str::<Vec<ConnectedPlayer>>(&content) {
-                if !list.is_empty() {
-                    return Ok(list);
+        // Check telemetry freshness: if file was not updated in the last 10 seconds, the client is offline
+        let is_fresh = pf.metadata()
+            .and_then(|m| m.modified())
+            .map(|mod_time| {
+                if let Ok(elapsed) = std::time::SystemTime::now().duration_since(mod_time) {
+                    elapsed.as_secs() <= 10
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+
+        if is_fresh {
+            if let Ok(content) = fs::read_to_string(&pf) {
+                if let Ok(list) = serde_json::from_str::<Vec<ConnectedPlayer>>(&content) {
+                    if !list.is_empty() {
+                        return Ok(list);
+                    }
                 }
             }
         }

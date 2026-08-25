@@ -1068,50 +1068,198 @@ local function initB42Polyfills()
         end
     end
 
-    -- Daily Report Journal (dSAG) Window & Event Protection
-    if dSAG and not dSAG._pzms_wrapped then
-        dSAG._pzms_wrapped = true
-        local old_onNewDay = dSAG.onNewDay
-        if old_onNewDay then
-            dSAG.onNewDay = function(record)
-                pcall(old_onNewDay, record)
+    -- ----------------------------------------------------------------------------
+    -- Safe Java ArrayList & Collection Interop Proxy Helper
+    -- ----------------------------------------------------------------------------
+    local function createSafeArrayListProxy(rawList)
+        if rawList == nil then
+            if ArrayList and ArrayList.new then
+                local ok, al = pcall(ArrayList.new)
+                if ok and al then rawList = al end
             end
         end
-        local old_onPlayerDeath = dSAG.onPlayerDeath
-        if old_onPlayerDeath then
-            dSAG.onPlayerDeath = function(...)
-                pcall(old_onPlayerDeath, ...)
+        local proxy = {}
+        setmetatable(proxy, {
+            __index = function(t, k)
+                if k == "get" then
+                    return function(self, idx)
+                        if not rawList or type(idx) ~= "number" then return nil end
+                        local okSize, size = pcall(function() return rawList:size() end)
+                        if okSize and type(size) == "number" and (idx < 0 or idx >= size) then
+                            return nil
+                        end
+                        local okGet, val = pcall(function() return rawList:get(idx) end)
+                        if okGet then return val end
+                        return nil
+                    end
+                elseif k == "size" then
+                    return function(self)
+                        if not rawList then return 0 end
+                        local okSize, size = pcall(function() return rawList:size() end)
+                        if okSize and type(size) == "number" then return size end
+                        return 0
+                    end
+                elseif k == "isEmpty" then
+                    return function(self)
+                        if not rawList then return true end
+                        local okEmpty, empty = pcall(function() return rawList:isEmpty() end)
+                        if okEmpty then return empty end
+                        local okSize, size = pcall(function() return rawList:size() end)
+                        if okSize and type(size) == "number" then return size == 0 end
+                        return true
+                    end
+                elseif k == "contains" then
+                    return function(self, item)
+                        if not rawList or item == nil then return false end
+                        local ok, res = pcall(function() return rawList:contains(item) end)
+                        return ok and res == true
+                    end
+                elseif k == "add" then
+                    return function(self, item)
+                        if not rawList then return false end
+                        local ok, res = pcall(function() return rawList:add(item) end)
+                        return ok and res == true
+                    end
+                elseif k == "clear" then
+                    return function(self)
+                        if not rawList then return end
+                        pcall(function() rawList:clear() end)
+                    end
+                end
+                if rawList and rawList[k] then
+                    local m = rawList[k]
+                    if type(m) == "function" then
+                        return function(self, ...)
+                            local ok, res = pcall(m, rawList, ...)
+                            if ok then return res end
+                            return nil
+                        end
+                    end
+                    return m
+                end
+                return nil
+            end,
+            __len = function()
+                if not rawList then return 0 end
+                local okSize, size = pcall(function() return rawList:size() end)
+                return (okSize and size) or 0
             end
-        end
-        local old_onDataReloaded = dSAG.onDataReloaded
-        if old_onDataReloaded then
-            dSAG.onDataReloaded = function(...)
-                pcall(old_onDataReloaded, ...)
+        })
+        return proxy
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- Daily Report Journal (dSAG / dailyStatisticsAndGains) Safety Guard
+    -- ----------------------------------------------------------------------------
+    local function guardDSAGTable(tbl)
+        if not tbl or tbl._pzms_wrapped then return end
+        tbl._pzms_wrapped = true
+        local methods = {
+            "onNewDay", "OnNewDay", "onPlayerDeath", "OnPlayerDeath",
+            "onDataReloaded", "OnDataReloaded", "analyzeStats", "switchTab",
+            "calculateStats", "updateStats", "render", "prerender"
+        }
+        for _, mName in ipairs(methods) do
+            if type(tbl[mName]) == "function" then
+                local rawFn = tbl[mName]
+                tbl[mName] = function(...)
+                    local ok, res = pcall(rawFn, ...)
+                    if ok then return res end
+                    return nil
+                end
             end
         end
     end
 
+    if dSAG then guardDSAGTable(dSAG) end
+    if dSAG_Window then guardDSAGTable(dSAG_Window) end
+    if dailyStatisticsAndGains then guardDSAGTable(dailyStatisticsAndGains) end
+    if DailyReportJournal then guardDSAGTable(DailyReportJournal) end
+
+    -- ----------------------------------------------------------------------------
+    -- Fancy Handwork B42 Multiplayer & Java Bounds Safety Guard
+    -- ----------------------------------------------------------------------------
+    local function guardFancyTable(tbl)
+        if not tbl or tbl.__pzms_fh_guarded then return end
+        tbl.__pzms_fh_guarded = true
+        for k, v in pairs(tbl) do
+            if type(v) == "function" then
+                local origFn = v
+                tbl[k] = function(...)
+                    local ok, res = pcall(origFn, ...)
+                    if ok then return res end
+                    return nil
+                end
+            end
+        end
+    end
+
+    if FancyHandwork then guardFancyTable(FancyHandwork) end
+    if aFancyHandwork then guardFancyTable(aFancyHandwork) end
+    if FHandwork then guardFancyTable(FHandwork) end
+    if _G.fancyMP and not _G.__pzms_fancyMP_guarded then
+        _G.__pzms_fancyMP_guarded = true
+        local orig_fancyMP = _G.fancyMP
+        _G.fancyMP = function(...)
+            local ok, res = pcall(orig_fancyMP, ...)
+            if ok then return res end
+            return nil
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- SaucedCarts / Pushable Carts Multiplayer & Attach Interop Guard
+    -- ----------------------------------------------------------------------------
+    local function guardSaucedCartsTable(tbl)
+        if not tbl or tbl._pzms_wrapped then return end
+        tbl._pzms_wrapped = true
+        for k, v in pairs(tbl) do
+            if type(v) == "function" then
+                local rawFn = v
+                tbl[k] = function(...)
+                    local ok, res = pcall(rawFn, ...)
+                    if ok then return res end
+                    return nil
+                end
+            end
+        end
+    end
+
+    if SaucedCarts then guardSaucedCartsTable(SaucedCarts) end
+    if PushableCarts then guardSaucedCartsTable(PushableCarts) end
+
     -- ----------------------------------------------------------------------------
     -- Dedicated Server & Multiplayer Null-Pointer Shield for getOnlinePlayers
     -- ----------------------------------------------------------------------------
-    if _G and _G.getOnlinePlayers then
+    if _G and _G.getOnlinePlayers and not _G.__pzms_getOnlinePlayers_wrapped then
+        _G.__pzms_getOnlinePlayers_wrapped = true
         local orig_getOnlinePlayers = _G.getOnlinePlayers
         _G.getOnlinePlayers = function(...)
             if isServer and isServer() then
                 if not (zombie and zombie.network and zombie.network.GameServer and zombie.network.GameServer.udpEngine) then
-                    if ArrayList and ArrayList.new then
-                        return ArrayList.new()
-                    end
+                    return createSafeArrayListProxy(nil)
                 end
             end
             local ok, res = pcall(orig_getOnlinePlayers, ...)
             if ok and res ~= nil then
-                return res
+                return createSafeArrayListProxy(res)
             end
-            if ArrayList and ArrayList.new then
-                return ArrayList.new()
+            return createSafeArrayListProxy(nil)
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- Multiplayer & Bounds Safety Shield for IsoPlayer.getPlayers
+    -- ----------------------------------------------------------------------------
+    if IsoPlayer and IsoPlayer.getPlayers and not IsoPlayer.__pzms_getPlayers_wrapped then
+        IsoPlayer.__pzms_getPlayers_wrapped = true
+        local orig_getPlayers = IsoPlayer.getPlayers
+        IsoPlayer.getPlayers = function(...)
+            local ok, res = pcall(orig_getPlayers, ...)
+            if ok and res ~= nil then
+                return createSafeArrayListProxy(res)
             end
-            return {}
+            return createSafeArrayListProxy(nil)
         end
     end
 
