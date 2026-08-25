@@ -1,48 +1,137 @@
+﻿<div align="center">
+
+<img src="111.png" alt="Project Zomboid Mod Studio Logo" width="160" />
+
 # 🧟 Project Zomboid Mod Studio (PZ Mod Studio)
 
-> **The ultimate desktop suite for managing, resolving conflicts, and ensuring mod compatibility in Project Zomboid, across any Build.**
+> **The ultimate desktop suite for managing, resolving conflicts, and ensuring mod compatibility in Project Zomboid (Build 42+ & legacy builds).**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](https://opensource.org/licenses/MIT)
+[![Tauri 2.0](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://tauri.app/)
+[![Rust](https://img.shields.io/badge/Rust-Stable-orange.svg)](https://www.rust-lang.org/)
+[![React 19](https://img.shields.io/badge/React-19-cyan.svg)](https://react.dev/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-purple.svg)]()
+[![GitHub release](https://img.shields.io/github/v/release/Pichu6/Project-Zomboid-Mod-Studio?color=emerald)](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases)
+
+[**Download Portable (.exe)**](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md) • [**Forum Post Tutorial**](FORUM_POST_THE_INDIE_STONE.md)
+
+</div>
 
 ---
 
-## 🇬🇧 English Description
+## 🌟 Overview
 
-### Overview
-**Project Zomboid Mod Studio (PZ Mod Studio)** is a high-performance, portable desktop application designed to solve mod conflicts and version breaks in **Project Zomboid (Build 42+ & legacy builds)**.
+**Project Zomboid Mod Studio** is a lightweight (~11 MB), portable desktop application engineered to eliminate the most common headaches in modded Project Zomboid: **virtual file overwrites**, **broken load orders**, **B41-to-B42 compatibility breaks**, and **unreadable crash logs**.
 
-Far beyond a simple *script merger*, **PZ Mod Studio** provides a comprehensive 4-module studio suite that allows players and modders to intelligently merge Lua code & game scripts, inject compatibility layers for outdated mods (Polyfills), manage load order (`ModListData.ini`), and diagnose startup errors in an isolated sandbox lab.
-
----
-
-### ✨ Key Features
-
-- **🔀 Virtual Path Conflict Detector & Dual 3-Way AST Merger:**
-  Overlays Vanilla paths (`media/lua/` & `media/scripts/`), Steam Workshop content, and Local Mods. Automatically merges non-overlapping edits in Lua files and PZ data script blocks (`.txt` files for items, recipes, fluids, vehicles).
-- **🛡️ JSON-Driven Polyfill Engine (B42 Compatibility):**
-  Injects static and dynamic syntax patches to fix legacy B41 calls (String-to-Enum conversions, uninitialized global table safety, `require` path redirection, and Java `Translator.getText` format string sanitization).
-- **📋 Load Order & Dependency Manager:**
-  Reads and writes directly to `ModListData.ini` and `mod.info` manifests. Performs topological dependency sorting to highlight missing base mods and save custom mod list profiles.
-- **🧪 Test Sandbox Lab & Crash Inspector (`console.txt`):**
-  Launches isolated test runs (`-cachedir`, `-debug`) and intercepts crashes in `console.txt`, translating raw Java/Lua stacktraces into actionable, human-readable 1-click solutions.
+Unlike basic file combiners, PZ Mod Studio parses Lua scripts into a true **Abstract Syntax Tree (AST)** using the `full_moon` parser, performing a **3-Way Git-style merge** across Vanilla game files, Steam Workshop mods, and local additions. It packages all resolutions into an isolated synthetic mod (`Z_PZModStudio_MergedPatch`) that loads safely alongside your game.
 
 ---
 
-### 🛠️ Tech Stack
+## ✨ Key Features
 
-- **Frontend:** React + TypeScript + TailwindCSS + Monaco Editor (VS Code Engine).
-- **Backend:** Rust + Tauri (Blazing fast Virtual File System scanner & AST diffing).
-- **Format:** Portable executable (no installer required, ready for GitHub Releases).
+| Module | Core Capabilities |
+| :--- | :--- |
+| **📂 Mod Profiles** | Save and switch between unlimited mod configurations (Solo, B42 Vanilla+, Co-op Server) with **1-click activation** directly into `ModListData.ini`. |
+| **📋 Mod List Manager** | Auto-detects all Workshop and local mods. Features **Topological Dependency Sorting** (Kahn's Algorithm), health inspectors for missing/disabled dependencies, and shareable **`.pzpack` presets**. |
+| **🔀 3-Way AST Mod Merger** | Detects Virtual File System (VFS) collisions and performs automated AST merges on Lua code and `.txt` scripts. Includes an integrated **Monaco Diff Editor** (VS Code engine). |
+| **📊 Monitor Center & Diagnostics** | Streams live `console.txt` with noise filtering. Detects Java/Lua exceptions and generates **Crash Diagnostic Cards** with **1-click "Apply Fix" Polyfill rules**. |
+| **🖥️ Dedicated Server Runner** | Launch dedicated servers with configurable RAM and `-nosteam` support. Monitor live connected players (health, coordinates, ping), send broadcast messages, and run live console commands. |
+| **🤖 AI Agent Integration (MCP)** | Native **Model Context Protocol (MCP 2024-11-05)** server (`pz-mcp-server.exe`) enabling assistants (Claude Desktop, Cursor, Antigravity) to inspect logs, manage load orders, and run in-game live commands. |
 
 ---
 
-## 🇪🇸 Descripción en Español
+## 🚀 Quick Start (Portable Edition)
 
-### Visión General
-**Project Zomboid Mod Studio (PZ Mod Studio)** es una aplicación de escritorio portátil de alto rendimiento diseñada para resolver los conflictos de mods y las roturas de versión en **Project Zomboid (Build 42+ y versiones anteriores)**.
+No installer or administrative rights required:
 
-Ofrece una suite de 4 módulos para combinar código Lua y scripts de datos, inyectar capas de compatibilidad (Polyfills), administrar el orden de carga (`ModListData.ini`) y diagnosticar errores en un laboratorio de pruebas aislado.
+1. Download `PZ-Mod-Studio-Portable.zip` from the latest **[GitHub Release](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases)**.
+2. Extract the folder anywhere on your computer.
+3. Launch **`Project-Zomboid-Mod-Studio.exe`**.
+4. The studio will auto-detect your Project Zomboid, Steam Workshop, and user folders.
+
+---
+
+## 🛠️ Building from Source (Developers & Contributors)
+
+### Prerequisites
+- [Node.js 22+](https://nodejs.org/)
+- [Rust Stable Toolchain](https://rustup.rs/)
+- Git
+
+### Build & Run
+```bash
+# 1. Clone the repository
+git clone https://github.com/Pichu6/Project-Zomboid-Mod-Studio.git
+cd Project-Zomboid-Mod-Studio
+
+# 2. Install dependencies
+npm install
+
+# 3. Launch in development mode (hot-reload frontend + Rust backend)
+npm run tauri dev
+
+# 4. Build production portable bundle
+npm run build:portable
+```
+
+To build only the standalone MCP server binary:
+```bash
+cargo build --release --bin pz-mcp-server --manifest-path "src-tauri/Cargo.toml"
+```
+
+---
+
+## 🤖 AI Agent & MCP Integration
+
+PZ Mod Studio includes a dedicated CLI binary (`pz-mcp-server.exe`) that exposes 22 developer tools via standard JSON-RPC 2.0 over `stdio`.
+
+Add this snippet to your assistant's configuration file (e.g. `claude_desktop_config.json`, `mcp.json`, or `.gemini/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "pz-mod-studio": {
+      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "args": []
+    }
+  }
+}
+```
+
+For complete tool documentation, see [**`AGENTS.md`**](AGENTS.md).
+
+---
+
+## 📚 Technical Knowledge Base (`docs/`)
+
+The repository includes a comprehensive, modular 9-chapter wiki detailing Project Zomboid's internal architecture:
+
+- [**01. Engine Architecture, JVM & Kahlua VM**](docs/01-arquitectura-motor-kahlua-java.md)
+- [**02. Lua Script Lifecycle & Event Bus**](docs/02-ciclo-vida-lua-y-eventos.md)
+- [**03. Item Definitions, Crafting & Fluid API (B42)**](docs/03-crafting-items-y-fluidos-b42.md)
+- [**04. UI Hierarchy, Context Menus & Timed Actions**](docs/04-ui-context-menu-y-timedactions.md)
+- [**05. Loot Distribution & Procedural Spawning**](docs/05-distribucion-de-botin-y-spawns.md)
+- [**06. ModData Persistence, Networking & Security**](docs/06-networking-moddata-y-seguridad.md)
+- [**07. FMOD Audio, JSON Translations & 3D Z-Levels**](docs/07-sonido-traducciones-y-espacio-b42.md)
+- [**08. Crash Diagnostics, VFS & 3-Way AST Merging**](docs/08-diagnostico-de-crashes-y-vfs.md)
+- [**09. Game Process Control & Live IPC Bridge**](docs/09-control-del-juego-y-bridge-ipc.md)
+
+See the [**Documentation Index**](docs/INDEX.md) for full details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are warmly welcomed! Please read [**`CONTRIBUTING.md`**](CONTRIBUTING.md) for details on code style, submitting polyfill rules, and opening Pull Requests.
 
 ---
 
 ## 📄 License
 
-MIT License - Free and open-source for the Project Zomboid community.
+This project is licensed under the **MIT License** — see the [**`LICENSE`**](LICENSE) file for details.
+
+---
+
+<div align="center">
+<i>Project Zomboid is a registered trademark of The Indie Stone. PZ Mod Studio is an unofficial community project.</i>
+</div>

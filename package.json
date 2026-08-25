@@ -1,13 +1,24 @@
 {
-  "name": "tauri-app",
-  "private": true,
-  "version": "0.1.0",
+  "name": "pz-mod-studio",
+  "version": "1.0.0",
+  "description": "The ultimate desktop suite for managing, resolving conflicts, and ensuring mod compatibility in Project Zomboid.",
+  "author": "Pichu6",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pichu6/Project-Zomboid-Mod-Studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Pichu6/Project-Zomboid-Mod-Studio/issues"
+  },
+  "homepage": "https://github.com/Pichu6/Project-Zomboid-Mod-Studio",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:portable": "tauri build --no-bundle && node scripts/package-portable.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

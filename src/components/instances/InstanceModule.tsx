@@ -7,12 +7,14 @@ interface InstanceModuleProps {
   paths: StudioPathsUI;
   mods: ModInfo[];
   onApplyInstanceLoadOrder: (loadOrder: string[], activeIds: string[]) => void;
+  onProfileActivated?: (inst: AppInstance) => void;
 }
 
 export const InstanceModule: React.FC<InstanceModuleProps> = ({
   paths,
   mods,
   onApplyInstanceLoadOrder,
+  onProfileActivated,
 }) => {
   const [instances, setInstances] = useState<AppInstance[]>([]);
   const [newInstanceName, setNewInstanceName] = useState('');
@@ -24,7 +26,6 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
   const [editingInstance, setEditingInstance] = useState<AppInstance | null>(null);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
-  const [updateModsOnEdit, setUpdateModsOnEdit] = useState(false);
 
   const activeMods = mods.filter((m) => m.enabled);
 
@@ -34,7 +35,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       const list: AppInstance[] = await TauriService.listInstances(paths.user_zomboid_dir);
       setInstances(list);
     } catch (err) {
-      console.error('Error al cargar instancias:', err);
+      console.error('Error loading profiles:', err);
     } finally {
       setIsLoading(false);
     }
@@ -46,7 +47,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
   const handleCreateInstance = async () => {
     if (!newInstanceName.trim()) {
-      alert('Ingresa un nombre para el perfil de instancia.');
+      alert('Please enter a name for the profile.');
       return;
     }
 
@@ -64,10 +65,15 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
       setNewInstanceName('');
       setNewInstanceDesc('');
-      setStatusMessage(`✨ Perfil de Instancia '${created.name}' creado con éxito.`);
+      setStatusMessage(`✨ Profile '${created.name}' created successfully.`);
       await loadInstances();
+
+      // If this is the only profile, activate it automatically
+      if (instances.length === 0) {
+        await handleActivateInstance(created);
+      }
     } catch (err: any) {
-      alert(`Error al crear instancia: ${err}`);
+      alert(`Error creating profile: ${err}`);
     }
   };
 
@@ -75,7 +81,6 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
     setEditingInstance(inst);
     setEditName(inst.name);
     setEditDesc(inst.description || '');
-    setUpdateModsOnEdit(false);
   };
 
   const handleSaveEdit = async () => {
@@ -86,16 +91,14 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
         ...editingInstance,
         name: editName.trim(),
         description: editDesc.trim() || undefined,
-        active_mod_ids: updateModsOnEdit ? activeMods.map((m) => m.mod_id) : editingInstance.active_mod_ids,
-        load_order: updateModsOnEdit ? mods.map((m) => m.mod_id) : editingInstance.load_order,
       };
 
       await TauriService.updateInstance(paths.user_zomboid_dir, updated);
-      setStatusMessage(`✨ Instancia '${updated.name}' actualizada con éxito.`);
+      setStatusMessage(`✨ Profile '${updated.name}' updated successfully.`);
       setEditingInstance(null);
       await loadInstances();
     } catch (err: any) {
-      alert(`Error al actualizar instancia: ${err}`);
+      alert(`Error updating profile: ${err}`);
     }
   };
 
@@ -103,21 +106,24 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
     try {
       await TauriService.activateInstance(paths.user_zomboid_dir, inst.id);
       onApplyInstanceLoadOrder(inst.load_order, inst.active_mod_ids);
-      setStatusMessage(`⚡ Instancia '${inst.name}' activada con éxito. ¡Mods aplicados al juego!`);
+      if (onProfileActivated) {
+        onProfileActivated(inst);
+      }
+      setStatusMessage(`⚡ Profile '${inst.name}' activated successfully. Mods applied to the game!`);
       await loadInstances();
     } catch (err: any) {
-      alert(`Error al activar la instancia: ${err}`);
+      alert(`Error activating profile: ${err}`);
     }
   };
 
   const handleDeleteInstance = async (inst: AppInstance) => {
-    if (!confirm(`¿Eliminar la instancia '${inst.name}'?`)) return;
+    if (!confirm(`Delete profile '${inst.name}'?`)) return;
     try {
       await TauriService.deleteInstance(paths.user_zomboid_dir, inst.id);
-      setStatusMessage(`Instancia '${inst.name}' eliminada.`);
+      setStatusMessage(`Profile '${inst.name}' deleted.`);
       await loadInstances();
     } catch (err: any) {
-      alert(`Error al eliminar la instancia: ${err}`);
+      alert(`Error deleting profile: ${err}`);
     }
   };
 
@@ -129,17 +135,17 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
           <div className="flex items-center gap-2">
             <Layers className="w-6 h-6 text-emerald-400" />
             <h2 className="text-xl font-bold text-slate-100 tracking-tight">
-              Instancias y Perfiles (Estilo Modrinth)
+              Mod Profiles
             </h2>
             {isLoading && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-2" />}
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Crea perfiles aislados de mods (ej. <i>Vanilla Plus B42</i>, <i>RP Multiplayer</i>, <i>Hardcore Overhaul</i>) y alterna entre ellos en 1 segundo sin tocar menús in-game.
+            Create and save custom mod combinations (e.g., <i>Vanilla Plus B42</i>, <i>Brita + Weapons</i>, <i>Co-op Server</i>) and switch between them with 1 click without losing your load order.
           </p>
         </div>
 
         <span className="text-xs font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 px-3 py-1.5 rounded-xl font-bold">
-          {instances.length} Perfiles Guardados
+          {instances.length} Saved Profiles
         </span>
       </div>
 
@@ -147,33 +153,33 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
         <div className="p-3 bg-emerald-950/80 border border-emerald-700/80 rounded-xl text-xs text-emerald-300 font-bold flex items-center justify-between">
           <span>{statusMessage}</span>
           <button onClick={() => setStatusMessage(null)} className="text-emerald-400 hover:underline">
-            Cerrar
+            Close
           </button>
         </div>
       )}
 
       {/* Main Grid: Create Profile & Instance Cards */}
       <div className="grid grid-cols-12 gap-6">
-        {/* Left Column: Create New Instance */}
+        {/* Left Column: Create New Profile */}
         <div className="col-span-12 lg:col-span-4 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
           <div className="border-b border-slate-800 pb-3 space-y-1">
             <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
               <Plus className="w-4 h-4 text-emerald-400" />
-              <span>Guardar Perfil de Instancia</span>
+              <span>Create New Profile</span>
             </h3>
             <p className="text-xs text-slate-400">
-              Guarda el estado actual ({activeMods.length} mods activos) como una nueva instancia independiente.
+              Create an independent profile to organize and save a mod combination.
             </p>
           </div>
 
           <div className="space-y-3">
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                Nombre de la Instancia
+                Profile Name
               </label>
               <input
                 type="text"
-                placeholder="ej. Instancia B42 Hardcore"
+                placeholder="e.g., B42 Brita & GunFighter"
                 value={newInstanceName}
                 onChange={(e) => setNewInstanceName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
@@ -182,11 +188,11 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                Descripción (Opcional)
+                Description (Optional)
               </label>
               <textarea
                 rows={3}
-                placeholder="Notas de los mods incluidos en este perfil..."
+                placeholder="Notes for the mods included in this profile..."
                 value={newInstanceDesc}
                 onChange={(e) => setNewInstanceDesc(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
@@ -199,12 +205,12 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
               className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2 mt-2"
             >
               <Plus className="w-4 h-4" />
-              <span>Crear Nueva Instancia</span>
+              <span>Create New Profile</span>
             </button>
           </div>
         </div>
 
-        {/* Right Column: Display Cards of All Saved Instances */}
+        {/* Right Column: Display Cards of All Saved Profiles */}
         <div className="col-span-12 lg:col-span-8 space-y-4">
           {instances.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -226,19 +232,19 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
                       {inst.is_active ? (
                         <span className="text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Activo
+                          <Check className="w-3 h-3" /> Active
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono text-slate-500">Inactivo</span>
+                        <span className="text-[10px] font-mono text-slate-500">Inactive</span>
                       )}
                     </div>
 
                     <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
-                      {inst.description || 'Perfil de instancia de mods para Project Zomboid.'}
+                      {inst.description || 'Mod profile for Project Zomboid.'}
                     </p>
 
                     <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 pt-1">
-                      <span className="text-emerald-400 font-bold">{inst.active_mod_ids.length} Mods Activos</span>
+                      <span className="text-emerald-400 font-bold">{inst.active_mod_ids.length} Active Mods</span>
                       <span>•</span>
                       <span>Total: {inst.load_order.length}</span>
                     </div>
@@ -251,14 +257,14 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                         className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow"
                       >
                         <Zap className="w-3.5 h-3.5 fill-white" />
-                        <span>Activar (1-Clic)</span>
+                        <span>Activate (1-Click)</span>
                       </button>
                     )}
 
                     <button
                       onClick={() => handleOpenEdit(inst)}
                       className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl transition cursor-pointer"
-                      title="Editar instancia"
+                      title="Edit profile"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -266,7 +272,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                     <button
                       onClick={() => handleDeleteInstance(inst)}
                       className="p-2 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 rounded-xl transition cursor-pointer"
-                      title="Eliminar instancia"
+                      title="Delete profile"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -280,9 +286,9 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                 <Layers className="w-7 h-7 text-emerald-400" />
               </div>
               <div className="space-y-1 max-w-md">
-                <h3 className="text-sm font-bold text-slate-200">No hay instancias creadas</h3>
+                <h3 className="text-sm font-bold text-slate-200">No profiles created</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Crea tu primera instancia en el panel izquierdo para guardar la combinación actual de mods.
+                  Create your first profile in the left panel to save the current mod combination.
                 </p>
               </div>
             </div>
@@ -290,14 +296,14 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
         </div>
       </div>
 
-      {/* Edit Instance Modal */}
+      {/* Edit Profile Modal */}
       {editingInstance && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-emerald-400" />
-                <span>Editar Instancia</span>
+                <span>Edit Mod Profile</span>
               </h3>
               <button
                 onClick={() => setEditingInstance(null)}
@@ -310,7 +316,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Nombre de la Instancia
+                  Profile Name
                 </label>
                 <input
                   type="text"
@@ -322,7 +328,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Descripción
+                  Description
                 </label>
                 <textarea
                   rows={3}
@@ -330,19 +336,6 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                   onChange={(e) => setEditDesc(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
                 />
-              </div>
-
-              <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  id="updateModsChk"
-                  checked={updateModsOnEdit}
-                  onChange={(e) => setUpdateModsOnEdit(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
-                />
-                <label htmlFor="updateModsChk" className="text-xs text-slate-300 cursor-pointer">
-                  Actualizar los mods de esta instancia con la configuración activa actual ({activeMods.length} mods activos)
-                </label>
               </div>
             </div>
 
@@ -352,13 +345,13 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                 className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow"
               >
                 <Save className="w-4 h-4" />
-                <span>Guardar Cambios</span>
+                <span>Save Changes</span>
               </button>
               <button
                 onClick={() => setEditingInstance(null)}
                 className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
               >
-                Cancelar
+                Cancel
               </button>
             </div>
           </div>

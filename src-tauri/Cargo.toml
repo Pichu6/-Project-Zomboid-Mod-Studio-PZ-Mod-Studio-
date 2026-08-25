@@ -1,13 +1,24 @@
 [package]
 name = "pz-mod-studio"
-version = "0.1.0"
+version = "1.0.0"
 description = "Project Zomboid Mod Studio"
 authors = ["Pichu6"]
+license = "MIT"
+repository = "https://github.com/Pichu6/Project-Zomboid-Mod-Studio"
 edition = "2021"
+default-run = "pz-mod-studio"
 
 [lib]
 name = "pz_mod_studio_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "pz-mod-studio"
+path = "src/main.rs"
+
+[[bin]]
+name = "pz-mcp-server"
+path = "src/bin/mcp_server.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -23,3 +34,4 @@ full_moon = "0.10"
 similar = "2.6"
 rfd = "0.15"
 open = "5.3"
+chrono = "0.4"

@@ -167,4 +167,52 @@ export const DEFAULT_POLYFILL_RULES: PolyfillRule[] = [
       replacement: 'Result:$1, Tags = CraftingIngredient,',
     },
   },
+  {
+    id: 'B42_OBJECT_INTERACT_SAFETY',
+    name: 'B42 IsoDoor / IsoWindow / Thumpable Interop Safety',
+    description: 'Safely wraps ToggleDoor, ToggleDoorActual, and ToggleWindow to prevent isLocalPlayer() NullPointerException during zombie thumping or NPC navigation',
+    category: 'ARGUMENT_TYPE_WRAPPER',
+    severity: 'CRITICAL',
+    enabled: true,
+    pattern: {
+      type: 'LUA_METHOD_CALL',
+      target_method: 'ToggleWindow',
+    },
+    action: {
+      type: 'RUNTIME_SHIM',
+      shim_code: 'Z_PZModStudio_Polyfills (Universal Object Interop Guard)',
+    },
+  },
+  {
+    id: 'B42_BANDITS_ROOM_SAFETY',
+    name: 'Bandits Week One Dining Room Safety',
+    description: 'Guards square:getRoom() calls so outdoor or unzoned tiles safely fallback without throwing getName() of non-table exceptions',
+    category: 'SAFE_GLOBAL',
+    severity: 'CRITICAL',
+    enabled: true,
+    pattern: {
+      type: 'LUA_GLOBAL_INDEX',
+      target_global: 'BWORoomPrograms',
+    },
+    action: {
+      type: 'RUNTIME_SHIM',
+      shim_code: 'Z_PZModStudio_Polyfills (BWORoomPrograms Dining Guard)',
+    },
+  },
+  {
+    id: 'B42_DAILY_REPORT_SAFETY',
+    name: 'Daily Report Journal Window & Event Protection',
+    description: 'Protects onNewDay, onPlayerDeath, and onDataReloaded callbacks from uninitialized ReportWindow method exceptions',
+    category: 'CUSTOM_SHIM',
+    severity: 'MEDIUM',
+    enabled: true,
+    pattern: {
+      type: 'EVENT_HOOK',
+      target_event: 'dSAG.onNewDay',
+    },
+    action: {
+      type: 'RUNTIME_SHIM',
+      shim_code: 'Z_PZModStudio_Polyfills (dSAG Window Protection)',
+    },
+  },
 ];

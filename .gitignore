@@ -7,21 +7,35 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node / Frontend Build Outputs
 node_modules
 dist
 dist-ssr
 *.local
 
-# Tauri / Rust build outputs
+# Tauri / Rust Build Outputs
 src-tauri/target
+target
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Standalone Portable Binaries (Distributed via GitHub Releases)
+PZ-Mod-Studio-Portable/*.exe
+
+# Scratch & Temporary Folders
+scratch/
+tools/
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.tmp
+
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json

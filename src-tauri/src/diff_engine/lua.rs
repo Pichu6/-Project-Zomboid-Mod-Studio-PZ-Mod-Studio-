@@ -76,3 +76,69 @@ pub fn three_way_merge_lua(base: &str, target_a: &str, target_b: &str) -> MergeC
         conflict_line_end,
     }
 }
+
+/// Intelligently combines multiple competing mod files into a single unified output.
+pub fn combine_n_way_lua_or_script(
+    rel_path: &str,
+    base: &str,
+    competing_files: &[crate::vfs::CompetingModFileRaw],
+) -> String {
+    if competing_files.is_empty() {
+        return base.to_string();
+    }
+    if competing_files.len() == 1 {
+        return competing_files[0].content.clone();
+    }
+
+    // Special case 1: registries.lua (Aggregate all registration calls and tables cleanly)
+    if rel_path.ends_with("registries.lua") || rel_path.ends_with("registries.LUA") {
+        let mut out = String::new();
+        out.push_str("-- ============================================================================\n");
+        out.push_str("-- PZ Mod Studio Master Patch: Unified Registries (media/registries.lua)\n");
+        out.push_str(&format!("-- Auto-fused across {} active mods to prevent registry clobbering in B42\n", competing_files.len()));
+        out.push_str("-- ============================================================================\n\n");
+
+        for file in competing_files {
+            out.push_str(&format!("-- [Mod: {}] ({})\n", file.mod_name, file.mod_id));
+            let clean_content = file.content.trim();
+            out.push_str(clean_content);
+            out.push_str("\n\n");
+        }
+        return out.trim_end().to_string() + "\n";
+    }
+
+    // Special case 2: Check if all competing files are identical
+    let first_trimmed = competing_files[0].content.trim();
+    if competing_files[1..].iter().all(|f| f.content.trim() == first_trimmed) {
+        return competing_files[0].content.clone();
+    }
+
+    // Special case 3: If a vanilla base exists and is valid, perform iterative 3-way merge
+    let has_real_base = !base.starts_with("-- vanilla file not present") && !base.starts_with("-- vanilla file unreadable");
+    if has_real_base {
+        let mut current_merged = competing_files[0].content.clone();
+        for file in &competing_files[1..] {
+            let res = three_way_merge_lua(base, &current_merged, &file.content);
+            current_merged = res.merged_text;
+        }
+        return current_merged;
+    }
+
+    // Special case 4: Non-vanilla mod-created file with multiple mod versions
+    // Combine unique definitions with clear section dividers
+    let mut out = String::new();
+    out.push_str("-- ============================================================================\n");
+    out.push_str(&format!("-- PZ Mod Studio Master Patch: Merged Output ({})\n", rel_path));
+    out.push_str(&format!("-- Combined from {} competing sources\n", competing_files.len()));
+    out.push_str("-- ============================================================================\n\n");
+
+    for (idx, file) in competing_files.iter().enumerate() {
+        out.push_str(&format!("-- ----------------------------------------------------------------------------\n"));
+        out.push_str(&format!("-- Source #{}: {} (ID: {})\n", idx + 1, file.mod_name, file.mod_id));
+        out.push_str(&format!("-- ----------------------------------------------------------------------------\n"));
+        out.push_str(file.content.trim());
+        out.push_str("\n\n");
+    }
+
+    out.trim_end().to_string() + "\n"
+}

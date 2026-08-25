@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard } from './types';
+import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile } from './types';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -9,29 +9,33 @@ import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
 import { TauriService } from './services/tauri';
 
-import { PresetModule } from './components/presets/PresetModule';
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
-import { InitialInstanceModal } from './components/instances/InitialInstanceModal';
-import { AppInstance } from './types';
+import { SplashScreen } from './components/layout/SplashScreen';
 
-import { Sparkles, CheckCircle2 } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('MOD_LIST');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('PROFILES');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
   const [mods, setMods] = useState<ModInfo[]>([]);
+  const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
-  const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false);
-  const [isInitialLaunchModal, setIsInitialLaunchModal] = useState(true);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
     total_conflicts: number;
     files_written: number;
     polyfills_injected: number;
   } | null>(null);
-  const [draftPackageCount, setDraftPackageCount] = useState<number>(0);
+
+  // Loading Screen & Startup State
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [initStatusMessage, setInitStatusMessage] = useState<string>('Starting PZ Mod Studio...');
+  const [initProgress, setInitProgress] = useState<number>(15);
 
   // Studio Directory Paths State (Persistent Profile)
   const [paths, setPaths] = useState<StudioPathsUI>({
@@ -42,57 +46,74 @@ export const App: React.FC = () => {
     is_valid: false,
   });
 
-  const refreshDraftPackageCount = useCallback(async () => {
-    if (paths.is_valid && paths.user_zomboid_dir) {
+  const refreshActiveProfile = useCallback(async (customUserDir?: string): Promise<AppProfile | null> => {
+    const userDir = customUserDir || paths.user_zomboid_dir;
+    if (userDir) {
       try {
-        const pkgs = await TauriService.listMergedPackages(paths.user_zomboid_dir, paths.mod_list_ini_path);
-        const openDrafts = pkgs.filter((p) => !p.is_packaged).length;
-        setDraftPackageCount(openDrafts);
-      } catch (e) {
-        console.error("Failed to list merged packages for draft count:", e);
+        const list: AppProfile[] = await TauriService.listInstances(userDir);
+        const active = list.find((i) => i.is_active) || null;
+        setActiveProfile(active);
+        return active;
+      } catch (err) {
+        console.error('Error listing profiles:', err);
+        return null;
       }
     }
-  }, [paths.is_valid, paths.user_zomboid_dir, paths.mod_list_ini_path]);
-
-  useEffect(() => {
-    refreshDraftPackageCount();
-  }, [refreshDraftPackageCount, mods]);
+    return null;
+  }, [paths.user_zomboid_dir]);
 
   // Load saved profile or auto-detect paths from Rust backend on initial load
   useEffect(() => {
     const initPaths = async () => {
-      const savedProfile = await TauriService.loadSavedPathsProfile();
-      setPaths(savedProfile);
+      try {
+        setInitStatusMessage('[VFS] Verifying Project Zomboid and Steam Workshop paths...');
+        setInitProgress(25);
+        const savedProfile = await TauriService.loadSavedPathsProfile();
+        setPaths(savedProfile);
 
-      if (savedProfile.is_valid) {
-        const scannedConflicts = await TauriService.scanConflicts(savedProfile);
-        setConflicts(scannedConflicts);
+        if (savedProfile.is_valid) {
+          setInitStatusMessage('[Profiles] Reading ModListData.ini and active profiles...');
+          setInitProgress(50);
+          const active = await refreshActiveProfile(savedProfile.user_zomboid_dir);
 
-        // Scan all subscribed Workshop & local mods on disk
-        const allSubscribedMods = await TauriService.scanAllInstalledMods(savedProfile);
-        if (allSubscribedMods.length > 0) {
-          setMods([...allSubscribedMods]);
+          setInitStatusMessage('[Workshop] Scanning mod directories on disk...');
+          setInitProgress(75);
+          // Scan all subscribed Workshop & local mods on disk (preserving saved absolute order)
+          const allSubscribedMods = await TauriService.scanAllInstalledMods(savedProfile);
+          if (allSubscribedMods.length > 0) {
+            setMods([...allSubscribedMods]);
+            setInitStatusMessage(`[Workshop] ${allSubscribedMods.length} mods loaded and indexed.`);
+          }
+          setConflicts([]);
+          setInitProgress(90);
+
+          // Determine initial startup screen based on settings and active profile presence
+          const startupBehavior = localStorage.getItem('pz_startup_behavior') || 'SHOW_STARTUP_SCREEN';
+          if (!active) {
+            setActiveTab('PROFILES');
+          } else if (startupBehavior === 'OPEN_LAST_PROFILE') {
+            setActiveTab('MOD_LIST');
+          } else {
+            setActiveTab('PROFILES');
+          }
+        } else {
+          setInitStatusMessage('[Setup] Configuring initial workspace...');
+          setInitProgress(85);
         }
 
-        // Open Instance Selector if saved instances exist
-        const existingInstances = await TauriService.listInstances(savedProfile.user_zomboid_dir);
-        if (existingInstances.length > 0) {
-          setIsInitialLaunchModal(true);
-          setIsInstanceModalOpen(true);
-        }
+        setInitStatusMessage('[Engine] Initialization complete! Opening environment...');
+        setInitProgress(100);
+      } catch (e) {
+        console.error('Initialization error:', e);
+      } finally {
+        setTimeout(() => {
+          setIsInitializing(false);
+        }, 600);
       }
     };
     initPaths();
   }, []);
 
-  const handleSelectInstance = async (inst: AppInstance) => {
-    try {
-      await TauriService.activateInstance(paths.user_zomboid_dir, inst.id);
-      handleApplyPresetLoadOrder(inst.load_order, inst.active_mod_ids);
-    } catch (err) {
-      console.error('Failed to activate instance:', err);
-    }
-  };
 
   // Listen to realtime sandbox logs & error cards from Rust watcher
   useEffect(() => {
@@ -135,36 +156,16 @@ export const App: React.FC = () => {
   const handleRefreshMods = async () => {
     if (paths.is_valid) {
       const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
-      if (allSubscribedMods.length > 0) {
-        const scannedMap = new Map<string, ModInfo>();
-        allSubscribedMods.forEach((m) => scannedMap.set(m.mod_id, m));
-
-        const updatedMods: ModInfo[] = [];
-
-        // 1. Maintain existing load order and enabled states, refreshing metadata from disk
-        for (const existing of mods) {
-          const scanned = scannedMap.get(existing.mod_id);
-          if (scanned) {
-            updatedMods.push({
-              ...scanned,
-              enabled: existing.enabled, // Preserve user's toggled ON/OFF state!
-            });
-            scannedMap.delete(existing.mod_id);
-          }
-        }
-
-        // 2. Append newly subscribed mods to the bottom of the list (disabled by default)
-        for (const [_, newMod] of scannedMap) {
-          updatedMods.push({
-            ...newMod,
-            enabled: false,
-          });
-        }
-
-        setMods(updatedMods);
-      }
+      setMods([...allSubscribedMods]);
     }
   };
+
+  // Auto-refresh mod list when switching to MOD_LIST tab to reflect external additions/unsubscriptions
+  useEffect(() => {
+    if (activeTab === 'MOD_LIST' && paths.is_valid) {
+      handleRefreshMods();
+    }
+  }, [activeTab]);
 
   const handleLoadMockups = (mockups: VfsConflict[]) => {
     setConflicts(mockups);
@@ -174,7 +175,46 @@ export const App: React.FC = () => {
     setMods(mockMods);
   };
 
-  // Magic Button: Auto-Merge & Generate Master Patch on Disk!
+  // Auto-Merge All conflicts in memory (without premature packaging)
+  const handleAutoMergeAll = async () => {
+    if (!paths.is_valid) {
+      alert('Configure and validate PZ paths before generating automatic patches.');
+      return;
+    }
+
+    try {
+      const activePolyfillIds = rules.filter((r) => r.enabled).map((r) => r.id);
+      const defaultPkgName = 'Z_PZModStudio_MergedPatch';
+
+      const mergedFiles = conflicts.map((c) => ({
+        relative_path: c.relative_path,
+        content: c.merged_output || c.base_content,
+      }));
+
+      const result = await TauriService.generateMasterPatch({
+        workshop_dir: paths.workshop_dir,
+        pz_install_dir: paths.pz_install_dir,
+        user_zomboid_dir: paths.user_zomboid_dir,
+        mod_list_ini_path: paths.mod_list_ini_path,
+        merged_files: mergedFiles,
+        active_polyfill_ids: activePolyfillIds,
+        package_folder_name: defaultPkgName,
+      });
+
+      setAutoMergeResultModal({
+        patch_mod_dir: result.patch_mod_dir,
+        total_conflicts: conflicts.length,
+        files_written: result.files_written,
+        polyfills_injected: result.polyfills_injected,
+      });
+
+      await handleRefreshMods();
+    } catch (err: any) {
+      alert(`Error generating Auto-Merge: ${err}`);
+    }
+  };
+
+  // Explicit Packaging: Generates Master Patch mod on Disk and Publishes to ModListData.ini
   const handleOptimizeAndResolve = async (packageFolderName?: string) => {
     const totalCount = conflicts.length;
 
@@ -203,8 +243,19 @@ export const App: React.FC = () => {
         package_folder_name: packageFolderName,
       });
 
-      // Clear conflicts from list since they are now resolved into Master Patch on disk!
-      setConflicts([]);
+      // Mark all conflicts as resolved
+      setConflicts((prev) =>
+        prev.map((c) => ({
+          ...c,
+          status: 'RESOLVED' as const,
+        }))
+      );
+
+      // Refresh installed mods so the newly published package appears in the Mod List tab immediately
+      const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
+      if (allSubscribedMods.length > 0) {
+        setMods([...allSubscribedMods]);
+      }
 
       if (result.success) {
         setAutoMergeResultModal({
@@ -217,21 +268,68 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleRunSandbox = () => {
-    setActiveTab('MONITOR');
-    if (paths.is_valid) {
-      TauriService.launchSandbox({
+  const [pendingLaunchMode, setPendingLaunchMode] = useState<GameLaunchMode | null>(null);
+  const [skipNoMergeWarning, setSkipNoMergeWarning] = useState<boolean>(() => {
+    return localStorage.getItem('pz_skip_no_merge_warning') === 'true';
+  });
+
+  const executeLaunch = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN') => {
+    try {
+      const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
+      await TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
+
+      await TauriService.launchSandbox({
         pz_install_dir: paths.pz_install_dir,
         user_zomboid_dir: paths.user_zomboid_dir,
-        test_mode: 'WINDOWED_DEEP',
+        test_mode: mode,
       });
+
+      if (mode.includes('DEBUG') || mode === 'MONITORED' || mode === 'WINDOWED') {
+        setActiveTab('MONITOR');
+      }
+    } catch (err: any) {
+      alert(`Error launching PZ sandbox: ${err}`);
     }
   };
 
-  const handleResolveConflict = (conflictId: string, _resolvedCode: string) => {
-    setConflicts((prev) =>
-      prev.filter((c) => c.id !== conflictId)
+  const handleRunSandbox = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN') => {
+    // Check if there is an active CLOSED/PACKAGED synthetic merge package (excluding Carrier and Bridge)
+    const hasActiveClosedMergePackage = mods.some(
+      (m) => m.enabled && m.mod_id.startsWith('Z_PZModStudio_') && m.is_packaged === true && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier')
     );
+
+    const openDraftPackages = mods.filter(
+      (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && (m.is_packaged === false || m.mod_id === openedPackageFolder)
+    );
+
+    // If there is no active closed package (either because it is open/draft, or none is active)
+    if (!hasActiveClosedMergePackage) {
+      if (openDraftPackages.length > 0 || !skipNoMergeWarning) {
+        setPendingLaunchMode(mode);
+        return;
+      }
+    }
+
+    await executeLaunch(mode);
+  };
+
+  const handleResolveConflict = async (conflictId: string, resolvedCode: string, packageFolderName?: string) => {
+    setConflicts((prev) =>
+      prev.map((c) =>
+        c.id === conflictId ? { ...c, merged_output: resolvedCode, status: 'RESOLVED' as const } : c
+      )
+    );
+
+    const targetConflict = conflicts.find((c) => c.id === conflictId);
+    if (targetConflict && paths.user_zomboid_dir) {
+      await TauriService.saveDraftResolution(
+        paths.user_zomboid_dir,
+        packageFolderName || 'Z_PZModStudio_MergedPatch',
+        targetConflict.relative_path,
+        resolvedCode,
+        'RESOLVED'
+      );
+    }
   };
 
   const handleToggleRule = (ruleId: string) => {
@@ -242,15 +340,45 @@ export const App: React.FC = () => {
 
   const handleReorderMods = (newOrder: ModInfo[]) => {
     setMods([...newOrder]);
-    const activeModIds = newOrder.filter((m) => m.enabled).map((m) => m.mod_id);
-    TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
+    setHasUnsavedChanges(true);
   };
 
   const handleToggleMod = (modId: string) => {
+    const target = mods.find((m) => m.mod_id === modId);
+    if (!target) return;
+
+    const isSyntheticFusionPackage =
+      modId.startsWith('Z_PZModStudio_') &&
+      !modId.includes('Carrier') &&
+      modId !== 'Z_PZModStudio_Bridge';
+
+    // Block activation of open / draft packages (is_packaged === false)
+    if (isSyntheticFusionPackage && target.is_packaged === false) {
+      return;
+    }
+
     setMods((prev) => {
-      const updated = prev.map((m) => (m.mod_id === modId ? { ...m, enabled: !m.enabled } : m));
-      const activeModIds = updated.filter((m) => m.enabled).map((m) => m.mod_id);
-      TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
+      const willEnable = !target.enabled;
+
+      const updated = prev.map((m) => {
+        if (m.mod_id === modId) {
+          return { ...m, enabled: willEnable };
+        }
+        // If enabling a synthetic fusion package, ensure only ONE fusion package is active at a time!
+        // (The Live Bridge companion mod is independent and can remain active simultaneously)
+        if (
+          willEnable &&
+          isSyntheticFusionPackage &&
+          m.mod_id.startsWith('Z_PZModStudio_') &&
+          !m.mod_id.includes('Carrier') &&
+          m.mod_id !== 'Z_PZModStudio_Bridge'
+        ) {
+          return { ...m, enabled: false };
+        }
+        return m;
+      });
+
+      setHasUnsavedChanges(true);
       return [...updated];
     });
   };
@@ -274,10 +402,30 @@ export const App: React.FC = () => {
         reordered.push({ ...m, enabled: activeSet.has(m.mod_id) });
       });
 
-      TauriService.writeModListIni(paths.mod_list_ini_path, activeIds);
       return reordered;
     });
+    setHasUnsavedChanges(false);
+    refreshActiveProfile();
   };
+
+  const handleSaveActiveProfile = async () => {
+    if (!activeProfile || !paths.user_zomboid_dir) return;
+    setIsSaving(true);
+    const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
+    const fullLoadOrder = mods.map((m) => m.mod_id);
+
+    try {
+      await TauriService.saveMasterLoadOrder(paths.user_zomboid_dir, fullLoadOrder, activeModIds);
+      setHasUnsavedChanges(false);
+      await refreshActiveProfile(paths.user_zomboid_dir);
+    } catch (err) {
+      console.error('Error saving active profile:', err);
+      alert(`Error saving active profile: ${err}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   const handleApplyFix = async (polyfillRuleId: string) => {
     const updatedRules = rules.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r));
@@ -304,9 +452,7 @@ export const App: React.FC = () => {
     const saved = await TauriService.savePathsProfile(updatedPaths);
     setPaths(saved);
     if (saved.is_valid) {
-      const scannedConflicts = await TauriService.scanConflicts(saved);
-      setConflicts(scannedConflicts);
-
+      await refreshActiveProfile(saved.user_zomboid_dir);
       const allSubscribedMods = await TauriService.scanAllInstalledMods(saved);
       if (allSubscribedMods.length > 0) {
         setMods([...allSubscribedMods]);
@@ -319,9 +465,7 @@ export const App: React.FC = () => {
     const saved = await TauriService.savePathsProfile(autoPaths);
     setPaths(saved);
     if (saved.is_valid) {
-      const scannedConflicts = await TauriService.scanConflicts(saved);
-      setConflicts(scannedConflicts);
-
+      await refreshActiveProfile(saved.user_zomboid_dir);
       const allSubscribedMods = await TauriService.scanAllInstalledMods(saved);
       if (allSubscribedMods.length > 0) {
         setMods([...allSubscribedMods]);
@@ -330,17 +474,25 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <>
+      <SplashScreen
+        isLoading={isInitializing}
+        statusMessage={initStatusMessage}
+        progress={initProgress}
+      />
+      <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Studio Header */}
       <StudioHeader
         conflictCount={conflicts.length}
         polyfillCount={rules.filter((r) => r.enabled).length}
+        activeProfileName={activeProfile?.name}
+        hasUnsavedChanges={hasUnsavedChanges}
+        isSaving={isSaving}
+        onSaveActiveProfile={handleSaveActiveProfile}
+        onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
-        onOpenInstanceSelector={() => {
-          setIsInitialLaunchModal(false);
-          setIsInstanceModalOpen(true);
-        }}
       />
+
 
       {/* Main Studio Body */}
       <div className="flex-1 flex overflow-hidden">
@@ -348,13 +500,28 @@ export const App: React.FC = () => {
         <StudioSidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
+          hasActiveProfile={!!activeProfile}
           conflictCount={conflicts.length}
           errorCardCount={errorCards.length}
-          draftPackageCount={draftPackageCount}
         />
 
         {/* Tab Modules */}
-        <main className="flex-1 flex flex-col overflow-y-auto p-6">
+        <main className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-slate-950">
+          {activeTab === 'PROFILES' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 font-sans">
+              <InstanceModule
+                paths={paths}
+                mods={mods}
+                onApplyInstanceLoadOrder={handleApplyPresetLoadOrder}
+                onProfileActivated={(inst) => {
+                  setActiveProfile(inst);
+                  setHasUnsavedChanges(false);
+                  setActiveTab('MOD_LIST');
+                }}
+              />
+            </div>
+          )}
+
           {activeTab === 'MOD_LIST' && (
             <LoadOrderModule
               paths={paths}
@@ -364,30 +531,18 @@ export const App: React.FC = () => {
               onRefreshMods={handleRefreshMods}
               onGoToSettings={() => setActiveTab('SETTINGS')}
               onLoadMockups={handleLoadModMockups}
-            />
-          )}
-
-          {activeTab === 'PRESETS' && (
-            <PresetModule
-              paths={paths}
-              mods={mods}
               onApplyPresetLoadOrder={handleApplyPresetLoadOrder}
+              openedPackageFolder={openedPackageFolder}
             />
           )}
 
           {activeTab === 'SERVERS' && (
-            <ServerModule
-              paths={paths}
-              mods={mods}
-            />
-          )}
-
-          {activeTab === 'INSTANCES' && (
-            <InstanceModule
-              paths={paths}
-              mods={mods}
-              onApplyInstanceLoadOrder={handleApplyPresetLoadOrder}
-            />
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 font-sans">
+              <ServerModule
+                paths={paths}
+                mods={mods}
+              />
+            </div>
           )}
 
           {activeTab === 'MERGER' && (
@@ -395,10 +550,16 @@ export const App: React.FC = () => {
               conflicts={conflicts}
               paths={paths}
               onResolveConflict={handleResolveConflict}
+              onAutoMergeAll={handleAutoMergeAll}
               onOptimizeAndResolve={handleOptimizeAndResolve}
               onGoToSettings={() => setActiveTab('SETTINGS')}
               onRescan={handleRescan}
+              onClearConflicts={() => setConflicts([])}
               onLoadMockups={handleLoadMockups}
+              onToggleMod={handleToggleMod}
+              onRefreshMods={handleRefreshMods}
+              onPackageOpened={(folder) => setOpenedPackageFolder(folder)}
+              onPackageClosed={() => setOpenedPackageFolder(null)}
             />
           )}
 
@@ -413,26 +574,19 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'SETTINGS' && (
-            <SettingsModule
-              paths={paths}
-              rules={rules}
-              onSavePaths={handleSavePaths}
-              onToggleRule={handleToggleRule}
-              onAutoDetect={handleAutoDetect}
-            />
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 font-sans">
+              <SettingsModule
+                paths={paths}
+                rules={rules}
+                onSavePaths={handleSavePaths}
+                onToggleRule={handleToggleRule}
+                onAutoDetect={handleAutoDetect}
+              />
+            </div>
           )}
         </main>
       </div>
 
-      {/* Initial Instance Selection Modal */}
-      <InitialInstanceModal
-        isOpen={isInstanceModalOpen}
-        onClose={() => setIsInstanceModalOpen(false)}
-        paths={paths}
-        onSelectInstance={handleSelectInstance}
-        onCreateNewInstanceClick={() => setActiveTab('INSTANCES')}
-        isInitialLaunch={isInitialLaunchModal}
-      />
 
       {/* Sleek Native Auto-Merge Completion Modal */}
       {autoMergeResultModal && (
@@ -444,27 +598,27 @@ export const App: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <span>✨ Auto-Merge Completado con Éxito</span>
+                  <span>✨ Auto-Merge Completed Successfully</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Todos los conflictos de scripts fueron resueltos en el parche de fusión.</p>
+                <p className="text-xs text-slate-400 mt-0.5">All script conflicts were resolved in the merge patch.</p>
               </div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs font-mono">
               <div className="text-emerald-400 font-bold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Parche Generado en Disco:</span>
+                <span>Patch Generated on Disk:</span>
               </div>
               <div className="p-2 bg-slate-900 rounded border border-slate-800 text-[11px] text-slate-300 break-all select-all font-mono">
                 {autoMergeResultModal.patch_mod_dir}
               </div>
               <div className="grid grid-cols-2 gap-2 pt-1 text-slate-300">
                 <div className="p-2 bg-slate-900/60 rounded border border-slate-800/80">
-                  <span className="text-slate-400 text-[10px] block">Conflictos Resueltos</span>
+                  <span className="text-slate-400 text-[10px] block">Conflicts Resolved</span>
                   <b className="text-emerald-400 text-sm">{autoMergeResultModal.total_conflicts}</b>
                 </div>
                 <div className="p-2 bg-slate-900/60 rounded border border-slate-800/80">
-                  <span className="text-slate-400 text-[10px] block">Archivos Fusionados</span>
+                  <span className="text-slate-400 text-[10px] block">Files Merged</span>
                   <b className="text-emerald-400 text-sm">{autoMergeResultModal.files_written}</b>
                 </div>
               </div>
@@ -475,13 +629,92 @@ export const App: React.FC = () => {
                 onClick={() => setAutoMergeResultModal(null)}
                 className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg transition"
               >
-                Aceptar y Continuar
+                Accept and Continue
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Launch Warning Modal — Open Package or No Merge Package */}
+      {pendingLaunchMode && (() => {
+        const openPackages = mods.filter(
+          (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && (m.is_packaged === false || m.mod_id === openedPackageFolder)
+        );
+        const isOpenPackageWarning = openPackages.length > 0;
+        const openPackageNames = openPackages.map((p) => p.name || p.mod_id).join(', ');
+
+        return (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in text-slate-200">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-100">
+                  {isOpenPackageWarning ? 'Open Package (Deactivated)' : 'No Active Merge Package'}
+                </h3>
+                <p className="text-xs text-amber-300/90 font-medium">
+                  {isOpenPackageWarning
+                    ? <>The package <code className="text-amber-200 bg-amber-950/60 px-1 rounded">{openPackageNames}</code> is open in draft mode and is currently deactivated.</>
+                    : 'There is no active merge patch in your profile.'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+              {isOpenPackageWarning
+                ? 'An open package (draft) is deactivated to prevent runtime conflicts while editing. To have it take effect in the game, you must package / publish it in Mod Merger before starting the game.'
+                : 'If your installed mods have conflicting files (Lua code collisions or shared scripts), errors, unexpected behaviors, or crashes could occur during gameplay. We suggest creating or activating a merge package in Mod Merger.'}
+            </p>
+
+            {!isOpenPackageWarning && (
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="skipNoMergeWarningCheckbox"
+                  checked={skipNoMergeWarning}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSkipNoMergeWarning(checked);
+                    localStorage.setItem('pz_skip_no_merge_warning', checked ? 'true' : 'false');
+                  }}
+                  className="rounded border-slate-700 text-amber-500 focus:ring-amber-500/40 bg-slate-950 cursor-pointer"
+                />
+                <label htmlFor="skipNoMergeWarningCheckbox" className="text-[11px] text-slate-400 select-none cursor-pointer">
+                  Do not show this warning again
+                </label>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  setPendingLaunchMode(null);
+                  setActiveTab('MERGER');
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shadow"
+              >
+                Go to Mod Merger
+              </button>
+              <button
+                onClick={() => {
+                  const mode = pendingLaunchMode;
+                  setPendingLaunchMode(null);
+                  executeLaunch(mode);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                {isOpenPackageWarning ? 'Launch without package' : 'Launch anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </div>
+    </>
   );
 };
 

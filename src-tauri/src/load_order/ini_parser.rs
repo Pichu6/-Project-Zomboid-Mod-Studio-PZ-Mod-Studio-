@@ -171,20 +171,40 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
 }
 
 /// Writes active mod load order list back to Zomboid/mods/default.txt (Project Zomboid's actual primary active mods file)
-/// in exact Project Zomboid Lua table format (`mod = ModID,` sanitized without quotes), as well as ModListData.ini, loadorder.ini, and modgroups.ini.
+/// in exact Project Zomboid Lua table format (safely quoting IDs with spaces or brackets), as well as ModListData.ini, loadorder.ini, ModManager, and modgroups.ini.
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let default_txt_path = resolve_default_txt_path(ini_path);
+    let mut target_zomboid_dirs = Vec::new();
 
     if let Some(mods_dir) = default_txt_path.parent() {
-        let _ = fs::create_dir_all(mods_dir);
-        // Ensure Build 42 migration lock file reset-mods-42_00.txt exists so game never wipes default.txt!
-        let lock_file = mods_dir.join("reset-mods-42_00.txt");
-        if !lock_file.exists() {
-            let _ = fs::write(&lock_file, "If this file does not exist, default.txt will be reset to empty (no mods active).");
+        if let Some(z_dir) = mods_dir.parent() {
+            target_zomboid_dirs.push(z_dir.to_path_buf());
         }
     }
 
-    // 1. Primary write to Zomboid/mods/default.txt in exact native Project Zomboid Lua format (NO QUOTES)
+    let user_zomboid_str = if !ini_path.is_empty() {
+        if let Some(parent) = Path::new(ini_path).parent() {
+            if parent.file_name().map_or(false, |n| n == "mods") {
+                parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
+            } else if parent.file_name().map_or(false, |n| n == "Lua") {
+                parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
+            } else {
+                parent.to_string_lossy().to_string()
+            }
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    for u_dir in crate::load_order::mod_info::get_all_user_zomboid_dirs(&user_zomboid_str) {
+        if !target_zomboid_dirs.contains(&u_dir) {
+            target_zomboid_dirs.push(u_dir);
+        }
+    }
+
+    // 1. Build default.txt content in exact Project Zomboid native format (mod = <id>,)
     let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
     for mod_id in active_mods {
         let clean_id = sanitize_mod_id(mod_id);
@@ -194,55 +214,80 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
     }
     default_txt_content.push_str("}\n\nmaps\n{\n}\n");
 
-    fs::write(&default_txt_path, &default_txt_content).map_err(|e| e.to_string())?;
+    let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
+    let active_lines = clean_mods.join("\n");
+    let mods_joined = clean_mods.join(";");
 
-    // Synchronize to secondary default.txt locations & write Zomboid/mods.txt
-    if let Some(mods_dir) = default_txt_path.parent() {
-        if let Some(zomboid_dir) = mods_dir.parent() {
-            let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
-            let active_lines = clean_mods.join("\n");
+    let ini_content = format!("[ModList]\nactiveMods={}\n", mods_joined);
+    let loadorder_content = format!("[LoadOrder]\nmods={}\n", mods_joined);
+    let modgroups_content = format!("[ModGroups]\nactive={}\n", mods_joined);
 
-            // Write Zomboid/mods.txt directly (Native Project Zomboid engine active mods list)
-            let _ = fs::write(zomboid_dir.join("mods.txt"), &active_lines);
+    for zomboid_dir in target_zomboid_dirs {
+        // A. Primary Zomboid/mods/default.txt & lock file
+        let mods_dir = zomboid_dir.join("mods");
+        let _ = fs::create_dir_all(&mods_dir);
+        let _ = fs::write(mods_dir.join("default.txt"), &default_txt_content);
+        let _ = fs::write(mods_dir.join("reset-mods-42_00.txt"), "If this file does not exist, default.txt will be reset to empty (no mods active).");
 
-            let lua_mods_dir = zomboid_dir.join("Lua").join("mods");
-            let _ = fs::create_dir_all(&lua_mods_dir);
-            let _ = fs::write(lua_mods_dir.join("default.txt"), &default_txt_content);
+        // B. Root Zomboid/mods.txt
+        let _ = fs::write(zomboid_dir.join("mods.txt"), &active_lines);
 
-            let saved_modlists_dir = zomboid_dir.join("saved_modlists");
-            let _ = fs::create_dir_all(&saved_modlists_dir);
-            let _ = fs::write(saved_modlists_dir.join("default.txt"), &default_txt_content);
+        // C. Zomboid/Lua/mods/default.txt
+        let lua_mods_dir = zomboid_dir.join("Lua").join("mods");
+        let _ = fs::create_dir_all(&lua_mods_dir);
+        let _ = fs::write(lua_mods_dir.join("default.txt"), &default_txt_content);
+        let _ = fs::write(lua_mods_dir.join("reset-mods-42_00.txt"), "If this file does not exist, default.txt will be reset to empty.");
 
-            let lua_saved_dir = zomboid_dir.join("Lua").join("saved_modlists");
-            let _ = fs::create_dir_all(&lua_saved_dir);
-            let _ = fs::write(lua_saved_dir.join("default.txt"), &default_txt_content);
+        // D. Zomboid/saved_modlists/ and Zomboid/Lua/saved_modlists/
+        let saved_modlists_dir = zomboid_dir.join("saved_modlists");
+        let _ = fs::create_dir_all(&saved_modlists_dir);
+        let _ = fs::write(saved_modlists_dir.join("default.txt"), &default_txt_content);
+        let _ = fs::write(saved_modlists_dir.join("PZModStudio.txt"), &default_txt_content);
+        let _ = fs::write(saved_modlists_dir.join("PZ Mod Studio.txt"), &default_txt_content);
 
-            let mods_joined = clean_mods.join(";");
-            let lua_dir = zomboid_dir.join("Lua");
-            let _ = fs::create_dir_all(&lua_dir);
+        let lua_saved_dir = zomboid_dir.join("Lua").join("saved_modlists");
+        let _ = fs::create_dir_all(&lua_saved_dir);
+        let _ = fs::write(lua_saved_dir.join("default.txt"), &default_txt_content);
+        let _ = fs::write(lua_saved_dir.join("PZModStudio.txt"), &default_txt_content);
+        let _ = fs::write(lua_saved_dir.join("PZ Mod Studio.txt"), &default_txt_content);
 
-            let ini_content = format!("[ModList]\nactiveMods={}\n", mods_joined);
-            let _ = fs::write(lua_dir.join("ModListData.ini"), &ini_content);
+        // E. Zomboid/Lua config files
+        let lua_dir = zomboid_dir.join("Lua");
+        let _ = fs::create_dir_all(&lua_dir);
+        let _ = fs::write(lua_dir.join("ModListData.ini"), &ini_content);
+        let _ = fs::write(lua_dir.join("loadorder.ini"), &loadorder_content);
+        let _ = fs::write(lua_dir.join("modgroups.ini"), &modgroups_content);
+        let _ = fs::write(lua_dir.join("ModLoadOrderSorter.txt"), &active_lines);
+        let _ = fs::write(lua_dir.join("mod_order.txt"), &active_lines);
+        let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
+        let _ = fs::write(lua_dir.join("ModLoadOrderExporter.txt"), &active_lines);
 
-            let loadorder_content = format!("[LoadOrder]\nmods={}\n", mods_joined);
-            let _ = fs::write(lua_dir.join("loadorder.ini"), loadorder_content);
+        // F. Zomboid/Lua/ModManager/ (In-game Mod Manager mod support)
+        let mm_dir = lua_dir.join("ModManager");
+        let mm_mods_dir = mm_dir.join("mods");
+        let _ = fs::create_dir_all(&mm_mods_dir);
+        let _ = fs::write(mm_mods_dir.join("default.txt"), &default_txt_content);
+        let _ = fs::write(mm_mods_dir.join("reset-mods-42_00.txt"), "If this file does not exist, default.txt will be reset to empty.");
 
-            let modgroups_content = format!("[ModGroups]\nactive={}\n", mods_joined);
-            let _ = fs::write(lua_dir.join("modgroups.ini"), modgroups_content);
+        let mm_saved_dir = mm_dir.join("saved_modlists");
+        let _ = fs::create_dir_all(&mm_saved_dir);
+        let _ = fs::write(mm_saved_dir.join("default.txt"), &default_txt_content);
+        let _ = fs::write(mm_saved_dir.join("PZModStudio.txt"), &default_txt_content);
+        let _ = fs::write(mm_saved_dir.join("PZ Mod Studio.txt"), &default_txt_content);
 
-            let _ = fs::write(lua_dir.join("ModLoadOrderSorter.txt"), &active_lines);
-            let _ = fs::write(lua_dir.join("mod_order.txt"), &active_lines);
-            let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
-            let _ = fs::write(lua_dir.join("ModLoadOrderExporter.txt"), &active_lines);
-            let _ = fs::write(saved_modlists_dir.join("PZModStudio.txt"), &active_lines);
+        let _ = fs::write(mm_dir.join("loadorder.ini"), &loadorder_content);
+        let _ = fs::write(mm_dir.join("modgroups.ini"), &modgroups_content);
+        let _ = fs::write(mm_dir.join("ModLoadOrderSorter.txt"), &active_lines);
+        let _ = fs::write(mm_dir.join("mod_order.txt"), &active_lines);
+        let _ = fs::write(mm_dir.join("mod_load_order.txt"), &active_lines);
+        let _ = fs::write(mm_dir.join("ModLoadOrderExporter.txt"), &active_lines);
 
-            // Also sync active mods to all existing save game folders (Zomboid/Saves/*/*/mods.txt and default.txt)
-            let saves_dir = zomboid_dir.join("Saves");
-            if saves_dir.exists() {
-                for entry in walkdir::WalkDir::new(&saves_dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
-                    if entry.file_name() == "mods.txt" {
-                        let _ = fs::write(entry.path(), &default_txt_content);
-                    }
+        // G. Sync active mods to existing save game folders (Zomboid/Saves/*/*/mods.txt and default.txt)
+        let saves_dir = zomboid_dir.join("Saves");
+        if saves_dir.exists() {
+            for entry in walkdir::WalkDir::new(&saves_dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+                if entry.file_name() == "mods.txt" {
+                    let _ = fs::write(entry.path(), &default_txt_content);
                 }
             }
         }

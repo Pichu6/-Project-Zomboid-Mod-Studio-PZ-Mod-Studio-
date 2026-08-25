@@ -1,0 +1,1304 @@
+-- ============================================================================
+-- Z_PZModStudio_Polyfills.lua (PZ Mod Studio Build 41/42+ Universal Runtime Shim)
+-- Architecture: Safe Hooking via Events.OnGameBoot, FluidContainer Proxy, Translator Protection & Metatable Proxies
+-- ============================================================================
+
+if not Z_PZModStudio_Polyfills then Z_PZModStudio_Polyfills = {} end
+local Poly = Z_PZModStudio_Polyfills
+
+-- ----------------------------------------------------------------------------
+-- 1. Translator Protection & Fallback Translations
+-- ----------------------------------------------------------------------------
+local FALLBACK_TRANSLATIONS = {
+    ["IGUI_ItemCat_GunMag"] = "Magazine",
+    ["IGUI_ItemCat_WeaponPart"] = "Weapon Part",
+    ["IGUI_ItemCat_Firearm"] = "Firearm",
+    ["IGUI_ItemCat_Ammo"] = "Ammo",
+    ["IGUI_ItemCat_Melee"] = "Melee Weapon",
+    ["IGUI_ItemCat_Explosive"] = "Explosive",
+    ["IGUI_ItemCat_Accessory"] = "Accessory",
+}
+
+local function isLikelyPlainText(str, numArgs)
+    if type(str) ~= "string" then return true end
+    if str == "" then return true end
+    if numArgs > 0 then return false end
+    -- Translation keys in PZ never contain spaces. Strings containing spaces or % without format args
+    -- are pre-formatted text; passing them to PZ Java Translator triggers reportMissingArgumentsFromPastAbuse
+    -- and crashes with IllegalFormatConversionException (e.g. "% GRATIS" -> "% G" float format specifier).
+    if string.find(str, "%s") or string.find(str, "%%") then
+        return true
+    end
+    return false
+end
+
+function Poly.safeGetText(str, ...)
+    if not str then return "" end
+    if type(str) ~= "string" then return tostring(str) end
+    if FALLBACK_TRANSLATIONS[str] then
+        return FALLBACK_TRANSLATIONS[str]
+    end
+    if isLikelyPlainText(str, select("#", ...)) then
+        return str
+    end
+    if zombie and zombie.core and zombie.core.Translator and zombie.core.Translator.getText then
+        local status, res = pcall(zombie.core.Translator.getText, str, ...)
+        if status and res ~= nil and res ~= str then return res end
+    end
+    if FALLBACK_TRANSLATIONS[str] then return FALLBACK_TRANSLATIONS[str] end
+    return tostring(str)
+end
+
+if _G and _G.getText then
+    local orig_gt = _G.getText
+    _G.getText = function(str, ...)
+        if not str then return "" end
+        if type(str) ~= "string" then return tostring(str) end
+        if FALLBACK_TRANSLATIONS[str] then return FALLBACK_TRANSLATIONS[str] end
+        if isLikelyPlainText(str, select("#", ...)) then
+            return str
+        end
+        local status, result = pcall(orig_gt, str, ...)
+        if status and result ~= nil and result ~= str then return result end
+        if FALLBACK_TRANSLATIONS[str] then return FALLBACK_TRANSLATIONS[str] end
+        return tostring(str)
+    end
+end
+
+if zombie and zombie.core and zombie.core.Translator and zombie.core.Translator.getText then
+    local orig_tr_gt = zombie.core.Translator.getText
+    zombie.core.Translator.getText = function(str, ...)
+        if not str then return "" end
+        if type(str) ~= "string" then return tostring(str) end
+        if FALLBACK_TRANSLATIONS[str] then return FALLBACK_TRANSLATIONS[str] end
+        if isLikelyPlainText(str, select("#", ...)) then
+            return str
+        end
+        local status, result = pcall(orig_tr_gt, str, ...)
+        if status and result ~= nil and result ~= str then return result end
+        if FALLBACK_TRANSLATIONS[str] then return FALLBACK_TRANSLATIONS[str] end
+        return tostring(str)
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- 2. ProceduralDistributions Metatable Protection
+-- ----------------------------------------------------------------------------
+if ProceduralDistributions then
+    if not ProceduralDistributions.list then ProceduralDistributions.list = {} end
+    local p_meta = getmetatable(ProceduralDistributions.list) or {}
+    local orig_index = p_meta.__index
+    p_meta.__index = function(t, k)
+        local val = rawget(t, k)
+        if val then
+            if type(val) == "table" and not val.junk then val.junk = { items = {} } end
+            return val
+        end
+        if type(orig_index) == "function" then
+            val = orig_index(t, k)
+        elseif type(orig_index) == "table" then
+            val = orig_index[k]
+        end
+        if not val then
+            val = { items = {}, junk = { items = {} } }
+            rawset(t, k, val)
+        elseif type(val) == "table" and not val.junk then
+            val.junk = { items = {} }
+        end
+        return val
+    end
+    setmetatable(ProceduralDistributions.list, p_meta)
+    for k, v in pairs(ProceduralDistributions.list) do
+        if type(v) == "table" and not v.junk then v.junk = { items = {} } end
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- 3. Java List to Lua Table Converter Utility
+-- ----------------------------------------------------------------------------
+function Poly.toLuaTable(javaListOrTable)
+    if not javaListOrTable then return {} end
+    if type(javaListOrTable) == "table" then return javaListOrTable end
+    local tbl = {}
+    if javaListOrTable.size and javaListOrTable.get then
+        local sz = javaListOrTable:size()
+        for i = 0, sz - 1 do
+            local item = javaListOrTable:get(i)
+            table.insert(tbl, item)
+        end
+    end
+    return tbl
+end
+
+-- ----------------------------------------------------------------------------
+-- 4. Anti-Feedback Loop Guard on Fluid / Water Events
+-- ----------------------------------------------------------------------------
+local Events = Events or triggerEvent
+if Events and Events.OnWaterAmountChange then
+    local in_water_event = false
+    local orig_water_add = Events.OnWaterAmountChange.Add
+    if orig_water_add then
+        Events.OnWaterAmountChange.Add = function(func)
+            if type(func) ~= "function" then return end
+            orig_water_add(function(...)
+                if in_water_event then return end
+                in_water_event = true
+                local status, err = pcall(func, ...)
+                in_water_event = false
+                if not status and err then
+                    print("[PZ Mod Studio Polyfill] Handled safe early-bailout in OnWaterAmountChange: " .. tostring(err))
+                end
+            end)
+        end
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- 4.1 OnEquipPrimary / OnEquipSecondary Bridge (B41 (player, weapon) -> B42 (player))
+-- ----------------------------------------------------------------------------
+if Events and Events.OnEquipPrimary and not Events.OnEquipPrimary._pzms_wrapped then
+    Events.OnEquipPrimary._pzms_wrapped = true
+    local orig_equip_add = Events.OnEquipPrimary.Add
+    Events.OnEquipPrimary.Add = function(func)
+        if type(func) ~= "function" then return end
+        orig_equip_add(function(player, weapon, ...)
+            local realWeapon = weapon
+            if realWeapon == nil and player and player.getPrimaryHandItem then
+                realWeapon = player:getPrimaryHandItem()
+            end
+            local status, err = pcall(func, player, realWeapon, ...)
+            if not status and err then
+                print("[PZ Mod Studio Polyfill] Handled safe OnEquipPrimary listener error: " .. tostring(err))
+            end
+        end)
+    end
+end
+
+if Events and Events.OnEquipSecondary and not Events.OnEquipSecondary._pzms_wrapped then
+    Events.OnEquipSecondary._pzms_wrapped = true
+    local orig_equip_sec_add = Events.OnEquipSecondary.Add
+    Events.OnEquipSecondary.Add = function(func)
+        if type(func) ~= "function" then return end
+        orig_equip_sec_add(function(player, weapon, ...)
+            local realWeapon = weapon
+            if realWeapon == nil and player and player.getSecondaryHandItem then
+                realWeapon = player:getSecondaryHandItem()
+            end
+            local status, err = pcall(func, player, realWeapon, ...)
+            if not status and err then
+                print("[PZ Mod Studio Polyfill] Handled safe OnEquipSecondary listener error: " .. tostring(err))
+            end
+        end)
+    end
+end
+
+if Events and Events.OnClothingUpdated and not Events.OnClothingUpdated._pzms_wrapped then
+    Events.OnClothingUpdated._pzms_wrapped = true
+    local orig_clothing_add = Events.OnClothingUpdated.Add
+    Events.OnClothingUpdated.Add = function(func)
+        if type(func) ~= "function" then return end
+        orig_clothing_add(function(character, ...)
+            local status, err = pcall(func, character, ...)
+            if not status and err then
+                -- Silently suppress face/hair customizer exception flood to prevent render loop stutter
+            end
+        end)
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- 4.2 OnMainMenuEnter Protection
+-- ----------------------------------------------------------------------------
+if Events and Events.OnMainMenuEnter and not Events.OnMainMenuEnter._pzms_wrapped then
+    Events.OnMainMenuEnter._pzms_wrapped = true
+    local orig_menu_add = Events.OnMainMenuEnter.Add
+    Events.OnMainMenuEnter.Add = function(func)
+        if type(func) ~= "function" then return end
+        orig_menu_add(function(...)
+            local status, err = pcall(func, ...)
+            if not status and err then
+                print("[PZ Mod Studio Polyfill] Protected OnMainMenuEnter from mod crash: " .. tostring(err))
+            end
+        end)
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- 5. Late Hook Initialization (Events.OnGameBoot) for Monkey-Patching Chain
+-- ----------------------------------------------------------------------------
+local function initB42Polyfills()
+    -- FluidContainer & Drainable Bridge (getUsedDelta / setUsedDelta)
+    if InventoryItem then
+        local old_getUsedDelta = InventoryItem.getUsedDelta
+        if old_getUsedDelta then
+            InventoryItem.getUsedDelta = function(self)
+                local status, res = pcall(old_getUsedDelta, self)
+                if status and res ~= nil then return res end
+                if self and self.getFluidContainer then
+                    local fc = self:getFluidContainer()
+                    if fc and fc.getAmount and fc.getCapacity then
+                        local cap = fc:getCapacity()
+                        if cap and cap > 0 then
+                            return fc:getAmount() / cap
+                        end
+                    end
+                end
+                return 0
+            end
+        end
+
+        local old_setUsedDelta = InventoryItem.setUsedDelta
+        if old_setUsedDelta then
+            InventoryItem.setUsedDelta = function(self, val)
+                local status, res = pcall(old_setUsedDelta, self, val)
+                if not status and self and self.getFluidContainer then
+                    local fc = self:getFluidContainer()
+                    if fc and fc.setAmount and fc.getCapacity then
+                        local cap = fc:getCapacity()
+                        if cap and cap > 0 then
+                            pcall(fc.setAmount, fc, (val or 0) * cap)
+                        end
+                    end
+                end
+                return res
+            end
+        end
+    end
+
+    -- ItemBodyLocation Universal Resolver & Bridge
+    local function resolveItemBodyLocation(location)
+        if not location then return nil end
+        if type(location) == "userdata" and location.getClass then
+            local ok, sName = pcall(function() return location:getClass():getSimpleName() end)
+            if ok and sName == "ItemBodyLocation" then
+                return location
+            end
+        end
+        if ItemBodyLocation and ItemBodyLocation.get then
+            local ok, locObj = pcall(ItemBodyLocation.get, location)
+            if ok and locObj and type(locObj) == "userdata" then
+                return locObj
+            end
+        end
+        if BodyLocations and BodyLocations.getGroup then
+            local okG, grp = pcall(BodyLocations.getGroup, "Human")
+            if okG and grp and grp.getLocation then
+                local ok, locObj = pcall(grp.getLocation, grp, tostring(location))
+                if ok and locObj and type(locObj) == "userdata" then
+                    return locObj
+                end
+            end
+        end
+        if ResourceLocation and ResourceLocation.of then
+            local okR, rLoc = pcall(ResourceLocation.of, tostring(location))
+            if okR and rLoc and ItemBodyLocation and ItemBodyLocation.get then
+                local ok, locObj = pcall(ItemBodyLocation.get, rLoc)
+                if ok and locObj and type(locObj) == "userdata" then
+                    return locObj
+                end
+            end
+        end
+        return location
+    end
+
+    if ItemBodyLocation and not ItemBodyLocation._pzms_wrapped then
+        ItemBodyLocation._pzms_wrapped = true
+        local old_get = ItemBodyLocation.get
+        if old_get then
+            ItemBodyLocation.get = function(val)
+                if not val then return nil end
+                local status, res = pcall(old_get, val)
+                if status and res ~= nil then return res end
+                if type(val) == "string" and ResourceLocation and ResourceLocation.of then
+                    local ok, rLoc = pcall(ResourceLocation.of, val)
+                    if ok and rLoc then
+                        local ok2, res2 = pcall(old_get, rLoc)
+                        if ok2 and res2 ~= nil then return res2 end
+                    end
+                end
+                return val
+            end
+        end
+    end
+
+    -- SurvivorDesc getWornItem / setWornItem Protection
+    if SurvivorDesc and not SurvivorDesc._pzms_wrapped then
+        SurvivorDesc._pzms_wrapped = true
+        local old_swi = SurvivorDesc.setWornItem
+        if old_swi then
+            SurvivorDesc.setWornItem = function(self, location, item)
+                if not self or not location then return end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_swi, self, actualLoc, item)
+                if ok then return res end
+            end
+        end
+        local old_gwi = SurvivorDesc.getWornItem
+        if old_gwi then
+            SurvivorDesc.getWornItem = function(self, location)
+                if not self or not location then return nil end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_gwi, self, actualLoc)
+                if ok and res ~= nil then return res end
+                local ok2, res2 = pcall(old_gwi, self, location)
+                if ok2 then return res2 end
+                return nil
+            end
+        end
+    end
+
+    -- IsoGameCharacter & IsoPlayer getWornItem / setWornItem Protection
+    if IsoGameCharacter and not IsoGameCharacter._pzms_worn_wrapped then
+        IsoGameCharacter._pzms_worn_wrapped = true
+        local old_char_gwi = IsoGameCharacter.getWornItem
+        if old_char_gwi then
+            IsoGameCharacter.getWornItem = function(self, location)
+                if not self or not location then return nil end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_char_gwi, self, actualLoc)
+                if ok and res ~= nil then return res end
+                local ok2, res2 = pcall(old_char_gwi, self, location)
+                if ok2 then return res2 end
+                return nil
+            end
+        end
+        local old_char_swi = IsoGameCharacter.setWornItem
+        if old_char_swi then
+            IsoGameCharacter.setWornItem = function(self, location, item)
+                if not self or not location then return end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_char_swi, self, actualLoc, item)
+                if ok then return res end
+            end
+        end
+    end
+
+    -- WornItems getItem / setItem / contains Protection
+    if WornItems and not WornItems._pzms_wrapped then
+        WornItems._pzms_wrapped = true
+        local old_wi_getItem = WornItems.getItem
+        if old_wi_getItem then
+            WornItems.getItem = function(self, location)
+                if not self or not location then return nil end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_wi_getItem, self, actualLoc)
+                if ok and res ~= nil then return res end
+                local ok2, res2 = pcall(old_wi_getItem, self, location)
+                if ok2 then return res2 end
+                return nil
+            end
+        end
+        local old_wi_setItem = WornItems.setItem
+        if old_wi_setItem then
+            WornItems.setItem = function(self, location, item)
+                if not self or not location then return end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_wi_setItem, self, actualLoc, item)
+                if ok then return res end
+            end
+        end
+        local old_wi_contains = WornItems.contains
+        if old_wi_contains then
+            WornItems.contains = function(self, location)
+                if not self or not location then return false end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_wi_contains, self, actualLoc)
+                if ok and res ~= nil then return res end
+                return false
+            end
+        end
+        local old_wi_getLocation = WornItems.getLocation
+        if old_wi_getLocation then
+            WornItems.getLocation = function(self, location)
+                if not self or not location then return nil end
+                local actualLoc = resolveItemBodyLocation(location)
+                local ok, res = pcall(old_wi_getLocation, self, actualLoc)
+                if ok and res ~= nil then return res end
+                return nil
+            end
+        end
+    end
+
+    -- ReportWindow:new Protection for Daily Report Journal (prevents nil operand division)
+    if ReportWindow and ReportWindow.new and not ReportWindow._pzms_wrapped then
+        ReportWindow._pzms_wrapped = true
+        local old_rep_new = ReportWindow.new
+        ReportWindow.new = function(self, x, y, width, height, player)
+            if type(x) ~= "number" and x ~= nil then
+                player = x
+                x = nil
+                y = nil
+                width = nil
+                height = nil
+            end
+            width = tonumber(width) or 500
+            height = tonumber(height) or 500
+            local sw = (getCore() and getCore():getScreenWidth()) or 1920
+            local sh = (getCore() and getCore():getScreenHeight()) or 1080
+            x = tonumber(x) or (sw / 2 - (width / 2))
+            y = tonumber(y) or (sh / 2 - (height / 2))
+            local status, res = pcall(old_rep_new, self, x, y, width, height, player)
+            if status and res then return res end
+            local o = ISCollapsableWindow:new(x, y, width, height)
+            setmetatable(o, self)
+            self.__index = self
+            o.borderColor = {r=0.4, g=0.4, b=0.4, a=1}
+            o.backgroundColor = {r=0, g=0, b=0, a=0.8}
+            o.width = width
+            o.height = height
+            o.player = player or (getSpecificPlayer and getSpecificPlayer(0))
+            o:setResizable(false)
+            o.selectedFaction = nil
+            o.moveWithMouse = true
+            ReportWindow.instance = o
+            o:setTitle("Daily Report Journal")
+            return o
+        end
+    end
+
+    -- IsoGameCharacter / IsoPlayer Hand Item Shims (prevents callFrame ReturnValues crash on weapon equip)
+    if IsoGameCharacter and not IsoGameCharacter._pzms_hands_wrapped then
+        IsoGameCharacter._pzms_hands_wrapped = true
+        local old_setPrimary = IsoGameCharacter.setPrimaryHandItem
+        if old_setPrimary then
+            IsoGameCharacter.setPrimaryHandItem = function(self, item)
+                if not self then return end
+                if self.getPrimaryHandItem and self:getPrimaryHandItem() == item and item ~= nil then
+                    return
+                end
+                local ok, res = pcall(old_setPrimary, self, item)
+                if ok then return res end
+            end
+        end
+        local old_setSecondary = IsoGameCharacter.setSecondaryHandItem
+        if old_setSecondary then
+            IsoGameCharacter.setSecondaryHandItem = function(self, item)
+                if not self then return end
+                if self.getSecondaryHandItem and self:getSecondaryHandItem() == item and item ~= nil then
+                    return
+                end
+                local ok, res = pcall(old_setSecondary, self, item)
+                if ok then return res end
+            end
+        end
+    end
+
+    if IsoPlayer and not IsoPlayer._pzms_hands_wrapped then
+        IsoPlayer._pzms_hands_wrapped = true
+        local old_p_setPrimary = IsoPlayer.setPrimaryHandItem
+        if old_p_setPrimary then
+            IsoPlayer.setPrimaryHandItem = function(self, item)
+                if not self then return end
+                if self.getPrimaryHandItem and self:getPrimaryHandItem() == item and item ~= nil then
+                    return
+                end
+                local ok, res = pcall(old_p_setPrimary, self, item)
+                if ok then return res end
+            end
+        end
+        local old_p_setSecondary = IsoPlayer.setSecondaryHandItem
+        if old_p_setSecondary then
+            IsoPlayer.setSecondaryHandItem = function(self, item)
+                if not self then return end
+                if self.getSecondaryHandItem and self:getSecondaryHandItem() == item and item ~= nil then
+                    return
+                end
+                local ok, res = pcall(old_p_setSecondary, self, item)
+                if ok then return res end
+            end
+        end
+    end
+
+    -- InventoryItem getDisplayCategory Fallback (Eliminates "Error: No category set")
+    if InventoryItem and not InventoryItem._pzms_cat_wrapped then
+        InventoryItem._pzms_cat_wrapped = true
+        local old_gdc = InventoryItem.getDisplayCategory
+        if old_gdc then
+            InventoryItem.getDisplayCategory = function(self)
+                local ok, res = pcall(old_gdc, self)
+                if ok and res ~= nil and res ~= "" and res ~= "Error: No category set" then
+                    return res
+                end
+                if self and self.getCategory then
+                    local ok2, cat = pcall(self.getCategory, self)
+                    if ok2 and cat then
+                        if cat == "Weapon" then return "Weapon" end
+                        if cat == "Ammo" then return "Ammo" end
+                        if cat == "WeaponPart" then return "WeaponPart" end
+                        return cat
+                    end
+                end
+                return "Item"
+            end
+        end
+    end
+
+    -- ISEquipWeaponAction / GunFighter perform wrapper (prevents JVM null callframe crash on equip)
+    if ISEquipWeaponAction and not ISEquipWeaponAction._pzms_perform_wrapped then
+        ISEquipWeaponAction._pzms_perform_wrapped = true
+        local old_perform = ISEquipWeaponAction.perform
+        if old_perform then
+            ISEquipWeaponAction.perform = function(self)
+                local ok, err = pcall(old_perform, self)
+                if not ok and err then
+                    print("[PZ Mod Studio Polyfill] Handled ISEquipWeaponAction:perform error safely: " .. tostring(err))
+                    if self and self.character and self.item then
+                        if self.primary then
+                            pcall(self.character.setPrimaryHandItem, self.character, self.item)
+                        else
+                            pcall(self.character.setSecondaryHandItem, self.character, self.item)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- IsoPlayer / IsoGameCharacter Attack & Melee Swing Safety (prevents SwipeState / Melee gun swing crash)
+    if IsoPlayer and not IsoPlayer._pzms_attack_wrapped then
+        IsoPlayer._pzms_attack_wrapped = true
+        local old_attack = IsoPlayer.Attack
+        if old_attack then
+            IsoPlayer.Attack = function(self, ...)
+                local ok, res = pcall(old_attack, self, ...)
+                if ok then return res end
+                print("[PZ Mod Studio Polyfill] Handled safe IsoPlayer:Attack exception: " .. tostring(res))
+            end
+        end
+    end
+
+    -- VehiclePart getDeviceData Safety Shim
+    if VehiclePart and VehiclePart.getDeviceData then
+        local old_gdd = VehiclePart.getDeviceData
+        VehiclePart.getDeviceData = function(self)
+            local status, res = pcall(old_gdd, self)
+            if status and res ~= nil then return res end
+            return nil
+        end
+    end
+
+    -- Global InventoryItemFactory Polyfill (Required for B42 mods instantiating items via InventoryItemFactory.CreateItem)
+    if not InventoryItemFactory then
+        InventoryItemFactory = {}
+    end
+    if not InventoryItemFactory._pzms_wrapped then
+        InventoryItemFactory._pzms_wrapped = true
+        local orig_CreateItem = InventoryItemFactory.CreateItem
+        InventoryItemFactory.CreateItem = function(itemType, ...)
+            if not itemType then return nil end
+            if orig_CreateItem then
+                local ok, it = pcall(orig_CreateItem, itemType, ...)
+                if ok and it then return it end
+                if type(itemType) == "string" and not itemType:find("%.") then
+                    local ok2, it2 = pcall(orig_CreateItem, "Base." .. itemType, ...)
+                    if ok2 and it2 then return it2 end
+                end
+            end
+            if instanceItem and type(itemType) == "string" then
+                local ok, it = pcall(instanceItem, itemType)
+                if ok and it then return it end
+                if not itemType:find("%.") then
+                    local ok2, it2 = pcall(instanceItem, "Base." .. itemType)
+                    if ok2 and it2 then return it2 end
+                end
+            end
+            if zombie and zombie.inventory and zombie.inventory.InventoryItemFactory and zombie.inventory.InventoryItemFactory.CreateItem then
+                local ok, it = pcall(zombie.inventory.InventoryItemFactory.CreateItem, itemType)
+                if ok and it then return it end
+            end
+            return nil
+        end
+    end
+
+    -- ItemContainer getFirstEvalRecurse & getAllEvalRecurse Protection (Eliminates Java CallFrame NullPointerException during Context Menu & UI building)
+    if ItemContainer and not ItemContainer._pzms_eval_wrapped then
+        ItemContainer._pzms_eval_wrapped = true
+        local old_getFirstEvalRecurse = ItemContainer.getFirstEvalRecurse
+        ItemContainer.getFirstEvalRecurse = function(self, predicate)
+            if not self or not predicate then return nil end
+            if old_getFirstEvalRecurse then
+                local ok, res = pcall(old_getFirstEvalRecurse, self, predicate)
+                if ok and res ~= nil then return res end
+            end
+            local items = self:getItems()
+            if items then
+                local sz = items:size()
+                for i = 0, sz - 1 do
+                    local it = items:get(i)
+                    if it then
+                        local matchOk, matchRes = pcall(predicate, it)
+                        if matchOk and matchRes then
+                            return it
+                        end
+                        if it.IsInventoryContainer and it:IsInventoryContainer() then
+                            local subInv = it:getInventory()
+                            if subInv and subInv.getFirstEvalRecurse then
+                                local found = subInv:getFirstEvalRecurse(predicate)
+                                if found then return found end
+                            end
+                        end
+                    end
+                end
+            end
+            return nil
+        end
+
+        local old_getAllEvalRecurse = ItemContainer.getAllEvalRecurse
+        if old_getAllEvalRecurse then
+            ItemContainer.getAllEvalRecurse = function(self, predicate, list)
+                if not self or not predicate or not list then return end
+                local ok, res = pcall(old_getAllEvalRecurse, self, predicate, list)
+                if ok then return res end
+                local items = self:getItems()
+                if items then
+                    local sz = items:size()
+                    for i = 0, sz - 1 do
+                        local it = items:get(i)
+                        if it then
+                            local matchOk, matchRes = pcall(predicate, it)
+                            if matchOk and matchRes then
+                                list:add(it)
+                            end
+                            if it.IsInventoryContainer and it:IsInventoryContainer() then
+                                local subInv = it:getInventory()
+                                if subInv and subInv.getAllEvalRecurse then
+                                    subInv:getAllEvalRecurse(predicate, list)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Safe GunFighter Attachment & Tag Shims
+    if not _G.safeHasTag then
+        _G.safeHasTag = function(item, tag)
+            if not item or not tag then return false end
+            if item.hasTag then
+                local ok, res = pcall(item.hasTag, item, tag)
+                if ok then return res == true end
+            end
+            return false
+        end
+    end
+
+    -- OCDInventory Async Refresh Wrapper (prevents mid-callframe UI re-layout during OnEquipPrimary)
+    if OCDInventory and OCDInventory.InventoryObserver and not OCDInventory.InventoryObserver._pzms_wrapped then
+        OCDInventory.InventoryObserver._pzms_wrapped = true
+        local old_requestRefresh = OCDInventory.InventoryObserver.requestRefresh
+        if old_requestRefresh then
+            OCDInventory.InventoryObserver.requestRefresh = function(playerNum, reason)
+                if reason == "equipPrimary" or reason == "equipSecondary" or reason == "clothingUpdated" then
+                    pcall(function()
+                        if OCDInventory.RefreshCoordinator and OCDInventory.RefreshCoordinator.schedule then
+                            OCDInventory.RefreshCoordinator.schedule(playerNum, reason)
+                        end
+                    end)
+                else
+                    pcall(old_requestRefresh, playerNum, reason)
+                end
+            end
+        end
+    end
+
+    -- Dynamic Magazine & Caliber Bridge (Resolves 7.62x39, 5.45x39, 5.7x28, .22, etc. Brita/GunFighter custom ammunition)
+    if ISInventoryPaneContextMenu and not ISInventoryPaneContextMenu._pzms_mag_wrapped then
+        ISInventoryPaneContextMenu._pzms_mag_wrapped = true
+        local MAG_CALIBER_MAP = {
+            ["AKClip"] = {"Base.762x39Bullets", "762x39Bullets", "Base.Bullets_762x39"},
+            ["762x39Belt"] = {"Base.762x39Bullets", "762x39Bullets"},
+            ["762Drum"] = {"Base.762x39Bullets", "762x39Bullets"},
+            ["SKSClip"] = {"Base.762x39Bullets", "762x39Bullets"},
+            ["SVDClip"] = {"Base.762x54rBullets", "762x54rBullets"},
+            ["MosinClip"] = {"Base.762x54rBullets", "762x54rBullets"},
+            ["762x54rBelt"] = {"Base.762x54rBullets", "762x54rBullets"},
+            ["545StdClip"] = {"Base.545x39Bullets", "545x39Bullets"},
+            ["545Drum"] = {"Base.545x39Bullets", "545x39Bullets"},
+            ["57Clip"] = {"Base.57x28Bullets", "57x28Bullets"},
+            ["P90Clip"] = {"Base.57x28Bullets", "57x28Bullets"},
+            ["380Clip"] = {"Base.380Bullets", "380Bullets"},
+            ["380ExtClip"] = {"Base.380Bullets", "380Bullets"},
+            ["M82Clip"] = {"Base.50BMGBullets", "50BMGBullets"},
+            ["3006ExtClip"] = {"Base.3006Bullets", "3006Bullets"},
+            ["1903Clip"] = {"Base.3006Bullets", "3006Bullets"},
+            ["22Clip"] = {"Base.22Bullets", "22Bullets"},
+            ["22Drum"] = {"Base.22Bullets", "22Bullets"},
+            ["22ExtClip"] = {"Base.22Bullets", "22Bullets"},
+            ["CP33Clip"] = {"Base.22Bullets", "22Bullets"},
+            ["CP33ExtClip"] = {"Base.22Bullets", "22Bullets"},
+            ["556Clip"] = {"Base.556Bullets", "Base.223Bullets", "556Bullets", "223Bullets"},
+            ["556Drum"] = {"Base.556Bullets", "Base.223Bullets", "556Bullets", "223Bullets"},
+            ["556Belt"] = {"Base.556Bullets", "Base.223Bullets", "556Bullets", "223Bullets"},
+            ["223Clip"] = {"Base.223Bullets", "Base.556Bullets", "223Bullets", "556Bullets"},
+            ["223StdClip"] = {"Base.223Bullets", "Base.556Bullets", "223Bullets", "556Bullets"},
+            ["223ExtClip"] = {"Base.223Bullets", "Base.556Bullets", "223Bullets", "556Bullets"},
+        }
+
+        local function resolveRealAmmoKey(playerObj, magazine)
+            if not playerObj or not magazine then return nil, 0 end
+            local inv = playerObj:getInventory()
+            if not inv then return nil, 0 end
+
+            local magType = magazine:getType()
+            local candidates = MAG_CALIBER_MAP[magType] or {}
+
+            -- Try mapped candidates first
+            for _, cand in ipairs(candidates) do
+                local count = inv:getItemCountRecurse(cand)
+                if count > 0 then
+                    return cand, count
+                end
+            end
+
+            -- Try native getAmmoType
+            local nativeAmmo = magazine:getAmmoType()
+            if nativeAmmo then
+                local nativeKey = nativeAmmo
+                if type(nativeAmmo) == "userdata" and nativeAmmo.getItemKey then
+                    nativeKey = nativeAmmo:getItemKey()
+                elseif type(nativeAmmo) == "string" then
+                    nativeKey = nativeAmmo
+                end
+                local count = inv:getItemCountRecurse(tostring(nativeKey))
+                if count > 0 then
+                    return tostring(nativeKey), count
+                end
+            end
+
+            -- Try matching by DisplayName string heuristic (e.g. "7.62x39")
+            local disp = tostring(magazine:getDisplayName() or "")
+            if disp:find("7%.62x39") then
+                local count = inv:getItemCountRecurse("Base.762x39Bullets")
+                if count > 0 then return "Base.762x39Bullets", count end
+            elseif disp:find("5%.45x39") then
+                local count = inv:getItemCountRecurse("Base.545x39Bullets")
+                if count > 0 then return "Base.545x39Bullets", count end
+            elseif disp:find("5%.7x28") then
+                local count = inv:getItemCountRecurse("Base.57x28Bullets")
+                if count > 0 then return "Base.57x28Bullets", count end
+            end
+
+            return nil, 0
+        end
+
+        local old_doMagazineMenu = ISInventoryPaneContextMenu.doMagazineMenu
+        ISInventoryPaneContextMenu.doMagazineMenu = function(playerObj, magazine, context)
+            if not playerObj or not magazine or not context then return end
+            if magazine:getCurrentAmmoCount() < magazine:getMaxAmmo() then
+                local matchedKey, ammoCount = resolveRealAmmoKey(playerObj, magazine)
+                if ammoCount > magazine:getMaxAmmo() then
+                    ammoCount = magazine:getMaxAmmo()
+                end
+                if ammoCount > magazine:getMaxAmmo() - magazine:getCurrentAmmoCount() then
+                    ammoCount = magazine:getMaxAmmo() - magazine:getCurrentAmmoCount()
+                end
+
+                if ammoCount == 0 then
+                    local option = context:addOption(getText("ContextMenu_NoBullets", ammoCount))
+                    option.notAvailable = true
+                else
+                    context:addOption(getText("ContextMenu_InsertBulletsInMagazine", ammoCount), playerObj, function(p, m, c)
+                        ISInventoryPaneContextMenu.transferIfNeeded(p, m)
+                        local items = p:getInventory():getSomeTypeRecurse(matchedKey, c)
+                        ISInventoryPaneContextMenu.transferIfNeeded(p, items)
+                        if c > 0 then
+                            ISTimedActionQueue.add(ISLoadBulletsInMagazine:new(p, m, c))
+                        end
+                    end, magazine, ammoCount)
+                end
+            end
+
+            if magazine:getCurrentAmmoCount() > 0 then
+                context:addOption(getText("ContextMenu_UnloadMagazine"), playerObj, ISInventoryPaneContextMenu.onUnloadBulletsFromMagazine, magazine)
+            end
+        end
+    end
+
+    -- Safe ISInventoryPane / UI Tables
+    if ISInventoryPane and not ISInventoryPane._pzms_safe then
+        ISInventoryPane._pzms_safe = true
+        local meta = getmetatable(ISInventoryPane) or {}
+        local orig_idx = meta.__index
+        meta.__index = function(t, k)
+            local val = rawget(t, k)
+            if val ~= nil then return val end
+            if orig_idx then
+                if type(orig_idx) == "function" then return orig_idx(t, k) end
+                if type(orig_idx) == "table" then return orig_idx[k] end
+            end
+            return nil
+        end
+        setmetatable(ISInventoryPane, meta)
+    end
+
+    -- ISEquipWeaponAction Safety Guard (prevents hand-swap action crashes between Fancy Handwork & OCDInventory)
+    if ISEquipWeaponAction and not ISEquipWeaponAction._pzms_complete_wrapped then
+        ISEquipWeaponAction._pzms_complete_wrapped = true
+        local orig_complete = ISEquipWeaponAction.complete
+        if orig_complete then
+            ISEquipWeaponAction.complete = function(self)
+                local ok, res = pcall(orig_complete, self)
+                if not ok then
+                    pcall(function()
+                        if self.item and self.character then
+                            if self.twoHands or (self.item.isRequiresEquippedBothHands and self.item:isRequiresEquippedBothHands()) then
+                                self.character:setPrimaryHandItem(self.item)
+                                self.character:setSecondaryHandItem(self.item)
+                            elseif self.primary then
+                                self.character:setPrimaryHandItem(self.item)
+                            else
+                                self.character:setSecondaryHandItem(self.item)
+                            end
+                        end
+                    end)
+                    return true
+                end
+                return res
+            end
+        end
+    end
+
+    -- Universal ScriptManager Item & Firearm Melee Sanitizer
+    if ScriptManager and ScriptManager.instance then
+        local sm = ScriptManager.instance
+        if sm.getAllItems then
+            local ok, items = pcall(sm.getAllItems, sm)
+            if ok and items then
+                local sz = items:size()
+                for i = 0, sz - 1 do
+                    local item = items:get(i)
+                    if item then
+                        -- 1. Fix missing DisplayCategory / "Error: No category set"
+                        local okDc, dispCat = pcall(item.getDisplayCategory, item)
+                        if not okDc or not dispCat or dispCat == "" or dispCat == "Error: No category set" then
+                            local okType, cat = pcall(item.getTypeString, item)
+                            if okType and cat == "Weapon" then
+                                local isRanged = false
+                                if item.isRanged then pcall(function() isRanged = item:isRanged() end) end
+                                if isRanged then
+                                    pcall(item.setDisplayCategory, item, "RangedWeapon")
+                                else
+                                    pcall(item.setDisplayCategory, item, "Weapon")
+                                end
+                            else
+                                local okName, name = pcall(item.getName, item)
+                                if okName and name then
+                                    if name:find("Round") or name:find("Bullet") or name:find("Ammo") or name:find("Shell") then
+                                        pcall(item.setDisplayCategory, item, "Ammo")
+                                    elseif name:find("Mag") or name:find("Clip") or name:find("Drum") then
+                                        pcall(item.setDisplayCategory, item, "GunMag")
+                                    end
+                                end
+                            end
+                        end
+
+                        -- 2. Fix Firearm Melee Swing Animation Crash (SwipeState.java NPE)
+                        if item.isRanged then
+                            local isRanged = false
+                            pcall(function() isRanged = item:isRanged() end)
+                            if isRanged then
+                                local okSw, swAnim = pcall(item.getSwingAnim, item)
+                                if not okSw or not swAnim or swAnim == "" or swAnim == "Bat" then
+                                    local isTwoHand = false
+                                    pcall(function() isTwoHand = item:isTwoHandWeapon() end)
+                                    if isTwoHand then
+                                        pcall(item.setSwingAnim, item, "Rifle")
+                                    else
+                                        pcall(item.setSwingAnim, item, "Handgun")
+                                    end
+                                end
+                                local okHf, hfType = pcall(item.getHitFloorType, item)
+                                if not okHf or not hfType or hfType == "" then
+                                    pcall(item.setHitFloorType, item, "Stomp")
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- IsoDoor / IsoWindow / IsoThumpable B42 JVM Null Pointer Interop Safety
+    if IsoDoor and not IsoDoor._pzms_wrapped then
+        IsoDoor._pzms_wrapped = true
+        local old_toggleDoor = IsoDoor.ToggleDoor
+        if old_toggleDoor then
+            IsoDoor.ToggleDoor = function(self, chr)
+                if not self then return end
+                local safeChr = chr or (getPlayer and getPlayer()) or (getSpecificPlayer and getSpecificPlayer(0))
+                if safeChr ~= nil then
+                    local ok, res = pcall(old_toggleDoor, self, safeChr)
+                    if ok then return res end
+                end
+                pcall(function()
+                    if self.setOpen and self.IsOpen then
+                        self:setOpen(not self:IsOpen())
+                    end
+                end)
+            end
+        end
+        local old_toggleActual = IsoDoor.ToggleDoorActual
+        if old_toggleActual then
+            IsoDoor.ToggleDoorActual = function(self, chr, ...)
+                if not self then return end
+                local safeChr = chr or (getPlayer and getPlayer()) or (getSpecificPlayer and getSpecificPlayer(0))
+                if safeChr ~= nil then
+                    local ok, res = pcall(old_toggleActual, self, safeChr, ...)
+                    if ok then return res end
+                end
+                pcall(function()
+                    if self.setOpen and self.IsOpen then
+                        self:setOpen(not self:IsOpen())
+                    end
+                end)
+            end
+        end
+    end
+
+    if IsoWindow and not IsoWindow._pzms_wrapped then
+        IsoWindow._pzms_wrapped = true
+        local old_toggleWindow = IsoWindow.ToggleWindow
+        if old_toggleWindow then
+            IsoWindow.ToggleWindow = function(self, chr)
+                if not self then return end
+                local safeChr = chr or (getPlayer and getPlayer()) or (getSpecificPlayer and getSpecificPlayer(0))
+                if safeChr ~= nil then
+                    local ok, res = pcall(old_toggleWindow, self, safeChr)
+                    if ok then return res end
+                end
+                pcall(function()
+                    if self.setOpen and self.IsOpen then
+                        self:setOpen(not self:IsOpen())
+                    end
+                end)
+            end
+        end
+    end
+
+    if IsoThumpable and not IsoThumpable._pzms_wrapped then
+        IsoThumpable._pzms_wrapped = true
+        local old_thumpToggle = IsoThumpable.ToggleDoor
+        if old_thumpToggle then
+            IsoThumpable.ToggleDoor = function(self, chr)
+                if not self then return end
+                local safeChr = chr or (getPlayer and getPlayer()) or (getSpecificPlayer and getSpecificPlayer(0))
+                if safeChr ~= nil then
+                    local ok, res = pcall(old_thumpToggle, self, safeChr)
+                    if ok then return res end
+                end
+                pcall(function()
+                    if self.setOpen and self.IsOpen then
+                        self:setOpen(not self:IsOpen())
+                    end
+                end)
+            end
+        end
+    end
+
+    -- Bandits Week One Room Programs & Nil Room Safety Guard (BWORoomPrograms.lua:1005)
+    if BWORoomPrograms and not BWORoomPrograms._pzms_wrapped then
+        BWORoomPrograms._pzms_wrapped = true
+        local old_restaurant = BWORoomPrograms.restaurant
+        if old_restaurant then
+            BWORoomPrograms.restaurant = function(bandit, def)
+                local status, res = pcall(old_restaurant, bandit, def)
+                if status and res ~= nil then return res end
+                return {}
+            end
+        end
+        for progName, progFunc in pairs(BWORoomPrograms) do
+            if type(progFunc) == "function" and progName ~= "restaurant" then
+                local rawProg = progFunc
+                BWORoomPrograms[progName] = function(bandit, def)
+                    local ok, res = pcall(rawProg, bandit, def)
+                    if ok and res ~= nil then return res end
+                    return {}
+                end
+            end
+        end
+    end
+
+    -- Bandits & BWO Program Task Return Safety Guard (Prevents __len on nil operand)
+    if BanditPrograms then
+        local bwoFns = {"Events", "Symptoms", "Talk", "FollowRoad"}
+        for _, fn in ipairs(bwoFns) do
+            if type(BanditPrograms[fn]) == "function" and not BanditPrograms["__pzms_guarded_" .. fn] then
+                BanditPrograms["__pzms_guarded_" .. fn] = true
+                local orig = BanditPrograms[fn]
+                BanditPrograms[fn] = function(...)
+                    local ok, res = pcall(orig, ...)
+                    if ok and type(res) == "table" then
+                        return res
+                    end
+                    return {}
+                end
+            end
+        end
+    end
+
+    -- Bandits UpdateItemsToSpawnAtDeath Safety Guard (Bandit.lua:714 / BWOSquareLoader.lua:763)
+    if Bandit and Bandit.UpdateItemsToSpawnAtDeath and not Bandit.__pzms_death_guarded then
+        Bandit.__pzms_death_guarded = true
+        local orig_update_items = Bandit.UpdateItemsToSpawnAtDeath
+        Bandit.UpdateItemsToSpawnAtDeath = function(zombie, brain)
+            if not zombie then return end
+            if not brain and BanditBrain and BanditBrain.Get then
+                brain = BanditBrain.Get(zombie)
+            end
+            if not brain or type(brain) ~= "table" or not brain.weapons then
+                return
+            end
+            return orig_update_items(zombie, brain)
+        end
+    end
+
+    -- AIWeekOne AINavigation Window / Navigation Safety Protection
+    if AINavigation and not AINavigation._pzms_wrapped then
+        AINavigation._pzms_wrapped = true
+        local old_recover = AINavigation.recover
+        if old_recover then
+            AINavigation.recover = function(zombie, brain, ...)
+                local ok, res = pcall(old_recover, zombie, brain, ...)
+                if ok then return res end
+                return false
+            end
+        end
+    end
+
+    -- Daily Report Journal (dSAG) Window & Event Protection
+    if dSAG and not dSAG._pzms_wrapped then
+        dSAG._pzms_wrapped = true
+        local old_onNewDay = dSAG.onNewDay
+        if old_onNewDay then
+            dSAG.onNewDay = function(record)
+                pcall(old_onNewDay, record)
+            end
+        end
+        local old_onPlayerDeath = dSAG.onPlayerDeath
+        if old_onPlayerDeath then
+            dSAG.onPlayerDeath = function(...)
+                pcall(old_onPlayerDeath, ...)
+            end
+        end
+        local old_onDataReloaded = dSAG.onDataReloaded
+        if old_onDataReloaded then
+            dSAG.onDataReloaded = function(...)
+                pcall(old_onDataReloaded, ...)
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- Dedicated Server & Multiplayer Null-Pointer Shield for getOnlinePlayers
+    -- ----------------------------------------------------------------------------
+    if _G and _G.getOnlinePlayers then
+        local orig_getOnlinePlayers = _G.getOnlinePlayers
+        _G.getOnlinePlayers = function(...)
+            if isServer and isServer() then
+                if not (zombie and zombie.network and zombie.network.GameServer and zombie.network.GameServer.udpEngine) then
+                    if ArrayList and ArrayList.new then
+                        return ArrayList.new()
+                    end
+                end
+            end
+            local ok, res = pcall(orig_getOnlinePlayers, ...)
+            if ok and res ~= nil then
+                return res
+            end
+            if ArrayList and ArrayList.new then
+                return ArrayList.new()
+            end
+            return {}
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- Exhaustive Power Rework (EPR) Dedicated Server Startup Guard
+    -- ----------------------------------------------------------------------------
+    if Grid and type(Grid.Reconcile) == "function" and not Grid.__pzms_patched then
+        Grid.__pzms_patched = true
+        local old_grid_reconcile = Grid.Reconcile
+        Grid.Reconcile = function(...)
+            if isServer and isServer() and not (zombie and zombie.network and zombie.network.GameServer and zombie.network.GameServer.udpEngine) then
+                return
+            end
+            return old_grid_reconcile(...)
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- Bandits Week One (BWO) Comprehensive Multiplayer & Audio Safety Guards
+    -- ----------------------------------------------------------------------------
+    if BWOVariants and not BWOVariants.__pzms_patched then
+        BWOVariants.__pzms_patched = true
+        local fallback_variant = BWOVariants["original"] or {
+            playerIsHostile = false,
+            schedule = {},
+            inhabitants = {},
+            streets = {},
+        }
+        setmetatable(BWOVariants, {
+            __index = function(t, k)
+                if k == nil or rawget(t, k) == nil then
+                    return fallback_variant
+                end
+                return rawget(t, k)
+            end
+        })
+    end
+
+    if _G.GetBWOModData and not _G.__pzms_gmd_patched then
+        _G.__pzms_gmd_patched = true
+        local orig_GetBWOModData = _G.GetBWOModData
+        _G.GetBWOModData = function()
+            local data = orig_GetBWOModData()
+            if type(data) ~= "table" then
+                data = {}
+                if _G.BWOGlobalData then _G.BWOGlobalData = data end
+            end
+            if not data.Variant then
+                if SandboxVars and SandboxVars.BanditsWeekOne and SandboxVars.BanditsWeekOne.Variant then
+                    data.Variant = SandboxVars.BanditsWeekOne.Variant
+                else
+                    data.Variant = "original"
+                end
+            end
+            return data
+        end
+    end
+
+    if BWOScheduler and BWOScheduler.generateSchedule and not BWOScheduler.__pzms_patched then
+        BWOScheduler.__pzms_patched = true
+        local orig_generateSchedule = BWOScheduler.generateSchedule
+        BWOScheduler.generateSchedule = function(...)
+            local gmd = GetBWOModData and GetBWOModData()
+            if gmd and not gmd.Variant then
+                if SandboxVars and SandboxVars.BanditsWeekOne and SandboxVars.BanditsWeekOne.Variant then
+                    gmd.Variant = SandboxVars.BanditsWeekOne.Variant
+                else
+                    gmd.Variant = "original"
+                end
+            end
+            local ok, res = pcall(orig_generateSchedule, ...)
+            if ok and res ~= nil then return res end
+            if BWOVariants and BWOVariants["original"] and BWOVariants["original"].schedule then
+                return BWOVariants["original"].schedule
+            end
+            return {}
+        end
+    end
+
+    if BWOMusic and not BWOMusic.__pzms_patched then
+        BWOMusic.__pzms_patched = true
+        if BWOMusic.Process then
+            local orig_bwo_process = BWOMusic.Process
+            BWOMusic.Process = function(...)
+                if not BWOMusic.origReturnVolume then
+                    local sm = getSoundManager and getSoundManager()
+                    BWOMusic.origReturnVolume = (sm and sm.getMusicVolume and sm:getMusicVolume()) or 0.5
+                end
+                if not BWOMusic.emitter then return end
+                pcall(orig_bwo_process, ...)
+            end
+        end
+
+        if BWOMusic.Play then
+            local orig_bwo_play = BWOMusic.Play
+            BWOMusic.Play = function(...)
+                pcall(orig_bwo_play, ...)
+            end
+        end
+    end
+
+    if BWOPopControl and not BWOPopControl.__pzms_patched then
+        BWOPopControl.__pzms_patched = true
+        if BWOPopControl.StreetsSpawn then
+            local orig_streets_spawn = BWOPopControl.StreetsSpawn
+            BWOPopControl.StreetsSpawn = function(cnt)
+                local gmd = GetBWOModData and GetBWOModData()
+                if gmd and not gmd.Variant then gmd.Variant = "original" end
+                pcall(orig_streets_spawn, cnt)
+            end
+        end
+        if BWOPopControl.UpdateCivs then
+            local orig_update_civs = BWOPopControl.UpdateCivs
+            BWOPopControl.UpdateCivs = function(...)
+                local gmd = GetBWOModData and GetBWOModData()
+                if gmd and not gmd.Variant then gmd.Variant = "original" end
+                pcall(orig_update_civs, ...)
+            end
+        end
+        if isClient and isClient() then
+            BWOPopControl.Zombie = function() end
+        end
+    end
+
+    if BWOCompatibility and not BWOCompatibility.__pzms_patched then
+        BWOCompatibility.__pzms_patched = true
+        local orig_get_vars = BWOCompatibility.GetSandboxOptionVars
+        BWOCompatibility.GetSandboxOptionVars = function(square)
+            local ok, vars = pcall(orig_get_vars, square)
+            if ok and type(vars) == "table" then
+                for _, var in pairs(vars) do
+                    if var and type(var) == "table" then
+                        if var[2] == nil or type(var[2]) ~= "number" then var[2] = tonumber(var[2]) or 1.0 end
+                        if var[3] == nil or type(var[3]) ~= "number" then var[3] = tonumber(var[3]) or var[2] or 1.0 end
+                    end
+                end
+                return vars
+            end
+            return {}
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- Global Vehicle Spawn Guard for MP Clients (Suppresses Unauthorized AddVehicle Commands)
+    -- ----------------------------------------------------------------------------
+    if isClient and isClient() then
+        if _G.addVehicle and not _G.__pzms_addveh_wrapped then
+            _G.__pzms_addveh_wrapped = true
+            local orig_addVehicle = _G.addVehicle
+            _G.addVehicle = function(...)
+                local p = getSpecificPlayer and getSpecificPlayer(0)
+                local acc = (p and p.getAccessLevel and tostring(p:getAccessLevel()):lower()) or "none"
+                if acc == "none" or acc == "" or acc == "nil" then
+                    return nil
+                end
+                return orig_addVehicle(...)
+            end
+        end
+
+        if _G.addVehicleDebug and not _G.__pzms_addvehdeb_wrapped then
+            _G.__pzms_addvehdeb_wrapped = true
+            local orig_addVehicleDebug = _G.addVehicleDebug
+            _G.addVehicleDebug = function(...)
+                local p = getSpecificPlayer and getSpecificPlayer(0)
+                local acc = (p and p.getAccessLevel and tostring(p:getAccessLevel()):lower()) or "none"
+                if acc == "none" or acc == "" or acc == "nil" then
+                    return nil
+                end
+                return orig_addVehicleDebug(...)
+            end
+        end
+    end
+end
+
+initB42Polyfills()
+
+if Events then
+    if Events.OnGameBoot then Events.OnGameBoot.Add(initB42Polyfills) end
+    if Events.OnGameStart then Events.OnGameStart.Add(initB42Polyfills) end
+    if Events.OnInitGlobalModData then Events.OnInitGlobalModData.Add(initB42Polyfills) end
+    if Events.OnTick then
+        local pzms_ticks = 0
+        Events.OnTick.Add(function()
+            pzms_ticks = pzms_ticks + 1
+            if pzms_ticks <= 60 or pzms_ticks % 120 == 0 then
+                initB42Polyfills()
+            end
+        end)
+    end
+end

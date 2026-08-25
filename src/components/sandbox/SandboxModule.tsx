@@ -1,8 +1,25 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { TranslatedErrorCard } from '../../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { TranslatedErrorCard, LogFileInfoUI } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { AlertCircle, Wrench, CheckCircle, Terminal, FolderX, Activity, Filter, Info, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Wrench,
+  CheckCircle,
+  FolderX,
+  Activity,
+  Filter,
+  Trash2,
+  FolderOpen,
+  Plus,
+  X,
+  Search,
+  Copy,
+  Check,
+  FileText,
+  ChevronDown,
+  Save,
+} from 'lucide-react';
 
 interface SandboxModuleProps {
   paths: StudioPathsUI;
@@ -12,9 +29,16 @@ interface SandboxModuleProps {
   onGoToSettings: () => void;
 }
 
-/**
- * Aggressively detects translator and missing key log spam lines in Project Zomboid logs.
- */
+interface LogTab {
+  id: string;
+  title: string;
+  isLive: boolean;
+  filePath?: string;
+  lines: string[];
+}
+
+type LogSeverityFilter = 'ALL' | 'ERRORS' | 'LUA' | 'JAVA' | 'BRIDGE';
+
 const isTranslationSpamLine = (line: string): boolean => {
   const lower = line.toLowerCase();
   return (
@@ -33,6 +57,19 @@ const isTranslationSpamLine = (line: string): boolean => {
   );
 };
 
+export const formatLogDisplayName = (file: LogFileInfoUI): string => {
+  if (file.is_active_console || file.file_name.toLowerCase().startsWith('console.txt')) {
+    if (file.modified_timestamp) {
+      const d = new Date(file.modified_timestamp * 1000);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const dateStr = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `console.txt (${dateStr})`;
+    }
+    return 'console.txt (On Disk)';
+  }
+  return file.file_name;
+};
+
 export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
   errorCards,
@@ -41,24 +78,126 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onGoToSettings,
 }) => {
   const [filterSpam, setFilterSpam] = useState<boolean>(true);
-  const [logs, setLogs] = useState<string[]>([
-    '[PZ Monitor Center] Realtime session monitor ready.',
-    '[PZ Monitor Center] Click "Launch Game (Monitored)" in the top header to start ProjectZomboid64.exe (-debug) and capture crashes.',
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [severityFilter, setSeverityFilter] = useState<LogSeverityFilter>('ALL');
+  const [copied, setCopied] = useState<boolean>(false);
+  const [copiedCardId, setCopiedCardId] = useState<string | null>(null);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState<boolean>(false);
+  const [availableLogs, setAvailableLogs] = useState<LogFileInfoUI[]>([]);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const terminalContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleInspectInConsole = (card: TranslatedErrorCard) => {
+    let term = '';
+    if (card.source_file) {
+      term = card.source_file.split(/[/|\\]/).pop() || '';
+    } else if (card.raw_error) {
+      const match = card.raw_error.match(/([a-zA-Z0-9_]+\.lua|[a-zA-Z0-9_]+Exception|[a-zA-Z0-9_]+State|isLocalPlayer|ToggleDoor|BWORoomPrograms)/);
+      term = match ? match[1] : card.raw_error.slice(0, 25);
+    }
+    setSearchQuery(term);
+    setSeverityFilter('ALL');
+  };
+
+  const handleCopyCardSnippet = (cardId: string, snippet: string) => {
+    navigator.clipboard.writeText(snippet);
+    setCopiedCardId(cardId);
+    setTimeout(() => setCopiedCardId(null), 2000);
+  };
+
+  // Tabs state with permanent Client and Dedicated Server tabs
+  const [tabs, setTabs] = useState<LogTab[]>([
+    {
+      id: 'live_console',
+      title: '🔴 console.txt (Client)',
+      isLive: true,
+      lines: [
+        '[PZ Monitor Center] Realtime client session monitor ready.',
+        '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-debug) and stream live output here.',
+      ],
+    },
+    {
+      id: 'live_server',
+      title: '🖥️ Dedicated Server (Live)',
+      isLive: true,
+      lines: [
+        '[PZ Monitor Center] Dedicated server monitor ready.',
+        '[PZ Monitor Center] Dedicated server is currently offline. Start the server in "SERVERS" tab to begin live monitoring.',
+      ],
+    },
   ]);
+  const [activeTabId, setActiveTabId] = useState<string>('live_console');
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [clearedOffsets, setClearedOffsets] = useState<Record<string, number>>({});
 
-  // Dynamically filter displayed logs in real time based on filterSpam toggle state
-  const displayedLogs = useMemo(() => {
-    if (!filterSpam) return logs;
-    return logs.filter((line) => !isTranslationSpamLine(line));
-  }, [logs, filterSpam]);
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
+        setIsAddMenuOpen(false);
+      }
+    };
+    if (isAddMenuOpen) document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [isAddMenuOpen]);
 
-  // Subscribe to real log streaming from Rust backend
+  // Dedicated Server live log polling (only streams when server is running)
+  useEffect(() => {
+    if (!paths.user_zomboid_dir) return;
+
+    let isMounted = true;
+    const fetchServerLogs = async () => {
+      try {
+        const srvStatus = await TauriService.getDedicatedServerStatus(paths.user_zomboid_dir);
+        if (!isMounted) return;
+
+        if (srvStatus.is_running) {
+          const srvLines = await TauriService.getDedicatedServerLogs(paths.user_zomboid_dir, 1500);
+          if (srvLines && srvLines.length > 0 && isMounted) {
+            const cleaned = srvLines.map((l) =>
+              l.replace(/^\[\d{2}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}\]\s*/, '')
+            );
+            setTabs((prev) =>
+              prev.map((t) => (t.id === 'live_server' ? { ...t, lines: cleaned } : t))
+            );
+          }
+        } else {
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === 'live_server' && t.lines.length > 2
+                ? {
+                    ...t,
+                    lines: [
+                      '[PZ Monitor Center] Dedicated server monitor ready.',
+                      '[PZ Monitor Center] Dedicated server is currently offline. Start the server in "SERVERS" tab to begin live monitoring.',
+                    ],
+                  }
+                : t
+            )
+          );
+        }
+      } catch (err) {
+        console.warn('Dedicated server log poll error:', err);
+      }
+    };
+
+    fetchServerLogs();
+    const interval = setInterval(fetchServerLogs, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [paths.user_zomboid_dir]);
+
+  // Subscribe to real log streaming from Rust backend for the client live tab
   useEffect(() => {
     let unlistenLogs: (() => void) | undefined;
 
     TauriService.listenSandboxLogs((payload) => {
       const line = payload.line;
-      setLogs((prev) => [...prev.slice(-800), line]);
+      setTabs((prev) =>
+        prev.map((t) => (t.id === 'live_console' ? { ...t, lines: [...t.lines.slice(-1500), line] } : t))
+      );
     }).then((unlisten) => {
       unlistenLogs = unlisten;
     });
@@ -68,13 +207,146 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     };
   }, []);
 
-  const handleClearLogs = () => {
-    setLogs([
-      '[PZ Monitor Center] Terminal logs cleared.',
-    ]);
+  // Fetch available log files when opening dropdown
+  const handleOpenAddMenu = async () => {
+    setIsAddMenuOpen((prev) => !prev);
+    if (!isAddMenuOpen && paths.user_zomboid_dir) {
+      const files = await TauriService.listAvailableLogFiles(paths.user_zomboid_dir);
+      setAvailableLogs(files);
+    }
   };
 
-  // State 1: Invalid paths guard
+  const handleOpenLogFile = async (logFile: LogFileInfoUI) => {
+    setIsAddMenuOpen(false);
+    // Check if already open
+    const existing = tabs.find((t) => t.filePath === logFile.absolute_path);
+    if (existing) {
+      setActiveTabId(existing.id);
+      return;
+    }
+
+    const displayName = formatLogDisplayName(logFile);
+    const lines = await TauriService.readLogFile(logFile.absolute_path, 2000);
+    const newTab: LogTab = {
+      id: `log_${Date.now()}`,
+      title: displayName,
+      isLive: false,
+      filePath: logFile.absolute_path,
+      lines: lines.length > 0 ? lines : ['(The log file is empty)'],
+    };
+
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const handlePickCustomLog = async () => {
+    setIsAddMenuOpen(false);
+    const filePath = await TauriService.pickOpenFile('PZ Log File', 'txt');
+    if (!filePath) return;
+
+    const fileName = filePath.split(/[/\\]/).pop() || 'External Log';
+    const lines = await TauriService.readLogFile(filePath, 2000);
+    const newTab: LogTab = {
+      id: `custom_${Date.now()}`,
+      title: fileName,
+      isLive: false,
+      filePath,
+      lines: lines.length > 0 ? lines : ['(The log file is empty)'],
+    };
+
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const isPermanentTab = (tabId: string) => tabId === 'live_console' || tabId === 'live_server';
+
+  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isPermanentTab(tabId)) return;
+    const remaining = tabs.filter((t) => t.id !== tabId);
+    setTabs(remaining);
+    if (activeTabId === tabId) {
+      setActiveTabId(remaining[remaining.length - 1].id);
+    }
+  };
+
+  const handleSaveSnapshot = async () => {
+    if (!paths.user_zomboid_dir) return;
+    try {
+      const serverName = activeTab.id === 'live_server' ? 'servertest' : 'console_snapshot';
+      const savedPath = await TauriService.saveServerLogSnapshot(
+        paths.user_zomboid_dir,
+        serverName,
+        activeTab.lines
+      );
+      const filename = savedPath.split(/[/\\]/).pop() || savedPath;
+      setSaveStatus(filename);
+      setTimeout(() => setSaveStatus(null), 3500);
+      const files = await TauriService.listAvailableLogFiles(paths.user_zomboid_dir);
+      setAvailableLogs(files);
+    } catch (err: any) {
+      alert(`Error saving log snapshot: ${err}`);
+    }
+  };
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  // Filter lines dynamically
+  const filteredLines = useMemo(() => {
+    if (!activeTab) return [];
+    const raw = activeTab.lines;
+    const offset = clearedOffsets[activeTab.id] || 0;
+    let list = offset > 0 ? (offset >= raw.length ? [] : raw.slice(offset)) : raw;
+
+    // 1. Spam filter
+    if (filterSpam) {
+      list = list.filter((line) => !isTranslationSpamLine(line));
+    }
+
+    // 2. Severity filter
+    if (severityFilter === 'ERRORS') {
+      list = list.filter((l) =>
+        /exception|error|stack trace|crash|nullpointer|failed|kahlua/i.test(l)
+      );
+    } else if (severityFilter === 'LUA') {
+      list = list.filter((l) => /lua|function|require|script/i.test(l));
+    } else if (severityFilter === 'JAVA') {
+      list = list.filter((l) => /java|\.java|jvm|kahlua|zombie\./i.test(l));
+    } else if (severityFilter === 'BRIDGE') {
+      list = list.filter((l) => /pzmodstudio|bridge|companion/i.test(l));
+    }
+
+    // 3. Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((l) => l.toLowerCase().includes(q));
+    }
+
+    return list;
+  }, [activeTab, filterSpam, severityFilter, searchQuery, clearedOffsets]);
+
+  const handleClearActiveTab = () => {
+    if (!activeTab) return;
+    setClearedOffsets((prev) => ({
+      ...prev,
+      [activeTabId]: activeTab.lines.length,
+    }));
+  };
+
+  const handleCopyLogs = () => {
+    const text = filteredLines.join('\n');
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Auto-scroll terminal to bottom when new lines arrive in live mode
+  useEffect(() => {
+    if (activeTab?.isLive && terminalContainerRef.current) {
+      terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
+    }
+  }, [filteredLines.length, activeTabId]);
+
   if (!paths.is_valid) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-200 font-sans">
@@ -100,117 +372,349 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
+    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans min-h-0">
       {/* Module Header & Controls */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-3 shrink-0">
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <Activity className="w-5 h-5 text-emerald-400" />
-            Monitor Center & Crash Diagnostics (<code className="text-emerald-400">console.txt</code>)
+            <span>Monitor Center & Crash Diagnostics</span>
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Monitors active game sessions in real time and translates Java/Lua exceptions into 1-click repair cards.
+            Real-time monitoring, multi-tab log viewer, and automated repair of Java/Lua exceptions.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Clear Logs Button */}
+        <div className="flex items-center gap-2.5">
+          {/* Open Real Logs Folder */}
           <button
-            onClick={handleClearLogs}
-            className="px-3 py-2 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg transition cursor-pointer flex items-center gap-1.5"
-            title="Clear terminal output"
+            onClick={() => TauriService.openLogsFolder(paths.user_zomboid_dir)}
+            className="px-3 py-1.5 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg transition cursor-pointer flex items-center gap-1.5 shadow"
+            title="Open the physical logs folder (console.txt and Logs/ subfolder) in Windows Explorer"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Logs</span>
+            <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>📁 Logs Folder</span>
           </button>
 
-          {/* Toggle Filter Button */}
+          {/* Spam Filter Toggle */}
           <button
             onClick={() => setFilterSpam(!filterSpam)}
-            className={`px-3.5 py-2 text-xs font-bold rounded-lg border transition cursor-pointer flex items-center gap-2 shadow ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer flex items-center gap-1.5 shadow ${
               filterSpam
-                ? 'bg-emerald-950 text-emerald-300 border-emerald-700 shadow-emerald-950/40'
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700 shadow-emerald-950/40'
                 : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
             }`}
-            title="Click to toggle filtering of noisy Translator and missing translation lines"
+            title="Filter or hide missing translation spam"
           >
-            <Filter className={`w-4 h-4 ${filterSpam ? 'text-emerald-400' : 'text-slate-500'}`} />
-            <span>{filterSpam ? 'Translator Spam: FILTERED (HIDE)' : 'Translator Spam: SHOW ALL'}</span>
+            <Filter className={`w-3.5 h-3.5 ${filterSpam ? 'text-emerald-400' : 'text-slate-500'}`} />
+            <span>{filterSpam ? 'Spam Filter: ACTIVE' : 'Filter: SHOW ALL'}</span>
           </button>
-        </div>
-      </div>
-
-      {/* Developer Debug Mode Notice Banner */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 mb-4 flex items-center justify-between text-xs text-slate-300">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-cyan-400 shrink-0" />
-          <span>
-            <b>Developer Debug Mode Active (<code className="text-cyan-300">-debug</code>):</b> The game menu displays the <code className="text-amber-300 font-bold">SCENARIOS</code> button, red <code className="text-red-400 font-bold">!</code> error box, and <code className="text-cyan-300">Reset Lua</code> tool so you can monitor and reload scripts live while testing!
-          </span>
         </div>
       </div>
 
       {/* Main Grid: Console Terminal Watcher (Left) vs Actionable Cards (Right) */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-        {/* Left Column: Realtime Terminal Log Inspector */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
-          <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-emerald-400" />
-              Live Console Output (<code className="text-emerald-400">console.txt</code>)
-              <span className="text-[10px] text-slate-500 font-normal">
-                ({displayedLogs.length} / {logs.length} lines)
-              </span>
-            </span>
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-0 overflow-hidden">
+        {/* Left Column (7 cols): Realtime & Historical Multi-Tab Log Inspector */}
+        <div className="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col shadow relative min-h-0 overflow-hidden">
+          {/* Top Tabs Bar */}
+          <div className="bg-slate-950 border-b border-slate-800 flex items-center justify-between px-2 pt-1.5 shrink-0 gap-2 relative z-30">
+            {/* Tabs List (Only the tabs scroll horizontally if there are many) */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0">
+              {tabs.map((tab) => {
+                const isActive = tab.id === activeTabId;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTabId(tab.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium border-t border-x transition cursor-pointer shrink-0 max-w-[200px] truncate ${
+                      isActive
+                        ? 'bg-slate-900 text-emerald-400 border-slate-700 font-bold shadow'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900/50'
+                    }`}
+                  >
+                    <span className="truncate">{tab.title}</span>
+                    {!isPermanentTab(tab.id) && (
+                      <span
+                        onClick={(e) => handleCloseTab(tab.id, e)}
+                        className="text-slate-500 hover:text-red-400 rounded-full p-0.5"
+                        title="Close tab"
+                      >
+                        <X className="w-3 h-3" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Fixed Right Actions (Add Log Button + Menu + Save Snapshot + Copy + Clear) */}
+            <div className="flex items-center gap-1.5 pb-1 shrink-0 relative">
+              {saveStatus && (
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-1 rounded border border-emerald-700/60 animate-fade-in truncate max-w-[130px]" title={`Saved: ${saveStatus}`}>
+                  ✅ Saved
+                </span>
+              )}
+
+              {/* Add New Tab Dropdown Button */}
+              <div className="relative" ref={addMenuRef}>
+                <button
+                  onClick={handleOpenAddMenu}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md transition cursor-pointer"
+                  title="Open or load another log file"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Load Log</span>
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                </button>
+
+                {isAddMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 p-2 space-y-1 animate-fade-in text-xs select-none">
+                    <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                      Available Logs in Zomboid/
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                      {availableLogs.length === 0 ? (
+                        <div className="p-2 text-slate-500 text-center">Searching for logs on disk...</div>
+                      ) : (
+                        availableLogs.map((item) => (
+                          <button
+                            key={item.absolute_path}
+                            onClick={() => handleOpenLogFile(item)}
+                            className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-800 text-slate-200 text-left transition cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <span className="truncate">{formatLogDisplayName(item)}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
+                              {(item.size_bytes / 1024).toFixed(0)} KB
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-800 pt-1">
+                      <button
+                        onClick={handlePickCustomLog}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-emerald-950/60 text-emerald-300 font-medium transition cursor-pointer text-left"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>📂 Browse another file (.txt)...</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Save Snapshot to Zomboid/Logs */}
+              <button
+                onClick={handleSaveSnapshot}
+                className="p-1.5 text-slate-400 hover:text-emerald-400 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition cursor-pointer"
+                title="Save current log snapshot to Zomboid/Logs/ as 'servertest - YYYY-MM-DD_HH-mm-ss.txt'"
+              >
+                <Save className="w-3.5 h-3.5 text-emerald-400" />
+              </button>
+
+              {/* Copy logs */}
+              <button
+                onClick={handleCopyLogs}
+                className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition cursor-pointer"
+                title="Copy visible log to clipboard"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+
+              {/* Clear logs */}
+              <button
+                onClick={handleClearActiveTab}
+                className="p-1.5 text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition cursor-pointer"
+                title="Clear viewer for this tab"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex-1 p-4 font-mono text-xs bg-slate-950 overflow-y-auto space-y-1 select-text">
-            {displayedLogs.map((log, idx) => {
-              const isErr = log.includes('JVM ERROR') || log.includes('Exception') || log.includes('Crash') || log.includes('ERROR');
-              return (
-                <div
-                  key={idx}
-                  className={`leading-relaxed ${
-                    isErr ? 'text-red-400 font-bold bg-red-950/30 px-2 py-0.5 rounded border-l-2 border-red-500' : 'text-slate-400'
-                  }`}
+          {/* Search & Severity Filters Bar */}
+          <div className="bg-slate-900 px-3 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search keyword (e.g., isCorpse, NullPointer, M4, GunFighter)..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs"
                 >
-                  {log}
-                </div>
-              );
-            })}
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Severity Filter Chips */}
+            <div className="flex items-center gap-1 font-mono text-[11px]">
+              <button
+                onClick={() => setSeverityFilter('ALL')}
+                className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                  severityFilter === 'ALL'
+                    ? 'bg-slate-700 text-slate-100 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setSeverityFilter('ERRORS')}
+                className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                  severityFilter === 'ERRORS'
+                    ? 'bg-red-950 text-red-300 border border-red-800 font-bold'
+                    : 'text-slate-400 hover:text-red-400'
+                }`}
+              >
+                🚨 Errors
+              </button>
+              <button
+                onClick={() => setSeverityFilter('LUA')}
+                className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                  severityFilter === 'LUA'
+                    ? 'bg-blue-950 text-blue-300 border border-blue-800 font-bold'
+                    : 'text-slate-400 hover:text-blue-400'
+                }`}
+              >
+                🌙 Lua
+              </button>
+              <button
+                onClick={() => setSeverityFilter('JAVA')}
+                className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                  severityFilter === 'JAVA'
+                    ? 'bg-amber-950 text-amber-300 border border-amber-800 font-bold'
+                    : 'text-slate-400 hover:text-amber-400'
+                }`}
+              >
+                ☕ Java
+              </button>
+              <button
+                onClick={() => setSeverityFilter('BRIDGE')}
+                className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                  severityFilter === 'BRIDGE'
+                    ? 'bg-purple-950 text-purple-300 border border-purple-800 font-bold'
+                    : 'text-slate-400 hover:text-purple-400'
+                }`}
+              >
+                ⚡ Bridge
+              </button>
+            </div>
+          </div>
+
+          {/* Log Lines Terminal Area */}
+          <div ref={terminalContainerRef} className="flex-1 p-3 font-mono text-xs bg-slate-950 overflow-y-auto space-y-1 select-text min-h-0">
+            {filteredLines.length === 0 ? (
+              <div className="p-6 text-center text-slate-500 space-y-1">
+                <Search className="w-6 h-6 mx-auto text-slate-600 mb-1" />
+                <p>No lines found matching the filters.</p>
+                {searchQuery && (
+                  <p className="text-[11px] text-slate-600">
+                    Try changing or clearing the search term: "{searchQuery}"
+                  </p>
+                )}
+              </div>
+            ) : (
+              filteredLines.map((log, idx) => {
+                const isErr = /exception|error|stack trace|crash|nullpointer|failed/i.test(log);
+                const isWarn = /warning|warn/i.test(log);
+                const isBridge = /pzmodstudio|bridge/i.test(log);
+
+                return (
+                  <div
+                    key={idx}
+                    className={`leading-relaxed px-2 py-0.5 rounded text-[11px] ${
+                      isErr
+                        ? 'text-red-400 font-bold bg-red-950/30 border-l-2 border-red-500'
+                        : isWarn
+                        ? 'text-amber-300 bg-amber-950/20 border-l-2 border-amber-500'
+                        : isBridge
+                        ? 'text-purple-300 bg-purple-950/20 border-l-2 border-purple-500'
+                        : 'text-slate-300 hover:bg-slate-900/60'
+                    }`}
+                  >
+                    {log}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Terminal Footer Bar */}
+          <div className="bg-slate-900 px-3 py-1.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono shrink-0">
+            <span>
+              Lines: {filteredLines.length} / {activeTab.lines.length}
+            </span>
+            {searchQuery && (
+              <span className="text-emerald-400">
+                Active filter: "{searchQuery}"
+              </span>
+            )}
+            {activeTab.filePath && (
+              <span className="truncate max-w-xs text-slate-500" title={activeTab.filePath}>
+                {activeTab.filePath}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Right Column: Actionable Repair Cards */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <h3 className="text-xs font-bold text-slate-200">
-              CRASH DIAGNOSTICS & REPAIR CARDS ({errorCards.length})
-            </h3>
+        {/* Right Column (5 cols): Actionable Crash Diagnostics Cards */}
+        <div className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4 space-y-3 min-h-0">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <div>
+              <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <span>CRASH DIAGNOSTICS ({errorCards.length})</span>
+                {errorCards.length > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono">
+                    Action Required
+                  </span>
+                )}
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Fatal Java/Lua exceptions detected with automatic patch.
+              </p>
+            </div>
+
             {errorCards.length > 0 ? (
               <button
                 onClick={onClearErrorCards}
                 className="text-[10px] text-slate-400 hover:text-slate-200 font-mono bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
-                title="Clear all active crash diagnostic cards"
+                title="Discard all cards"
               >
                 <Trash2 className="w-3 h-3 text-slate-400" />
-                <span>Dismiss All</span>
+                <span>Discard</span>
               </button>
             ) : (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-                <CheckCircle className="w-3 h-3" /> Zero Crash Exceptions
+                <CheckCircle className="w-3.5 h-3.5" /> 0 Fatal Errors
               </span>
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
             {errorCards.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
-                <CheckCircle className="w-10 h-10 text-emerald-500/40" />
-                <p className="text-xs font-medium text-slate-400">Zero Critical Crashes Detected</p>
-                <p className="text-[11px] text-slate-500 max-w-xs leading-relaxed">
-                  When a mod causes a Java or Lua crash during game execution, Monitor Center intercepts it and generates a 1-click repair card here.
-                </p>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2.5">
+                <div className="w-12 h-12 rounded-xl bg-emerald-950/40 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-slate-300">No Fatal Errors Detected</p>
+                  <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
+                    Crash Diagnostics filters out thousands of harmless console warnings and only alerts you when a real exception breaks the game or blocks actions.
+                  </p>
+                </div>
               </div>
             ) : (
               errorCards.map((card) => (
@@ -228,20 +732,53 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     </div>
                   </div>
 
-                  <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-slate-800">
-                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Captured Log Snippet</div>
+                  <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-slate-800 select-text">
+                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Log Snippet</div>
                     <div className="truncate">{card.raw_error}</div>
                   </div>
 
-                  {card.polyfill_rule_id_suggestion && (
+                  {card.polyfill_rule_id_suggestion ? (
                     <button
                       onClick={() => onApplyFix(card.polyfill_rule_id_suggestion!)}
-                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow transition cursor-pointer"
                     >
                       <Wrench className="w-3.5 h-3.5" />
-                      1-Click Fix: Enable Polyfill Rule
+                      <span>⚡ 1-Click Repair (Inject Polyfill)</span>
                     </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Covered by Universal Master Polyfill Shim</span>
+                    </div>
                   )}
+
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <button
+                      onClick={() => handleInspectInConsole(card)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
+                      title="Jump to this error in the console logs"
+                    >
+                      <Search className="w-3 h-3 text-cyan-400" />
+                      <span>🔍 Inspect in Logs</span>
+                    </button>
+                    <button
+                      onClick={() => handleCopyCardSnippet(card.id, card.raw_error)}
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-medium transition cursor-pointer"
+                      title="Copy error snippet to clipboard"
+                    >
+                      {copiedCardId === card.id ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 text-slate-400" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               ))
             )}

@@ -30,6 +30,8 @@ export interface VfsConflict {
   base_content: string; // Vanilla file content
   competing_mods: CompetingModFile[];
   merged_output?: string;
+  auto_ast_output?: string;
+  is_identical_noise?: boolean;
   status: ConflictStatus;
   has_syntax_errors?: boolean;
   syntax_error_message?: string;
@@ -93,6 +95,7 @@ export interface ModInfo {
   enabled: boolean;
   is_library?: boolean;
   is_map_mod?: boolean;
+  is_packaged?: boolean;
   load_order_index: number;
 }
 
@@ -119,6 +122,15 @@ export interface ModProfile {
 
 export type SandboxStatus = 'IDLE' | 'BOOTING' | 'RUNNING' | 'SUCCESS' | 'CRASHED';
 
+export type GameLaunchMode =
+  | 'DEBUG_FULLSCREEN'
+  | 'DEBUG_WINDOWED'
+  | 'NORMAL_FULLSCREEN'
+  | 'NORMAL_WINDOWED'
+  | 'MONITORED'
+  | 'WINDOWED'
+  | 'NORMAL';
+
 export interface TranslatedErrorCard {
   id: string;
   raw_error: string;
@@ -144,7 +156,6 @@ export interface StudioPathsUI {
   workshop_dir: string;
   user_zomboid_dir: string;
   mod_list_ini_path: string;
-  carrier_workshop_id?: string;
   is_valid: boolean;
 }
 
@@ -182,6 +193,48 @@ export interface PZServerConfig {
   workshop_items: string[];
 }
 
+export interface DedicatedServerStatus {
+  is_running: boolean;
+  pid?: number | null;
+  server_name?: string | null;
+  memory_gb?: number | null;
+  start_timestamp?: number | null;
+}
+
+export interface ConnectedPlayer {
+  username: string;
+  role: string;
+  ping: number;
+  health: number;
+  is_godmode: boolean;
+  x: number;
+  y: number;
+  z: number;
+  steam_id: string;
+}
+
+export interface ServerQuickSettings {
+  public_name: string;
+  public_description: string;
+  password: string;
+  max_players: number;
+  pvp: boolean;
+  pause_empty: boolean;
+  open: boolean;
+  port: number;
+  rcon_port: number;
+  rcon_password: string;
+  map_names: string;
+}
+
+export interface LogFileInfoUI {
+  file_name: string;
+  absolute_path: string;
+  size_bytes: number;
+  modified_timestamp: number;
+  is_active_console: boolean;
+}
+
 export interface AppInstance {
   id: string;
   name: string;
@@ -192,4 +245,6 @@ export interface AppInstance {
   load_order: string[];
 }
 
-export type ActiveTab = 'MOD_LIST' | 'PRESETS' | 'SERVERS' | 'INSTANCES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
+export type AppProfile = AppInstance;
+
+export type ActiveTab = 'MOD_LIST' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'SETTINGS';

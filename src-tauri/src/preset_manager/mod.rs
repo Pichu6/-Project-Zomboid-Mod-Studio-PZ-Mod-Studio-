@@ -40,7 +40,7 @@ pub fn export_preset_file(preset: ModPreset, file_path: String) -> Result<(), St
 #[tauri::command]
 pub fn import_preset_file(file_path: String) -> Result<ModPreset, String> {
     let content = fs::read_to_string(Path::new(&file_path)).map_err(|e| e.to_string())?;
-    let preset: ModPreset = serde_json::from_str(&content).map_err(|e| format!("Formato .pzpack inválido: {}", e))?;
+    let preset: ModPreset = serde_json::from_str(&content).map_err(|e| format!("Invalid .pzpack format: {}", e))?;
     Ok(preset)
 }
 

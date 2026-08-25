@@ -44,12 +44,12 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
   }, [isOpen, paths.user_zomboid_dir]);
 
   const handleDeleteInstance = async (id: string, name: string) => {
-    if (confirm(`¿Estás seguro de que deseas eliminar el perfil de instancia "${name}"?`)) {
+    if (confirm(`Are you sure you want to delete the instance profile "${name}"?`)) {
       try {
         await TauriService.deleteInstance(paths.user_zomboid_dir, id);
         await loadInstancesList();
       } catch (err) {
-        console.error('Error al eliminar instancia:', err);
+        console.error('Error deleting instance:', err);
       }
     }
   };
@@ -67,12 +67,12 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
                 <Layers className="w-4 h-4 text-emerald-400" />
               </div>
               <h2 className="text-lg font-bold text-slate-100 tracking-tight">
-                Selecciona tu Instancia de Project Zomboid
+                Select your Project Zomboid Instance
               </h2>
               {isLoading && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-2" />}
             </div>
             <p className="text-xs text-slate-400">
-              Elige el perfil de mods con el que deseas trabajar en esta sesión.
+              Choose the mod profile you want to work with in this session.
             </p>
           </div>
 
@@ -114,13 +114,13 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
 
                       {inst.is_active && (
                         <span className="text-[9px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                          <Check className="w-3 h-3" /> Activo
+                          <Check className="w-3 h-3" /> Active
                         </span>
                       )}
                     </div>
 
                     <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                      {inst.description || 'Perfil de instancia configurado.'}
+                      {inst.description || 'Configured instance profile.'}
                     </p>
                   </div>
 
@@ -133,7 +133,7 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
                           handleDeleteInstance(inst.id, inst.name);
                         }}
                         className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-950 hover:text-red-400 text-slate-400 transition cursor-pointer border border-slate-800"
-                        title="Eliminar esta instancia"
+                        title="Delete this instance"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -145,7 +145,7 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
                         }}
                         className="px-3 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                       >
-                        <span>Cargar</span>
+                        <span>Load</span>
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
@@ -157,9 +157,9 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
             <div className="p-8 text-center space-y-3 bg-slate-950/60 rounded-2xl border border-dashed border-slate-800">
               <Layers className="w-8 h-8 text-slate-500 mx-auto" />
               <div className="space-y-1">
-                <h4 className="text-xs font-bold text-slate-300">No hay instancias guardadas aún</h4>
+                <h4 className="text-xs font-bold text-slate-300">No saved instances yet</h4>
                 <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                  Crea tu primera instancia para organizar tus perfiles de mods aislados.
+                  Create your first instance to organize your isolated mod profiles.
                 </p>
               </div>
             </div>
@@ -176,7 +176,7 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
             className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border border-slate-700"
           >
             <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Crear Nueva Instancia</span>
+            <span>Create New Instance</span>
           </button>
 
           {!isInitialLaunch && (
@@ -185,7 +185,7 @@ export const InitialInstanceModal: React.FC<InitialInstanceModalProps> = ({
               className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-2 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Continuar con Configuración Actual</span>
+              <span>Continue with Current Configuration</span>
             </button>
           )}
         </div>

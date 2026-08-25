@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { ModInfo } from '../../types';
+import { ModInfo, ModPreset, MissingModsReport } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -30,6 +30,12 @@ import {
   ShieldAlert,
   Link2,
   Save,
+  Download,
+  Upload,
+  Bookmark,
+  Sparkles,
+  Trash2,
+  Plus,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -40,6 +46,8 @@ interface LoadOrderModuleProps {
   onRefreshMods: () => void;
   onGoToSettings: () => void;
   onLoadMockups: (mockMods: ModInfo[]) => void;
+  onApplyPresetLoadOrder?: (presetLoadOrder: string[], activeIds: string[]) => void;
+  openedPackageFolder?: string | null;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -183,6 +191,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onToggleMod,
   onRefreshMods,
   onGoToSettings,
+  onApplyPresetLoadOrder,
+  openedPackageFolder,
 }) => {
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
@@ -190,33 +200,179 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [assigningModId, setAssigningModId] = useState<string | null>(null);
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
   const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
 
+  // Preset & Profile Management State
+  const [savedPresets, setSavedPresets] = useState<ModPreset[]>(() => {
+    try {
+      const stored = localStorage.getItem('pz_mod_studio_saved_presets');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activePresetName, setActivePresetName] = useState<string | null>(null);
+  const [isPresetDropdownOpen, setIsPresetDropdownOpen] = useState<boolean>(false);
+  const [isPresetModalOpen, setIsPresetModalOpen] = useState<boolean>(false);
+  const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState<boolean>(false);
+  const [newPresetName, setNewPresetName] = useState<string>('');
+  const [newPresetDesc, setNewPresetDesc] = useState<string>('');
+  const [importedPreset, setImportedPreset] = useState<ModPreset | null>(null);
+  const [missingReport, setMissingReport] = useState<MissingModsReport | null>(null);
+  const [_isExportingPreset, setIsExportingPreset] = useState<boolean>(false);
+
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const handleSaveCurrentAsPreset = () => {
+    if (!newPresetName.trim()) {
+      alert('Please enter a name for the preset.');
+      return;
+    }
+    const newPreset: ModPreset = {
+      id: `preset_${Date.now()}`,
+      name: newPresetName.trim(),
+      description: newPresetDesc.trim() || undefined,
+      author: 'PZ Mod Studio User',
+      created_at: new Date().toISOString(),
+      mods: mods.filter((m) => m.enabled).map((m) => ({
+        mod_id: m.mod_id,
+        name: m.name,
+        workshop_id: m.workshop_id,
+        enabled: true,
+      })),
+      load_order: mods.map((m) => m.mod_id),
+    };
+
+    const updated = [newPreset, ...savedPresets.filter((p) => p.name !== newPreset.name)];
+    setSavedPresets(updated);
+    localStorage.setItem('pz_mod_studio_saved_presets', JSON.stringify(updated));
+    setActivePresetName(newPreset.name);
+    setIsSavePresetModalOpen(false);
+    setNewPresetName('');
+    setNewPresetDesc('');
+    setSaveToast(`✨ Preset '${newPreset.name}' saved successfully.`);
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
+  const handleApplyPreset = (preset: ModPreset) => {
+    const activeIds = preset.mods.filter((m) => m.enabled).map((m) => m.mod_id);
+    if (onApplyPresetLoadOrder) {
+      onApplyPresetLoadOrder(preset.load_order, activeIds);
+    } else {
+      const activeSet = new Set(activeIds);
+      const modMap = new Map(mods.map((m) => [m.mod_id, m]));
+      const reordered: ModInfo[] = [];
+
+      preset.load_order.forEach((id) => {
+        const found = modMap.get(id);
+        if (found) {
+          reordered.push({ ...found, enabled: activeSet.has(id) });
+          modMap.delete(id);
+        }
+      });
+
+      modMap.forEach((m) => {
+        reordered.push({ ...m, enabled: activeSet.has(m.mod_id) });
+      });
+
+      triggerReorder(reordered);
+    }
+    setActivePresetName(preset.name);
+    setIsPresetDropdownOpen(false);
+    setIsPresetModalOpen(false);
+    setSaveToast(`✨ Preset '${preset.name}' applied to the game.`);
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
+  const handleDeletePreset = (presetId: string) => {
+    const target = savedPresets.find((p) => p.id === presetId);
+    if (confirm(`Delete preset '${target?.name || ''}'?`)) {
+      const updated = savedPresets.filter((p) => p.id !== presetId);
+      setSavedPresets(updated);
+      localStorage.setItem('pz_mod_studio_saved_presets', JSON.stringify(updated));
+      if (activePresetName === target?.name) {
+        setActivePresetName(null);
+      }
+      setSaveToast(`Preset deleted.`);
+      setTimeout(() => setSaveToast(null), 2500);
+    }
+  };
+
+  const handleExportPresetFile = async (targetPreset?: ModPreset) => {
+    const presetToExport: ModPreset = targetPreset || {
+      id: `preset_${Date.now()}`,
+      name: activePresetName || 'ModList_Preset',
+      description: 'Exported from PZ Mod Studio',
+      author: 'PZ Mod Studio User',
+      created_at: new Date().toISOString(),
+      mods: mods.filter((m) => m.enabled).map((m) => ({
+        mod_id: m.mod_id,
+        name: m.name,
+        workshop_id: m.workshop_id,
+        enabled: true,
+      })),
+      load_order: mods.map((m) => m.mod_id),
+    };
+
+    setIsExportingPreset(true);
+    try {
+      const defaultFileName = `${presetToExport.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pzpack`;
+      const filePath = await TauriService.pickSaveFile(defaultFileName, 'PZ Mod Studio Preset (.pzpack)', 'pzpack');
+      if (filePath) {
+        await TauriService.exportPresetFile(presetToExport, filePath);
+        setSaveToast(`✨ Collection exported to: ${filePath}`);
+        setTimeout(() => setSaveToast(null), 4000);
+      }
+    } catch (err: any) {
+      alert(`Error exporting preset: ${err}`);
+    } finally {
+      setIsExportingPreset(false);
+    }
+  };
+
+  const handleImportPresetFile = async () => {
+    try {
+      const filePath = await TauriService.pickOpenFile('PZ Mod Studio Preset (.pzpack)', 'pzpack');
+      if (filePath) {
+        const preset: ModPreset = await TauriService.importPresetFile(filePath);
+        setImportedPreset(preset);
+
+        const report: MissingModsReport = await TauriService.checkMissingPresetMods(
+          preset,
+          paths.user_zomboid_dir,
+          paths.workshop_dir
+        );
+        setMissingReport(report);
+        setIsPresetModalOpen(true);
+        setIsPresetDropdownOpen(false);
+      }
+    } catch (err: any) {
+      alert(`Error importing .pzpack file: ${err}`);
+    }
+  };
+
+  const handleApplyImportedPreset = () => {
+    if (!importedPreset) return;
+    handleApplyPreset(importedPreset);
+    const exists = savedPresets.some((p) => p.name === importedPreset.name);
+    if (!exists) {
+      const updated = [importedPreset, ...savedPresets];
+      setSavedPresets(updated);
+      localStorage.setItem('pz_mod_studio_saved_presets', JSON.stringify(updated));
+    }
+    setImportedPreset(null);
+    setMissingReport(null);
+  };
+
   const triggerReorder = (newOrder: ModInfo[]) => {
-    setHasUnsavedChanges(true);
     onReorder(newOrder);
   };
 
   const triggerToggleMod = (modId: string) => {
-    setHasUnsavedChanges(true);
     onToggleMod(modId);
-  };
-
-  const handleSaveExplicitly = async () => {
-    setIsSaving(true);
-    const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
-    await TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
-    setSaveToast('💾 ¡ModListData.ini guardado!');
-    setIsSaving(false);
-    setHasUnsavedChanges(false);
-    setTimeout(() => setSaveToast(null), 3000);
   };
 
   const handleRefresh = async () => {
@@ -235,10 +391,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const m of mods) {
-      if (m.workshop_id) {
+      if (m.workshop_id && m.workshop_id !== '9999999999' && !m.mod_id.startsWith('Z_PZModStudio_')) {
         counts[m.workshop_id] = (counts[m.workshop_id] || 0) + 1;
       }
     }
+
 
     const multiMap: Record<string, boolean> = {};
     const colorMap: Record<string, typeof PACKAGE_COLOR_PALETTES[0]> = {};
@@ -557,6 +714,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const handleToggleSingleMod = (modId: string) => {
+    if (openedPackageFolder && modId === openedPackageFolder) {
+      return;
+    }
+
     const targetMod = mods.find((m) => m.mod_id === modId);
     if (!targetMod) return;
 
@@ -582,7 +743,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const handleEnableAllWithoutDiscrimination = (enable: boolean) => {
-    const updated = mods.map((m) => ({ ...m, enabled: enable }));
+    const updated = mods.map((m) => {
+      if (enable && openedPackageFolder && m.mod_id === openedPackageFolder) {
+        return { ...m, enabled: false };
+      }
+      return { ...m, enabled: enable };
+    });
     triggerReorder(updated);
   };
 
@@ -639,10 +805,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       const getModFamilyPriority = (name: string, id: string): number => {
         const lower = (name + " " + id).toLowerCase();
         if (lower.includes("neatui_framework") || lower.includes("neatui framework")) return 0;
-        if (lower.includes("neat_building") || lower.includes("neat building")) return 10;
-        if (lower.includes("neat_crafting") || lower.includes("neat crafting")) return 20;
-        if (lower.includes("neat_rocco") || lower.includes("neat rocco")) return 30;
-        if (lower.includes("neatui_hairstyler") || lower.includes("neatui hairstyler")) return 40;
+        if (lower.includes("spncc") || lower.includes("spongie")) return 15;
+        if (lower.includes("neat_building") || lower.includes("neat building")) return 20;
+        if (lower.includes("neat_crafting") || lower.includes("neat crafting")) return 30;
+        if (lower.includes("neat_rocco") || lower.includes("neat rocco")) return 40;
+        if (lower.includes("neatui_hairstyler") || lower.includes("neatui hairstyler")) return 50;
         return 100;
       };
 
@@ -835,7 +1002,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             Mod List & Load Order Manager (<code className="text-emerald-400">ModListData.ini</code>)
           </h2>
           <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
-            <span>Steam Subscriptions: <b className="text-cyan-400">{uniqueWorkshopIds || 58} items</b></span>
+            <span>Steam Subscriptions: <b className="text-cyan-400">{uniqueWorkshopIds} items</b></span>
+
             <span>•</span>
             <span>Total Sub-mods: <b className="text-slate-200">{mods.length}</b></span>
             <span>•</span>
@@ -847,7 +1015,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleMissingUninstalled}
                   className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Haz clic para recorrer los mods con dependencias faltantes (no instaladas)"
+                  title="Click to cycle through mods with missing dependencies (not installed)"
                 >
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
                   <span>Dependencies missing</span>
@@ -866,7 +1034,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleMissingDeps}
                   className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Haz clic para recorrer los mods con librerías desactivadas"
+                  title="Click to cycle through mods with disabled libraries"
                 >
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
                   <span>Dependencies off</span>
@@ -885,7 +1053,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleConflicts}
                   className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Haz clic para recorrer los mods con incompatibilidades exclusivas"
+                  title="Click to cycle through mods with exclusive incompatibilities"
                 >
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span>Incompatibility</span>
@@ -904,7 +1072,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleOrderViolations}
                   className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Haz clic para recorrer los mods con orden de carga incorrecto"
+                  title="Click to cycle through mods with incorrect load order"
                 >
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span>List Order</span>
@@ -919,18 +1087,108 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Presets & Mod Lists Dropdown & Actions */}
+          <div className="relative">
+            <button
+              onClick={() => setIsPresetDropdownOpen(!isPresetDropdownOpen)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
+              title="Preset Management & Collections (.pzpack)"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{activePresetName ? `Preset: ${activePresetName}` : `Presets (${savedPresets.length})`}</span>
+            </button>
+
+            {isPresetDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-2 space-y-2">
+                <div className="text-[11px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+                  <span>Mod Presets</span>
+                  <span className="text-cyan-400 font-mono text-[10px]">{savedPresets.length} Saved</span>
+                </div>
+
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      setIsSavePresetModalOpen(true);
+                      setIsPresetDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-emerald-300 hover:bg-emerald-950/40 rounded-lg transition text-left cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Save Current List as Preset</span>
+                  </button>
+
+                  <button
+                    onClick={handleImportPresetFile}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-cyan-300 hover:bg-cyan-950/40 rounded-lg transition text-left cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Import .pzpack File</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleExportPresetFile();
+                      setIsPresetDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded-lg transition text-left cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Export Current List (.pzpack)</span>
+                  </button>
+                </div>
+
+                {savedPresets.length > 0 && (
+                  <>
+                    <div className="text-[10px] font-bold text-slate-500 px-2 pt-1 uppercase border-t border-slate-800">
+                      Load Saved Preset
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                      {savedPresets.map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between p-1.5 bg-slate-950 hover:bg-slate-800/80 rounded-lg border border-slate-800/80 text-xs group"
+                        >
+                          <button
+                            onClick={() => handleApplyPreset(p)}
+                            className="flex-1 text-left truncate pr-2 text-slate-200 hover:text-cyan-300 font-medium text-xs cursor-pointer"
+                            title={`Load ${p.name} (${p.mods.length} mods)`}
+                          >
+                            <div className="truncate font-semibold">{p.name}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">{p.mods.filter((m) => m.enabled).length} active mods</div>
+                          </button>
+                          <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100">
+                            <button
+                              onClick={() => handleExportPresetFile(p)}
+                              className="p-1 hover:text-cyan-400 transition cursor-pointer"
+                              title="Export as .pzpack"
+                            >
+                              <Download className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleDeletePreset(p.id)}
+                              className="p-1 hover:text-red-400 transition cursor-pointer"
+                              title="Delete preset"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Steam Workshop Button */}
           <button
-            onClick={handleSaveExplicitly}
-            disabled={!hasUnsavedChanges || isSaving}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition shadow shrink-0 ${
-              hasUnsavedChanges && !isSaving
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white cursor-pointer shadow-emerald-950/50 shadow-lg animate-pulse'
-                : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
-            }`}
-            title={hasUnsavedChanges ? '¡Tienes cambios sin guardar! Haz clic para guardar en ModListData.ini' : 'No hay cambios pendientes por guardar'}
+            onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-cyan-500/60 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 group"
+            title="Open Steam Workshop de Project Zomboid"
           >
-            <Save className={`w-4 h-4 ${hasUnsavedChanges ? 'text-emerald-100' : 'text-slate-500'} ${isSaving ? 'animate-spin' : ''}`} />
-            <span>Guardar</span>
+            <ExternalLink className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <span>Workshop</span>
           </button>
 
           <button
@@ -1035,11 +1293,32 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
         {/* Left Column (7 cols): Reorderable Mod List */}
         <div className="col-span-12 lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
-          <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800">
-            <div className="col-span-1 text-center">Nº</div>
+          <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800 items-center">
+            <div className="col-span-1 text-center">#</div>
             <div className="col-span-1 text-center">Active</div>
-            <div className="col-span-5">Mod Name & ID</div>
-            <div className="col-span-5 text-right">Actions</div>
+            <div className="col-span-6 flex items-center gap-2 min-w-0">
+              <span className="shrink-0">Mod Name & ID</span>
+              <div className="relative flex-1 max-w-[260px] normal-case font-normal text-xs">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search the list..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-950/90 border border-slate-800 hover:border-slate-700 focus:border-cyan-500/80 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="col-span-4 text-right">Actions</div>
           </div>
 
           <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
@@ -1082,6 +1361,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   activeConflictsMap[selectedMod.mod_id] &&
                   activeConflictsMap[selectedMod.mod_id].some((c) => c.conflictingModId === mod.mod_id);
 
+                const isSyntheticFusion = mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier");
+                const isBridge = mod.mod_id === "Z_PZModStudio_Bridge";
+                const isOpenedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === false);
+                const isClosedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === true);
+
                 return (
                   <div
                     key={mod.mod_id}
@@ -1090,7 +1374,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
-                      hasMissingUninstalledDep || hasDisabledDependency
+                      isOpenedPackage
+                        ? 'border-2 border-amber-500/80 bg-amber-950/25 shadow-md shadow-amber-950/30'
+                        : hasMissingUninstalledDep || hasDisabledDependency
                         ? 'border-2 border-red-500 bg-red-950/40 shadow-md shadow-red-950/40'
                         : isConflictPartner
                         ? 'border-2 border-amber-400 bg-amber-950/90 shadow-xl shadow-amber-900/60 ring-2 ring-amber-400/50 animate-pulse'
@@ -1106,31 +1392,48 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         ? 'bg-slate-800/90 border border-emerald-500/60 shadow-lg'
                         : isMultiPackage && packageColor
                         ? packageColor.bgMatch
+                        : isOpenedPackage
+                        ? 'bg-amber-950/20 hover:bg-amber-950/30 border border-amber-800/60'
                         : mod.enabled
                         ? 'bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800'
                         : 'bg-slate-950/40 opacity-60 hover:opacity-100 border border-slate-900/60'
                     }`}
                   >
                     {/* Fixed Line Number (Original Load Order Index) */}
-                    <div className={`col-span-1 text-center font-mono text-[11px] ${mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
+                    <div className={`col-span-1 text-center font-mono text-[11px] ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
                       #{originalIndex + 1}
                     </div>
 
                     {/* Enable/Disable Toggle Checkbox */}
                     <div className="col-span-1 flex justify-center">
                       <button
+                        disabled={isOpenedPackage}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleToggleSingleMod(mod.mod_id);
+                          if (!isOpenedPackage) {
+                            handleToggleSingleMod(mod.mod_id);
+                          }
                         }}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center transition cursor-pointer ${
-                          mod.enabled
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition ${
+                          isOpenedPackage
+                            ? 'cursor-not-allowed opacity-40 bg-slate-900 text-slate-600 border border-amber-800/50'
+                            : 'cursor-pointer'
+                        } ${
+                          mod.enabled && !isOpenedPackage
                             ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 border border-emerald-400 font-bold'
-                            : 'bg-slate-950 text-slate-700 border border-slate-700 hover:border-slate-500'
+                            : !isOpenedPackage
+                            ? 'bg-slate-950 text-slate-700 border border-slate-700 hover:border-slate-500'
+                            : ''
                         }`}
-                        title={mod.enabled ? 'Click to disable mod' : 'Click to enable mod'}
+                        title={
+                          isOpenedPackage
+                            ? 'This package is open in draft mode and deactivated. It cannot be enabled until it is packaged/published in Mod Merger.'
+                            : mod.enabled
+                            ? 'Click to disable mod'
+                            : 'Click to enable mod'
+                        }
                       >
-                        {mod.enabled && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        {mod.enabled && !isOpenedPackage && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </button>
                     </div>
 
@@ -1165,13 +1468,33 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             {mod.name}
                           </span>
 
-                          {mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier") && (
+                          {isBridge && (
                             <span
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-700 shrink-0 shadow-sm cursor-help"
-                              title={`Paquete de Fusión Sintético: ${mod.mod_id}\nContiene los parches de compatibilidad creados en Mod Merger.`}
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-700 shrink-0 shadow-sm"
+                              title="PZ Mod Studio Live Bridge Companion Mod"
+                            >
+                              <Package className="w-3 h-3 text-cyan-400" />
+                              <span>COMPANION BRIDGE</span>
+                            </span>
+                          )}
+
+                          {isOpenedPackage && (
+                            <span
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shrink-0 shadow-sm cursor-help animate-pulse"
+                              title={`Open Package (Draft): ${mod.mod_id}\nThis package is in editing mode and deactivated. Package / publish it in Mod Merger to use it in-game.`}
+                            >
+                              <Package className="w-3 h-3 text-amber-400" />
+                              <span>OPEN (Draft)</span>
+                            </span>
+                          )}
+
+                          {isClosedPackage && (
+                            <span
+                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shrink-0 shadow-sm cursor-help"
+                              title={`Packaged Mod (Closed): ${mod.mod_id}\nContains compiled compatibility patches ready for Project Zomboid.`}
                             >
                               <Package className="w-3 h-3 text-emerald-400" />
-                              <span>PAQUETE DE FUSIÓN</span>
+                              <span>PACKAGED</span>
                             </span>
                           )}
 
@@ -1189,7 +1512,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                                 handleJumpToDependency(uninstalledDependencies[0]);
                               }}
                               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ DEPENDENCIAS FALTANTES\n\nEste mod requiere [${uninstalledDependencies[0]}], que no está instalado.`}
+                              title={`⚠️ MISSING DEPENDENCIES\n\nThis mod requires [${uninstalledDependencies[0]}], which is not installed.`}
                             >
                               <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
                               <span>Dependencies missing</span>
@@ -1205,7 +1528,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                                 handleJumpToMod(disabledDependencies[0].mod_id);
                               }}
                               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ DEPENDENCIAS DESACTIVADAS\n\nEste mod requiere [${disabledDependencies[0].name}], que está deshabilitada.`}
+                              title={`⚠️ DISABLED DEPENDENCIES\n\nThis mod requires [${disabledDependencies[0].name}], which is disabled.`}
                             >
                               <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
                               <span>Dependencies off</span>
@@ -1221,7 +1544,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                                 handleJumpToMod(conflictsForThisMod[0].conflictingModId);
                               }}
                               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ INCOMPATIBILIDAD DETECTADA\n\nMutuamente exclusivo con: [${conflictsForThisMod[0].conflictingModName}].`}
+                              title={`⚠️ INCOMPATIBILITY DETECTED\n\nMutually exclusive with: [${conflictsForThisMod[0].conflictingModName}].`}
                             >
                               <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                               <span>Incompatibility</span>
@@ -1237,7 +1560,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                                 handleJumpToMod(orderViolationsForThisMod[0].requiredModId);
                               }}
                               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ ORDEN DE CARGA INCORRECTO\n\nCarga antes de [${orderViolationsForThisMod[0].requiredModName}]. Debe ir DESPUÉS.`}
+                              title={`⚠️ INCORRECT LOAD ORDER\n\nLoads before [${orderViolationsForThisMod[0].requiredModName}]. Must go AFTER.`}
                             >
                               <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                               <span>List Order</span>
@@ -1256,7 +1579,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded border border-emerald-500">
                           <input
                             type="number"
-                            placeholder="Nº"
+                            placeholder="#"
                             value={targetPosInput}
                             onChange={(e) => setTargetPosInput(e.target.value)}
                             className="w-12 bg-slate-900 border border-slate-700 px-1 py-0.5 text-xs text-emerald-300 font-mono text-center rounded"
@@ -1368,7 +1691,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <h3
                   onClick={() => handleJumpToMod(selectedMod.mod_id)}
                   className="text-base font-bold text-slate-100 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1.5"
-                  title="Haz clic para centrar e iluminar este mod en la lista izquierda"
+                  title="Click to center and highlight this mod in the left list"
                 >
                   <span>{selectedMod.name}</span>
                 </h3>
@@ -1381,15 +1704,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <div className="flex items-center justify-between font-bold text-orange-300">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="w-4 h-4 text-orange-400 shrink-0" />
-                      <span>Advertencia: Orden de Carga Incorrecto</span>
+                      <span>Warning: Incorrect Load Order</span>
                     </div>
                     <span className="text-[10px] font-mono bg-orange-900/80 text-orange-200 px-2 py-0.5 rounded border border-orange-600">
-                      Posición #{mods.findIndex((m) => m.mod_id === selectedMod.mod_id) + 1}
+                      Position #{mods.findIndex((m) => m.mod_id === selectedMod.mod_id) + 1}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-200 leading-relaxed">
-                    Este mod está cargando <b>ANTES</b> de su dependencia requerida{' '}
-                    <b className="text-orange-300">[{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}]</b> (Posición #{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModIndex + 1}). Debe ser colocado <b>DESPUÉS</b> en la lista para evitar errores.
+                    This mod is loading <b>BEFORE</b> its required dependency{' '}
+                    <b className="text-orange-300">[{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}]</b> (Position #{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModIndex + 1}). Must be placed <b>AFTER</b> in the list to avoid errors.
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <button
@@ -1397,12 +1720,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
                     >
                       <Wand2 className="w-4 h-4" />
-                      <span>Mover Después de {loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}</span>
+                      <span>Move After {loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}</span>
                     </button>
                     <button
                       onClick={() => handleJumpToMod(loadOrderViolationsMap[selectedMod.mod_id][0].requiredModId)}
                       className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-orange-300 border border-orange-800 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Saltar a la dependencia requerida"
+                      title="Jump to required dependency"
                     >
                       <span>Ver Dep</span>
                     </button>
@@ -1415,11 +1738,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <div className="p-3 bg-rose-950/60 border-2 border-rose-500/80 rounded-xl space-y-2 text-xs">
                   <div className="flex items-center gap-2 font-bold text-rose-300">
                     <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span>Advertencia: Librería Base Desactivada</span>
+                    <span>Warning: Base Library Disabled</span>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Este mod está activo pero requiere la librería{' '}
-                    <b className="text-rose-300">[{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</b> que está DESACTIVADA.
+                    This mod is active but requires the library{' '}
+                    <b className="text-rose-300">[{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</b> which is DISABLED.
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <button
@@ -1427,14 +1750,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Activar Librería</span>
+                      <span>Activate Library</span>
                     </button>
                     <button
                       onClick={() => handleJumpToMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
                       className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Saltar a la librería en la lista"
+                      title="Jump to library in list"
                     >
-                      <span>Ver Mod</span>
+                      <span>View Mod</span>
                     </button>
                   </div>
                 </div>
@@ -1445,10 +1768,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <div className="p-3 bg-amber-950/60 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs">
                   <div className="flex items-center gap-2 font-bold text-amber-300">
                     <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Advertencia: Incompatibilidad Detectada</span>
+                    <span>Warning: Incompatibility Detected</span>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Mutuamente exclusivo con:{' '}
+                    Mutually exclusive with:{' '}
                     <b className="text-amber-300">[{activeConflictsMap[selectedMod.mod_id][0].conflictingModName}]</b>.
                   </p>
                   <div className="flex items-center gap-2 pt-1">
@@ -1456,14 +1779,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       onClick={() => handleJumpToMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
                     >
-                      <span>Ver Mod en Conflicto</span>
+                      <span>View Conflicting Mod</span>
                     </button>
                     <button
                       onClick={() => handleToggleSingleMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
                       className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Desactivar la variante en conflicto"
+                      title="Deactivate conflicting variant"
                     >
-                      <span>Desactivar</span>
+                      <span>Deactivate</span>
                     </button>
                   </div>
                 </div>
@@ -1618,8 +1941,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           }`}
                           title={
                             matched
-                              ? `Haz clic para centrar e ir a la librería padre [${matched.name}] (${matched.enabled ? 'ACTIVA' : 'DESHABILITADA'})`
-                              : `Librería no instalada: ${item.raw} (Haz clic para buscar en Steam Workshop)`
+                              ? `Click to center and go to parent library [${matched.name}] (${matched.enabled ? 'ACTIVE' : 'DISABLED'})`
+                              : `Library not installed: ${item.raw} (Click to search on Steam Workshop)`
                           }
                         >
                           <span className={`w-2 h-2 rounded-full ${isDepDisabled ? 'bg-rose-400 animate-pulse' : matched ? 'bg-emerald-400' : 'bg-red-400'}`} />
@@ -1653,7 +1976,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             ? 'bg-purple-950/80 border-purple-700 text-purple-200 hover:border-purple-400 shadow'
                             : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
                         }`}
-                        title={`Haz clic para centrar e ir al mod hijo [${depMod.name}] (${depMod.enabled ? 'ACTIVO' : 'DESHABILITADO'})`}
+                        title={`Click to center and go to child mod [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
                       >
                         <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                         <span>{depMod.name}</span>
@@ -1682,17 +2005,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <Wand2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">✨ Ordenamiento Automático Completado</h3>
-                <p className="text-xs text-slate-400">Prioridad y jerarquía de dependencias aplicadas</p>
+                <h3 className="text-base font-bold text-slate-100">✨ Auto-Sorting Completed</h3>
+                <p className="text-xs text-slate-400">Priority and hierarchy of dependencies applied</p>
               </div>
             </div>
 
             <ul className="text-xs text-slate-300 space-y-2 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-sans leading-relaxed">
-              <li className="flex items-center gap-2 text-emerald-300">📦 Sub-mods del mismo paquete agrupados juntos.</li>
-              <li className="flex items-center gap-2">📚 Librerías base movidas AL INICIO (Prioridad de carga).</li>
-              <li className="flex items-center gap-2">🔗 Dependencias requeridas colocadas ANTES de sus dependientes.</li>
-              <li className="flex items-center gap-2">🗺️ Mods de mapas ubicados CERCA DEL FINAL.</li>
-              <li className="flex items-center gap-2 font-bold text-amber-300">🛡️ PZ Mod Studio Master Patch colocado ÚLTIMO al final.</li>
+              <li className="flex items-center gap-2 text-emerald-300">📦 Sub-mods of the same package grouped together.</li>
+              <li className="flex items-center gap-2">📚 Base libraries moved to the TOP (Load priority).</li>
+              <li className="flex items-center gap-2">🔗 Required dependencies placed BEFORE their dependents.</li>
+              <li className="flex items-center gap-2">🗺️ Map mods located NEAR THE END.</li>
+              <li className="flex items-center gap-2 font-bold text-amber-300">🛡️ PZ Mod Studio Master Patch placed LAST at the end.</li>
             </ul>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800 gap-4">
@@ -1703,7 +2026,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   onChange={(e) => setDontShowNoticeChecked(e.target.checked)}
                   className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-0 w-4 h-4 cursor-pointer"
                 />
-                <span>No volver a mostrar este mensaje</span>
+                <span>Do not show this message again</span>
               </label>
 
               <button
@@ -1715,7 +2038,151 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 }}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer shrink-0"
               >
-                Entendido
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Preset Dialog Modal */}
+      {isSavePresetModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <Bookmark className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-slate-100">Save Current List as Preset</h3>
+              </div>
+              <button onClick={() => setIsSavePresetModalOpen(false)} className="text-slate-500 hover:text-slate-300 p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Save the current configuration of <b className="text-emerald-400">{activeCount} active mods</b> and its load order so you can restore it at any time.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Preset Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Hardcore Survival 1993, Vanilla Plus..."
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Description (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Optimized collection with weapon and UI mods"
+                  value={newPresetDesc}
+                  onChange={(e) => setNewPresetDesc(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                onClick={() => setIsSavePresetModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveCurrentAsPreset}
+                disabled={!newPresetName.trim()}
+                className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Preset</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Imported Preset & Missing Mods Diagnostic Modal */}
+      {isPresetModalOpen && importedPreset && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-100">Collection: {importedPreset.name}</h3>
+                  <p className="text-[11px] text-slate-400">{importedPreset.description || 'Imported from .pzpack file'}</p>
+                </div>
+              </div>
+              <button onClick={() => { setIsPresetModalOpen(false); setImportedPreset(null); setMissingReport(null); }} className="text-slate-500 hover:text-slate-300 p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Diagnostic Report */}
+            {missingReport && (
+              <div className="space-y-2">
+                {missingReport.missing_mods.length > 0 ? (
+                  <div className="p-3.5 bg-amber-950/70 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs shadow-md">
+                    <div className="flex items-center justify-between font-bold text-amber-300">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Mods Not Installed on your PC ({missingReport.missing_mods.length})</span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      To fully enjoy this preset, subscribe to these mods on Steam Workshop:
+                    </p>
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {missingReport.missing_mods.map((m, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-1.5 bg-slate-950/80 rounded border border-slate-800 text-[11px] font-mono">
+                          <span className="text-slate-200 truncate max-w-[240px]">{m.name}</span>
+                          {m.workshop_id ? (
+                            <button
+                              onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshop_id}`)}
+                              className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
+                            >
+                              <span>Steam (#{m.workshop_id})</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <span className="text-slate-500 text-[10px]">Local Mod</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-emerald-950/60 border border-emerald-700/80 rounded-xl flex items-center gap-3 text-xs text-emerald-300">
+                    <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-bold">All mods in the collection are installed!</div>
+                      <div className="text-[11px] text-slate-300">You can apply the order and activation immediately.</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                onClick={() => { setIsPresetModalOpen(false); setImportedPreset(null); setMissingReport(null); }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyImportedPreset}
+                className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>Apply Preset to my Game</span>
               </button>
             </div>
           </div>

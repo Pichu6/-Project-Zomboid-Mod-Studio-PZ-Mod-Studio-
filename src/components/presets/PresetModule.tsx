@@ -25,7 +25,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
 
   const handleExportPreset = async () => {
     if (!presetName.trim()) {
-      alert('Por favor ingresa un nombre para la colección / preset.');
+      alert('Please enter a name for the collection / preset.');
       return;
     }
 
@@ -49,12 +49,12 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
         };
 
         await TauriService.exportPresetFile(preset, filePath);
-        setStatusMessage(`✨ Colección guardada con éxito en: ${filePath}`);
+        setStatusMessage(`✨ Collection saved successfully at: ${filePath}`);
         setPresetName('');
         setPresetDesc('');
       }
     } catch (err: any) {
-      alert(`Error al exportar preset: ${err}`);
+      alert(`Error exporting preset: ${err}`);
     } finally {
       setIsExporting(false);
     }
@@ -75,7 +75,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
         setMissingReport(report);
       }
     } catch (err: any) {
-      alert(`Error al importar el archivo .pzpack: ${err}`);
+      alert(`Error importing .pzpack file: ${err}`);
     }
   };
 
@@ -83,7 +83,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
     if (!importedPreset) return;
     const activeIds = importedPreset.mods.map((m) => m.mod_id);
     onApplyPresetLoadOrder(importedPreset.load_order, activeIds);
-    setStatusMessage(`✨ Colección '${importedPreset.name}' aplicada con éxito.`);
+    setStatusMessage(`✨ Collection '${importedPreset.name}' applied successfully.`);
     setImportedPreset(null);
     setMissingReport(null);
   };
@@ -96,11 +96,11 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
           <div className="flex items-center gap-2">
             <Package className="w-6 h-6 text-cyan-400" />
             <h2 className="text-xl font-bold text-slate-100 tracking-tight">
-              Presets & Colecciones (.pzpack)
+              Presets & Collections (.pzpack)
             </h2>
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Guarda, comparte y restaura colecciones completas de mods con su orden de carga exacto y parches de compatibilidad pre-configurados.
+            Save, share, and restore complete mod collections with their exact load order and pre-configured compatibility patches.
           </p>
         </div>
 
@@ -110,7 +110,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
             className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition shadow-lg flex items-center gap-2 cursor-pointer"
           >
             <Upload className="w-4 h-4" />
-            <span>Importar .pzpack</span>
+            <span>Import .pzpack</span>
           </button>
         </div>
       </div>
@@ -119,7 +119,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
         <div className="p-3 bg-emerald-950/80 border border-emerald-700/80 rounded-xl text-xs text-emerald-300 font-bold flex items-center justify-between">
           <span>{statusMessage}</span>
           <button onClick={() => setStatusMessage(null)} className="text-emerald-400 hover:underline">
-            Cerrar
+            Close
           </button>
         </div>
       )}
@@ -132,21 +132,21 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
             <div className="border-b border-slate-800 pb-3 space-y-1">
               <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
                 <Download className="w-4 h-4 text-cyan-400" />
-                <span>Exportar Colección Actual</span>
+                <span>Export Current Collection</span>
               </h3>
               <p className="text-xs text-slate-400">
-                Empaqueta tus <b className="text-emerald-400">{activeMods.length} mods activos</b> y orden de carga en un archivo portátil <code className="text-cyan-300">.pzpack</code>.
+                Package your <b className="text-emerald-400">{activeMods.length} active mods</b> and load order into a portable <code className="text-cyan-300">.pzpack</code> file.
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Nombre de la Colección
+                  Collection Name
                 </label>
                 <input
                   type="text"
-                  placeholder="ej. Pack Supervivencia Hardcore B42"
+                  placeholder="e.g. Hardcore Survival Pack B42"
                   value={presetName}
                   onChange={(e) => setPresetName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-medium"
@@ -155,11 +155,11 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
 
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Descripción (Opcional)
+                  Description (Optional)
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="Resumen del modpack, recomendaciones de mapas o notas para tus amigos..."
+                  placeholder="Modpack summary, map recommendations, or notes for your friends..."
                   value={presetDesc}
                   onChange={(e) => setPresetDesc(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-sans"
@@ -168,11 +168,11 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
 
               <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1 font-mono text-[11px]">
                 <div className="flex items-center justify-between text-slate-300">
-                  <span>Mods Activos Incluidos:</span>
+                  <span>Included Active Mods:</span>
                   <span className="text-emerald-400 font-bold">{activeMods.length}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-300">
-                  <span>Total en Orden de Carga:</span>
+                  <span>Total in Load Order:</span>
                   <span className="text-cyan-400 font-bold">{mods.length}</span>
                 </div>
               </div>
@@ -185,7 +185,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
             className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2 mt-4"
           >
             <Download className="w-4 h-4" />
-            <span>Guardar Colección (.pzpack)</span>
+            <span>Save Collection (.pzpack)</span>
           </button>
         </div>
 
@@ -201,7 +201,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                       <span>{importedPreset.name}</span>
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {importedPreset.description || 'Sin descripción proporcionada.'}
+                      {importedPreset.description || 'No description provided.'}
                     </p>
                   </div>
                   <span className="text-[10px] font-mono bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800">
@@ -217,11 +217,11 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                         <div className="flex items-center justify-between font-bold text-amber-300">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                            <span>Mods No Instalados en tu Disco ({missingReport.missing_mods.length})</span>
+                            <span>Mods Not Installed on your Disk ({missingReport.missing_mods.length})</span>
                           </div>
                         </div>
                         <p className="text-[11px] text-slate-300 leading-relaxed">
-                          Para disfrutar completamente de este pack, debes suscribirte a los siguientes mods en Steam Workshop:
+                          To fully enjoy this pack, you must subscribe to the following mods on the Steam Workshop:
                         </p>
                         <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                           {missingReport.missing_mods.map((m, idx) => (
@@ -232,7 +232,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                                   onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshop_id}`)}
                                   className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
                                 >
-                                  <span>Abrir Steam (#{m.workshop_id})</span>
+                                  <span>Open Steam (#{m.workshop_id})</span>
                                   <ExternalLink className="w-3 h-3" />
                                 </button>
                               ) : (
@@ -246,8 +246,8 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                       <div className="p-3.5 bg-emerald-950/60 border border-emerald-700/80 rounded-xl flex items-center gap-3 text-xs text-emerald-300">
                         <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
                         <div>
-                          <div className="font-bold">¡Todos los mods están instalados en tu PC!</div>
-                          <div className="text-[11px] text-slate-300">Puedes aplicar el orden de carga inmediatamente.</div>
+                          <div className="font-bold">All mods are installed on your PC!</div>
+                          <div className="text-[11px] text-slate-300">You can apply the load order immediately.</div>
                         </div>
                       </div>
                     )}
@@ -261,7 +261,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                   className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Aplicar Colección a mi Juego</span>
+                  <span>Apply Collection to my Game</span>
                 </button>
                 <button
                   onClick={() => {
@@ -270,7 +270,7 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                   }}
                   className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
                 >
-                  Cancelar
+                  Cancel
                 </button>
               </div>
             </div>
@@ -280,9 +280,9 @@ export const PresetModule: React.FC<PresetModuleProps> = ({
                 <Layers className="w-7 h-7 text-cyan-400" />
               </div>
               <div className="space-y-1 max-w-md">
-                <h3 className="text-sm font-bold text-slate-200">Ningún preset cargado</h3>
+                <h3 className="text-sm font-bold text-slate-200">No preset loaded</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Haz clic en <b className="text-cyan-400">Importar .pzpack</b> arriba para abrir una colección guardada y verificar qué mods necesitas suscribir.
+                  Click on <b className="text-cyan-400">Import .pzpack</b> above to open a saved collection and verify which mods you need to subscribe to.
                 </p>
               </div>
             </div>

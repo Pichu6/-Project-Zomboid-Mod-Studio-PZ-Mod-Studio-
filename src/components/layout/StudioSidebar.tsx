@@ -1,57 +1,30 @@
 import React from 'react';
 import { ActiveTab } from '../../types';
-import { GitCompare, ListOrdered, Settings, Activity, Package, Server, Layers } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  hasActiveProfile?: boolean;
   conflictCount: number;
   errorCardCount: number;
-  draftPackageCount?: number;
 }
 
 export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   activeTab,
   setActiveTab,
+  hasActiveProfile = true,
   conflictCount: _conflictCount,
   errorCardCount,
-  draftPackageCount = 0,
 }) => {
   const navItems = [
     {
-      id: 'MOD_LIST' as ActiveTab,
-      label: 'Mod List',
-      icon: ListOrdered,
-      badge: null,
-      badgeColor: '',
-    },
-    {
-      id: 'MERGER' as ActiveTab,
-      label: 'Mod Merger',
-      icon: GitCompare,
-      badge: draftPackageCount > 0 ? draftPackageCount : null,
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    },
-    {
-      id: 'PRESETS' as ActiveTab,
-      label: 'Presets (.pzpack)',
-      icon: Package,
-      badge: null,
-      badgeColor: '',
-    },
-    {
-      id: 'SERVERS' as ActiveTab,
-      label: 'Servidores',
-      icon: Server,
-      badge: null,
-      badgeColor: '',
-    },
-    {
-      id: 'INSTANCES' as ActiveTab,
-      label: 'Instancias',
+      id: 'PROFILES' as ActiveTab,
+      label: 'Profiles',
       icon: Layers,
       badge: null,
       badgeColor: '',
+      requiresProfile: false,
     },
     {
       id: 'MONITOR' as ActiveTab,
@@ -59,6 +32,31 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: Activity,
       badge: errorCardCount > 0 ? errorCardCount : null,
       badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40',
+      requiresProfile: true,
+    },
+    {
+      id: 'MOD_LIST' as ActiveTab,
+      label: 'Mod List',
+      icon: ListOrdered,
+      badge: null,
+      badgeColor: '',
+      requiresProfile: true,
+    },
+    {
+      id: 'MERGER' as ActiveTab,
+      label: 'Mod Merger',
+      icon: GitCompare,
+      badge: null,
+      badgeColor: '',
+      requiresProfile: true,
+    },
+    {
+      id: 'SERVERS' as ActiveTab,
+      label: 'Servers',
+      icon: Server,
+      badge: null,
+      badgeColor: '',
+      requiresProfile: true,
     },
   ];
 
@@ -74,27 +72,38 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            const isLocked = item.requiresProfile && !hasActiveProfile;
 
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                  isActive
-                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 font-bold shadow'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                onClick={() => {
+                  if (!isLocked) {
+                    setActiveTab(item.id);
+                  }
+                }}
+                disabled={isLocked}
+                title={isLocked ? 'You must activate or create a profile first' : item.label}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition ${
+                  isLocked
+                    ? 'text-slate-600 opacity-40 cursor-not-allowed border border-transparent select-none'
+                    : isActive
+                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 font-bold shadow cursor-pointer'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent cursor-pointer'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : isLocked ? 'text-slate-600' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
 
-                {item.badge !== null && (
+                {isLocked ? (
+                  <Lock className="w-3 h-3 text-slate-600" />
+                ) : item.badge !== null ? (
                   <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border ${item.badgeColor}`}>
                     {item.badge}
                   </span>
-                )}
+                ) : null}
               </button>
             );
           })}

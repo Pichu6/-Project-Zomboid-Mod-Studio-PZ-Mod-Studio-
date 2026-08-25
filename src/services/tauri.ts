@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -50,7 +51,10 @@ export interface MergedPackageInfoUI {
   folder_name: string;
   display_name: string;
   mod_id: string;
+  description?: string;
   is_packaged: boolean;
+  is_active_in_modlist: boolean;
+  is_companion_bridge: boolean;
   created_at?: string;
   packaged_mods: string[];
   merged_files: string[];
@@ -67,9 +71,23 @@ export const TauriService = {
    */
   openExternalUrl: async (url: string): Promise<void> => {
     try {
+      await openUrl(url);
+      return;
+    } catch (pluginErr) {
+      console.warn('Tauri openUrl plugin fallback:', pluginErr);
+    }
+
+    try {
       await invoke('open_external_url_cmd', { url });
-    } catch (err) {
-      console.error('Failed to open external URL:', err);
+      return;
+    } catch (ipcErr) {
+      console.warn('Tauri open_external_url_cmd fallback:', ipcErr);
+    }
+
+    try {
+      window.open(url, '_blank');
+    } catch (winErr) {
+      console.error('Failed to open external URL:', winErr);
     }
   },
 
@@ -162,13 +180,16 @@ export const TauriService = {
         conflict_line: c.conflict_line ?? 1,
         total_file_lines: c.total_file_lines ?? c.base_content.split('\n').length ?? 1,
         base_content: c.base_content,
+        merged_output: c.merged_output || c.base_content,
+        auto_ast_output: c.auto_ast_output || c.merged_output || c.base_content,
+        is_identical_noise: c.is_identical_noise ?? false,
         competing_mods: c.competing_files.map((f: any) => ({
           mod_id: f.mod_id,
           mod_name: f.mod_name,
           absolute_path: f.absolute_path,
           content: f.content,
         })),
-        status: 'MANUAL_CONFLICT' as const,
+        status: (c.status as any) || (c.is_identical_noise ? ('AUTO_MERGED' as const) : ('MANUAL_CONFLICT' as const)),
       }));
     } catch (err) {
       console.warn('Scan conflicts error:', err);
@@ -195,12 +216,14 @@ export const TauriService = {
         pzversion: m.pzversion,
         url: m.url,
         dependencies: m.require || [],
+        load_mod_after: m.load_mod_after || [],
         incompatible: m.incompatible || [],
         enabled: m.enabled ?? false,
         icon_path: m.icon_path,
         poster_url: m.poster_url,
         is_library: m.is_library ?? false,
         is_map_mod: m.is_map_mod ?? false,
+        is_packaged: m.is_packaged,
         load_order_index: idx + 1,
       }));
     } catch (err) {
@@ -335,9 +358,9 @@ export const TauriService = {
   /**
    * Creates a new named merged package (e.g. "Mix Mods" -> Z_PZModStudio_MixMods)
    */
-  createMergedPackage: async (userZomboidDir: string, modListIniPath: string, name: string): Promise<MergedPackageInfoUI | null> => {
+  createMergedPackage: async (userZomboidDir: string, modListIniPath: string, name: string, description?: string): Promise<MergedPackageInfoUI | null> => {
     try {
-      return await invoke<MergedPackageInfoUI>('create_merged_package_cmd', { userZomboidDir, modListIniPath, name });
+      return await invoke<MergedPackageInfoUI>('create_merged_package_cmd', { userZomboidDir, modListIniPath, name, description });
     } catch (err) {
       console.error('Failed to create merged package:', err);
       return null;
@@ -347,12 +370,34 @@ export const TauriService = {
   /**
    * Renames an existing merged package
    */
-  renameMergedPackage: async (userZomboidDir: string, modListIniPath: string, oldFolder: string, newName: string): Promise<MergedPackageInfoUI | null> => {
+  renameMergedPackage: async (userZomboidDir: string, modListIniPath: string, oldFolder: string, newName: string, description?: string): Promise<MergedPackageInfoUI | null> => {
     try {
-      return await invoke<MergedPackageInfoUI>('rename_merged_package_cmd', { userZomboidDir, modListIniPath, oldFolder, newName });
+      return await invoke<MergedPackageInfoUI>('rename_merged_package_cmd', { userZomboidDir, modListIniPath, oldFolder, newName, description });
     } catch (err) {
       console.error('Failed to rename merged package:', err);
       return null;
+    }
+  },
+
+  /**
+   * Toggles a merged package presence (active/hidden) in ModListData.ini / default.txt
+   */
+  togglePackageInModlist: async (
+    userZomboidDir: string,
+    modListIniPath: string,
+    folderName: string,
+    enabled: boolean
+  ): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('toggle_package_in_modlist_cmd', {
+        userZomboidDir,
+        modListIniPath,
+        folderName,
+        enabled,
+      });
+    } catch (err) {
+      console.error('Failed to toggle package in modlist:', err);
+      return false;
     }
   },
 
@@ -361,10 +406,101 @@ export const TauriService = {
    */
   deleteMergedPackage: async (userZomboidDir: string, modListIniPath: string, folderName: string): Promise<boolean> => {
     try {
-      return await invoke<boolean>('delete_merged_package_cmd', { userZomboidDir, modListIniPath, folderName });
+      return await invoke<boolean>('delete_merged_package_cmd', {
+        userZomboidDir,
+        modListIniPath,
+        folderName,
+      });
     } catch (err) {
       console.error('Failed to delete merged package:', err);
       return false;
+    }
+  },
+
+  saveDraftResolution: async (
+    userZomboidDir: string,
+    packageFolderName: string,
+    relativePath: string,
+    resolvedContent: string,
+    status: string
+  ): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('save_draft_resolution_cmd', {
+        userZomboidDir,
+        packageFolderName,
+        relativePath,
+        resolvedContent,
+        status,
+      });
+    } catch (err) {
+      console.error('Failed to save draft resolution:', err);
+      return false;
+    }
+  },
+
+  getDraftResolutions: async (
+    userZomboidDir: string,
+    packageFolderName: string
+  ): Promise<Record<string, { relative_path: string; resolved_content: string; status: string }>> => {
+    try {
+      return await invoke<Record<string, { relative_path: string; resolved_content: string; status: string }>>(
+        'get_draft_resolutions_cmd',
+        {
+          userZomboidDir,
+          packageFolderName,
+        }
+      );
+    } catch (err) {
+      console.error('Failed to get draft resolutions:', err);
+      return {};
+    }
+  },
+
+  clearDraftResolutions: async (
+    userZomboidDir: string,
+    packageFolderName: string
+  ): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('clear_draft_resolutions_cmd', {
+        userZomboidDir,
+        packageFolderName,
+      });
+    } catch (err) {
+      console.error('Failed to clear draft resolutions:', err);
+      return false;
+    }
+  },
+  exportMergedPackage: async (
+    userZomboidDir: string,
+    packageFolderName: string,
+    targetFilePath: string
+  ): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('export_merged_package_cmd', {
+        userZomboidDir,
+        packageFolderName,
+        targetFilePath,
+      });
+    } catch (err) {
+      console.error('Failed to export merged package:', err);
+      throw err;
+    }
+  },
+
+  importMergedPackage: async (
+    userZomboidDir: string,
+    modListIniPath: string,
+    sourceFilePath: string
+  ): Promise<MergedPackageInfoUI> => {
+    try {
+      return await invoke<MergedPackageInfoUI>('import_merged_package_cmd', {
+        userZomboidDir,
+        modListIniPath,
+        sourceFilePath,
+      });
+    } catch (err) {
+      console.error('Failed to import merged package:', err);
+      throw err;
     }
   },
 
@@ -401,34 +537,70 @@ export const TauriService = {
     });
   },
 
-  /**
-   * Prepares local carrier mod folder under Zomboid/mods/Z_PZModStudio_Carrier for Workshop uploading
-   */
-  prepareCarrierMod: async (userZomboidDir: string): Promise<string> => {
-    try {
-      return await invoke<string>('prepare_carrier_mod_cmd', { userZomboidDir });
-    } catch (err) {
-      console.error('Failed to prepare carrier mod folder:', err);
-      throw err;
-    }
-  },
+
 
   // ==========================================
-  // Presets & Steam Workshop Sync (.pzpack)
+  // Presets & File Dialogs (.pzpack, .pzmerge)
   // ==========================================
-  pickSaveFile: async (defaultName?: string): Promise<string | null> => {
+  pickSaveFile: async (defaultName?: string, filterName?: string, filterExt?: string): Promise<string | null> => {
     try {
-      return await invoke<string | null>('pick_save_file_cmd', { defaultName });
+      return await invoke<string | null>('pick_save_file_cmd', {
+        defaultName,
+        filterName,
+        filterExt,
+      });
     } catch (err) {
       return null;
     }
   },
 
-  pickOpenFile: async (): Promise<string | null> => {
+  pickOpenFile: async (filterName?: string, filterExt?: string): Promise<string | null> => {
     try {
-      return await invoke<string | null>('pick_open_file_cmd');
+      return await invoke<string | null>('pick_open_file_cmd', {
+        filterName,
+        filterExt,
+      });
     } catch (err) {
       return null;
+    }
+  },
+
+  openPackageFolder: async (userZomboidDir: string, packageFolderName: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('open_package_folder_cmd', {
+        userZomboidDir,
+        packageFolderName,
+      });
+    } catch (err) {
+      console.error('Failed to open package folder in explorer:', err);
+      return false;
+    }
+  },
+
+  openLogsFolder: async (userZomboidDir: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('open_logs_folder_cmd', { userZomboidDir });
+    } catch (err) {
+      console.error('Failed to open logs folder in explorer:', err);
+      return false;
+    }
+  },
+
+  listAvailableLogFiles: async (userZomboidDir: string): Promise<any[]> => {
+    try {
+      return await invoke<any[]>('list_available_log_files_cmd', { userZomboidDir });
+    } catch (err) {
+      console.error('Failed to list available log files:', err);
+      return [];
+    }
+  },
+
+  readLogFile: async (filePath: string, maxLines?: number): Promise<string[]> => {
+    try {
+      return await invoke<string[]>('read_log_file_cmd', { filePath, maxLines });
+    } catch (err) {
+      console.error('Failed to read log file:', err);
+      return [];
     }
   },
 
@@ -455,8 +627,87 @@ export const TauriService = {
     return await invoke('sync_client_to_server', { filePath, activeModIds, activeWorkshopIds });
   },
 
-  createNewServerConfig: async (userZomboidDir: string, serverName: string): Promise<any> => {
+  createNewServerConfig: async (
+    userZomboidDir: string,
+    serverName: string
+  ): Promise<PZServerConfig> => {
     return await invoke('create_new_server_config', { userZomboidDir, serverName });
+  },
+
+  deleteServerConfig: async (
+    userZomboidDir: string,
+    filePath: string,
+    serverName?: string
+  ): Promise<boolean> => {
+    return await invoke('delete_server_config', { userZomboidDir, filePath, serverName });
+  },
+
+  launchDedicatedServer: async (
+    pzInstallDir: string,
+    userZomboidDir: string,
+    serverName: string,
+    memoryGb?: number,
+    nosteam?: boolean
+  ): Promise<number> => {
+    return await invoke('launch_dedicated_server', {
+      pzInstallDir,
+      userZomboidDir,
+      serverName,
+      memoryGb,
+      nosteam,
+    });
+  },
+
+  stopDedicatedServer: async (userZomboidDir: string, pid?: number): Promise<boolean> => {
+    return await invoke('stop_dedicated_server', { userZomboidDir, pid });
+  },
+
+  getDedicatedServerStatus: async (userZomboidDir: string): Promise<DedicatedServerStatus> => {
+    return await invoke('get_dedicated_server_status', { userZomboidDir });
+  },
+
+  getDedicatedServerLogs: async (userZomboidDir: string, maxLines?: number): Promise<string[]> => {
+    return await invoke('get_dedicated_server_logs', { userZomboidDir, maxLines });
+  },
+
+  saveServerLogSnapshot: async (
+    userZomboidDir: string,
+    serverName: string,
+    customLines?: string[]
+  ): Promise<string> => {
+    return await invoke('save_server_log_snapshot', {
+      userZomboidDir,
+      serverName,
+      customLines,
+    });
+  },
+
+  getConnectedPlayers: async (userZomboidDir: string): Promise<ConnectedPlayer[]> => {
+    return await invoke('get_connected_players', { userZomboidDir });
+  },
+
+  sendServerCommand: async (
+    userZomboidDir: string,
+    action: string,
+    target?: string,
+    message?: string,
+    reason?: string
+  ): Promise<boolean> => {
+    return await invoke('send_server_command', {
+      userZomboidDir,
+      action,
+      target,
+      message,
+      reason,
+    });
+  },
+
+  getServerQuickSettings: async (filePath: string): Promise<ServerQuickSettings> => {
+    return await invoke('get_server_quick_settings', { filePath });
+  },
+
+  saveServerQuickSettings: async (filePath: string, settings: ServerQuickSettings): Promise<boolean> => {
+    return await invoke('save_server_quick_settings', { filePath, settings });
   },
 
   // ==========================================
@@ -486,5 +737,13 @@ export const TauriService = {
 
   updateInstance: async (userZomboidDir: string, instance: any): Promise<any> => {
     return await invoke('update_instance', { userZomboidDir, instance });
+  },
+
+  saveMasterLoadOrder: async (
+    userZomboidDir: string,
+    loadOrder: string[],
+    activeModIds: string[]
+  ): Promise<void> => {
+    return await invoke('save_master_load_order', { userZomboidDir, loadOrder, activeModIds });
   },
 };

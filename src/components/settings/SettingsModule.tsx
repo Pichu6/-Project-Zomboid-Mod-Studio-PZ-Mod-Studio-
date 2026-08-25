@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus, Bell } from 'lucide-react';
+import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Sparkles } from 'lucide-react';
 import { PolyfillRule } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -8,7 +8,6 @@ export interface StudioPathsUI {
   workshop_dir: string;
   user_zomboid_dir: string;
   mod_list_ini_path: string;
-  carrier_workshop_id?: string;
   is_valid: boolean;
 }
 
@@ -27,16 +26,39 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   onToggleRule,
   onAutoDetect,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'PATHS' | 'POLYFILLS'>('PATHS');
+  const [activeSubTab, setActiveSubTab] = useState<'PATHS' | 'POLYFILLS' | 'MCP'>('PATHS');
+  const [selectedMcpClient, setSelectedMcpClient] = useState<'ANTIGRAVITY' | 'CLAUDE' | 'CURSOR' | 'VSCODE_LOCAL' | 'OPENAI_CODEX'>('ANTIGRAVITY');
+  const [copiedMcpConfig, setCopiedMcpConfig] = useState<boolean>(false);
   const [formData, setFormData] = useState<StudioPathsUI>(paths);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [noticeSilenced, setNoticeSilenced] = useState<boolean>(
     localStorage.getItem('pz_hide_autosort_notice') === 'true'
   );
+  const [noMergeWarningSilenced, setNoMergeWarningSilenced] = useState<boolean>(
+    localStorage.getItem('pz_skip_no_merge_warning') === 'true'
+  );
+  const [startupBehavior, setStartupBehavior] = useState<'SHOW_STARTUP_SCREEN' | 'OPEN_LAST_PROFILE'>(() => {
+    return (localStorage.getItem('pz_startup_behavior') as any) || 'SHOW_STARTUP_SCREEN';
+  });
+
+  const handleSetStartupBehavior = (behavior: 'SHOW_STARTUP_SCREEN' | 'OPEN_LAST_PROFILE') => {
+    setStartupBehavior(behavior);
+    localStorage.setItem('pz_startup_behavior', behavior);
+  };
 
   const handleRestoreNotice = () => {
     localStorage.removeItem('pz_hide_autosort_notice');
     setNoticeSilenced(false);
+  };
+
+  const handleRestoreNoMergeWarning = () => {
+    localStorage.removeItem('pz_skip_no_merge_warning');
+    setNoMergeWarningSilenced(false);
+  };
+
+  const handleSilenceNoMergeWarning = () => {
+    localStorage.setItem('pz_skip_no_merge_warning', 'true');
+    setNoMergeWarningSilenced(true);
   };
 
   const handlePickFolder = async (field: keyof StudioPathsUI, currentVal: string) => {
@@ -53,6 +75,87 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     onSavePaths(formData);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const getMcpConfigSnippet = () => {
+    const binaryPath = 'e:\\PZ Mod Studio\\src-tauri\\target\\debug\\pz-mcp-server.exe';
+    if (selectedMcpClient === 'CLAUDE') {
+      return JSON.stringify(
+        {
+          mcpServers: {
+            'pz-mod-studio': {
+              command: binaryPath,
+              args: [],
+            },
+          },
+        },
+        null,
+        2
+      );
+    } else if (selectedMcpClient === 'CURSOR') {
+      return JSON.stringify(
+        {
+          mcpServers: {
+            'pz-mod-studio': {
+              command: binaryPath,
+              args: [],
+            },
+          },
+        },
+        null,
+        2
+      );
+    } else if (selectedMcpClient === 'VSCODE_LOCAL') {
+      return JSON.stringify(
+        {
+          mcpServers: {
+            'pz-mod-studio': {
+              command: binaryPath,
+              args: [],
+              disabled: false,
+              autoApprove: [],
+            },
+          },
+        },
+        null,
+        2
+      );
+    } else if (selectedMcpClient === 'OPENAI_CODEX') {
+      return JSON.stringify(
+        {
+          mcpServers: {
+            'pz-mod-studio': {
+              command: binaryPath,
+              args: [],
+              description: 'Project Zomboid Mod Studio MCP Server (Build 41/42)',
+            },
+          },
+        },
+        null,
+        2
+      );
+    } else {
+      // ANTIGRAVITY / GEMINI CLI
+      return JSON.stringify(
+        {
+          mcpServers: {
+            'pz-mod-studio': {
+              command: binaryPath,
+              args: [],
+              env: {},
+            },
+          },
+        },
+        null,
+        2
+      );
+    }
+  };
+
+  const handleCopyMcpConfig = () => {
+    navigator.clipboard.writeText(getMcpConfigSnippet());
+    setCopiedMcpConfig(true);
+    setTimeout(() => setCopiedMcpConfig(false), 2500);
   };
 
   return (
@@ -93,6 +196,17 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             >
               <Wrench className="w-3.5 h-3.5" />
               Polyfill Rules ({rules.filter((r) => r.enabled).length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('MCP')}
+              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                activeSubTab === 'MCP'
+                  ? 'bg-slate-800 text-cyan-400 font-bold border border-slate-700 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5 text-cyan-400" />
+              MCP Agent Server
             </button>
           </div>
         </div>
@@ -135,7 +249,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200">
-                  Project Zomboid Installation Path
+                  Project Zomboid Installation Directory
                 </label>
                 {formData.pz_install_dir ? (
                   <span className="text-[10px] text-emerald-400 flex items-center gap-1">
@@ -143,12 +257,12 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </span>
                 ) : (
                   <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Path Missing
+                    <AlertTriangle className="w-3 h-3" /> Path Not Found
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-400">
-                Root directory of Project Zomboid containing ProjectZomboid64.exe and base media files.
+                Root installation folder containing <span className="font-mono text-slate-300">ProjectZomboid64.exe</span> and base game files. Compatible with Steam, GOG or manual installations.
               </p>
               <div className="flex gap-2">
                 <input
@@ -167,22 +281,29 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
             </div>
 
-            {/* Card 2: Steam Workshop Path */}
+            {/* Card 2: Steam Workshop / External Mods Path */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200">
-                  Steam Workshop Content Path
+                  Steam Workshop Folder (Optional if not using Steam)
                 </label>
-                <span className="text-[10px] text-slate-400 font-mono">App ID: 108600</span>
+                {formData.workshop_dir ? (
+                  <span className="text-[10px] text-slate-400 font-mono">Steam App ID: 108600</span>
+                ) : (
+                  <span className="text-[10px] text-cyan-300 font-mono bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50">
+                    Optional (GOG / No-Steam)
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400">
-                Steam Workshop directory where downloaded mods are stored. (Steam App ID: 108600)
+                For Steam users: Path where Workshop mods are downloaded (<span className="font-mono text-slate-300">workshop/content/108600</span>). If you play on GOG or install mods manually in <span className="font-mono text-slate-300">Zomboid/mods</span>, you can leave this field empty.
               </p>
               <div className="flex gap-2">
                 <input
                   type="text"
                   readOnly
                   value={formData.workshop_dir}
+                  placeholder="(Optional for GOG or No-Steam versions)"
                   className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 cursor-not-allowed"
                 />
                 <button
@@ -197,11 +318,22 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
 
             {/* Card 3: User Zomboid Directory */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
-              <label className="text-xs font-bold text-slate-200">
-                User Zomboid Directory
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200">
+                  User Zomboid Directory (Data and Local Mods Folder)
+                </label>
+                {formData.user_zomboid_dir ? (
+                  <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Universal
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Required
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-400">
-                User folder containing console.txt logs, saved games, and local mods directory.
+                User personal folder (<span className="font-mono text-slate-300">C:\Users\&lt;User&gt;\Zomboid</span>). Contains logs (<span className="font-mono text-slate-300">console.txt</span>), saves, profiles and the local mods folder (<span className="font-mono text-slate-300">Zomboid/mods</span>).
               </p>
               <div className="flex gap-2">
                 <input
@@ -223,10 +355,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             {/* Card 4: ModListData.ini Path */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <label className="text-xs font-bold text-slate-200">
-                ModListData.ini Configuration Path
+                Mod Configuration File (ModListData.ini / default.txt)
               </label>
               <p className="text-[11px] text-slate-400">
-                Active mod list load order file used by Project Zomboid Mod Manager.
+                File that stores active mods and load order for Project Zomboid. Automatically detected in <span className="font-mono text-slate-300">Zomboid/mods/ModListData.ini</span> or <span className="font-mono text-slate-300">Zomboid/default.txt</span>.
               </p>
               <div className="flex gap-2">
                 <input
@@ -245,81 +377,155 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
             </div>
 
-            {/* Card 4.5: Custom Carrier Workshop Mod Integration */}
-            <div className="bg-slate-900/80 border border-cyan-500/30 rounded-xl p-4 space-y-2 shadow">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-cyan-300 flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-cyan-400" />
-                  Carrier Workshop Mod ID (Optional Steam Workshop Carrier)
-                </label>
-                <span className="text-[10px] bg-cyan-950 text-cyan-300 font-bold px-2 py-0.5 rounded border border-cyan-800 font-mono">
-                  B42 Workshop Carrier
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                If you upload a mod or patch to Steam Workshop, enter its Workshop Item ID here (e.g. <code className="text-cyan-300">3123456789</code>). PZ Mod Studio will inject all 3-Way merged files and polyfills directly into your subscribed Workshop mod folder so Project Zomboid loads it natively in-game.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Enter Workshop Item ID (e.g. 3123456789)"
-                  value={formData.carrier_workshop_id || ''}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, carrier_workshop_id: e.target.value }))}
-                  className="flex-1 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg px-3 py-2 text-xs font-mono text-cyan-200"
-                />
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await TauriService.prepareCarrierMod(formData.user_zomboid_dir);
-                      alert(`✨ Carpetas del Mod Preparadas Correctamente:\n${res}\n\nEstructura corregida con mod.info válido (sin carpeta Contents intermedia):\n\nOpción 1 (Mod Local offline):\n1. Abre Project Zomboid\n2. Menú Principal -> MODS\n3. Activa 'Z_PZ Mod Studio Master Patch' o 'PZ Mod Studio Carrier Patch'. ¡Ya aparece directamente en el juego!\n\nOpción 2 (Subir a Steam Workshop):\n1. Abre Project Zomboid\n2. Menú Principal -> Workshop -> Editor de Mods / Subir Mod\n3. Selecciona 'PZ Mod Studio Carrier Patch' y haz clic en Subir\n4. Copia el ID de Workshop asignado en esta casilla para sincronizarlo automáticamente.`);
-                    } catch (err) {
-                      alert(`Error preparing carrier folder: ${err}`);
-                    }
-                  }}
-                  className="px-3 py-2 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-300 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Prepare Local Mod Folder for Workshop
-                </button>
-              </div>
-            </div>
-
-            {/* Card 5: App Notification Preferences */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
-              <div className="flex items-center justify-between">
+            {/* Card 5: Unified App Notification & Warning Preferences */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                  <Bell className="w-4 h-4 text-cyan-400" />
-                  Notificaciones de la Aplicación
+                  <Bell className="w-4 h-4 text-emerald-400" />
+                  System Notifications and Warnings
                 </label>
-                <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${noticeSilenced ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'}`}>
-                  {noticeSilenced ? 'Auto-Sort Silenciado' : 'Notificaciones Activas'}
+                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                  UI Preferences
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Controla la visibilidad de la ventana modal emergente al presionar "Auto-Sort Dependencies".
+                Configure the display of warnings, security confirmations and application popups.
               </p>
-              <div className="pt-1 flex items-center justify-between">
-                <span className="text-xs text-slate-300">
-                  {noticeSilenced ? 'Has marcado "No volver a mostrar este mensaje".' : 'El mensaje informativo de auto-sort se mostrará al ordenar.'}
+
+              <div className="space-y-3">
+                {/* 1. Advertencia de Lanzamiento sin Merge */}
+                <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-1 max-w-xl">
+                    <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Warning when launching game without active merge package</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Shows a preventive warning before running the game if you have no active merge patch to resolve collisions between mods.
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {noMergeWarningSilenced ? (
+                      <button
+                        onClick={handleRestoreNoMergeWarning}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                      >
+                        Restore Warning
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSilenceNoMergeWarning}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
+                      >
+                        Silence Warning
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Notificación de Auto-Sort */}
+                <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-1 max-w-xl">
+                    <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Auto-Sort Dependencies Explanatory Message</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Shows an explanatory informational dialog when clicking the sort dependencies button in the mod list.
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {noticeSilenced ? (
+                      <button
+                        onClick={handleRestoreNotice}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                      >
+                        Restore Notification
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          localStorage.setItem('pz_hide_autosort_notice', 'true');
+                          setNoticeSilenced(true);
+                        }}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
+                      >
+                        Silence Notification
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 6: Startup Screen Behavior */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-emerald-400" />
+                  Startup Behavior
+                </label>
+                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-slate-950 text-emerald-300 border border-slate-800">
+                  {startupBehavior === 'SHOW_STARTUP_SCREEN' ? 'Profiles Screen' : 'Last Active Profile'}
                 </span>
-                {noticeSilenced ? (
-                  <button
-                    onClick={handleRestoreNotice}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
-                  >
-                    Restaurar Notificación de Auto-Sort
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      localStorage.setItem('pz_hide_autosort_notice', 'true');
-                      setNoticeSilenced(true);
-                    }}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
-                  >
-                    Silenciar Notificación
-                  </button>
-                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Select which module you want to open automatically when starting PZ Mod Studio:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div
+                  onClick={() => handleSetStartupBehavior('SHOW_STARTUP_SCREEN')}
+                  className={`p-3.5 rounded-xl border transition cursor-pointer flex items-start gap-3 ${
+                    startupBehavior === 'SHOW_STARTUP_SCREEN'
+                      ? 'bg-emerald-950/40 border-emerald-500 text-slate-100 ring-1 ring-emerald-500/50'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="startupBehavior"
+                    checked={startupBehavior === 'SHOW_STARTUP_SCREEN'}
+                    onChange={() => handleSetStartupBehavior('SHOW_STARTUP_SCREEN')}
+                    className="mt-1 text-emerald-500 focus:ring-0 cursor-pointer"
+                  />
+                  <div className="space-y-1 text-left">
+                    <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <span>Profiles Screen (Start)</span>
+                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.2 rounded font-mono">Recommended</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Shows the profile manager so you can choose or activate the combination you are going to work with.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => handleSetStartupBehavior('OPEN_LAST_PROFILE')}
+                  className={`p-3.5 rounded-xl border transition cursor-pointer flex items-start gap-3 ${
+                    startupBehavior === 'OPEN_LAST_PROFILE'
+                      ? 'bg-emerald-950/40 border-emerald-500 text-slate-100 ring-1 ring-emerald-500/50'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="startupBehavior"
+                    checked={startupBehavior === 'OPEN_LAST_PROFILE'}
+                    onChange={() => handleSetStartupBehavior('OPEN_LAST_PROFILE')}
+                    className="mt-1 text-emerald-500 focus:ring-0 cursor-pointer"
+                  />
+                  <div className="space-y-1 text-left">
+                    <div className="text-xs font-bold text-slate-200">
+                      Open Last Profile Directly
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Loads the previous active profile and takes you directly to the mod list.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -385,6 +591,337 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* SUB-TAB 3: Model Context Protocol (MCP) Agent Server */}
+        {activeSubTab === 'MCP' && (
+          <div className="space-y-6">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/40 border border-cyan-500/30 rounded-xl p-5 shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800">
+                      <Bot className="w-5 h-5" />
+                    </span>
+                    <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      Model Context Protocol (MCP) Server
+                      <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full flex items-center gap-1">
+                        <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
+                        Stdio Ready
+                      </span>
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                    Connect autonomous AI agents (Antigravity, Claude Desktop, Cursor, VS Code with Roo Code/Cline, or local models via Ollama/LM Studio) directly to PZ Mod Studio. The MCP server provides real-time access to console logs, crash diagnostics, VFS collision detection, Lua AST validation and live game control.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Setup / Client Configuration */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Terminal className="w-4 h-4 text-cyan-400" />
+                    Configuration Generator for MCP Clients
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Select your AI client or environment and copy the JSON snippet into your configuration file:
+                  </p>
+                </div>
+
+                {/* Client Selector Pills */}
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-1 flex flex-wrap gap-1 text-[11px]">
+                  <button
+                    onClick={() => setSelectedMcpClient('ANTIGRAVITY')}
+                    className={`px-2.5 py-1 rounded font-medium transition cursor-pointer ${
+                      selectedMcpClient === 'ANTIGRAVITY'
+                        ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Antigravity / Gemini
+                  </button>
+                  <button
+                    onClick={() => setSelectedMcpClient('CLAUDE')}
+                    className={`px-2.5 py-1 rounded font-medium transition cursor-pointer ${
+                      selectedMcpClient === 'CLAUDE'
+                        ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Claude Desktop
+                  </button>
+                  <button
+                    onClick={() => setSelectedMcpClient('CURSOR')}
+                    className={`px-2.5 py-1 rounded font-medium transition cursor-pointer ${
+                      selectedMcpClient === 'CURSOR'
+                        ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Cursor / Windsurf
+                  </button>
+                  <button
+                    onClick={() => setSelectedMcpClient('VSCODE_LOCAL')}
+                    className={`px-2.5 py-1 rounded font-medium transition cursor-pointer ${
+                      selectedMcpClient === 'VSCODE_LOCAL'
+                        ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    VS Code (Roo / Cline / Ollama Local)
+                  </button>
+                  <button
+                    onClick={() => setSelectedMcpClient('OPENAI_CODEX')}
+                    className={`px-2.5 py-1 rounded font-medium transition cursor-pointer ${
+                      selectedMcpClient === 'OPENAI_CODEX'
+                        ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    OpenAI / Codex / ChatGPT
+                  </button>
+                </div>
+              </div>
+
+              {selectedMcpClient === 'VSCODE_LOCAL' && (
+                <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    <b>Compatible with Local Models:</b> You can use <b>Ollama</b> or <b>LM Studio</b> with models like <i>Qwen 2.5 Coder, DeepSeek Coder or Llama 3.1</i> in VS Code via Roo Code or Cline. The local model will run MCP tools directly on your PC with no API costs or internet connection.
+                  </span>
+                </div>
+              )}
+
+              {/* JSON Code Box */}
+              <div className="relative bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto">
+                <button
+                  onClick={handleCopyMcpConfig}
+                  className={`absolute top-3 right-3 px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow ${
+                    copiedMcpConfig
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                  }`}
+                >
+                  {copiedMcpConfig ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      Copy MCP JSON
+                    </>
+                  )}
+                </button>
+                <pre>{getMcpConfigSnippet()}</pre>
+              </div>
+
+              <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-300">Executable Path:</span>
+                <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
+                  e:\PZ Mod Studio\src-tauri\target\debug\pz-mcp-server.exe
+                </code>
+                <span>or via CLI flag:</span>
+                <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
+                  pz-mod-studio.exe --mcp
+                </code>
+              </div>
+            </div>
+
+            {/* MCP Tools (22 Tools) & Resources (4 URIs) Overview */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Exposed Tools (Span 2 cols) */}
+              <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Code2 className="w-4 h-4 text-emerald-400" />
+                    MCP Tools Catalog (22 Tools Available)
+                  </h4>
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                    tools/call
+                  </span>
+                </div>
+
+                <div className="space-y-3.5 max-h-[520px] overflow-y-auto pr-1">
+                  {/* Category 1: Game Control & IPC Bridge */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
+                      🎮 Process Control & Live IPC Bridge (6 Tools)
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-cyan-300 font-bold text-[11px]">get_game_status</div>
+                        <div className="text-[10px] text-slate-400">Checks if ProjectZomboid64.exe is running and returns its PID.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-cyan-300 font-bold text-[11px]">launch_game</div>
+                        <div className="text-[10px] text-slate-400">Launches the game with configurable debugging flags (-debug, -windowed).</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-cyan-300 font-bold text-[11px]">terminate_game</div>
+                        <div className="text-[10px] text-slate-400">Closes or forces the termination of the Project Zomboid process.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-cyan-300 font-bold text-[11px]">send_game_ipc_command</div>
+                        <div className="text-[10px] text-slate-400">Sends live commands (give_item, eval_lua, godmode) to the companion mod.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-cyan-300 font-bold text-[11px]">get_game_ipc_response</div>
+                        <div className="text-[10px] text-slate-400">Reads the execution response emitted by the companion mod in the game.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-cyan-300 font-bold text-[11px]">install_bridge_companion_mod</div>
+                        <div className="text-[10px] text-slate-400">Installs the companion mod Z_PZModStudio_Bridge in Zomboid/mods.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category 2: Monitor Center & Diagnostics */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                      🩺 Monitor Center & Crash Diagnostics (4 Tools)
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-amber-300 font-bold text-[11px]">get_monitor_logs</div>
+                        <div className="text-[10px] text-slate-400">Reads and filters recent lines from console.txt (errors and stacktraces).</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-amber-300 font-bold text-[11px]">get_crash_diagnostics</div>
+                        <div className="text-[10px] text-slate-400">Parses Java/Lua exceptions and generates B41/B42 diagnostics with solutions.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-amber-300 font-bold text-[11px]">list_available_logs</div>
+                        <div className="text-[10px] text-slate-400">Lists all session log files on disk (console.txt and Logs/).</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-amber-300 font-bold text-[11px]">read_log_file</div>
+                        <div className="text-[10px] text-slate-400">Reads any specific log file with exception filtering.</div>
+                      </div>
+                    </div>
+                  {/* Category 3: Mods, Paths & Profiles */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
+                      📦 Mods, Paths & Profiles (7 Tools)
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">get_studio_paths</div>
+                        <div className="text-[10px] text-slate-400">Auto-detects game paths, Workshop and Zomboid folder.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">list_installed_mods</div>
+                        <div className="text-[10px] text-slate-400">Scans and lists all Steam Workshop and local mods.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">sort_mod_load_order</div>
+                        <div className="text-[10px] text-slate-400">Topological sorting of dependencies and cycle detection.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">scan_mod_conflicts</div>
+                        <div className="text-[10px] text-slate-400">Scans VFS collisions between mods and the base game.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">list_mod_profiles</div>
+                        <div className="text-[10px] text-slate-400">Lists all saved, active mod profiles and order.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">create_mod_profile</div>
+                        <div className="text-[10px] text-slate-400">Creates a new independent mod combination profile.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-emerald-300 font-bold text-[11px]">activate_mod_profile</div>
+                        <div className="text-[10px] text-slate-400">Activates a mod profile in default.txt / ModListData.ini.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category 4: AST Merger & Patch Engine */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block">
+                      ⚡ AST Merge Engine & Patches (5 Tools)
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-purple-300 font-bold text-[11px]">validate_lua_syntax</div>
+                        <div className="text-[10px] text-slate-400">Validates Lua syntax using AST parser (full_moon) with line and column.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-purple-300 font-bold text-[11px]">merge_lua_scripts</div>
+                        <div className="text-[10px] text-slate-400">3-way AST merge between base code and two conflicting variants.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-purple-300 font-bold text-[11px]">list_merged_packages</div>
+                        <div className="text-[10px] text-slate-400">Lists all patch and merge packages (Z_PZModStudio_*).</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-purple-300 font-bold text-[11px]">get_master_patch_status</div>
+                        <div className="text-[10px] text-slate-400">Queries the Master Patch status and saved resolutions.</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                        <div className="font-mono text-purple-300 font-bold text-[11px]">save_draft_resolution</div>
+                        <div className="text-[10px] text-slate-400">Saves a code resolution directly into the patch package.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exposed Resources (1 col) */}
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-purple-400" />
+                    MCP Resources (8 Passive URIs)
+                  </h4>
+                  <span className="text-[10px] font-mono text-purple-300 font-bold bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800">
+                    resources/read
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 text-xs">
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://monitor/console-log</div>
+                    <div className="text-[10px] text-slate-400">Live text stream of the console.txt file.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://game/status</div>
+                    <div className="text-[10px] text-slate-400">Game execution status, PID and companion bridge.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://diagnostics/latest-crash</div>
+                    <div className="text-[10px] text-slate-400">Parsed diagnostic of the last crash and stacktraces.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://mods/installed-summary</div>
+                    <div className="text-[10px] text-slate-400">JSON snapshot of all installed mods and order.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://profiles/list</div>
+                    <div className="text-[10px] text-slate-400">Complete list of saved and active mod profiles.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://conflicts/active</div>
+                    <div className="text-[10px] text-slate-400">Snapshot of VFS collisions between active mods.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://patches/status</div>
+                    <div className="text-[10px] text-slate-400">Status and resolutions of Z_PZModStudio_MasterPatch.</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
+                    <div className="font-mono text-purple-300 font-bold text-[11px]">pz://paths/config</div>
+                    <div className="text-[10px] text-slate-400">Detected system paths and configuration.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             </div>
           </div>
         )}

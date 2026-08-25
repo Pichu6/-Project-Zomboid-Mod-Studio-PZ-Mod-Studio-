@@ -33,6 +33,10 @@ pub struct VfsConflictRaw {
     pub total_file_lines: usize,
     pub base_content: String,
     pub competing_files: Vec<CompetingModFileRaw>,
+    pub merged_output: String,
+    pub auto_ast_output: String,
+    pub is_identical_noise: bool,
+    pub status: Option<String>,
 }
 
 /// Auto-detects default Project Zomboid installation and user data paths across drives.
@@ -223,25 +227,74 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
         }
     }
 
-    let pz_media_dir = Path::new(&paths.pz_install_dir).join("media");
+    let pz_base_dir = Path::new(&paths.pz_install_dir);
+
+    // Load any saved draft resolutions for active packages
+    let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
+    let mut draft_map: HashMap<String, (String, String)> = HashMap::new();
+    for u_dir in &user_dirs {
+        let mods_dir = u_dir.join("mods");
+        if let Ok(entries) = fs::read_dir(&mods_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let p = entry.path();
+                if p.is_dir() {
+                    let name = p.file_name().unwrap_or_default().to_string_lossy();
+                    if name.starts_with("Z_PZModStudio_") {
+                        let draft_file = p.join("draft_resolutions.json");
+                        if draft_file.exists() {
+                            if let Ok(content) = fs::read_to_string(&draft_file) {
+                                if let Ok(items) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+                                    for (k, v) in items {
+                                        if let (Some(c), Some(st)) = (v["resolved_content"].as_str(), v["status"].as_str()) {
+                                            draft_map.insert(k, (c.to_string(), st.to_string()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     let mut conflicts = Vec::new();
     let mut id_counter = 1;
 
     for (rel_path, mut competing_files) in file_map {
+        // In Build 42, media/registries.lua is an additive registration file loaded natively by the game engine from all active mods.
+        // It does not clobber other mods and re-registering causes duplicate null returns in Java.
+        if rel_path.ends_with("registries.lua") || rel_path.ends_with("registries.LUA") {
+            continue;
+        }
+
         if competing_files.len() > 1 {
+            // Prioritize Build 42 (42/) files over legacy B41 fallback copies for the same mod
+            competing_files.sort_by_key(|f| {
+                if f.absolute_path.contains("/42/") || f.absolute_path.contains("\\42\\") {
+                    0
+                } else {
+                    1
+                }
+            });
+
             let mut unique_mods = Vec::new();
             let mut seen_mods = HashSet::new();
 
             for file in competing_files.drain(..) {
-                if !seen_mods.contains(&file.mod_id) {
-                    seen_mods.insert(file.mod_id.clone());
+                let norm_mod_id = file.mod_id.to_lowercase().replace('-', "_").replace(' ', "");
+                if !seen_mods.contains(&norm_mod_id) {
+                    seen_mods.insert(norm_mod_id);
                     unique_mods.push(file);
                 }
             }
 
             if unique_mods.len() > 1 {
-                let vanilla_file_path = pz_media_dir.join(&rel_path);
+                let vanilla_file_path = if rel_path.starts_with("media/") || rel_path.starts_with("media\\") {
+                    pz_base_dir.join(&rel_path)
+                } else {
+                    pz_base_dir.join("media").join(&rel_path)
+                };
                 let base_content = if vanilla_file_path.exists() {
                     fs::read_to_string(&vanilla_file_path).unwrap_or_else(|_| "-- vanilla file unreadable".to_string())
                 } else {
@@ -251,6 +304,20 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                 let file_type = if rel_path.ends_with(".lua") { "LUA" } else { "SCRIPT_TXT" };
                 let total_file_lines = base_content.lines().count().max(1);
                 let conflict_line = find_first_differing_line(&base_content, &unique_mods);
+
+                let is_identical_noise = if unique_mods.len() > 1 {
+                    let first = unique_mods[0].content.trim();
+                    unique_mods[1..].iter().all(|f| f.content.trim() == first)
+                } else {
+                    true
+                };
+
+                let auto_ast_output = crate::diff_engine::lua::combine_n_way_lua_or_script(&rel_path, &base_content, &unique_mods);
+                let (merged_output, status) = if let Some((saved_content, saved_status)) = draft_map.get(&rel_path) {
+                    (saved_content.clone(), Some(saved_status.clone()))
+                } else {
+                    (auto_ast_output.clone(), None)
+                };
 
                 conflicts.push(VfsConflictRaw {
                     id: format!("conflict_{}", id_counter),
@@ -262,6 +329,10 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                     total_file_lines,
                     base_content,
                     competing_files: unique_mods,
+                    merged_output,
+                    auto_ast_output,
+                    is_identical_noise,
+                    status,
                 });
 
                 id_counter += 1;
@@ -344,7 +415,11 @@ fn resolve_specific_mod_name(file_path: &Path, fallback_mod_id: &str) -> String 
 fn extract_relative_media_path(path: &Path) -> Option<String> {
     let path_str = path.to_string_lossy().replace('\\', "/");
     if let Some(idx) = path_str.find("/media/") {
-        return Some(path_str[idx + 1..].to_string());
+        let rel = path_str[idx + 1..].to_string();
+        if rel == "media/sandbox-options.txt" || rel.ends_with("/sandbox-options.txt") || rel == "media/mod.info" {
+            return None;
+        }
+        return Some(rel);
     }
     None
 }
