@@ -165,9 +165,6 @@ pub fn get_preview_png_bytes() -> Vec<u8> {
     if let Ok(bytes) = fs::read("111.png") {
         return bytes;
     }
-    if let Ok(bytes) = fs::read(r"E:\PZ Mod Studio\111.png") {
-        return bytes;
-    }
     EMBEDDED_PREVIEW_PNG.to_vec()
 }
 

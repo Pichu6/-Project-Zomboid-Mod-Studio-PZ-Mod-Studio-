@@ -21,11 +21,11 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 
 ### Executable Paths
 - **Portable console binary (Recommended):**
-  `E:\PZ Mod Studio\PZ-Mod-Studio-Portable\pz-mcp-server.exe`
+  `C:\Path\To\PZ-Mod-Studio-Portable\pz-mcp-server.exe`
 - **Development build:**
-  `E:\PZ Mod Studio\src-tauri\target\release\pz-mcp-server.exe`
+  `C:\Path\To\src-tauri\target\release\pz-mcp-server.exe`
 - **Main application CLI flag:**
-  `E:\PZ Mod Studio\PZ-Mod-Studio-Portable\Project-Zomboid-Mod-Studio.exe --mcp`
+  `C:\Path\To\PZ-Mod-Studio-Portable\Project-Zomboid-Mod-Studio.exe --mcp`
 
 ### JSON Configuration Snippets
 
@@ -34,7 +34,7 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": [],
       "env": {}
     }
@@ -47,7 +47,7 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": []
     }
   }
@@ -59,7 +59,7 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": []
     }
   }
@@ -71,7 +71,7 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": [],
       "disabled": false,
       "autoApprove": []
@@ -85,7 +85,7 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": [],
       "description": "Project Zomboid Mod Studio MCP Server (Build 41/42 AST & Live Bridge)"
     }

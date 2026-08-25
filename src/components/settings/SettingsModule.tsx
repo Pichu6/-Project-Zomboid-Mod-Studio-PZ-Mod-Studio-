@@ -78,7 +78,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   };
 
   const getMcpConfigSnippet = () => {
-    const binaryPath = 'E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe';
+    const binaryPath = 'C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe';
     if (selectedMcpClient === 'CLAUDE') {
       return JSON.stringify(
         {
@@ -742,7 +742,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
                     <li>Open <b>Cursor Settings</b> (Gear icon) &gt; <b>Features</b> &gt; <b>MCP</b>.</li>
                     <li>Click <b>+ Add New MCP Server</b>.</li>
-                    <li>Set <b>Type</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">command</code>, <b>Name</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">pz-mod-studio</code>, and <b>Command</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">E:\PZ Mod Studio\PZ-Mod-Studio-Portable\pz-mcp-server.exe</code>.</li>
+                    <li>Set <b>Type</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">command</code>, <b>Name</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">pz-mod-studio</code>, and <b>Command</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">C:\Path\To\PZ-Mod-Studio-Portable\pz-mcp-server.exe</code>.</li>
                     <li>The status dot will turn green (Enabled), exposing Lua AST and live diagnostics to the Agent.</li>
                   </ol>
                   <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
@@ -812,11 +812,11 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
 
               <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">
-                <span className="font-semibold text-slate-300">Portable Executable:</span>
+                <span className="font-semibold text-slate-300">Executable:</span>
                 <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
-                  E:\PZ Mod Studio\PZ-Mod-Studio-Portable\pz-mcp-server.exe
+                  &lt;PZ-Mod-Studio-Folder&gt;\PZ-Mod-Studio-Portable\pz-mcp-server.exe
                 </code>
-                <span>or via CLI flag:</span>
+                <span>or CLI flag:</span>
                 <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
                   Project-Zomboid-Mod-Studio.exe --mcp
                 </code>
