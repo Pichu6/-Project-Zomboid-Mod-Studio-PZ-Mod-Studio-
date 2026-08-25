@@ -1,4 +1,4 @@
-﻿# Contributing to Project Zomboid Mod Studio
+# Contributing to Project Zomboid Mod Studio
 
 Thank you for your interest in contributing to **Project Zomboid Mod Studio (PZ Mod Studio)**! 
 
@@ -17,8 +17,8 @@ Make sure you have the following installed on your machine:
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/Pichu6/Project-Zomboid-Mod-Studio.git
-cd Project-Zomboid-Mod-Studio
+git clone https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-.git
+cd -Project-Zomboid-Mod-Studio-PZ-Mod-Studio-
 ```
 
 ### 2. Install Frontend Dependencies

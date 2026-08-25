@@ -17,8 +17,8 @@ dist-ssr
 src-tauri/target
 target
 
-# Standalone Portable Binaries (Distributed via GitHub Releases)
-PZ-Mod-Studio-Portable/*.exe
+# Standalone Portable Binaries (Tracked for direct repository download)
+# PZ-Mod-Studio-Portable/*.exe
 
 # Scratch & Temporary Folders
 scratch/

@@ -11,9 +11,9 @@
 [![Rust](https://img.shields.io/badge/Rust-Stable-orange.svg)](https://www.rust-lang.org/)
 [![React 19](https://img.shields.io/badge/React-19-cyan.svg)](https://react.dev/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-purple.svg)]()
-[![GitHub release](https://img.shields.io/github/v/release/Pichu6/Project-Zomboid-Mod-Studio?color=emerald)](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases)
+[![GitHub release](https://img.shields.io/github/v/release/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-?color=emerald)](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases)
 
-[**Download Portable (.exe)**](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md)
+[**Download Portable (.exe)**](PZ-Mod-Studio-Portable/) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md)
 
 </div>
 
@@ -44,8 +44,10 @@ Unlike basic file combiners, PZ Mod Studio parses Lua scripts into a true **Abst
 
 No installer or administrative rights required:
 
-1. Download `PZ-Mod-Studio-Portable.zip` from the latest **[GitHub Release](https://github.com/Pichu6/Project-Zomboid-Mod-Studio/releases)**.
-2. Extract the folder anywhere on your computer.
+1. Download the precompiled binaries directly from the [**`PZ-Mod-Studio-Portable/`**](PZ-Mod-Studio-Portable/) folder or from [**GitHub Releases**](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases).
+2. Inside `PZ-Mod-Studio-Portable`, you'll find:
+   - **`Project-Zomboid-Mod-Studio.exe`** — The main desktop GUI application (~11 MB).
+   - **`pz-mcp-server.exe`** — The standalone console MCP server for AI Agents (~1.9 MB).
 3. Launch **`Project-Zomboid-Mod-Studio.exe`**.
 4. The studio will auto-detect your Project Zomboid, Steam Workshop, and user folders.
 
@@ -61,8 +63,8 @@ No installer or administrative rights required:
 ### Build & Run
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Pichu6/Project-Zomboid-Mod-Studio.git
-cd Project-Zomboid-Mod-Studio
+git clone https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-.git
+cd -Project-Zomboid-Mod-Studio-PZ-Mod-Studio-
 
 # 2. Install dependencies
 npm install

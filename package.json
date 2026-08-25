@@ -6,12 +6,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Pichu6/Project-Zomboid-Mod-Studio.git"
+    "url": "https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-.git"
   },
   "bugs": {
-    "url": "https://github.com/Pichu6/Project-Zomboid-Mod-Studio/issues"
+    "url": "https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/issues"
   },
-  "homepage": "https://github.com/Pichu6/Project-Zomboid-Mod-Studio",
+  "homepage": "https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-",
   "type": "module",
   "scripts": {
     "dev": "vite",

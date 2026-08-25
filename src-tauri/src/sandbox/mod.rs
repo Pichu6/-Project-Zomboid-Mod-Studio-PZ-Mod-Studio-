@@ -497,9 +497,20 @@ versionMin=41.00
 
 local Bridge = {}
 Bridge.tickCount = 0
+Bridge.wasConnected = false
 Bridge.RESP_FILE = "pz_ipc_resp.json"
 Bridge.PLAYERS_FILE = "pz_server_players.json"
 Bridge.QUEUE_FILES = { "pz_ipc_queue.json", "pz_server_commands.json" }
+
+function Bridge.ClearPlayersState()
+    pcall(function()
+        local writer = getFileWriter(Bridge.PLAYERS_FILE, true, false)
+        if writer then
+            writer:write("[]")
+            writer:close()
+        end
+    end)
+end
 
 local function safeHaloText(player, text, r, g, b)
     if not player or not text then return end
@@ -604,7 +615,15 @@ function Bridge.OnTick()
     Bridge.tickCount = Bridge.tickCount + 1
 
     local player = getPlayer()
-    if not player then return end
+    if not player then
+        if Bridge.wasConnected then
+            Bridge.wasConnected = false
+            Bridge.ClearPlayersState()
+        end
+        return
+    end
+
+    Bridge.wasConnected = true
 
     -- Update live players JSON every 30 frames (~0.5 sec)
     if Bridge.tickCount % 30 == 0 then
@@ -720,7 +739,12 @@ function Bridge.ExecuteCommand(jsonStr, player)
     end
 end
 
-Events.OnTick.Add(Bridge.OnTick)
+if Events then
+    if Events.OnTick then Events.OnTick.Add(Bridge.OnTick) end
+    if Events.OnDisconnect then Events.OnDisconnect.Add(Bridge.ClearPlayersState) end
+    if Events.OnMainMenuEnter then Events.OnMainMenuEnter.Add(Bridge.ClearPlayersState) end
+    if Events.OnDestroyIsoCode then Events.OnDestroyIsoCode.Add(Bridge.ClearPlayersState) end
+end
 print("[PZModStudio_Bridge] Live Companion Mod Initialized successfully!")
 "#;
 
