@@ -20,12 +20,12 @@ This file serves as the **master technical reference guide for AI Agents** (Anti
 The MCP server can be launched as a dedicated console binary or via the `--mcp` CLI flag on the main executable.
 
 ### Executable Paths
-- **Direct console binary (Recommended for MCP):**
-  `e:\PZ Mod Studio\src-tauri\target\debug\pz-mcp-server.exe`
-- **Release build:**
-  `e:\PZ Mod Studio\src-tauri\target\release\pz-mcp-server.exe`
+- **Portable console binary (Recommended):**
+  `E:\PZ Mod Studio\PZ-Mod-Studio-Portable\pz-mcp-server.exe`
+- **Development build:**
+  `E:\PZ Mod Studio\src-tauri\target\release\pz-mcp-server.exe`
 - **Main application CLI flag:**
-  `e:\PZ Mod Studio\src-tauri\target\debug\pz-mod-studio.exe --mcp`
+  `E:\PZ Mod Studio\PZ-Mod-Studio-Portable\Project-Zomboid-Mod-Studio.exe --mcp`
 
 ### JSON Configuration Snippets
 
@@ -34,8 +34,9 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "e:\\PZ Mod Studio\\src-tauri\\target\\debug\\pz-mcp-server.exe",
-      "args": []
+      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "args": [],
+      "env": {}
     }
   }
 }
@@ -46,20 +47,47 @@ The MCP server can be launched as a dedicated console binary or via the `--mcp` 
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "e:\\PZ Mod Studio\\src-tauri\\target\\debug\\pz-mcp-server.exe",
+      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": []
     }
   }
 }
 ```
 
-#### For Cursor / Windsurf / VS Code (`mcp.json`):
+#### For Cursor / Windsurf (`mcp.json`):
 ```json
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "e:\\PZ Mod Studio\\src-tauri\\target\\debug\\pz-mcp-server.exe",
+      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
       "args": []
+    }
+  }
+}
+```
+
+#### For VS Code (Roo Code / Cline / Offline Ollama & LM Studio — `cline_mcp_settings.json`):
+```json
+{
+  "mcpServers": {
+    "pz-mod-studio": {
+      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "args": [],
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+#### For OpenAI / Codex / ChatGPT MCP Bridges:
+```json
+{
+  "mcpServers": {
+    "pz-mod-studio": {
+      "command": "E:\\PZ Mod Studio\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "args": [],
+      "description": "Project Zomboid Mod Studio MCP Server (Build 41/42 AST & Live Bridge)"
     }
   }
 }
