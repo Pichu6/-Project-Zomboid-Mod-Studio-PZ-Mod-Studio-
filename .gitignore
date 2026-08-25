@@ -31,6 +31,7 @@ tools/
 *.sln
 *.sw?
 *.tmp
+*.zip
 
 # Python artifacts
 __pycache__/
