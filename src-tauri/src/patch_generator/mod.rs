@@ -578,8 +578,11 @@ local function initB42Polyfills()
                 local o = orig_handcraft_new(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
                 if not isoObject and isClient() then
                     o.containers = nil
+                    o.manualInputs = nil
                     o.items = nil
                     o.recipeItem = nil
+                    o.onCompleteTarget = nil
+                    o.onCompleteFunc = nil
                 end
                 return o
             end
@@ -646,6 +649,56 @@ local function initB42Polyfills()
                 if self._clientOnCompleteFunc then
                     pcall(self._clientOnCompleteFunc, self._clientOnCompleteTarget, unpack(self._clientOnCompleteArgs or {}))
                 end
+
+                -- Client-side fallback for canned food opening when server is running unpatched NetTimedAction
+                if isClient() and self.character and self.character.getInventory and self.craftRecipe then
+                    local recipeName = self.craftRecipe:getName() or ""
+                    if recipeName == "OpenCannedFood" or recipeName == "OpenCannedFood2" or string.find(recipeName, "open_") or string.find(recipeName, "Open") then
+                        local inv = self.character:getInventory()
+                        local CAN_MAP = {
+                            ["Base.TinnedBeans"] = "Base.OpenBeans",
+                            ["Base.CannedBolognese"] = "Base.CannedBologneseOpen",
+                            ["Base.CannedSpaghettiBolognese"] = "Base.CannedBologneseOpen",
+                            ["Base.CannedCarrots2"] = "Base.CannedCarrotsOpen",
+                            ["Base.CannedCarrots"] = "Base.CannedCarrotsOpen",
+                            ["Base.CannedChili"] = "Base.CannedChiliOpen",
+                            ["Base.CannedCorn"] = "Base.CannedCornOpen",
+                            ["Base.CannedFruitCocktail"] = "Base.CannedFruitCocktailOpen",
+                            ["Base.CannedFruitBeverage"] = "Base.CannedFruitBeverageOpen",
+                            ["Base.CannedMilk"] = "Base.CannedMilkOpen",
+                            ["Base.CannedMushroomSoup"] = "Base.CannedMushroomSoupOpen",
+                            ["Base.CannedPeaches"] = "Base.CannedPeachesOpen",
+                            ["Base.CannedPeas"] = "Base.CannedPeasOpen",
+                            ["Base.CannedPineapple"] = "Base.CannedPineappleOpen",
+                            ["Base.CannedPotato2"] = "Base.CannedPotatoOpen",
+                            ["Base.CannedPotato"] = "Base.CannedPotatoOpen",
+                            ["Base.TinnedSoup"] = "Base.TinnedSoupOpen",
+                            ["Base.CannedTomato2"] = "Base.CannedTomatoOpen",
+                            ["Base.CannedTomato"] = "Base.CannedTomatoOpen",
+                            ["Base.TunaTin"] = "Base.TunaTinOpen",
+                            ["Base.Dogfood"] = "Base.DogfoodOpen",
+                            ["Base.Macandcheese"] = "Base.Macaroni",
+                        }
+                        for closedType, openType in pairs(CAN_MAP) do
+                            local closedItem = inv:getFirstTypeRecurse(closedType)
+                            if closedItem then
+                                inv:Remove(closedItem)
+                                local openItem = inv:AddItem(openType)
+                                if closedType == "Base.Macandcheese" then
+                                    inv:AddItem("Base.CheesePowder")
+                                end
+                                if openItem and closedItem.getAge and openItem.setAge then
+                                    pcall(function() openItem:setAge(closedItem:getAge()) end)
+                                end
+                                if ISInventoryPage and ISInventoryPage.dirtyUI then
+                                    ISInventoryPage.dirtyUI()
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+
                 return res
             end
         end
@@ -662,7 +715,7 @@ local function initB42Polyfills()
                     local delta = self:getJobDelta()
                     if delta and delta >= 0.99 then
                         self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 15 then
+                        if self._stuck_ticks > 10 then
                             pcall(function()
                                 self:forceComplete()
                             end)
