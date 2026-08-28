@@ -436,7 +436,7 @@ local function initB42Polyfills()
                         for inputIndex, items in pairs(self.manualInputs) do
                             local inputScript = self.craftRecipe:getIOForIndex(inputIndex)
                             if inputScript and not self.logic:setManualInputsFor(inputScript, items) then
-                                if log then log(DebugType.CraftLogic, "ISHandcraftAction.start -> failed to set manual input items.") end
+                                if log and DebugType and DebugType.CraftLogic then log(DebugType.CraftLogic, "ISHandcraftAction.start -> failed to set manual input items.") end
                             end
                         end
                         self.logic:canPerformCurrentRecipe()
@@ -477,7 +477,7 @@ local function initB42Polyfills()
                         for inputIndex, items in pairs(self.manualInputs) do
                             local inputScript = self.craftRecipe:getIOForIndex(inputIndex)
                             if inputScript and not self.logic:setManualInputsFor(inputScript, items) then
-                                if log then log(DebugType.CraftLogic, "ISHandcraftAction.serverStart -> failed to set manual input items.") end
+                                if log and DebugType and DebugType.CraftLogic then log(DebugType.CraftLogic, "ISHandcraftAction.serverStart -> failed to set manual input items.") end
                             end
                         end
                     end
