@@ -16,15 +16,31 @@ const mcpExeSrc = path.join(releaseDir, 'pz-mcp-server.exe');
 const mcpExeDest = path.join(rootDir, 'pz-mcp-server.exe');
 
 if (fs.existsSync(appExeSrc)) {
-  fs.copyFileSync(appExeSrc, appExeDest);
-  console.log(`[Packaging] Copied ${appExeDest}`);
+  try {
+    fs.copyFileSync(appExeSrc, appExeDest);
+    console.log(`[Packaging] Copied ${appExeDest}`);
+  } catch (err) {
+    if (err.code === 'EBUSY') {
+      console.warn(`[Packaging] Warning: ${appExeDest} is currently open/in use. Close the app to update the root executable.`);
+    } else {
+      console.error(`[Packaging] Error copying ${appExeDest}:`, err);
+    }
+  }
 } else {
   console.error(`[Packaging] Error: ${appExeSrc} not found.`);
 }
 
 if (fs.existsSync(mcpExeSrc)) {
-  fs.copyFileSync(mcpExeSrc, mcpExeDest);
-  console.log(`[Packaging] Copied ${mcpExeDest}`);
+  try {
+    fs.copyFileSync(mcpExeSrc, mcpExeDest);
+    console.log(`[Packaging] Copied ${mcpExeDest}`);
+  } catch (err) {
+    if (err.code === 'EBUSY') {
+      console.warn(`[Packaging] Warning: ${mcpExeDest} is currently in use.`);
+    } else {
+      console.error(`[Packaging] Error copying ${mcpExeDest}:`, err);
+    }
+  }
 }
 
 const readmeContent = `=============================================================================

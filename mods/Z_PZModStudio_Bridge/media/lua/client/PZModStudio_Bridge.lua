@@ -46,10 +46,10 @@ function Bridge.UpdatePlayersState(player)
     if player.isGodMod then
         isGod = player:isGodMod() == true
     end
-    local role = "User"
+    local role = Bridge.customRole or "User"
     if player.getAccessLevel then
         local acc = player:getAccessLevel()
-        if acc and acc ~= "" and acc ~= "none" then
+        if acc and tostring(acc):lower() ~= "none" and tostring(acc) ~= "" then
             role = acc
         end
     end
@@ -316,6 +316,27 @@ function Bridge.ExecuteCommand(jsonStr, player)
             else
                 print("[PZModStudio_Bridge] dynamic load/loadstring not supported in this Kahlua scope")
             end
+        end
+    elseif actionMatch == "set_access_level" or actionMatch == "grant_admin" or actionMatch == "set_role" then
+        local targetMatch = jsonStr:match('"target"%s*:%s*"([^"]+)"')
+        local roleMatch = jsonStr:match('"message"%s*:%s*"([^"]+)"') or jsonStr:match('"role"%s*:%s*"([^"]+)"') or "admin"
+        if not targetMatch or targetMatch == player:getUsername() then
+            local isRevoke = roleMatch:lower() == "none" or roleMatch:lower() == "user" or roleMatch == ""
+            Bridge.customRole = isRevoke and "User" or roleMatch
+            pcall(function()
+                if player.setAccessLevel then
+                    player:setAccessLevel(isRevoke and "None" or roleMatch)
+                end
+                if roleMatch:lower() == "admin" then
+                    if player.setGodMod then player:setGodMod(true) end
+                    if player.setGhostMode then player:setGhostMode(true) end
+                elseif isRevoke then
+                    if player.setGodMod then player:setGodMod(false) end
+                    if player.setGhostMode then player:setGhostMode(false) end
+                end
+            end)
+            safeHaloText(player, "ACCESS LEVEL: " .. (isRevoke and "USER" or string.upper(roleMatch)), 255, 215, 0)
+            print("[PZModStudio_Bridge] Access level updated to " .. roleMatch .. " for " .. (targetMatch or player:getUsername()))
         end
     elseif actionMatch == "set_godmode" or actionMatch == "godmode" then
         local current = false

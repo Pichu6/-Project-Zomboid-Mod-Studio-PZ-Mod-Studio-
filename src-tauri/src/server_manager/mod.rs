@@ -611,8 +611,31 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
 
         if is_fresh {
             if let Ok(content) = fs::read_to_string(&pf) {
-                if let Ok(list) = serde_json::from_str::<Vec<ConnectedPlayer>>(&content) {
+                if let Ok(mut list) = serde_json::from_str::<Vec<ConnectedPlayer>>(&content) {
                     if !list.is_empty() {
+                        let roles_file = primary_user_dir.join("Lua").join("pz_player_roles.json");
+                        let fallback_roles_file = primary_user_dir.join("pz_player_roles.json");
+                        let roles_map: std::collections::HashMap<String, String> = if roles_file.exists() {
+                            fs::read_to_string(&roles_file)
+                                .ok()
+                                .and_then(|s| serde_json::from_str(&s).ok())
+                                .unwrap_or_default()
+                        } else if fallback_roles_file.exists() {
+                            fs::read_to_string(&fallback_roles_file)
+                                .ok()
+                                .and_then(|s| serde_json::from_str(&s).ok())
+                                .unwrap_or_default()
+                        } else {
+                            std::collections::HashMap::new()
+                        };
+
+                        for player in list.iter_mut() {
+                            if let Some(r) = roles_map.get(&player.username) {
+                                if !r.is_empty() && r.to_lowercase() != "none" {
+                                    player.role = r.clone();
+                                }
+                            }
+                        }
                         return Ok(list);
                     }
                 }
