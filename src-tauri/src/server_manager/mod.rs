@@ -574,6 +574,17 @@ pub fn get_dedicated_server_logs(
     }
 }
 
+fn is_clean_player_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") || trimmed.len() < 2 || trimmed.len() > 32 {
+        return false;
+    }
+    if trimmed.contains('[') || trimmed.contains(']') || trimmed.contains('"') || trimmed.contains('=') {
+        return false;
+    }
+    trimmed.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == ' ')
+}
+
 #[tauri::command]
 pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPlayer>, String> {
     let primary_user_dir = if !user_zomboid_dir.is_empty() {
@@ -732,7 +743,7 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
                                 }
                             }
 
-                            if !username.is_empty() && username != "null" {
+                            if is_clean_player_name(&username) {
                                 online_map.insert(username.clone(), ConnectedPlayer {
                                     username,
                                     role: "User".to_string(),
@@ -803,7 +814,7 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
                                 }
                             }
 
-                            if !username.is_empty() && username != "null" {
+                            if is_clean_player_name(&username) {
                                 if line.contains("event=\"disconnected\"") || line.contains("connection-type=\"Disconnected\"") {
                                     online_map.remove(&username);
                                 } else if line.contains("fully-connected") || line.contains("client-connect") || line.contains("player-connect") {
