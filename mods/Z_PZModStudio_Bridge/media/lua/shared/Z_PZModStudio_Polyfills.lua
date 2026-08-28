@@ -364,6 +364,36 @@ local function initB42Polyfills()
     end
 
     -- ----------------------------------------------------------------------------
+    -- RecipeCodeOnCreate & BuildRecipeCode Polyfills (Prevents craft action freeze)
+    -- ----------------------------------------------------------------------------
+    if not RecipeCodeOnCreate then
+        RecipeCodeOnCreate = {}
+    end
+    setmetatable(RecipeCodeOnCreate, {
+        __index = function(t, k)
+            local noop = function(...) end
+            rawset(t, k, noop)
+            return noop
+        end
+    })
+    if _G then
+        _G.RecipeCodeOnCreate = RecipeCodeOnCreate
+    end
+
+    if not RecipeCodeOnCreate.openMacAndCheese then
+        RecipeCodeOnCreate.openMacAndCheese = function(data, character)
+            -- Handled automatically by recipe inputs/outputs
+        end
+    end
+
+    if not BuildRecipeCode then
+        BuildRecipeCode = {}
+    end
+    if _G then
+        _G.BuildRecipeCode = BuildRecipeCode
+    end
+
+    -- ----------------------------------------------------------------------------
     -- ISVehicleDashboard Null-Safety Guard (Prevents null pointer when entering/switching seat)
     -- ----------------------------------------------------------------------------
     if ISVehicleDashboard and not ISVehicleDashboard._pzms_wrapped then
