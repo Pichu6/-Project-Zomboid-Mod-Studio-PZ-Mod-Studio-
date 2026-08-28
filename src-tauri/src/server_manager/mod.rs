@@ -654,11 +654,26 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
         }
     }
 
-    // 2. Parse connection logs from Logs/
+    let state_file = primary_user_dir.join("pz_server_state.json");
+    let (is_server_running, server_start_ts) = if state_file.exists() {
+        if let Ok(content) = fs::read_to_string(&state_file) {
+            if let Ok(st) = serde_json::from_str::<DedicatedServerStatus>(&content) {
+                (st.is_running, st.start_timestamp)
+            } else {
+                (false, None)
+            }
+        } else {
+            (false, None)
+        }
+    } else {
+        (false, None)
+    };
+
+    // 2. Parse connection logs from Logs/ (only if server is running and logs belong to current session)
     let logs_dir = primary_user_dir.join("Logs");
     let mut online_map: std::collections::HashMap<String, ConnectedPlayer> = std::collections::HashMap::new();
 
-    if logs_dir.exists() {
+    if is_server_running && logs_dir.exists() {
         if let Ok(entries) = fs::read_dir(&logs_dir) {
             let mut user_log_paths = Vec::new();
             let mut conn_log_paths = Vec::new();
@@ -666,6 +681,18 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.is_file() {
+                    if let Some(srv_start) = server_start_ts {
+                        let file_mod_ts = p.metadata()
+                            .and_then(|m| m.modified())
+                            .ok()
+                            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        if file_mod_ts + 5 < srv_start {
+                            continue;
+                        }
+                    }
+
                     let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
                     if name.contains("user.txt") {
                         user_log_paths.push(p.clone());
