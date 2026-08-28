@@ -381,9 +381,13 @@ local function initB42Polyfills()
     end
 
     if not RecipeCodeOnCreate.openMacAndCheese then
-        RecipeCodeOnCreate.openMacAndCheese = function(data, character)
-            -- Handled automatically by recipe inputs/outputs
-        end
+        RecipeCodeOnCreate.openMacAndCheese = function(data, character) end
+    end
+    if not RecipeCodeOnCreate.openAndEat then
+        RecipeCodeOnCreate.openAndEat = function(data, character) end
+    end
+    if not RecipeCodeOnCreate.cutChicken then
+        RecipeCodeOnCreate.cutChicken = function(data, character) end
     end
 
     if not BuildRecipeCode then
@@ -434,13 +438,10 @@ local function initB42Polyfills()
                 -- Stuck prevention: if action reached completion but was not released by network
                 if self.action and self.getJobDelta then
                     local delta = self:getJobDelta()
-                    if delta and delta >= 0.98 then
+                    if delta and delta >= 0.999 then
                         self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 20 then
+                        if self._stuck_ticks > 60 then
                             pcall(function()
-                                if isClient() then
-                                    self:performRecipe()
-                                end
                                 self:forceComplete()
                             end)
                         end
