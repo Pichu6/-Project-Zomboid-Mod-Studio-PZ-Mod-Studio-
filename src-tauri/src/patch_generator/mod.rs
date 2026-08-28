@@ -567,7 +567,7 @@ local function initB42Polyfills()
     end
 
     -- ----------------------------------------------------------------------------
-    -- ISHandcraftAction MP ContainerID & In-Hand Crafting Network Fix
+    -- ISHandcraftAction MP Null-Safety & Stuck-State Protection Guard
     -- ----------------------------------------------------------------------------
     if ISHandcraftAction and not ISHandcraftAction._pzms_wrapped then
         ISHandcraftAction._pzms_wrapped = true
@@ -575,14 +575,13 @@ local function initB42Polyfills()
         local orig_handcraft_new = ISHandcraftAction.new
         if orig_handcraft_new then
             ISHandcraftAction.new = function(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                local o = orig_handcraft_new(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                if not isoObject and isClient() then
-                    o.containers = nil
-                    o.manualInputs = nil
-                    o.items = nil
-                    o.recipeItem = nil
-                    o.onCompleteTarget = nil
-                    o.onCompleteFunc = nil
+                local safeContainers = containers
+                if not safeContainers then
+                    safeContainers = ArrayList and ArrayList.new and ArrayList.new() or {}
+                end
+                local o = orig_handcraft_new(self, character, craftRecipe, safeContainers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
+                if o and not o.containers then
+                    o.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
                 end
                 return o
             end
@@ -592,114 +591,19 @@ local function initB42Polyfills()
         if orig_handcraft_start then
             ISHandcraftAction.start = function(self)
                 if not self.containers then
-                    local conts = ArrayList and ArrayList.new and ArrayList.new() or {}
-                    if self.character and self.character.getInventory then
-                        conts:add(self.character:getInventory())
-                    end
-                    if self.craftRecipe and showDebugInfoInChat then showDebugInfoInChat("CRAFT \'"..self.craftRecipe:getName().."\'") end
-                    self.logic = HandcraftLogic.new(self.character, self.craftBench, self.isoObject)
-                    self.logic:setContainers(conts)
-                    self.logic:setRecipe(self.craftRecipe)
-                    self.logic:setTargetVariableInputRatio(self.variableInputRatio)
-                    if self.manualInputs then
-                        self:fixManualInputs()
-                        self.logic:setManualSelectInputs(true)
-                        self.logic:clearManualInputs()
-                        for inputIndex, items in pairs(self.manualInputs) do
-                            local inputScript = self.craftRecipe:getIOForIndex(inputIndex)
-                            if inputScript and not self.logic:setManualInputsFor(inputScript, items) then
-                                if log and DebugType and DebugType.CraftLogic then log(DebugType.CraftLogic, "ISHandcraftAction.start -> failed to set manual input items.") end
-                            end
-                        end
-                        self.logic:canPerformCurrentRecipe()
-                    end
-                    self:clearItemsProgressBar(true)
-                    self:setOverrideHandModels(self.logic:getModelHandOne(), self.logic:getModelHandTwo())
-                    if self.actionScript then
-                        self:setActionAnim(self.actionScript:getActionAnim())
-                        if self.actionScript:getAnimVarKey() then
-                            self:setAnimVariable(self.actionScript:getAnimVarKey(), self.actionScript:getAnimVarVal())
-                        end
-                        if self.actionScript:getSound() ~= nil and self.actionScript:getSoundTime() == ActionSoundTime.ACTION_START then
-                            self.sound = self.character:playSound(self.actionScript:getSound())
-                        end
-                    end
-                    return
+                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
                 end
                 return orig_handcraft_start(self)
             end
         end
 
-        local orig_handcraft_setOnComplete = ISHandcraftAction.setOnComplete
-        if orig_handcraft_setOnComplete then
-            ISHandcraftAction.setOnComplete = function(self, func, target, ...)
-                self._clientOnCompleteFunc = func
-                self._clientOnCompleteTarget = target
-                self._clientOnCompleteArgs = {...}
-                if not isClient() then
-                    return orig_handcraft_setOnComplete(self, func, target, ...)
+        local orig_handcraft_serverStart = ISHandcraftAction.serverStart
+        if orig_handcraft_serverStart then
+            ISHandcraftAction.serverStart = function(self)
+                if not self.containers then
+                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
                 end
-            end
-        end
-
-        local orig_handcraft_perform = ISHandcraftAction.perform
-        if orig_handcraft_perform then
-            ISHandcraftAction.perform = function(self)
-                local res = orig_handcraft_perform(self)
-                if self._clientOnCompleteFunc then
-                    pcall(self._clientOnCompleteFunc, self._clientOnCompleteTarget, unpack(self._clientOnCompleteArgs or {}))
-                end
-
-                -- Client-side fallback for canned food opening when server is running unpatched NetTimedAction
-                if isClient() and self.character and self.character.getInventory and self.craftRecipe then
-                    local recipeName = self.craftRecipe:getName() or ""
-                    if recipeName == "OpenCannedFood" or recipeName == "OpenCannedFood2" or string.find(recipeName, "open_") or string.find(recipeName, "Open") then
-                        local inv = self.character:getInventory()
-                        local CAN_MAP = {
-                            ["Base.TinnedBeans"] = "Base.OpenBeans",
-                            ["Base.CannedBolognese"] = "Base.CannedBologneseOpen",
-                            ["Base.CannedSpaghettiBolognese"] = "Base.CannedBologneseOpen",
-                            ["Base.CannedCarrots2"] = "Base.CannedCarrotsOpen",
-                            ["Base.CannedCarrots"] = "Base.CannedCarrotsOpen",
-                            ["Base.CannedChili"] = "Base.CannedChiliOpen",
-                            ["Base.CannedCorn"] = "Base.CannedCornOpen",
-                            ["Base.CannedFruitCocktail"] = "Base.CannedFruitCocktailOpen",
-                            ["Base.CannedFruitBeverage"] = "Base.CannedFruitBeverageOpen",
-                            ["Base.CannedMilk"] = "Base.CannedMilkOpen",
-                            ["Base.CannedMushroomSoup"] = "Base.CannedMushroomSoupOpen",
-                            ["Base.CannedPeaches"] = "Base.CannedPeachesOpen",
-                            ["Base.CannedPeas"] = "Base.CannedPeasOpen",
-                            ["Base.CannedPineapple"] = "Base.CannedPineappleOpen",
-                            ["Base.CannedPotato2"] = "Base.CannedPotatoOpen",
-                            ["Base.CannedPotato"] = "Base.CannedPotatoOpen",
-                            ["Base.TinnedSoup"] = "Base.TinnedSoupOpen",
-                            ["Base.CannedTomato2"] = "Base.CannedTomatoOpen",
-                            ["Base.CannedTomato"] = "Base.CannedTomatoOpen",
-                            ["Base.TunaTin"] = "Base.TunaTinOpen",
-                            ["Base.Dogfood"] = "Base.DogfoodOpen",
-                            ["Base.Macandcheese"] = "Base.Macaroni",
-                        }
-                        for closedType, openType in pairs(CAN_MAP) do
-                            local closedItem = inv:getFirstTypeRecurse(closedType)
-                            if closedItem then
-                                inv:Remove(closedItem)
-                                local openItem = inv:AddItem(openType)
-                                if closedType == "Base.Macandcheese" then
-                                    inv:AddItem("Base.CheesePowder")
-                                end
-                                if openItem and closedItem.getAge and openItem.setAge then
-                                    pcall(function() openItem:setAge(closedItem:getAge()) end)
-                                end
-                                if ISInventoryPage and ISInventoryPage.dirtyUI then
-                                    ISInventoryPage.dirtyUI()
-                                end
-                                break
-                            end
-                        end
-                    end
-                end
-
-                return res
+                return orig_handcraft_serverStart(self)
             end
         end
 
@@ -710,12 +614,12 @@ local function initB42Polyfills()
                 if not ok then
                     print("[PZModStudio_Polyfills] Handcraft update error caught: " .. tostring(err))
                 end
-                -- Stuck prevention: if action reached 100% completion but was not released
+                -- Stuck prevention: if action reached 100% completion but network did not release
                 if self.action and self.getJobDelta then
                     local delta = self:getJobDelta()
-                    if delta and delta >= 0.99 then
+                    if delta and delta >= 0.999 then
                         self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 10 then
+                        if self._stuck_ticks > 25 then
                             pcall(function()
                                 self:forceComplete()
                             end)
