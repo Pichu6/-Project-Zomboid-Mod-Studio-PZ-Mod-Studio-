@@ -13,7 +13,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-purple.svg)]()
 [![GitHub release](https://img.shields.io/github/v/release/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-?color=emerald)](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases)
 
-[**Download Portable (.exe)**](PZ-Mod-Studio-Portable/) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md)
+[**Download Portable (.exe)**](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases) • [**Technical Wiki (docs/)**](docs/INDEX.md) • [**AI Agent Guide (AGENTS.md)**](AGENTS.md)
 
 </div>
 
@@ -44,12 +44,11 @@ Unlike basic file combiners, PZ Mod Studio parses Lua scripts into a true **Abst
 
 No installer or administrative rights required:
 
-1. Download the precompiled binaries directly from the [**`PZ-Mod-Studio-Portable/`**](PZ-Mod-Studio-Portable/) folder or from [**GitHub Releases**](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases).
-2. Inside `PZ-Mod-Studio-Portable`, you'll find:
+1. Download the precompiled binaries directly from the root repository or from [**GitHub Releases**](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases):
    - **`Project-Zomboid-Mod-Studio.exe`** — The main desktop GUI application (~11 MB).
-   - **`pz-mcp-server.exe`** — The standalone console MCP server for AI Agents (~1.9 MB).
-3. Launch **`Project-Zomboid-Mod-Studio.exe`**.
-4. The studio will auto-detect your Project Zomboid, Steam Workshop, and user folders.
+   - **`pz-mcp-server.exe`** — The standalone console MCP server for AI Agents (~2 MB).
+2. Launch **`Project-Zomboid-Mod-Studio.exe`**.
+3. The studio will auto-detect your Project Zomboid, Steam Workshop, and user folders.
 
 ---
 
@@ -58,34 +57,26 @@ No installer or administrative rights required:
 ### Prerequisites
 - [Node.js 22+](https://nodejs.org/)
 - [Rust Stable Toolchain](https://rustup.rs/)
-- Git
 
-### Build & Run
+### Setup & Run in Development
 ```bash
-# 1. Clone the repository
+# Clone the repository
 git clone https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-.git
 cd -Project-Zomboid-Mod-Studio-PZ-Mod-Studio-
 
-# 2. Install dependencies
+# Install npm dependencies
 npm install
 
-# 3. Launch in development mode (hot-reload frontend + Rust backend)
+# Run the full desktop application in development mode:
 npm run tauri dev
 
-# 4. Build production portable bundle
+# Or build the release binaries:
 npm run build:portable
-```
-
-To build only the standalone MCP server binary:
-```bash
-cargo build --release --bin pz-mcp-server --manifest-path "src-tauri/Cargo.toml"
 ```
 
 ---
 
-## 🤖 AI Agent & MCP Integration
-
-PZ Mod Studio includes a dedicated CLI binary (`pz-mcp-server.exe`) that exposes 22 developer tools via standard JSON-RPC 2.0 over `stdio`.
+## 🤖 Connecting AI Agents via MCP
 
 Add this snippet to your assistant's configuration file (e.g. `claude_desktop_config.json`, `mcp.json`, or `.gemini/settings.json`):
 
@@ -93,7 +84,7 @@ Add this snippet to your assistant's configuration file (e.g. `claude_desktop_co
 {
   "mcpServers": {
     "pz-mod-studio": {
-      "command": "C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe",
+      "command": "C:\\Path\\To\\Project-Zomboid-Mod-Studio\\pz-mcp-server.exe",
       "args": []
     }
   }

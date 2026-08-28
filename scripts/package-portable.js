@@ -7,29 +7,24 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
 const releaseDir = path.join(rootDir, 'src-tauri', 'target', 'release');
-const portableDir = path.join(rootDir, 'PZ-Mod-Studio-Portable');
 
-if (!fs.existsSync(portableDir)) {
-  fs.mkdirSync(portableDir, { recursive: true });
-}
-
-// Files to copy
+// Files to copy directly to repository root
 const appExeSrc = path.join(releaseDir, 'pz-mod-studio.exe');
-const appExeDest = path.join(portableDir, 'Project-Zomboid-Mod-Studio.exe');
+const appExeDest = path.join(rootDir, 'Project-Zomboid-Mod-Studio.exe');
 
 const mcpExeSrc = path.join(releaseDir, 'pz-mcp-server.exe');
-const mcpExeDest = path.join(portableDir, 'pz-mcp-server.exe');
+const mcpExeDest = path.join(rootDir, 'pz-mcp-server.exe');
 
 if (fs.existsSync(appExeSrc)) {
   fs.copyFileSync(appExeSrc, appExeDest);
-  console.log(`[Portable Packaging] Copied ${appExeDest}`);
+  console.log(`[Packaging] Copied ${appExeDest}`);
 } else {
-  console.error(`[Portable Packaging] Error: ${appExeSrc} not found.`);
+  console.error(`[Packaging] Error: ${appExeSrc} not found.`);
 }
 
 if (fs.existsSync(mcpExeSrc)) {
   fs.copyFileSync(mcpExeSrc, mcpExeDest);
-  console.log(`[Portable Packaging] Copied ${mcpExeDest}`);
+  console.log(`[Packaging] Copied ${mcpExeDest}`);
 }
 
 const readmeContent = `=============================================================================
@@ -66,10 +61,10 @@ System Requirements:
 =============================================================================
 `;
 
-fs.writeFileSync(path.join(portableDir, 'README_PORTABLE.txt'), readmeContent, 'utf-8');
-const oldReadme = path.join(portableDir, 'LEEME_PORTABLE.txt');
+fs.writeFileSync(path.join(rootDir, 'README_PORTABLE.txt'), readmeContent, 'utf-8');
+const oldReadme = path.join(rootDir, 'LEEME_PORTABLE.txt');
 if (fs.existsSync(oldReadme)) {
   fs.unlinkSync(oldReadme);
 }
-console.log(`[Portable Packaging] Generated ${path.join(portableDir, 'README_PORTABLE.txt')}`);
-console.log(`[Portable Packaging] ✅ Portable package created successfully in: ${portableDir}`);
+console.log(`[Packaging] Generated ${path.join(rootDir, 'README_PORTABLE.txt')}`);
+console.log(`[Packaging] ✅ Portable executables created successfully in root directory: ${rootDir}`);
