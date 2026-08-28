@@ -563,6 +563,51 @@ local function initB42Polyfills()
     end
 
     -- ----------------------------------------------------------------------------
+    -- ISHandcraftAction MP ContainerID & Stuck-State Protection Guard
+    -- ----------------------------------------------------------------------------
+    if ISHandcraftAction and not ISHandcraftAction._pzms_wrapped then
+        ISHandcraftAction._pzms_wrapped = true
+        
+        local orig_handcraft_new = ISHandcraftAction.new
+        if orig_handcraft_new then
+            ISHandcraftAction.new = function(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
+                local safeContainers = containers
+                -- In multiplayer client, omit raw ArrayList containers on in-hand craft to prevent Java ContainerID.findObject NPE on server
+                if not isoObject and isClient() then
+                    safeContainers = nil
+                end
+                local o = orig_handcraft_new(self, character, craftRecipe, safeContainers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
+                return o
+            end
+        end
+
+        local orig_handcraft_update = ISHandcraftAction.update
+        if orig_handcraft_update then
+            ISHandcraftAction.update = function(self)
+                local ok, err = pcall(orig_handcraft_update, self)
+                if not ok then
+                    print("[PZModStudio_Polyfills] Handcraft update error caught: " .. tostring(err))
+                end
+                -- Stuck prevention: if action reached completion but was not released by network
+                if self.action and self.getJobDelta then
+                    local delta = self:getJobDelta()
+                    if delta and delta >= 0.98 then
+                        self._stuck_ticks = (self._stuck_ticks or 0) + 1
+                        if self._stuck_ticks > 25 then
+                            pcall(function()
+                                if isClient() then
+                                    self:performRecipe()
+                                end
+                                self:forceComplete()
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
     -- ISVehicleDashboard Null-Safety Guard (Prevents null pointer when entering/switching seat)
     -- ----------------------------------------------------------------------------
     if ISVehicleDashboard and not ISVehicleDashboard._pzms_wrapped then
