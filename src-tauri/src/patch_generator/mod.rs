@@ -627,32 +627,48 @@ local function initB42Polyfills()
             end
         end
 
-        local orig_handcraft_serverStart = ISHandcraftAction.serverStart
-        if orig_handcraft_serverStart then
-            ISHandcraftAction.serverStart = function(self)
-                if not self.containers then
-                    local conts = ArrayList and ArrayList.new and ArrayList.new() or {}
-                    if self.character and self.character.getInventory then
-                        conts:add(self.character:getInventory())
-                    end
-                    self.logic = HandcraftLogic.new(self.character, self.craftBench, self.isoObject)
-                    self.logic:setContainers(conts)
-                    self.logic:setRecipe(self.craftRecipe)
-                    self.logic:setTargetVariableInputRatio(self.variableInputRatio)
-                    if self.manualInputs then
-                        self:fixManualInputs()
-                        self.logic:setManualSelectInputs(true)
-                        self.logic:clearManualInputs()
-                        for inputIndex, items in pairs(self.manualInputs) do
-                            local inputScript = self.craftRecipe:getIOForIndex(inputIndex)
-                            if inputScript and not self.logic:setManualInputsFor(inputScript, items) then
-                                if log and DebugType and DebugType.CraftLogic then log(DebugType.CraftLogic, "ISHandcraftAction.serverStart -> failed to set manual input items.") end
-                            end
+        local orig_handcraft_setOnComplete = ISHandcraftAction.setOnComplete
+        if orig_handcraft_setOnComplete then
+            ISHandcraftAction.setOnComplete = function(self, func, target, ...)
+                self._clientOnCompleteFunc = func
+                self._clientOnCompleteTarget = target
+                self._clientOnCompleteArgs = {...}
+                if not isClient() then
+                    return orig_handcraft_setOnComplete(self, func, target, ...)
+                end
+            end
+        end
+
+        local orig_handcraft_perform = ISHandcraftAction.perform
+        if orig_handcraft_perform then
+            ISHandcraftAction.perform = function(self)
+                local res = orig_handcraft_perform(self)
+                if self._clientOnCompleteFunc then
+                    pcall(self._clientOnCompleteFunc, self._clientOnCompleteTarget, unpack(self._clientOnCompleteArgs or {}))
+                end
+                return res
+            end
+        end
+
+        local orig_handcraft_update = ISHandcraftAction.update
+        if orig_handcraft_update then
+            ISHandcraftAction.update = function(self)
+                local ok, err = pcall(orig_handcraft_update, self)
+                if not ok then
+                    print("[PZModStudio_Polyfills] Handcraft update error caught: " .. tostring(err))
+                end
+                -- Stuck prevention: if action reached 100% completion but was not released
+                if self.action and self.getJobDelta then
+                    local delta = self:getJobDelta()
+                    if delta and delta >= 0.99 then
+                        self._stuck_ticks = (self._stuck_ticks or 0) + 1
+                        if self._stuck_ticks > 15 then
+                            pcall(function()
+                                self:forceComplete()
+                            end)
                         end
                     end
-                    return
                 end
-                return orig_handcraft_serverStart(self)
             end
         end
     end
