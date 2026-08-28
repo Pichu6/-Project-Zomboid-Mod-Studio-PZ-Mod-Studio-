@@ -424,7 +424,22 @@ local function initB42Polyfills()
                 if not self.containers then
                     self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
                 end
-                return orig_handcraft_start(self)
+                local res = orig_handcraft_start(self)
+                -- Omit raw ArrayList containers from Lua table so NetTimedAction does not trigger server ContainerID NPE
+                if not self.isoObject and isClient() then
+                    self.containers = nil
+                end
+                return res
+            end
+        end
+
+        local orig_handcraft_serverStart = ISHandcraftAction.serverStart
+        if orig_handcraft_serverStart then
+            ISHandcraftAction.serverStart = function(self)
+                if not self.containers then
+                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
+                end
+                return orig_handcraft_serverStart(self)
             end
         end
 
@@ -448,6 +463,16 @@ local function initB42Polyfills()
                     end
                 end
             end
+        end
+    end
+
+    if BaseCraftingLogic and BaseCraftingLogic.setContainers then
+        local orig_bcl_setContainers = BaseCraftingLogic.setContainers
+        BaseCraftingLogic.setContainers = function(self, list)
+            if not list then
+                list = ArrayList and ArrayList.new and ArrayList.new() or {}
+            end
+            return orig_bcl_setContainers(self, list)
         end
     end
 
