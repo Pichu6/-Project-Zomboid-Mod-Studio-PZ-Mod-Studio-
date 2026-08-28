@@ -572,12 +572,24 @@ local function initB42Polyfills()
         if orig_handcraft_new then
             ISHandcraftAction.new = function(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
                 local safeContainers = containers
-                -- In multiplayer client, omit raw ArrayList containers on in-hand craft to prevent Java ContainerID.findObject NPE on server
-                if not isoObject and isClient() then
-                    safeContainers = nil
+                if not safeContainers then
+                    safeContainers = ArrayList and ArrayList.new and ArrayList.new() or {}
                 end
                 local o = orig_handcraft_new(self, character, craftRecipe, safeContainers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
+                if o and not o.containers then
+                    o.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
+                end
                 return o
+            end
+        end
+
+        local orig_handcraft_start = ISHandcraftAction.start
+        if orig_handcraft_start then
+            ISHandcraftAction.start = function(self)
+                if not self.containers then
+                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
+                end
+                return orig_handcraft_start(self)
             end
         end
 
@@ -593,7 +605,7 @@ local function initB42Polyfills()
                     local delta = self:getJobDelta()
                     if delta and delta >= 0.98 then
                         self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 25 then
+                        if self._stuck_ticks > 20 then
                             pcall(function()
                                 if isClient() then
                                     self:performRecipe()
