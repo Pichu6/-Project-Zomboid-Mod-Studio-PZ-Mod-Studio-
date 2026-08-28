@@ -158,17 +158,16 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
                     require.push(clean);
                 }
             }
-        } else if trimmed.starts_with("loadModAfter=") {
-            let req_str = trimmed[13..].trim();
-            for s in req_str.split(',') {
-                let clean = sanitize_mod_id(s);
-                if !clean.is_empty() && !load_mod_after.contains(&clean) {
-                    load_mod_after.push(clean);
-                }
-            }
-        } else if trimmed.starts_with("load_mod_after=") {
-            let req_str = trimmed[15..].trim();
-            for s in req_str.split(',') {
+        } else if let Some(req_str) = trimmed.strip_prefix("loadModAfter=")
+            .or_else(|| trimmed.strip_prefix("load_mod_after="))
+            .or_else(|| trimmed.strip_prefix("loadAfter="))
+            .or_else(|| trimmed.strip_prefix("load_after="))
+            .or_else(|| trimmed.strip_prefix("loadafter="))
+            .or_else(|| trimmed.strip_prefix("loadmodafter="))
+            .or_else(|| trimmed.strip_prefix("LoadAfter="))
+            .or_else(|| trimmed.strip_prefix("LoadModAfter="))
+        {
+            for s in req_str.trim().split(',') {
                 let clean = sanitize_mod_id(s);
                 if !clean.is_empty() && !load_mod_after.contains(&clean) {
                     load_mod_after.push(clean);
@@ -389,6 +388,9 @@ pub fn get_all_user_zomboid_dirs(user_zomboid_dir: &str) -> Vec<std::path::PathB
         if !dirs.contains(&p3) { dirs.push(p3); }
         let p4 = std::path::PathBuf::from(&user_profile).join("Documents").join("Zomboid");
         if !dirs.contains(&p4) { dirs.push(p4); }
+    }
+    if dirs.is_empty() {
+        dirs.push(std::path::PathBuf::from("C:\\Zomboid"));
     }
     dirs
 }

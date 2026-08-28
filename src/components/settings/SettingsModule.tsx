@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, Save, HardDrive, Wrench, Plus, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
+import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Plus, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
 import { PolyfillRule } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -30,6 +30,11 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [selectedMcpClient, setSelectedMcpClient] = useState<'ANTIGRAVITY' | 'CLAUDE' | 'CURSOR' | 'VSCODE_LOCAL' | 'OPENAI_CODEX'>('ANTIGRAVITY');
   const [copiedMcpConfig, setCopiedMcpConfig] = useState<boolean>(false);
   const [formData, setFormData] = useState<StudioPathsUI>(paths);
+
+  React.useEffect(() => {
+    setFormData(paths);
+  }, [paths]);
+
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [noticeSilenced, setNoticeSilenced] = useState<boolean>(
     localStorage.getItem('pz_hide_autosort_notice') === 'true'
@@ -64,17 +69,15 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const handlePickFolder = async (field: keyof StudioPathsUI, currentVal: string) => {
     const selectedFolder = await TauriService.pickFolder(currentVal);
     if (selectedFolder) {
-      setFormData((prev) => ({
-        ...prev,
+      const updated = {
+        ...formData,
         [field]: selectedFolder,
-      }));
+      };
+      setFormData(updated);
+      onSavePaths(updated);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
     }
-  };
-
-  const handleSave = () => {
-    onSavePaths(formData);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const getMcpConfigSnippet = () => {
@@ -233,14 +236,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
                   Auto-Detect Paths
-                </button>
-
-                <button
-                  onClick={handleSave}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow transition cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  Save Paths
                 </button>
               </div>
             </div>

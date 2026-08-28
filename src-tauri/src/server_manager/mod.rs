@@ -259,6 +259,7 @@ pub fn launch_dedicated_server(
     server_name: String,
     memory_gb: Option<u32>,
     nosteam: Option<bool>,
+    admin_password: Option<String>,
 ) -> Result<u32, String> {
     let install_path = Path::new(&pz_install_dir);
     if !install_path.exists() {
@@ -268,6 +269,7 @@ pub fn launch_dedicated_server(
     let mem = memory_gb.unwrap_or(4).max(2).min(32);
     let clean_name = server_name.trim().replace(' ', "_");
     let is_nosteam = nosteam.unwrap_or(false);
+    let clean_admin_pass = admin_password.unwrap_or_default().trim().to_string();
 
     let java_exe = install_path.join("jre64").join("bin").join("java.exe");
     let pz_server_bat = install_path.join("ProjectZomboidServer.bat");
@@ -309,21 +311,40 @@ pub fn launch_dedicated_server(
             c.arg("-servername");
             c.arg(&clean_name);
             c.arg(format!("-cachedir={}", primary_user_dir.display()));
+            if !clean_admin_pass.is_empty() {
+                c.arg("-adminpassword");
+                c.arg(&clean_admin_pass);
+            }
             if is_nosteam {
                 c.arg("-nosteam");
             }
             c
         } else if pz_server_bat.exists() {
             let mut c = Command::new("cmd.exe");
-            c.args(&["/c", &pz_server_bat.to_string_lossy(), "-servername", &clean_name]);
+            let mut args = vec!["/c".to_string(), pz_server_bat.to_string_lossy().to_string(), "-servername".to_string(), clean_name.clone()];
+            if !clean_admin_pass.is_empty() {
+                args.push("-adminpassword".to_string());
+                args.push(clean_admin_pass.clone());
+            }
+            c.args(&args);
             c
         } else if start_server_bat.exists() {
             let mut c = Command::new("cmd.exe");
-            c.args(&["/c", &start_server_bat.to_string_lossy(), "-servername", &clean_name]);
+            let mut args = vec!["/c".to_string(), start_server_bat.to_string_lossy().to_string(), "-servername".to_string(), clean_name.clone()];
+            if !clean_admin_pass.is_empty() {
+                args.push("-adminpassword".to_string());
+                args.push(clean_admin_pass.clone());
+            }
+            c.args(&args);
             c
         } else if pz_exe.exists() {
             let mut c = Command::new(&pz_exe);
-            c.args(&["-servername", &clean_name]);
+            let mut args = vec!["-servername".to_string(), clean_name.clone()];
+            if !clean_admin_pass.is_empty() {
+                args.push("-adminpassword".to_string());
+                args.push(clean_admin_pass.clone());
+            }
+            c.args(&args);
             c
         } else {
             return Err("Could not find java.exe, ProjectZomboidServer.bat, or ProjectZomboid64.exe in install directory.".to_string());
@@ -792,6 +813,29 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
         }
     }
 
+    // Enhance with dynamically assigned persistent roles
+    let roles_file = primary_user_dir.join("Lua").join("pz_player_roles.json");
+    let fallback_roles_file = primary_user_dir.join("pz_player_roles.json");
+    let roles_map: std::collections::HashMap<String, String> = if roles_file.exists() {
+        fs::read_to_string(&roles_file)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else if fallback_roles_file.exists() {
+        fs::read_to_string(&fallback_roles_file)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    for player in online_map.values_mut() {
+        if let Some(r) = roles_map.get(&player.username) {
+            player.role = r.clone();
+        }
+    }
+
     let result: Vec<ConnectedPlayer> = online_map.into_values().collect();
     Ok(result)
 }
@@ -805,11 +849,11 @@ pub fn send_server_command(
     reason: Option<String>,
 ) -> Result<bool, String> {
     let primary_user_dir = if !user_zomboid_dir.is_empty() {
-        Path::new(&user_zomboid_dir)
+        Path::new(&user_zomboid_dir).to_path_buf()
     } else if let Some(home) = dirs_next::home_dir() {
-        &home.join("Zomboid")
+        home.join("Zomboid")
     } else {
-        Path::new(".")
+        Path::new(".").to_path_buf()
     };
 
     let payload = serde_json::json!({
@@ -831,6 +875,33 @@ pub fn send_server_command(
     // 2. Write to root Zomboid/ (fallback)
     let _ = fs::write(primary_user_dir.join("pz_server_commands.json"), &json_text);
     let _ = fs::write(primary_user_dir.join("pz_ipc_queue.json"), &json_text);
+
+    // 3. If setting role / access level, persist to pz_player_roles.json
+    if action == "set_access_level" || action == "grant_admin" || action == "set_role" {
+        if let Some(ref t) = target {
+            let role_val = message.clone().unwrap_or_else(|| "admin".to_string());
+            let roles_file = lua_dir.join("pz_player_roles.json");
+            let mut roles_map: std::collections::HashMap<String, String> = if roles_file.exists() {
+                fs::read_to_string(&roles_file)
+                    .ok()
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .unwrap_or_default()
+            } else {
+                std::collections::HashMap::new()
+            };
+
+            if role_val == "none" || role_val.is_empty() || role_val.to_lowercase() == "user" {
+                roles_map.remove(t);
+            } else {
+                roles_map.insert(t.clone(), role_val);
+            }
+
+            if let Ok(serialized) = serde_json::to_string_pretty(&roles_map) {
+                let _ = fs::write(&roles_file, &serialized);
+                let _ = fs::write(primary_user_dir.join("pz_player_roles.json"), &serialized);
+            }
+        }
+    }
 
     Ok(true)
 }

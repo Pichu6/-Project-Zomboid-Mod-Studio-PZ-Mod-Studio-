@@ -479,14 +479,28 @@ pub fn install_bridge_companion_mod(user_zomboid_dir: &str) -> Result<String, St
         .join("Z_PZModStudio_Bridge");
 
     let client_lua_dir = target_mod_dir.join("media").join("lua").join("client");
+    let b42_dir = target_mod_dir.join("42");
     std::fs::create_dir_all(&client_lua_dir)
         .map_err(|e| format!("Failed to create directories for bridge mod: {}", e))?;
+    std::fs::create_dir_all(&b42_dir)
+        .map_err(|e| format!("Failed to create 42 directory for bridge mod: {}", e))?;
 
     let mod_info_content = r#"name=PZ Mod Studio Live Bridge
 id=Z_PZModStudio_Bridge
 description=Companion IPC Bridge for PZ Mod Studio and AI Agents to execute real-time game commands, equip items, and debug live sessions.
 poster=poster.png
+icon=icon.png
+modversion=1.0.0
 versionMin=41.00
+"#;
+
+    let b42_mod_info_content = r#"name=PZ Mod Studio Live Bridge
+id=Z_PZModStudio_Bridge
+description=Companion IPC Bridge for PZ Mod Studio and AI Agents to execute real-time game commands, equip items, and debug live sessions.
+poster=poster.png
+icon=icon.png
+modversion=1.0.0
+versionMin=42.0.0
 "#;
 
     let lua_script_content = r#"-- =============================================================================
@@ -678,6 +692,21 @@ function Bridge.ExecuteCommand(jsonStr, player)
                 end
             end)
         end
+    elseif actionMatch == "set_access_level" or actionMatch == "grant_admin" or actionMatch == "set_role" then
+        local targetMatch = jsonStr:match('"target"%s*:%s*"([^"]+)"')
+        local roleMatch = jsonStr:match('"message"%s*:%s*"([^"]+)"') or jsonStr:match('"role"%s*:%s*"([^"]+)"') or "admin"
+        if targetMatch and (targetMatch == player:getUsername() or not isClient()) then
+            pcall(function()
+                if player.setAccessLevel then
+                    player:setAccessLevel(roleMatch)
+                end
+                if SendPlayerExtraInfo then
+                    SendPlayerExtraInfo(player)
+                end
+            end)
+            safeHaloText(player, "ACCESS LEVEL: " .. string.upper(roleMatch), 255, 215, 0)
+            print("[PZModStudio_Bridge] Access level updated to " .. roleMatch .. " for " .. targetMatch)
+        end
     elseif actionMatch == "give_item" then
         local itemMatch = jsonStr:match('"item"%s*:%s*"([^"]+)"')
         local countMatch = tonumber(jsonStr:match('"count"%s*:%s*(%d+)')) or 1
@@ -694,24 +723,118 @@ function Bridge.ExecuteCommand(jsonStr, player)
             safeHaloText(player, "Added: " .. itemMatch .. (countMatch > 1 and (" x" .. tostring(countMatch)) or ""), 0, 255, 0)
             print("[PZModStudio_Bridge] Successfully added item: " .. itemMatch)
         end
+    elseif actionMatch == "spawn_vehicle" then
+        local vehicleMatch = jsonStr:match('"vehicle"%s*:%s*"([^"]+)"') or "Base.StepVan"
+        local cell = getCell()
+        local dir = player:getDir()
+        local dx, dy = 0, 0
+        if dir == IsoDirections.N then dy = -4
+        elseif dir == IsoDirections.S then dy = 4
+        elseif dir == IsoDirections.W then dx = -4
+        elseif dir == IsoDirections.E then dx = 4
+        elseif dir == IsoDirections.NW then dx = -3; dy = -3
+        elseif dir == IsoDirections.NE then dx = 3; dy = -3
+        elseif dir == IsoDirections.SW then dx = -3; dy = 3
+        elseif dir == IsoDirections.SE then dx = 3; dy = 3
+        else dx = 3 end
+        
+        local targetSq = cell:getGridSquare(player:getX() + dx, player:getY() + dy, player:getZ()) or player:getCurrentSquare()
+        
+        local sm = ScriptManager.instance
+        local chosenScript = vehicleMatch
+        if not (sm and sm:getVehicle(chosenScript)) then
+            local candidateScripts = {
+                "Base.86bounder",
+                "Base.73Winnebago",
+                "Base.pzkBounder86",
+                "Base.fr_fl_bounder_86",
+                "Base.86econolinerv",
+                "Base.StepVan",
+                "Base.VanSeats",
+                "Base.Van"
+            }
+            for _, s in ipairs(candidateScripts) do
+                if sm and sm:getVehicle(s) then
+                    chosenScript = s
+                    break
+                end
+            end
+        end
+        
+        local v = addVehicleDebug(chosenScript, dir, nil, targetSq)
+        if v then
+            local key = v:createVehicleKey()
+            if key then
+                player:getInventory():AddItem(key)
+                if sendClientCommand then
+                    pcall(sendClientCommand, player, "vehicle", "getKey", { vehicle = v:getId() })
+                end
+            end
+            local gas = v:getPartById("GasTank")
+            if gas then
+                gas:setContainerContentAmount(gas:getContainerCapacity())
+            end
+            safeHaloText(player, "Vehicle Spawned: " .. chosenScript .. " (Key Added)", 0, 255, 128)
+            print("[PZModStudio_Bridge] Successfully spawned " .. chosenScript .. " with key at (" .. tostring(targetSq:getX()) .. "," .. tostring(targetSq:getY()) .. ")")
+        else
+            safeHaloText(player, "Failed to spawn vehicle: " .. tostring(chosenScript), 255, 0, 0)
+        end
     elseif actionMatch == "eval_lua" then
-        local codeMatch = jsonStr:match('"code"%s*:%s*"(.-)"%s*[,}]')
-        if not codeMatch then
-            codeMatch = jsonStr:match('"code"%s*:%s*"([^"]+)"')
+        local codeMatch = nil
+        local sStart, sEnd = jsonStr:find('"code"%s*:%s*"')
+        if sStart and sEnd then
+            local i = sEnd + 1
+            local len = #jsonStr
+            local codeChars = {}
+            while i <= len do
+                local c = jsonStr:sub(i, i)
+                if c == '\\' then
+                    local nextC = jsonStr:sub(i + 1, i + 1)
+                    if nextC == '"' then
+                        table.insert(codeChars, '"')
+                        i = i + 2
+                    elseif nextC == 'n' then
+                        table.insert(codeChars, '\n')
+                        i = i + 2
+                    elseif nextC == 'r' then
+                        table.insert(codeChars, '\r')
+                        i = i + 2
+                    elseif nextC == 't' then
+                        table.insert(codeChars, '\t')
+                        i = i + 2
+                    elseif nextC == '\\' then
+                        table.insert(codeChars, '\\')
+                        i = i + 2
+                    else
+                        table.insert(codeChars, c)
+                        i = i + 1
+                    end
+                elseif c == '"' then
+                    break
+                else
+                    table.insert(codeChars, c)
+                    i = i + 1
+                end
+            end
+            codeMatch = table.concat(codeChars)
         end
         if codeMatch then
-            local unescaped = codeMatch:gsub('\\n', '\n'):gsub('\\r', ''):gsub('\\t', '\t'):gsub('\\"', '"'):gsub('\\\\', '\\')
-            local func, loadErr = loadstring(unescaped)
-            if func then
-                local execOk, execErr = pcall(func)
-                if not execOk then
-                    print("[PZModStudio_Bridge] Lua runtime error in eval: " .. tostring(execErr))
-                    safeHaloText(player, "Lua Error: " .. tostring(execErr), 255, 0, 0)
+            local loadFn = loadstring or load
+            if loadFn then
+                local func, loadErr = loadFn(codeMatch)
+                if func then
+                    local execOk, execErr = pcall(func)
+                    if not execOk then
+                        print("[PZModStudio_Bridge] Lua runtime error in eval: " .. tostring(execErr))
+                        safeHaloText(player, "Lua Error: " .. tostring(execErr), 255, 0, 0)
+                    else
+                        safeHaloText(player, "Lua Executed", 100, 200, 255)
+                    end
                 else
-                    safeHaloText(player, "Lua Executed", 100, 200, 255)
+                    print("[PZModStudio_Bridge] Lua syntax error in eval: " .. tostring(loadErr))
                 end
             else
-                print("[PZModStudio_Bridge] Lua syntax error in eval: " .. tostring(loadErr))
+                print("[PZModStudio_Bridge] dynamic load/loadstring not supported in this Kahlua scope")
             end
         end
     elseif actionMatch == "set_godmode" or actionMatch == "godmode" then
@@ -749,20 +872,37 @@ print("[PZModStudio_Bridge] Live Companion Mod Initialized successfully!")
 "#;
 
     let shared_lua_dir = target_mod_dir.join("media").join("lua").join("shared");
+    let server_lua_dir = target_mod_dir.join("media").join("lua").join("server");
     let _ = std::fs::create_dir_all(&shared_lua_dir);
+    let _ = std::fs::create_dir_all(&server_lua_dir);
+
+    let b42_media_dir = b42_dir.join("media");
+    let b42_client_dir = b42_media_dir.join("lua").join("client");
+    let b42_server_dir = b42_media_dir.join("lua").join("server");
+    let b42_shared_dir = b42_media_dir.join("lua").join("shared");
+    let _ = std::fs::create_dir_all(&b42_client_dir);
+    let _ = std::fs::create_dir_all(&b42_server_dir);
+    let _ = std::fs::create_dir_all(&b42_shared_dir);
 
     let polyfills_content = crate::patch_generator::generate_master_polyfill_lua();
-    let _ = std::fs::write(shared_lua_dir.join("Z_PZModStudio_Polyfills.lua"), polyfills_content);
+    let _ = std::fs::write(shared_lua_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfills_content);
+    let _ = std::fs::write(b42_shared_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfills_content);
 
     let _ = std::fs::write(target_mod_dir.join("mod.info"), mod_info_content);
+    let _ = std::fs::write(b42_dir.join("mod.info"), b42_mod_info_content);
     let _ = std::fs::write(client_lua_dir.join("PZModStudio_Bridge.lua"), lua_script_content);
+    let _ = std::fs::write(server_lua_dir.join("PZModStudio_Bridge_Server.lua"), lua_script_content);
+    let _ = std::fs::write(b42_client_dir.join("PZModStudio_Bridge.lua"), lua_script_content);
+    let _ = std::fs::write(b42_server_dir.join("PZModStudio_Bridge_Server.lua"), lua_script_content);
 
     let png_bytes = crate::patch_generator::get_preview_png_bytes();
     let _ = std::fs::write(target_mod_dir.join("poster.png"), &png_bytes);
     let _ = std::fs::write(target_mod_dir.join("icon.png"), &png_bytes);
+    let _ = std::fs::write(b42_dir.join("poster.png"), &png_bytes);
+    let _ = std::fs::write(b42_dir.join("icon.png"), &png_bytes);
 
     let meta = serde_json::json!({
-        "is_packaged": false,
+        "is_packaged": true,
         "is_visible_in_modlist": true,
         "created_at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs().to_string()).unwrap_or_default(),
         "packaged_mod_ids": [],

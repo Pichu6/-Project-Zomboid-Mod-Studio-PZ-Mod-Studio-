@@ -133,35 +133,61 @@ end
 -- ----------------------------------------------------------------------------
 -- 4. Anti-Feedback Loop Guard on Fluid / Water Events
 -- ----------------------------------------------------------------------------
+-- 4. Event Wrapping Helper with Bidirectional Add/Remove Mapping
+-- ----------------------------------------------------------------------------
 local Events = Events or triggerEvent
-if Events and Events.OnWaterAmountChange then
-    local in_water_event = false
-    local orig_water_add = Events.OnWaterAmountChange.Add
-    if orig_water_add then
-        Events.OnWaterAmountChange.Add = function(func)
+local function wrapEventAddRemove(eventObj, wrapperBuilder)
+    if not eventObj or eventObj._pzms_wrapped then return end
+    eventObj._pzms_wrapped = true
+    local orig_add = eventObj.Add
+    local orig_remove = eventObj.Remove
+    local wrapperMap = setmetatable({}, { __mode = "k" })
+    
+    if orig_add then
+        eventObj.Add = function(func)
             if type(func) ~= "function" then return end
-            orig_water_add(function(...)
-                if in_water_event then return end
-                in_water_event = true
-                local status, err = pcall(func, ...)
-                in_water_event = false
-                if not status and err then
-                    print("[PZ Mod Studio Polyfill] Handled safe early-bailout in OnWaterAmountChange: " .. tostring(err))
-                end
-            end)
+            local wrapper = wrapperBuilder(func)
+            wrapperMap[func] = wrapper
+            orig_add(wrapper)
         end
     end
+    
+    if orig_remove then
+        eventObj.Remove = function(func)
+            if type(func) ~= "function" then return end
+            local wrapper = wrapperMap[func]
+            if wrapper then
+                orig_remove(wrapper)
+                wrapperMap[func] = nil
+            else
+                orig_remove(func)
+            end
+        end
+    end
+end
+
+-- Anti-Feedback Loop Guard on Fluid / Water Events
+if Events and Events.OnWaterAmountChange then
+    local in_water_event = false
+    wrapEventAddRemove(Events.OnWaterAmountChange, function(func)
+        return function(...)
+            if in_water_event then return end
+            in_water_event = true
+            local status, err = pcall(func, ...)
+            in_water_event = false
+            if not status and err then
+                print("[PZ Mod Studio Polyfill] Handled safe early-bailout in OnWaterAmountChange: " .. tostring(err))
+            end
+        end
+    end)
 end
 
 -- ----------------------------------------------------------------------------
 -- 4.1 OnEquipPrimary / OnEquipSecondary Bridge (B41 (player, weapon) -> B42 (player))
 -- ----------------------------------------------------------------------------
-if Events and Events.OnEquipPrimary and not Events.OnEquipPrimary._pzms_wrapped then
-    Events.OnEquipPrimary._pzms_wrapped = true
-    local orig_equip_add = Events.OnEquipPrimary.Add
-    Events.OnEquipPrimary.Add = function(func)
-        if type(func) ~= "function" then return end
-        orig_equip_add(function(player, weapon, ...)
+if Events and Events.OnEquipPrimary then
+    wrapEventAddRemove(Events.OnEquipPrimary, function(func)
+        return function(player, weapon, ...)
             local realWeapon = weapon
             if realWeapon == nil and player and player.getPrimaryHandItem then
                 realWeapon = player:getPrimaryHandItem()
@@ -170,16 +196,13 @@ if Events and Events.OnEquipPrimary and not Events.OnEquipPrimary._pzms_wrapped 
             if not status and err then
                 print("[PZ Mod Studio Polyfill] Handled safe OnEquipPrimary listener error: " .. tostring(err))
             end
-        end)
-    end
+        end
+    end)
 end
 
-if Events and Events.OnEquipSecondary and not Events.OnEquipSecondary._pzms_wrapped then
-    Events.OnEquipSecondary._pzms_wrapped = true
-    local orig_equip_sec_add = Events.OnEquipSecondary.Add
-    Events.OnEquipSecondary.Add = function(func)
-        if type(func) ~= "function" then return end
-        orig_equip_sec_add(function(player, weapon, ...)
+if Events and Events.OnEquipSecondary then
+    wrapEventAddRemove(Events.OnEquipSecondary, function(func)
+        return function(player, weapon, ...)
             local realWeapon = weapon
             if realWeapon == nil and player and player.getSecondaryHandItem then
                 realWeapon = player:getSecondaryHandItem()
@@ -188,39 +211,33 @@ if Events and Events.OnEquipSecondary and not Events.OnEquipSecondary._pzms_wrap
             if not status and err then
                 print("[PZ Mod Studio Polyfill] Handled safe OnEquipSecondary listener error: " .. tostring(err))
             end
-        end)
-    end
+        end
+    end)
 end
 
-if Events and Events.OnClothingUpdated and not Events.OnClothingUpdated._pzms_wrapped then
-    Events.OnClothingUpdated._pzms_wrapped = true
-    local orig_clothing_add = Events.OnClothingUpdated.Add
-    Events.OnClothingUpdated.Add = function(func)
-        if type(func) ~= "function" then return end
-        orig_clothing_add(function(character, ...)
+if Events and Events.OnClothingUpdated then
+    wrapEventAddRemove(Events.OnClothingUpdated, function(func)
+        return function(character, ...)
             local status, err = pcall(func, character, ...)
             if not status and err then
                 -- Silently suppress face/hair customizer exception flood to prevent render loop stutter
             end
-        end)
-    end
+        end
+    end)
 end
 
 -- ----------------------------------------------------------------------------
 -- 4.2 OnMainMenuEnter Protection
 -- ----------------------------------------------------------------------------
-if Events and Events.OnMainMenuEnter and not Events.OnMainMenuEnter._pzms_wrapped then
-    Events.OnMainMenuEnter._pzms_wrapped = true
-    local orig_menu_add = Events.OnMainMenuEnter.Add
-    Events.OnMainMenuEnter.Add = function(func)
-        if type(func) ~= "function" then return end
-        orig_menu_add(function(...)
+if Events and Events.OnMainMenuEnter then
+    wrapEventAddRemove(Events.OnMainMenuEnter, function(func)
+        return function(...)
             local status, err = pcall(func, ...)
             if not status and err then
                 print("[PZ Mod Studio Polyfill] Protected OnMainMenuEnter from mod crash: " .. tostring(err))
             end
-        end)
-    end
+        end
+    end)
 end
 
 -- ----------------------------------------------------------------------------
@@ -291,20 +308,17 @@ if _G and _G.getOnlinePlayers and not _G._pzms_online_players_wrapped then
 end
 
 -- ----------------------------------------------------------------------------
--- 4.4 OnPlayerUpdate Exception Suppression (Prevents 60 FPS exponential error cascades)
+-- 4.4 OnPlayerUpdate Exception Suppression & Safe Remove (Prevents 60 FPS cascades & sticky loops)
 -- ----------------------------------------------------------------------------
-if Events and Events.OnPlayerUpdate and not Events.OnPlayerUpdate._pzms_wrapped then
-    Events.OnPlayerUpdate._pzms_wrapped = true
-    local orig_player_update_add = Events.OnPlayerUpdate.Add
-    Events.OnPlayerUpdate.Add = function(func)
-        if type(func) ~= "function" then return end
-        orig_player_update_add(function(player, ...)
+if Events and Events.OnPlayerUpdate then
+    wrapEventAddRemove(Events.OnPlayerUpdate, function(func)
+        return function(player, ...)
             local status, err = pcall(func, player, ...)
             if not status and err then
                 -- Silently catch frame-by-frame player loop errors to protect FPS
             end
-        end)
-    end
+        end
+    end)
 end
 
 -- ----------------------------------------------------------------------------
@@ -345,6 +359,54 @@ local function initB42Polyfills()
                     end
                 end
                 return res
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- ISVehicleDashboard Null-Safety Guard (Prevents null pointer when entering/switching seat)
+    -- ----------------------------------------------------------------------------
+    if ISVehicleDashboard and not ISVehicleDashboard._pzms_wrapped then
+        ISVehicleDashboard._pzms_wrapped = true
+        local orig_onSwitchSeat = ISVehicleDashboard.onSwitchVehicleSeat
+        if orig_onSwitchSeat then
+            ISVehicleDashboard.onSwitchVehicleSeat = function(character)
+                if character and instanceof(character, 'IsoPlayer') and character:isLocalPlayer() then
+                    local vehicle = character:getVehicle()
+                    local db = getPlayerVehicleDashboard and getPlayerVehicleDashboard(character:getPlayerNum())
+                    if db and db.setVehicle then
+                        if vehicle and vehicle:isDriver(character) then
+                            db:setVehicle(vehicle)
+                        else
+                            db:setVehicle(nil)
+                        end
+                    end
+                end
+            end
+        end
+        local orig_onEnterVehicle = ISVehicleDashboard.onEnterVehicle
+        if orig_onEnterVehicle then
+            ISVehicleDashboard.onEnterVehicle = function(character)
+                if character and instanceof(character, 'IsoPlayer') and character:isLocalPlayer() then
+                    local vehicle = character:getVehicle()
+                    if vehicle and vehicle:isDriver(character) then
+                        local db = getPlayerVehicleDashboard and getPlayerVehicleDashboard(character:getPlayerNum())
+                        if db and db.setVehicle then
+                            db:setVehicle(vehicle)
+                        end
+                    end
+                end
+            end
+        end
+        local orig_onExitVehicle = ISVehicleDashboard.onExitVehicle
+        if orig_onExitVehicle then
+            ISVehicleDashboard.onExitVehicle = function(character)
+                if character and instanceof(character, 'IsoPlayer') and character:isLocalPlayer() then
+                    local db = getPlayerVehicleDashboard and getPlayerVehicleDashboard(character:getPlayerNum())
+                    if db and db.setVehicle then
+                        db:setVehicle(nil)
+                    end
+                end
             end
         end
     end
@@ -1518,6 +1580,136 @@ local function initB42Polyfills()
     end
 end
 
+-- ----------------------------------------------------------------------------
+-- Live IPC Bridge Command Processor (Embedded in Master Polyfills)
+-- ----------------------------------------------------------------------------
+local function checkIPCCommands()
+    local player = getPlayer and getPlayer()
+    if not player then return end
+    local qFiles = { "pz_ipc_queue.json", "pz_server_commands.json" }
+    for _, qFile in ipairs(qFiles) do
+        local reader = getFileReader and getFileReader(qFile, false)
+        if reader then
+            local raw = ""
+            local line = reader:readLine()
+            while line do
+                raw = raw .. line
+                line = reader:readLine()
+            end
+            reader:close()
+            if raw ~= "" and raw ~= "{}" and not raw:match("^%s*$") then
+                local writer = getFileWriter and getFileWriter(qFile, true, false)
+                if writer then
+                    writer:write("{}")
+                    writer:close()
+                end
+                
+                local actionMatch = raw:match('"action"%s*:%s*"([^"]+)"')
+                if actionMatch == "spawn_vehicle" then
+                    local vehicleMatch = raw:match('"vehicle"%s*:%s*"([^"]+)"') or "Base.StepVan"
+                    local cell = getCell and getCell()
+                    local dir = player.getDir and player:getDir() or IsoDirections.S
+                    local dx, dy = 0, 0
+                    if dir == IsoDirections.N then dy = -4
+                    elseif dir == IsoDirections.S then dy = 4
+                    elseif dir == IsoDirections.W then dx = -4
+                    elseif dir == IsoDirections.E then dx = 4
+                    elseif dir == IsoDirections.NW then dx = -3; dy = -3
+                    elseif dir == IsoDirections.NE then dx = 3; dy = -3
+                    elseif dir == IsoDirections.SW then dx = -3; dy = 3
+                    elseif dir == IsoDirections.SE then dx = 3; dy = 3
+                    else dx = 3 end
+                    
+                    local targetSq = (cell and cell.getGridSquare and cell:getGridSquare(player:getX() + dx, player:getY() + dy, player:getZ())) or (player.getCurrentSquare and player:getCurrentSquare())
+                    
+                    local sm = ScriptManager and ScriptManager.instance
+                    local chosenScript = vehicleMatch
+                    if not (sm and sm.getVehicle and sm:getVehicle(chosenScript)) then
+                        local candidateScripts = {
+                            "Base.86bounder",
+                            "Base.73Winnebago",
+                            "Base.pzkBounder86",
+                            "Base.fr_fl_bounder_86",
+                            "Base.86econolinerv",
+                            "Base.StepVan",
+                            "Base.VanSeats",
+                            "Base.Van"
+                        }
+                        for _, s in ipairs(candidateScripts) do
+                            if sm and sm:getVehicle(s) then
+                                chosenScript = s
+                                break
+                            end
+                        end
+                    end
+                    
+                    if addVehicleDebug and targetSq then
+                        local v = addVehicleDebug(chosenScript, dir, nil, targetSq)
+                        if v then
+                            local key = v.createVehicleKey and v:createVehicleKey()
+                            if key and player.getInventory then
+                                player:getInventory():AddItem(key)
+                                if sendClientCommand then
+                                    pcall(sendClientCommand, player, "vehicle", "getKey", { vehicle = v:getId() })
+                                end
+                            end
+                            local gas = v.getPartById and v:getPartById("GasTank")
+                            if gas and gas.getContainerCapacity then
+                                pcall(function() gas:setContainerContentAmount(gas:getContainerCapacity()) end)
+                            end
+                            if player.setHaloNote then
+                                player:setHaloNote("Vehicle Spawned: " .. chosenScript .. " (Key Added)", 0, 255, 128, 300)
+                            end
+                        end
+                    end
+                elseif actionMatch == "eval_lua" then
+                    local sStart, sEnd = raw:find('"code"%s*:%s*"')
+                    if sStart and sEnd then
+                        local i = sEnd + 1
+                        local len = #raw
+                        local codeChars = {}
+                        while i <= len do
+                            local c = raw:sub(i, i)
+                            if c == '\\' then
+                                local nextC = raw:sub(i + 1, i + 1)
+                                if nextC == '"' then table.insert(codeChars, '"'); i = i + 2
+                                elseif nextC == 'n' then table.insert(codeChars, '\n'); i = i + 2
+                                elseif nextC == 'r' then table.insert(codeChars, '\r'); i = i + 2
+                                elseif nextC == 't' then table.insert(codeChars, '\t'); i = i + 2
+                                elseif nextC == '\\' then table.insert(codeChars, '\\'); i = i + 2
+                                else table.insert(codeChars, c); i = i + 1 end
+                            elseif c == '"' then break
+                            else table.insert(codeChars, c); i = i + 1 end
+                        end
+                        local codeStr = table.concat(codeChars)
+                        local func, loadErr = loadstring(codeStr)
+                        if func then
+                            local ok, execErr = pcall(func)
+                            if not ok and player.setHaloNote then
+                                player:setHaloNote("Lua Error: " .. tostring(execErr), 255, 0, 0, 300)
+                            end
+                        end
+                    end
+                elseif actionMatch == "give_item" then
+                    local itemMatch = raw:match('"item"%s*:%s*"([^"]+)"')
+                    local countMatch = tonumber(raw:match('"count"%s*:%s*(%d+)')) or 1
+                    if itemMatch and player.getInventory then
+                        for i = 1, countMatch do
+                            player:getInventory():AddItem(itemMatch)
+                        end
+                    end
+                end
+                
+                local respWriter = getFileWriter and getFileWriter("pz_ipc_resp.json", true, false)
+                if respWriter then
+                    respWriter:write('{"status": "ok", "timestamp": "' .. tostring(getTimeInMillis and getTimeInMillis() or 0) .. '"}')
+                    respWriter:close()
+                end
+            end
+        end
+    end
+end
+
 initB42Polyfills()
 
 if Events then
@@ -1530,6 +1722,9 @@ if Events then
             pzms_ticks = pzms_ticks + 1
             if pzms_ticks <= 60 or pzms_ticks % 120 == 0 then
                 initB42Polyfills()
+            end
+            if pzms_ticks % 15 == 0 then
+                checkIPCCommands()
             end
         end)
     end

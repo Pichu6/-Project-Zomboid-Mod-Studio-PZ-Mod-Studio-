@@ -56,6 +56,8 @@ pub fn auto_detect_paths() -> StudioPaths {
             format!("{}:\\Program Files\\Steam", drive),
             format!("{}:\\Steam", drive),
             format!("{}:\\SteamLibrary", drive),
+            format!("{}:\\Apps\\Steam", drive),
+            format!("{}:\\Apps", drive),
             format!("{}:\\Juegos", drive),
             format!("{}:\\Juegos\\Steam", drive),
             format!("{}:\\Games", drive),

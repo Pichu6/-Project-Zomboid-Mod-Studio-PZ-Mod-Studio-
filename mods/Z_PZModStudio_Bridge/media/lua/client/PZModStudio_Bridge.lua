@@ -203,24 +203,118 @@ function Bridge.ExecuteCommand(jsonStr, player)
             safeHaloText(player, "Added: " .. itemMatch .. (countMatch > 1 and (" x" .. tostring(countMatch)) or ""), 0, 255, 0)
             print("[PZModStudio_Bridge] Successfully added item: " .. itemMatch)
         end
+    elseif actionMatch == "spawn_vehicle" then
+        local vehicleMatch = jsonStr:match('"vehicle"%s*:%s*"([^"]+)"') or "Base.StepVan"
+        local cell = getCell()
+        local dir = player:getDir()
+        local dx, dy = 0, 0
+        if dir == IsoDirections.N then dy = -4
+        elseif dir == IsoDirections.S then dy = 4
+        elseif dir == IsoDirections.W then dx = -4
+        elseif dir == IsoDirections.E then dx = 4
+        elseif dir == IsoDirections.NW then dx = -3; dy = -3
+        elseif dir == IsoDirections.NE then dx = 3; dy = -3
+        elseif dir == IsoDirections.SW then dx = -3; dy = 3
+        elseif dir == IsoDirections.SE then dx = 3; dy = 3
+        else dx = 3 end
+        
+        local targetSq = cell:getGridSquare(player:getX() + dx, player:getY() + dy, player:getZ()) or player:getCurrentSquare()
+        
+        local sm = ScriptManager.instance
+        local chosenScript = vehicleMatch
+        if not (sm and sm:getVehicle(chosenScript)) then
+            local candidateScripts = {
+                "Base.86bounder",
+                "Base.73Winnebago",
+                "Base.pzkBounder86",
+                "Base.fr_fl_bounder_86",
+                "Base.86econolinerv",
+                "Base.StepVan",
+                "Base.VanSeats",
+                "Base.Van"
+            }
+            for _, s in ipairs(candidateScripts) do
+                if sm and sm:getVehicle(s) then
+                    chosenScript = s
+                    break
+                end
+            end
+        end
+        
+        local v = addVehicleDebug(chosenScript, dir, nil, targetSq)
+        if v then
+            local key = v:createVehicleKey()
+            if key then
+                player:getInventory():AddItem(key)
+                if sendClientCommand then
+                    pcall(sendClientCommand, player, "vehicle", "getKey", { vehicle = v:getId() })
+                end
+            end
+            local gas = v:getPartById("GasTank")
+            if gas then
+                gas:setContainerContentAmount(gas:getContainerCapacity())
+            end
+            safeHaloText(player, "Vehicle Spawned: " .. chosenScript .. " (Key Added)", 0, 255, 128)
+            print("[PZModStudio_Bridge] Successfully spawned " .. chosenScript .. " with key at (" .. tostring(targetSq:getX()) .. "," .. tostring(targetSq:getY()) .. ")")
+        else
+            safeHaloText(player, "Failed to spawn vehicle: " .. tostring(chosenScript), 255, 0, 0)
+        end
     elseif actionMatch == "eval_lua" then
-        local codeMatch = jsonStr:match('"code"%s*:%s*"(.-)"%s*[,}]')
-        if not codeMatch then
-            codeMatch = jsonStr:match('"code"%s*:%s*"([^"]+)"')
+        local codeMatch = nil
+        local sStart, sEnd = jsonStr:find('"code"%s*:%s*"')
+        if sStart and sEnd then
+            local i = sEnd + 1
+            local len = #jsonStr
+            local codeChars = {}
+            while i <= len do
+                local c = jsonStr:sub(i, i)
+                if c == '\\' then
+                    local nextC = jsonStr:sub(i + 1, i + 1)
+                    if nextC == '"' then
+                        table.insert(codeChars, '"')
+                        i = i + 2
+                    elseif nextC == 'n' then
+                        table.insert(codeChars, '\n')
+                        i = i + 2
+                    elseif nextC == 'r' then
+                        table.insert(codeChars, '\r')
+                        i = i + 2
+                    elseif nextC == 't' then
+                        table.insert(codeChars, '\t')
+                        i = i + 2
+                    elseif nextC == '\\' then
+                        table.insert(codeChars, '\\')
+                        i = i + 2
+                    else
+                        table.insert(codeChars, c)
+                        i = i + 1
+                    end
+                elseif c == '"' then
+                    break
+                else
+                    table.insert(codeChars, c)
+                    i = i + 1
+                end
+            end
+            codeMatch = table.concat(codeChars)
         end
         if codeMatch then
-            local unescaped = codeMatch:gsub('\\n', '\n'):gsub('\\r', ''):gsub('\\t', '\t'):gsub('\\"', '"'):gsub('\\\\', '\\')
-            local func, loadErr = loadstring(unescaped)
-            if func then
-                local execOk, execErr = pcall(func)
-                if not execOk then
-                    print("[PZModStudio_Bridge] Lua runtime error in eval: " .. tostring(execErr))
-                    safeHaloText(player, "Lua Error: " .. tostring(execErr), 255, 0, 0)
+            local loadFn = loadstring or load
+            if loadFn then
+                local func, loadErr = loadFn(codeMatch)
+                if func then
+                    local execOk, execErr = pcall(func)
+                    if not execOk then
+                        print("[PZModStudio_Bridge] Lua runtime error in eval: " .. tostring(execErr))
+                        safeHaloText(player, "Lua Error: " .. tostring(execErr), 255, 0, 0)
+                    else
+                        safeHaloText(player, "Lua Executed", 100, 200, 255)
+                    end
                 else
-                    safeHaloText(player, "Lua Executed", 100, 200, 255)
+                    print("[PZModStudio_Bridge] Lua syntax error in eval: " .. tostring(loadErr))
                 end
             else
-                print("[PZModStudio_Bridge] Lua syntax error in eval: " .. tostring(loadErr))
+                print("[PZModStudio_Bridge] dynamic load/loadstring not supported in this Kahlua scope")
             end
         end
     elseif actionMatch == "set_godmode" or actionMatch == "godmode" then

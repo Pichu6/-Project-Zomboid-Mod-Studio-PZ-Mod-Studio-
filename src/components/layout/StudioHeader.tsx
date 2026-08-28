@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Shield, Play, Activity, ChevronDown, Layout, Zap, Check, Layers, Save } from 'lucide-react';
+import { Shield, Play, Activity, ChevronDown, Layout, Zap, Check, Layers } from 'lucide-react';
 import { GameLaunchMode } from '../../types';
 
 interface StudioHeaderProps {
   conflictCount: number;
   polyfillCount: number;
   activeProfileName?: string;
-  hasUnsavedChanges?: boolean;
-  isSaving?: boolean;
-  onSaveActiveProfile?: () => void;
   onNavigateToProfiles?: () => void;
   onRunSandbox: (mode: GameLaunchMode) => void;
 }
@@ -64,9 +61,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   conflictCount,
   polyfillCount,
   activeProfileName,
-  hasUnsavedChanges = false,
-  isSaving = false,
-  onSaveActiveProfile,
   onNavigateToProfiles,
   onRunSandbox,
 }) => {
@@ -147,29 +141,8 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right Actions: Save Profile & Launch Sandbox */}
+      {/* Right Actions: Launch Sandbox */}
       <div className="flex items-center gap-2.5">
-        {/* Save Active Profile Button */}
-        {onSaveActiveProfile && (
-          <button
-            onClick={onSaveActiveProfile}
-            disabled={!hasUnsavedChanges || isSaving}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition border shadow cursor-pointer ${
-              hasUnsavedChanges
-                ? 'bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-500/60'
-                : 'bg-slate-800 text-slate-400 border-slate-700 cursor-not-allowed opacity-60'
-            }`}
-            title={
-              hasUnsavedChanges
-                ? `Save changes in the active profile "${activeProfileName}"`
-                : `No pending changes in "${activeProfileName}"`
-            }
-          >
-            <Save className={`w-3.5 h-3.5 ${hasUnsavedChanges ? 'text-emerald-100' : 'text-slate-500'} ${isSaving ? 'animate-spin' : ''}`} />
-            <span>Save Profile</span>
-          </button>
-        )}
-
         {/* Launch Game with Dropdown */}
         <div ref={dropdownRef} className="relative flex items-center">
           <div className="flex items-center shadow-lg rounded-lg overflow-hidden border border-emerald-600/40">

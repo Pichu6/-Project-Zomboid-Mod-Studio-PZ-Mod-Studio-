@@ -56,7 +56,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       const loadOrder = mods.map((m) => m.mod_id);
 
       const created: AppInstance = await TauriService.createInstance(
-        paths.user_zomboid_dir,
+        paths.user_zomboid_dir || '',
         newInstanceName.trim(),
         newInstanceDesc.trim() || undefined,
         activeModIds,
@@ -65,13 +65,11 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
       setNewInstanceName('');
       setNewInstanceDesc('');
-      setStatusMessage(`✨ Profile '${created.name}' created successfully.`);
+      setStatusMessage(`✨ Profile '${created.name}' created and activated successfully.`);
       await loadInstances();
 
-      // If this is the only profile, activate it automatically
-      if (instances.length === 0) {
-        await handleActivateInstance(created);
-      }
+      // Automatically activate the new profile so all tabs unlock immediately
+      await handleActivateInstance(created);
     } catch (err: any) {
       alert(`Error creating profile: ${err}`);
     }
@@ -201,7 +199,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
             <button
               onClick={handleCreateInstance}
-              disabled={activeMods.length === 0}
+              disabled={!newInstanceName.trim()}
               className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2 mt-2"
             >
               <Plus className="w-4 h-4" />

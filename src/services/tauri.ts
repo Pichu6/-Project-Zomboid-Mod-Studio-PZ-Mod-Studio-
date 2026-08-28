@@ -647,7 +647,8 @@ export const TauriService = {
     userZomboidDir: string,
     serverName: string,
     memoryGb?: number,
-    nosteam?: boolean
+    nosteam?: boolean,
+    adminPassword?: string
   ): Promise<number> => {
     return await invoke('launch_dedicated_server', {
       pzInstallDir,
@@ -655,6 +656,7 @@ export const TauriService = {
       serverName,
       memoryGb,
       nosteam,
+      adminPassword,
     });
   },
 

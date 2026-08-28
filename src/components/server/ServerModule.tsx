@@ -21,6 +21,9 @@ import {
   Sliders,
   Share2,
   Trash2,
+  Crown,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   ModInfo,
@@ -52,7 +55,16 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
   const [selectedRam, setSelectedRam] = useState<number>(4);
   const [isNoSteam, setIsNoSteam] = useState<boolean>(false);
   const [isLaunching, setIsLaunching] = useState<boolean>(false);
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    return localStorage.getItem('pz_server_admin_password') || '';
+  });
+  const [showAdminPassword, setShowAdminPassword] = useState<boolean>(false);
+  const [showServerPassword, setShowServerPassword] = useState<boolean>(false);
 
+  const handleAdminPasswordChange = (val: string) => {
+    setAdminPassword(val);
+    localStorage.setItem('pz_server_admin_password', val);
+  };
 
   // Live Players & Moderation State
   const [players, setPlayers] = useState<ConnectedPlayer[]>([]);
@@ -205,7 +217,8 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
         paths.user_zomboid_dir,
         selectedServer.name,
         selectedRam,
-        isNoSteam
+        isNoSteam,
+        adminPassword || undefined
       );
       setStatusMessage(`🎮 Dedicated server started successfully in interactive console! PID: ${pid}`);
       await refreshServerStatusAndPlayers();
@@ -269,6 +282,37 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       await refreshServerStatusAndPlayers();
     } catch (err: any) {
       alert(`Error executing action: ${err}`);
+    }
+  };
+
+  const handleSetPlayerRole = async (player: ConnectedPlayer, newRole: string) => {
+    if (!paths.user_zomboid_dir) return;
+    
+    // Immediate optimistic update in UI
+    const targetRole = newRole.toLowerCase() === 'admin' ? 'admin' : 'User';
+    setPlayers((prev) =>
+      prev.map((p) => (p.username === player.username ? { ...p, role: targetRole } : p))
+    );
+
+    try {
+      await TauriService.sendServerCommand(
+        paths.user_zomboid_dir,
+        'set_access_level',
+        player.username,
+        newRole,
+        `Role set to ${newRole}`
+      );
+      setStatusMessage(
+        newRole.toLowerCase() === 'admin'
+          ? `👑 ¡Jugador '${player.username}' promovido a ADMIN!`
+          : `🛡️ Privilegios de Administrador removidos para '${player.username}'.`
+      );
+      setTimeout(async () => {
+        await refreshServerStatusAndPlayers();
+      }, 1000);
+    } catch (err: any) {
+      alert(`Error al cambiar rol: ${err}`);
+      await refreshServerStatusAndPlayers();
     }
   };
 
@@ -554,17 +598,17 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                 <div className="space-y-4 flex-1 flex flex-col justify-between">
                   <div className="space-y-4">
                     {/* Launch Options Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {/* RAM Allocation Selector */}
                       <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                             <Cpu className="w-4 h-4 text-purple-400" />
-                            <span>Memory Allocation (-Xmx)</span>
+                            <span>Memory (-Xmx)</span>
                           </label>
                           <span className="text-xs font-mono font-bold text-purple-400">{selectedRam} GB</span>
                         </div>
-                        <div className="grid grid-cols-4 gap-1.5 pt-1">
+                        <div className="grid grid-cols-4 gap-1 pt-1">
                           {[4, 8, 12, 16].map((ram) => (
                             <button
                               key={ram}
@@ -575,29 +619,54 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                                   : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
                               }`}
                             >
-                              {ram} GB
+                              {ram}G
                             </button>
                           ))}
                         </div>
                       </div>
 
+                      {/* Admin Password Input */}
+                      <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                          <Shield className="w-4 h-4 text-purple-400" />
+                          <span>Admin Password</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showAdminPassword ? 'text' : 'password'}
+                            placeholder="Create admin pass..."
+                            value={adminPassword}
+                            onChange={(e) => handleAdminPasswordChange(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-2.5 pr-8 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
+                            title="Sets the password for the 'admin' superuser account on startup automatically"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowAdminPassword(!showAdminPassword)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-300 cursor-pointer p-0.5"
+                            title={showAdminPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showAdminPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Network & Steam Mode */}
-                      <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
+                      <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                         <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                           <Globe className="w-4 h-4 text-purple-400" />
-                          <span>Authentication & Network</span>
+                          <span>Auth & Network</span>
                         </label>
-                        <div className="flex items-center justify-between pt-1 text-xs text-slate-300">
-                          <span>Steam Enabled:</span>
+                        <div className="flex items-center justify-between pt-0.5 text-xs text-slate-300">
                           <button
                             onClick={() => setIsNoSteam(!isNoSteam)}
-                            className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                            className={`w-full py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                               !isNoSteam
                                 ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/50'
                                 : 'bg-amber-950 text-amber-300 border border-amber-600/50'
                             }`}
                           >
-                            {!isNoSteam ? 'Steam Active' : 'NoSteam (LAN)'}
+                            {!isNoSteam ? 'Steam Enabled' : 'NoSteam (LAN)'}
                           </button>
                         </div>
                       </div>
@@ -764,6 +833,26 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
 
                               {/* Admin Action Buttons */}
                               <div className="flex items-center gap-1.5">
+                                {p.role.toLowerCase() === 'admin' ? (
+                                  <button
+                                    onClick={() => handleSetPlayerRole(p, 'none')}
+                                    className="px-2 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 rounded-lg transition cursor-pointer flex items-center gap-1 text-[11px] font-bold shadow"
+                                    title="Revoke Admin (Demote to standard player)"
+                                  >
+                                    <Crown className="w-3.5 h-3.5 fill-current text-rose-400" />
+                                    <span>Revoke Admin</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSetPlayerRole(p, 'admin')}
+                                    className="px-2 py-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-600/60 text-amber-300 rounded-lg transition cursor-pointer flex items-center gap-1 text-[11px] font-bold shadow"
+                                    title="Grant Admin (Make superuser with all powers)"
+                                  >
+                                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>Make Admin</span>
+                                  </button>
+                                )}
+
                                 <button
                                   onClick={() => handlePlayerAction('godmode', p)}
                                   className="p-1.5 bg-slate-800 hover:bg-amber-900 text-amber-300 rounded-lg transition cursor-pointer"
@@ -819,14 +908,45 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Server Password</label>
-                      <input
-                        type="text"
-                        placeholder="Leave blank for open server"
-                        value={quickSettings.password}
-                        onChange={(e) => setQuickSettings({ ...quickSettings, password: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-purple-500"
-                      />
+                      <label className="text-[11px] font-bold text-slate-300">Server Password (Join)</label>
+                      <div className="relative">
+                        <input
+                          type={showServerPassword ? 'text' : 'password'}
+                          placeholder="Leave blank for open server"
+                          value={quickSettings.password}
+                          onChange={(e) => setQuickSettings({ ...quickSettings, password: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-8 py-1.5 text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowServerPassword(!showServerPassword)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-300 cursor-pointer p-0.5"
+                          title={showServerPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showServerPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Admin Password (-adminpassword)</label>
+                      <div className="relative">
+                        <input
+                          type={showAdminPassword ? 'text' : 'password'}
+                          placeholder="Superuser admin password..."
+                          value={adminPassword}
+                          onChange={(e) => handleAdminPasswordChange(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-8 py-1.5 text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAdminPassword(!showAdminPassword)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-300 cursor-pointer p-0.5"
+                          title={showAdminPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showAdminPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-1">

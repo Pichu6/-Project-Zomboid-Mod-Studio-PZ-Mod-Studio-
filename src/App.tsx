@@ -21,9 +21,7 @@ export const App: React.FC = () => {
   const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
@@ -338,9 +336,21 @@ export const App: React.FC = () => {
     );
   };
 
+  const autoPersistProfileChanges = async (updatedMods: ModInfo[]) => {
+    const userDir = paths.user_zomboid_dir || '';
+    const activeModIds = updatedMods.filter((m) => m.enabled).map((m) => m.mod_id);
+    const fullLoadOrder = updatedMods.map((m) => m.mod_id);
+
+    try {
+      await TauriService.saveMasterLoadOrder(userDir, fullLoadOrder, activeModIds);
+    } catch (err) {
+      console.warn('Auto-persisting profile load order:', err);
+    }
+  };
+
   const handleReorderMods = (newOrder: ModInfo[]) => {
     setMods([...newOrder]);
-    setHasUnsavedChanges(true);
+    autoPersistProfileChanges(newOrder);
   };
 
   const handleToggleMod = (modId: string) => {
@@ -378,7 +388,7 @@ export const App: React.FC = () => {
         return m;
       });
 
-      setHasUnsavedChanges(true);
+      autoPersistProfileChanges(updated);
       return [...updated];
     });
   };
@@ -402,30 +412,11 @@ export const App: React.FC = () => {
         reordered.push({ ...m, enabled: activeSet.has(m.mod_id) });
       });
 
+      autoPersistProfileChanges(reordered);
       return reordered;
     });
-    setHasUnsavedChanges(false);
     refreshActiveProfile();
   };
-
-  const handleSaveActiveProfile = async () => {
-    if (!activeProfile || !paths.user_zomboid_dir) return;
-    setIsSaving(true);
-    const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
-    const fullLoadOrder = mods.map((m) => m.mod_id);
-
-    try {
-      await TauriService.saveMasterLoadOrder(paths.user_zomboid_dir, fullLoadOrder, activeModIds);
-      setHasUnsavedChanges(false);
-      await refreshActiveProfile(paths.user_zomboid_dir);
-    } catch (err) {
-      console.error('Error saving active profile:', err);
-      alert(`Error saving active profile: ${err}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
 
   const handleApplyFix = async (polyfillRuleId: string) => {
     const updatedRules = rules.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r));
@@ -486,9 +477,6 @@ export const App: React.FC = () => {
         conflictCount={conflicts.length}
         polyfillCount={rules.filter((r) => r.enabled).length}
         activeProfileName={activeProfile?.name}
-        hasUnsavedChanges={hasUnsavedChanges}
-        isSaving={isSaving}
-        onSaveActiveProfile={handleSaveActiveProfile}
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
       />
@@ -515,7 +503,6 @@ export const App: React.FC = () => {
                 onApplyInstanceLoadOrder={handleApplyPresetLoadOrder}
                 onProfileActivated={(inst) => {
                   setActiveProfile(inst);
-                  setHasUnsavedChanges(false);
                   setActiveTab('MOD_LIST');
                 }}
               />
