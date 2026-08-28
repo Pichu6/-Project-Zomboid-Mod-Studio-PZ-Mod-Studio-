@@ -567,7 +567,7 @@ local function initB42Polyfills()
     end
 
     -- ----------------------------------------------------------------------------
-    -- ISHandcraftAction MP ContainerID & Stuck-State Protection Guard
+    -- ISHandcraftAction MP ContainerID & In-Hand Crafting Network Fix
     -- ----------------------------------------------------------------------------
     if ISHandcraftAction and not ISHandcraftAction._pzms_wrapped then
         ISHandcraftAction._pzms_wrapped = true
@@ -575,13 +575,11 @@ local function initB42Polyfills()
         local orig_handcraft_new = ISHandcraftAction.new
         if orig_handcraft_new then
             ISHandcraftAction.new = function(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                local safeContainers = containers
-                if not safeContainers then
-                    safeContainers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
-                local o = orig_handcraft_new(self, character, craftRecipe, safeContainers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                if o and not o.containers then
-                    o.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
+                local o = orig_handcraft_new(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
+                if not isoObject and isClient() then
+                    o.containers = nil
+                    o.items = nil
+                    o.recipeItem = nil
                 end
                 return o
             end
@@ -591,14 +589,41 @@ local function initB42Polyfills()
         if orig_handcraft_start then
             ISHandcraftAction.start = function(self)
                 if not self.containers then
-                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
+                    local conts = ArrayList and ArrayList.new and ArrayList.new() or {}
+                    if self.character and self.character.getInventory then
+                        conts:add(self.character:getInventory())
+                    end
+                    if self.craftRecipe and showDebugInfoInChat then showDebugInfoInChat("CRAFT \'"..self.craftRecipe:getName().."\'") end
+                    self.logic = HandcraftLogic.new(self.character, self.craftBench, self.isoObject)
+                    self.logic:setContainers(conts)
+                    self.logic:setRecipe(self.craftRecipe)
+                    self.logic:setTargetVariableInputRatio(self.variableInputRatio)
+                    if self.manualInputs then
+                        self:fixManualInputs()
+                        self.logic:setManualSelectInputs(true)
+                        self.logic:clearManualInputs()
+                        for inputIndex, items in pairs(self.manualInputs) do
+                            local inputScript = self.craftRecipe:getIOForIndex(inputIndex)
+                            if inputScript and not self.logic:setManualInputsFor(inputScript, items) then
+                                if log then log(DebugType.CraftLogic, "ISHandcraftAction.start -> failed to set manual input items.") end
+                            end
+                        end
+                        self.logic:canPerformCurrentRecipe()
+                    end
+                    self:clearItemsProgressBar(true)
+                    self:setOverrideHandModels(self.logic:getModelHandOne(), self.logic:getModelHandTwo())
+                    if self.actionScript then
+                        self:setActionAnim(self.actionScript:getActionAnim())
+                        if self.actionScript:getAnimVarKey() then
+                            self:setAnimVariable(self.actionScript:getAnimVarKey(), self.actionScript:getAnimVarVal())
+                        end
+                        if self.actionScript:getSound() ~= nil and self.actionScript:getSoundTime() == ActionSoundTime.ACTION_START then
+                            self.sound = self.character:playSound(self.actionScript:getSound())
+                        end
+                    end
+                    return
                 end
-                local res = orig_handcraft_start(self)
-                -- Omit raw ArrayList containers from Lua table so NetTimedAction does not trigger server ContainerID NPE
-                if not self.isoObject and isClient() then
-                    self.containers = nil
-                end
-                return res
+                return orig_handcraft_start(self)
             end
         end
 
@@ -606,31 +631,28 @@ local function initB42Polyfills()
         if orig_handcraft_serverStart then
             ISHandcraftAction.serverStart = function(self)
                 if not self.containers then
-                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
-                return orig_handcraft_serverStart(self)
-            end
-        end
-
-        local orig_handcraft_update = ISHandcraftAction.update
-        if orig_handcraft_update then
-            ISHandcraftAction.update = function(self)
-                local ok, err = pcall(orig_handcraft_update, self)
-                if not ok then
-                    print("[PZModStudio_Polyfills] Handcraft update error caught: " .. tostring(err))
-                end
-                -- Stuck prevention: if action reached completion but was not released by network
-                if self.action and self.getJobDelta then
-                    local delta = self:getJobDelta()
-                    if delta and delta >= 0.999 then
-                        self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 60 then
-                            pcall(function()
-                                self:forceComplete()
-                            end)
+                    local conts = ArrayList and ArrayList.new and ArrayList.new() or {}
+                    if self.character and self.character.getInventory then
+                        conts:add(self.character:getInventory())
+                    end
+                    self.logic = HandcraftLogic.new(self.character, self.craftBench, self.isoObject)
+                    self.logic:setContainers(conts)
+                    self.logic:setRecipe(self.craftRecipe)
+                    self.logic:setTargetVariableInputRatio(self.variableInputRatio)
+                    if self.manualInputs then
+                        self:fixManualInputs()
+                        self.logic:setManualSelectInputs(true)
+                        self.logic:clearManualInputs()
+                        for inputIndex, items in pairs(self.manualInputs) do
+                            local inputScript = self.craftRecipe:getIOForIndex(inputIndex)
+                            if inputScript and not self.logic:setManualInputsFor(inputScript, items) then
+                                if log then log(DebugType.CraftLogic, "ISHandcraftAction.serverStart -> failed to set manual input items.") end
+                            end
                         end
                     end
+                    return
                 end
+                return orig_handcraft_serverStart(self)
             end
         end
     end
