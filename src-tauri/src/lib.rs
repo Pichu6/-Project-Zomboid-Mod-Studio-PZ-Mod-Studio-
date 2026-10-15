@@ -12,6 +12,7 @@ pub mod preset_manager;
 pub mod sandbox;
 pub mod secrets;
 pub mod server_manager;
+pub mod vdf;
 pub mod vfs;
 pub mod workshop;
 

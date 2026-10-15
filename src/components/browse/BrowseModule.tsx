@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Library, Link2, Loader2, Search, Users, X,
 } from 'lucide-react';
-import { CatalogModSummary, InstallResult, ModOrigin, NexusMod, NexusSort, WorkshopItem, WorkshopLookup, WorkshopSort } from '../../types';
+import { CatalogModSummary, InstallResult, ModOrigin, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 
@@ -153,7 +153,18 @@ const InstallBox: React.FC<{
 // Steam Workshop
 // ---------------------------------------------------------------------------------------------
 
-const WorkshopCard: React.FC<{ item: WorkshopItem; installedIds: string[] }> = ({ item, installedIds }) => (
+const UpdateChips: React.FC<{ state: WorkshopInstallState | undefined }> = ({ state }) => (
+  <>
+    {state?.update_pending && (
+      <Chip className="border-amber-500/60 text-amber-300 bg-amber-950/40" title="Steam has a newer version that is not downloaded yet">Update waiting</Chip>
+    )}
+    {state?.updated_since_last_play && !state.update_pending && (
+      <Chip className="border-sky-500/60 text-sky-300 bg-sky-950/40" title="This version was published after you last played">New since last play</Chip>
+    )}
+  </>
+);
+
+const WorkshopCard: React.FC<{ item: WorkshopItem; installedIds: string[]; state?: WorkshopInstallState }> = ({ item, installedIds, state }) => (
   <article className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
     <div className="aspect-video bg-slate-950 overflow-hidden">
       {item.preview_url ? (
@@ -167,6 +178,7 @@ const WorkshopCard: React.FC<{ item: WorkshopItem; installedIds: string[] }> = (
         <h3 className="text-xs font-bold text-slate-100 leading-snug">{item.found ? item.title : `Item ${item.workshop_id}`}</h3>
         <div className="flex flex-wrap justify-end gap-1">
           {installedIds.length > 0 && <InstalledChip />}
+          <UpdateChips state={state} />
           {item.found && <BuildChips builds={item.builds} source="The Workshop page" />}
         </div>
       </div>
@@ -383,6 +395,17 @@ const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) 
     return map;
   }, [catalog]);
   const subscribedIds = useMemo(() => [...installedByItem.keys()].sort(), [installedByItem]);
+  // Workshop id -> what Steam has installed (update waiting / new since last play).
+  const stateByItem = useMemo(() => {
+    const map = new Map<string, WorkshopInstallState>();
+    for (const m of catalog) {
+      if (m.source.kind === 'workshop' && m.workshop_state) map.set(m.source.workshop_id, m.workshop_state);
+    }
+    return map;
+  }, [catalog]);
+  const pendingCount = [...stateByItem.values()].filter((s) => s.update_pending).length;
+  const newSincePlayCount = [...stateByItem.values()].filter((s) => s.updated_since_last_play).length;
+  const [updateFilter, setUpdateFilter] = useState<'all' | 'pending' | 'new'>('all');
 
   const [subscribed, setSubscribed] = useState<WorkshopItem[]>([]);
   const [loadingSubs, setLoadingSubs] = useState(false);
@@ -419,9 +442,11 @@ const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) 
 
   const visibleSubs = useMemo(() => {
     const q = filter.toLowerCase().trim();
-    const list = q ? subscribed.filter((i) => i.title.toLowerCase().includes(q) || (installedByItem.get(i.workshop_id) ?? []).some((id) => id.toLowerCase().includes(q))) : subscribed;
+    let list = q ? subscribed.filter((i) => i.title.toLowerCase().includes(q) || (installedByItem.get(i.workshop_id) ?? []).some((id) => id.toLowerCase().includes(q))) : subscribed;
+    if (updateFilter === 'pending') list = list.filter((i) => stateByItem.get(i.workshop_id)?.update_pending);
+    if (updateFilter === 'new') list = list.filter((i) => stateByItem.get(i.workshop_id)?.updated_since_last_play);
     return [...list].sort((a, b) => (b.time_updated ?? 0) - (a.time_updated ?? 0));
-  }, [subscribed, filter, installedByItem]);
+  }, [subscribed, filter, installedByItem, updateFilter, stateByItem]);
 
   const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)) : [];
 
@@ -486,6 +511,13 @@ const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) 
           Your subscriptions <span className="text-slate-500 font-mono text-xs">({subscribedIds.length})</span>
           {loadingSubs && <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-slate-500" aria-hidden="true" />}
         </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={updateFilter} onChange={(e) => setUpdateFilter(e.target.value as 'all' | 'pending' | 'new')} aria-label="Filter by update status"
+            className="px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 cursor-pointer">
+            <option value="all">All subscriptions</option>
+            <option value="new">New since last play ({newSincePlayCount})</option>
+            <option value="pending">Update waiting ({pendingCount})</option>
+          </select>
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -493,10 +525,17 @@ const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) 
           aria-label="Filter subscriptions"
           className="w-64 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 outline-none placeholder:text-slate-600"
         />
+        </div>
       </div>
+      {(pendingCount > 0 || newSincePlayCount > 0) && (
+        <p className="text-xs text-slate-400">
+          {pendingCount > 0 && <span className="text-amber-300">{pendingCount} updates are waiting to download in Steam (multiplayer servers reject mismatched versions). </span>}
+          {newSincePlayCount > 0 && <span className="text-sky-300">{newSincePlayCount} items changed since you last played.</span>}
+        </p>
+      )}
       {subscribedIds.length === 0 && <p className="text-xs text-slate-500">No subscribed Workshop items found in your Workshop folder.</p>}
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-        {visibleSubs.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} />)}
+        {visibleSubs.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} state={stateByItem.get(i.workshop_id)} />)}
       </div>
     </div>
   );

@@ -37,6 +37,60 @@ pub struct WorkshopItem {
     pub steam_url: String,
 }
 
+/// What Steam has installed for one subscribed item (from appworkshop_108600.acf, offline).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InstalledItemState {
+    /// Publish time (unix seconds) of the version on disk.
+    pub installed_time: Option<u64>,
+    /// Publish time of the newest version Steam knows about.
+    pub latest_time: Option<u64>,
+    pub size: Option<u64>,
+    /// Steam knows a newer version that is not downloaded yet (the usual cause of
+    /// "Workshop item version is different than the server's").
+    pub update_pending: bool,
+    /// The version on disk was published after the game last ran.
+    pub updated_since_last_play: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WorkshopLocalState {
+    /// When Project Zomboid last ran (unix seconds).
+    pub time_last_app_ran: Option<u64>,
+    pub items: std::collections::BTreeMap<String, InstalledItemState>,
+}
+
+/// Reads Steam's record of installed Project Zomboid Workshop items. `workshop_content_dir` is
+/// `.../steamapps/workshop/content/108600`; the record is `.../steamapps/workshop/appworkshop_108600.acf`.
+pub fn local_state(workshop_content_dir: &str) -> Option<WorkshopLocalState> {
+    let acf = std::path::Path::new(workshop_content_dir).parent()?.parent()?.join("appworkshop_108600.acf");
+    let text = std::fs::read_to_string(acf).ok()?;
+    let root = crate::vdf::parse(&text);
+    let app = root.get("AppWorkshop")?;
+    let last_ran = app.u64("TimeLastAppRan").filter(|t| *t > 0);
+    let details = app.get("WorkshopItemDetails");
+    let mut items = std::collections::BTreeMap::new();
+    for (id, installed) in app.get("WorkshopItemsInstalled").and_then(|b| b.block()).into_iter().flatten() {
+        let detail = details.and_then(|d| d.get(id));
+        let installed_time = installed.u64("timeupdated").or_else(|| detail.and_then(|d| d.u64("timeupdated")));
+        let latest_time = detail.and_then(|d| d.u64("latest_timeupdated")).or(installed_time);
+        let manifest = installed.str("manifest").or_else(|| detail.and_then(|d| d.str("manifest")));
+        let latest_manifest = detail.and_then(|d| d.str("latest_manifest"));
+        let update_pending = matches!((latest_time, installed_time), (Some(l), Some(i)) if l > i)
+            || matches!((latest_manifest, manifest), (Some(l), Some(m)) if l != m && l != "0");
+        items.insert(
+            id.clone(),
+            InstalledItemState {
+                installed_time,
+                latest_time,
+                size: installed.u64("size"),
+                update_pending,
+                updated_since_last_play: matches!((installed_time, last_ran), (Some(i), Some(r)) if i > r),
+            },
+        );
+    }
+    Some(WorkshopLocalState { time_last_app_ran: last_ran, items })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkshopLookup {
     /// Set when the input was a collection.
@@ -315,6 +369,36 @@ mod tests {
         assert!(q.is_project_zomboid);
         assert_eq!(q.summary, "Short text");
         assert_eq!(q.builds, vec!["41"]);
+    }
+
+    #[test]
+    fn reads_install_state_from_the_acf() {
+        let root = std::env::temp_dir().join(format!("pzms-acf-{}", std::process::id()));
+        let content = root.join("steamapps/workshop/content/108600");
+        std::fs::create_dir_all(&content).unwrap();
+        std::fs::write(root.join("steamapps/workshop/appworkshop_108600.acf"), r#""AppWorkshop"
+{
+	"TimeLastAppRan"		"2000"
+	"WorkshopItemsInstalled"
+	{
+		"1" { "size" "10" "timeupdated" "1500" "manifest" "a" }
+		"2" { "size" "20" "timeupdated" "2500" "manifest" "b" }
+		"3" { "size" "30" "timeupdated" "1000" "manifest" "c" }
+	}
+	"WorkshopItemDetails"
+	{
+		"1" { "manifest" "a" "timeupdated" "1500" "latest_timeupdated" "1500" "latest_manifest" "a" }
+		"2" { "manifest" "b" "timeupdated" "2500" "latest_timeupdated" "2500" "latest_manifest" "b" }
+		"3" { "manifest" "c" "timeupdated" "1000" "latest_timeupdated" "3000" "latest_manifest" "d" }
+	}
+}"#).unwrap();
+        let state = local_state(&content.to_string_lossy()).unwrap();
+        assert_eq!(state.time_last_app_ran, Some(2000));
+        assert!(!state.items["1"].update_pending && !state.items["1"].updated_since_last_play);
+        assert!(state.items["2"].updated_since_last_play);
+        assert!(state.items["3"].update_pending);
+        assert_eq!(state.items["3"].latest_time, Some(3000));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// Live Steam call with a deliberately invalid key: must come back as a clear key error.

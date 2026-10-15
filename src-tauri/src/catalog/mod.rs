@@ -63,6 +63,9 @@ pub struct CatalogMod {
     /// For mods in Zomboid/mods installed by the Studio: where they were downloaded from.
     #[serde(default)]
     pub origin: Option<crate::origins::ModOrigin>,
+    /// For subscribed Workshop items: what Steam has installed vs the latest version.
+    #[serde(default)]
+    pub workshop_state: Option<crate::workshop::InstalledItemState>,
     pub info: GameModInfo,
 }
 
@@ -141,6 +144,7 @@ pub fn build_catalog(workshop_dir: &str, user_zomboid_dir: &str, game_version_ov
     let game_version = game_version_override.or_else(|| read_installed_game_version(user_zomboid_dir));
     let mut mods: Vec<CatalogMod> = Vec::new();
     let mut first_copy: HashMap<String, String> = HashMap::new();
+    let steam_state = crate::workshop::local_state(workshop_dir).unwrap_or_default();
     let recorded_origins = get_existing_user_zomboid_dirs(user_zomboid_dir)
         .first()
         .map(|dir| crate::origins::load(dir))
@@ -217,6 +221,10 @@ pub fn build_catalog(workshop_dir: &str, user_zomboid_dir: &str, game_version_ov
                 loadability,
                 shadowed_by,
                 origin: if source == ModSource::Local { recorded_origins.get(&folder_name).map(|r| r.origin.clone()) } else { None },
+                workshop_state: match &source {
+                    ModSource::Workshop { workshop_id } => steam_state.items.get(workshop_id).cloned(),
+                    _ => None,
+                },
                 info,
             });
         }
@@ -261,6 +269,8 @@ pub enum SuggestedFix {
     MoveBefore { mod_id: String, before: String },
     RemoveFromList { entry: String },
     SubscribeWorkshop { hint: String },
+    /// Open the item in the Steam client (e.g. to let a pending update download).
+    OpenInSteam { workshop_id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -289,7 +299,7 @@ impl IssueList {
                 SuggestedFix::EnableMod { mod_id: m } | SuggestedFix::DisableMod { mod_id: m } => Some(m),
                 SuggestedFix::MoveBefore { mod_id: m, before } => Some(if Some(m.as_str()) == mod_id { before } else { m }),
                 SuggestedFix::SubscribeWorkshop { hint } => Some(hint),
-                SuggestedFix::RemoveFromList { .. } => None,
+                SuggestedFix::RemoveFromList { .. } | SuggestedFix::OpenInSteam { .. } => None,
             };
             if let Some(other) = other.filter(|o| Some(o.as_str()) != mod_id && !related.contains(o)) {
                 related.push(other.clone());
@@ -386,6 +396,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
         reason
     }
 
+    let mut updated_since_play: Vec<String> = Vec::new();
     let mut seen_entries: HashSet<&str> = HashSet::new();
     for (idx, entry) in active.iter().enumerate() {
         let entry = entry.trim();
@@ -495,10 +506,32 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             }
         }
 
+        if let (ModSource::Workshop { workshop_id }, Some(state)) = (&m.source, &m.workshop_state) {
+            if state.update_pending {
+                let when = state.latest_time.and_then(|t| chrono::DateTime::from_timestamp(t as i64, 0)).map(|d| d.format("%Y-%m-%d").to_string());
+                list.push(Severity::Warning, "workshop_update_pending", Some(id),
+                    format!("Steam has a newer version of {}{} that is not downloaded yet. Let Steam download it (restart Steam if it is stuck): servers reject players whose mod versions differ (\"Workshop item version is different than the server's\").",
+                        describe(m), when.map(|w| format!(" (published {})", w)).unwrap_or_default()),
+                    vec![SuggestedFix::OpenInSteam { workshop_id: workshop_id.clone() }]);
+            }
+            if state.updated_since_last_play {
+                updated_since_play.push(describe(m));
+            }
+        }
+
         for copy in catalog.mods.iter().filter(|c| c.id == m.id && c.shadowed_by.is_some()) {
             list.push(Severity::Info, "shadowed_copy", Some(id),
                 format!("Another copy of {} at {} is ignored: the game uses the one at {}", m.id, copy.root_dir, m.root_dir), vec![]);
         }
+    }
+
+    if !updated_since_play.is_empty() {
+        let shown: Vec<&str> = updated_since_play.iter().take(12).map(String::as_str).collect();
+        let more = updated_since_play.len().saturating_sub(shown.len());
+        list.push(Severity::Info, "updated_since_last_play", None,
+            format!("{} active mods were updated since you last played: {}{}. If a save misbehaves, start with these.",
+                updated_since_play.len(), shown.join(", "), if more > 0 { format!(" and {} more", more) } else { String::new() }),
+            vec![]);
     }
 
     let mut issues = list.0;

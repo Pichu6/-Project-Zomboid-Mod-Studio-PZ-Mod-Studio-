@@ -76,7 +76,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | ⬜ | Nexus app registration and SSO login | Required by Nexus before a public release (email support@nexusmods.com with a test build). Personal API keys only for development. No rehosting of Nexus data; 20k requests/day, then 500/hour per user |
 | ⬜ | **PZ community mod index** on GitHub, CKAN-style | One small CC-0 file per mod by pull request: `id`, authors, sources (Workshop / Nexus / GitHub / URL + sha256), supported builds, requires, incompatible, load-after, tags. A GitHub Action builds one `index.json` the app downloads. Main value: B41/B42 compatibility data nobody else has |
 | 🔨 | GitHub releases and "install from URL / zip" (forum, Discord, itch.io). Done: install from `.zip` or an extracted folder into `Zomboid/mods` (any nesting, zip-slip and size checks, backups on replace, warnings when a Workshop copy wins or the build can't load it). Next: `.7z`/`.rar`, from URL, GitHub | Every non-Workshop install is hash-checked and goes through the Lua scan before it can be enabled |
-| ⬜ | Update tracking and "what changed" per mod; snapshot a mod before it updates so a save can roll back | Workshop only serves the latest version (Wabbajack-style pinning) |
+| 🔨 | Update tracking and "what changed" per mod; snapshot a mod before it updates so a save can roll back | Done: from Steam's own `appworkshop_108600.acf` (offline), updates waiting to download (the cause of "Workshop item version is different than the server's") are a Mod Health warning, and mods updated since you last played are listed; both are tags/filters on your subscriptions. Next: snapshots for rollback |
 
 ## Phase 3: Any mod, any version
 

@@ -259,7 +259,8 @@ export type HealthFix =
   | { action: 'disable_mod'; mod_id: string }
   | { action: 'move_before'; mod_id: string; before: string }
   | { action: 'remove_from_list'; entry: string }
-  | { action: 'subscribe_workshop'; hint: string };
+  | { action: 'subscribe_workshop'; hint: string }
+  | { action: 'open_in_steam'; workshop_id: string };
 
 export interface HealthIssue {
   severity: HealthSeverity;
@@ -279,11 +280,20 @@ export interface HealthReport {
   issues: HealthIssue[];
 }
 
+export interface WorkshopInstallState {
+  installed_time: number | null;
+  latest_time: number | null;
+  size: number | null;
+  update_pending: boolean;
+  updated_since_last_play: boolean;
+}
+
 export interface CatalogModSummary {
   id: string;
   name: string;
   source: CatalogSource;
   origin: ModOrigin | null;
+  workshop_state: WorkshopInstallState | null;
   root_dir: string;
   shadowed_by: string | null;
   loadability: { status: 'loadable' | 'no_folder_for_build' | 'outside_version_range' | 'invalid_mod_info' };
