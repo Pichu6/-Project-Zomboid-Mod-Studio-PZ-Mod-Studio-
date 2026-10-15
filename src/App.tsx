@@ -7,7 +7,7 @@ import { MergerModule } from './components/merger/MergerModule';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
-import { TauriService } from './services/tauri';
+import { TauriService, reportBackendError } from './services/tauri';
 
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
@@ -350,7 +350,7 @@ export const App: React.FC = () => {
     try {
       await TauriService.saveMasterLoadOrder(userDir, fullLoadOrder, activeModIds);
     } catch (err) {
-      console.warn('Auto-persisting profile load order:', err);
+      reportBackendError('Saving the load order', err);
     }
   };
 
@@ -373,10 +373,10 @@ export const App: React.FC = () => {
       return;
     }
 
-    setMods((prev) => {
+    {
       const willEnable = !target.enabled;
 
-      const updated = prev.map((m) => {
+      const updated = mods.map((m) => {
         if (m.mod_id === modId) {
           return { ...m, enabled: willEnable };
         }
@@ -394,14 +394,15 @@ export const App: React.FC = () => {
         return m;
       });
 
+      // Persist outside the state updater: updaters may run twice (StrictMode) and must stay pure.
+      setMods(updated);
       autoPersistProfileChanges(updated);
-      return [...updated];
-    });
+    }
   };
 
   const handleApplyPresetLoadOrder = (presetLoadOrder: string[], activeIds: string[]) => {
-    setMods((prev) => {
-      const modMap = new Map(prev.map((m) => [m.mod_id, m]));
+    {
+      const modMap = new Map(mods.map((m) => [m.mod_id, m]));
       const activeSet = new Set(activeIds);
 
       const reordered: ModInfo[] = [];
@@ -418,9 +419,9 @@ export const App: React.FC = () => {
         reordered.push({ ...m, enabled: activeSet.has(m.mod_id) });
       });
 
+      setMods(reordered);
       autoPersistProfileChanges(reordered);
-      return reordered;
-    });
+    }
     refreshActiveProfile();
   };
 

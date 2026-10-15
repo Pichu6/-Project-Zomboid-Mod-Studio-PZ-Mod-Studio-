@@ -29,37 +29,37 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use vfs::{auto_detect_paths, scan_conflicts, validate_paths, StudioPaths, VfsConflictRaw};
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_auto_paths() -> StudioPaths {
     auto_detect_paths()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn set_and_validate_paths(custom_paths: StudioPaths) -> StudioPaths {
     validate_paths(custom_paths)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn scan_conflicts_cmd(paths: StudioPaths) -> Vec<VfsConflictRaw> {
     scan_conflicts(&paths)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn validate_lua_syntax_cmd(code: String) -> LuaSyntaxCheckResult {
     validate_lua_syntax(&code)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn three_way_merge_lua_cmd(base: String, target_a: String, target_b: String) -> MergeChunkResult {
     three_way_merge_lua(&base, &target_a, &target_b)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn merge_pz_data_scripts_cmd(base: String, mod_a: String, mod_b: String) -> PzScriptMergeResult {
     merge_pz_data_scripts(&base, &mod_a, &mod_b)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_mod_list_ini_cmd(ini_path: String) -> Result<ModListData, String> {
     read_mod_list_ini(&ini_path)
 }
@@ -69,17 +69,17 @@ fn write_mod_list_ini_cmd(ini_path: String, active_mods: Vec<String>) -> Result<
     write_mod_list_ini(&ini_path, &active_mods)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn scan_all_installed_mods_cmd(paths: StudioPaths) -> Vec<ModManifest> {
     scan_all_installed_mods(&paths)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn sort_mod_dependencies_cmd(manifests: Vec<ModManifest>) -> DependencyAnalysisResult {
     sort_dependencies_topologically(&manifests)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn launch_sandbox_cmd<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
     config: SandboxLaunchConfig,
@@ -88,7 +88,7 @@ fn launch_sandbox_cmd<R: tauri::Runtime>(
     launch_sandbox_and_watch(app_handle, config, stop_signal)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn generate_master_patch_cmd(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     generate_master_patch(req)
 }
@@ -179,12 +179,12 @@ fn open_logs_folder_cmd(user_zomboid_dir: String) -> Result<bool, String> {
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_available_log_files_cmd(user_zomboid_dir: String) -> Vec<sandbox::LogFileInfo> {
     sandbox::list_available_log_files(&user_zomboid_dir)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_log_file_cmd(file_path: String, max_lines: Option<usize>) -> Result<Vec<String>, String> {
     sandbox::read_log_file(&file_path, max_lines)
 }
@@ -208,17 +208,17 @@ fn validate_external_url(url: &str) -> Result<&str, String> {
     Ok(url)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn clean_master_patch_cmd(req: MasterPatchRequest) -> Result<bool, String> {
     patch_generator::clean_master_patch(req)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_master_patch_status_cmd(user_zomboid_dir: String, mod_list_ini_path: String, package_folder_name: Option<String>) -> patch_generator::MasterPatchStatusInfo {
     patch_generator::get_master_patch_status(&user_zomboid_dir, &mod_list_ini_path, package_folder_name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_merged_packages_cmd(user_zomboid_dir: String, mod_list_ini_path: String) -> Vec<patch_generator::MergedPackageInfo> {
     patch_generator::list_merged_packages(&user_zomboid_dir, &mod_list_ini_path)
 }
@@ -233,7 +233,7 @@ fn rename_merged_package_cmd(user_zomboid_dir: String, mod_list_ini_path: String
     patch_generator::rename_merged_package(&user_zomboid_dir, &mod_list_ini_path, &old_folder, &new_name, description.as_deref())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_merged_package_cmd(user_zomboid_dir: String, mod_list_ini_path: String, folder_name: String) -> Result<bool, String> {
     patch_generator::delete_merged_package(&user_zomboid_dir, &mod_list_ini_path, &folder_name)
 }
@@ -255,7 +255,7 @@ fn save_draft_resolution_cmd(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_draft_resolutions_cmd(
     user_zomboid_dir: String,
     package_folder_name: String,
@@ -271,7 +271,7 @@ fn clear_draft_resolutions_cmd(
     patch_generator::clear_draft_resolutions(&user_zomboid_dir, &package_folder_name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn export_merged_package_cmd(
     user_zomboid_dir: String,
     package_folder_name: String,
@@ -280,7 +280,7 @@ fn export_merged_package_cmd(
     patch_generator::export_merged_package(&user_zomboid_dir, &package_folder_name, &target_file_path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn import_merged_package_cmd(
     user_zomboid_dir: String,
     mod_list_ini_path: String,

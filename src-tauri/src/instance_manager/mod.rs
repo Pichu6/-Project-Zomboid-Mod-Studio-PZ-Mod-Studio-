@@ -13,12 +13,24 @@ pub struct AppInstance {
     pub load_order: Vec<String>,
 }
 
+/// Path of a profile's JSON file. Profile IDs come from the UI and are joined onto a folder
+/// path, so anything other than a plain identifier is refused.
+fn instance_file_path(dir: &std::path::Path, instance_id: &str) -> Result<std::path::PathBuf, String> {
+    let valid = !instance_id.is_empty()
+        && instance_id.len() <= 64
+        && instance_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if !valid {
+        return Err(format!("Invalid profile id: '{}'", instance_id));
+    }
+    Ok(dir.join(format!("{}.json", instance_id)))
+}
+
 fn get_instances_dir(user_zomboid_dir: &str) -> std::path::PathBuf {
     let user_dirs = get_all_user_zomboid_dirs(user_zomboid_dir);
     user_dirs[0].join("PZModStudio_Instances")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_instances(user_zomboid_dir: String) -> Result<Vec<AppInstance>, String> {
     let dir = get_instances_dir(&user_zomboid_dir);
     if !dir.exists() {
@@ -59,11 +71,12 @@ pub fn create_instance(
         return Err("Instance name cannot be empty.".to_string());
     }
 
-    let timestamp = std::time::SystemTime::now()
+    let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let id = format!("inst_{}", timestamp);
+        .unwrap_or_default();
+    let timestamp = now.as_secs();
+    // Milliseconds so two profiles created in the same second do not overwrite each other.
+    let id = format!("inst_{}", now.as_millis());
     let created_at = format!("{}", timestamp);
 
     let instance = AppInstance {
@@ -83,10 +96,10 @@ pub fn create_instance(
     Ok(instance)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Result<(), String> {
     let dir = get_instances_dir(&user_zomboid_dir);
-    let instance_file = dir.join(format!("{}.json", instance_id));
+    let instance_file = instance_file_path(&dir, &instance_id)?;
     if !instance_file.exists() {
         return Err("Selected instance does not exist.".to_string());
     }
@@ -111,20 +124,16 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
 
     target_instance.is_active = true;
 
-    // 2. Write active mods directly into Zomboid/mods.txt, default.txt, ModListData.ini, and PZModStudio_MasterLoadOrder.json
-    let user_dirs = get_all_user_zomboid_dirs(&user_zomboid_dir);
-    for z_dir in &user_dirs {
-        // Write mods.txt (PZ Build 42)
-        let mods_txt_path = z_dir.join("mods.txt");
-        let mods_txt_content = target_instance.active_mod_ids.join("\n");
-        let _ = fs::write(mods_txt_path, &mods_txt_content);
-
-        // Write ModListData.ini and complete default.txt with active mods and maps
-        let mod_list_data_path = z_dir.join("ModListData.ini");
-        let _ = crate::load_order::ini_parser::write_mod_list_ini(
-            &mod_list_data_path.to_string_lossy(),
+    // 2. Write the active mods into mods/default.txt and PZModStudio_MasterLoadOrder.json
+    let z_dir = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&user_zomboid_dir)
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
+    {
+        crate::load_order::ini_parser::write_mod_list_ini(
+            &z_dir.join("ModListData.ini").to_string_lossy(),
             &target_instance.active_mod_ids,
-        );
+        )?;
 
         // Write PZModStudio_MasterLoadOrder.json
         let master_order_path = z_dir.join("PZModStudio_MasterLoadOrder.json");
@@ -146,20 +155,19 @@ pub fn save_master_load_order(
     load_order: Vec<String>,
     active_mod_ids: Vec<String>,
 ) -> Result<(), String> {
-    let user_dirs = get_all_user_zomboid_dirs(&user_zomboid_dir);
-    for z_dir in &user_dirs {
-        // 1. Write ModListData.ini and complete default.txt with active mods and maps
-        let mod_list_data_path = z_dir.join("ModListData.ini");
-        let _ = crate::load_order::ini_parser::write_mod_list_ini(
-            &mod_list_data_path.to_string_lossy(),
+    // Runs on every toggle/reorder: only the Zomboid folder in use, and no Workshop scans.
+    let z_dir = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&user_zomboid_dir)
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
+    {
+        // 1. mods/default.txt, the list the game reads
+        crate::load_order::ini_parser::write_mod_list_ini(
+            &z_dir.join("ModListData.ini").to_string_lossy(),
             &active_mod_ids,
-        );
+        )?;
 
-        // 2. Write mods.txt
-        let mods_txt_path = z_dir.join("mods.txt");
-        let _ = fs::write(mods_txt_path, active_mod_ids.join("\n"));
-
-        // 4. Write PZModStudio_MasterLoadOrder.json
+        // 2. Write PZModStudio_MasterLoadOrder.json
         let master_order_path = z_dir.join("PZModStudio_MasterLoadOrder.json");
         let master_json = serde_json::json!({
             "load_order": load_order,
@@ -193,7 +201,7 @@ pub fn save_master_load_order(
 #[tauri::command]
 pub fn delete_instance(user_zomboid_dir: String, instance_id: String) -> Result<(), String> {
     let dir = get_instances_dir(&user_zomboid_dir);
-    let instance_file = dir.join(format!("{}.json", instance_id));
+    let instance_file = instance_file_path(&dir, &instance_id)?;
     if instance_file.exists() {
         fs::remove_file(instance_file).map_err(|e| e.to_string())?;
     }
@@ -206,7 +214,7 @@ pub fn update_instance(
     instance: AppInstance,
 ) -> Result<AppInstance, String> {
     let dir = get_instances_dir(&user_zomboid_dir);
-    let instance_file = dir.join(format!("{}.json", instance.id));
+    let instance_file = instance_file_path(&dir, &instance.id)?;
     if !instance_file.exists() {
         return Err("The instance to update does not exist.".to_string());
     }

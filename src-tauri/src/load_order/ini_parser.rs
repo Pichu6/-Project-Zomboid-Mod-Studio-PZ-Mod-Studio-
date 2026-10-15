@@ -363,7 +363,10 @@ pub fn write_file_with_backup(path: &Path, content: &str, backup_dir: &Path) -> 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Cannot create {}: {}", parent.display(), e))?;
     }
-    let tmp_path = path.with_extension("pzms-tmp");
+    // Unique per writer so two writes can never share (and truncate) the same temp file.
+    static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp_path = path.with_extension(format!("pzms-tmp-{}-{}", std::process::id(), n));
     fs::write(&tmp_path, content).map_err(|e| format!("Cannot write {}: {}", tmp_path.display(), e))?;
     fs::rename(&tmp_path, path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
@@ -376,22 +379,26 @@ pub fn write_file_with_backup(path: &Path, content: &str, backup_dir: &Path) -> 
 /// game reads (ZomboidFileSystem / ActiveModsFile). The previous file is backed up to
 /// `Zomboid/PZModStudio_Backups/`. Save folders are not touched: the game rewrites each save's
 /// own `mods.txt` itself whenever that save is loaded.
+///
+/// The `maps` block is kept as it is: the game only uses it to order conflicting map mods and
+/// maintains it from its own mod selector, so it does not need a Workshop scan on every save.
 pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
     let default_txt_path = resolve_default_txt_path(ini_path);
     let zomboid_dir = zomboid_dir_for(&default_txt_path)
         .ok_or_else(|| format!("Cannot resolve the Zomboid folder for {}", default_txt_path.display()))?;
-
-    let mut maps = read_existing_maps(&default_txt_path);
-    for detected in detect_active_maps(active_mods, &zomboid_dir.to_string_lossy()) {
-        if !maps.contains(&detected) {
-            maps.push(detected);
-        }
+    if !zomboid_dir.is_dir() {
+        return Err(format!("Zomboid folder not found: {}", zomboid_dir.display()));
     }
 
+    // Saves from the UI thread and background scans can overlap; one writer at a time.
+    let _guard = MOD_LIST_WRITE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let maps = read_existing_maps(&default_txt_path);
     let content = build_default_txt(active_mods, &maps);
     write_file_with_backup(&default_txt_path, &content, &zomboid_dir.join("PZModStudio_Backups"))?;
     Ok(())
 }
+
+static MOD_LIST_WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod tests {

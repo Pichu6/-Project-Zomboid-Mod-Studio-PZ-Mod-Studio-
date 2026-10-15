@@ -49,7 +49,7 @@ pub struct ServerQuickSettings {
     pub map_names: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_server_configs(user_zomboid_dir: String) -> Result<Vec<PZServerConfig>, String> {
     let mut configs = Vec::new();
 
@@ -216,7 +216,7 @@ pub fn delete_server_config(
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_server_log_snapshot(
     user_zomboid_dir: String,
     server_name: String,
@@ -252,7 +252,7 @@ pub fn save_server_log_snapshot(
     Ok(target_path.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn launch_dedicated_server(
     pz_install_dir: String,
     user_zomboid_dir: String,
@@ -435,7 +435,7 @@ fn read_server_state(state_file: &Path) -> Option<DedicatedServerStatus> {
 /// Stops the dedicated server this app launched (the PID saved in pz_server_state.json),
 /// together with its child processes. Never touches unrelated java.exe processes.
 /// Returns Ok(false) when there is no tracked server to stop.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
@@ -489,7 +489,7 @@ pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Res
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_dedicated_server_status(user_zomboid_dir: String) -> Result<DedicatedServerStatus, String> {
     let primary_user_dir = if !user_zomboid_dir.is_empty() {
         Path::new(&user_zomboid_dir).to_path_buf()
@@ -544,7 +544,7 @@ pub fn get_dedicated_server_status(user_zomboid_dir: String) -> Result<Dedicated
     Ok(state)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_dedicated_server_logs(
     user_zomboid_dir: String,
     max_lines: Option<usize>,
@@ -621,7 +621,7 @@ fn is_clean_player_name(name: &str) -> bool {
     trimmed.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == ' ')
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPlayer>, String> {
     let primary_user_dir = if !user_zomboid_dir.is_empty() {
         Path::new(&user_zomboid_dir).to_path_buf()
@@ -1003,7 +1003,7 @@ pub fn send_server_command(
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_server_quick_settings(file_path: String) -> Result<ServerQuickSettings, String> {
     let path = Path::new(&file_path);
     if !path.exists() {

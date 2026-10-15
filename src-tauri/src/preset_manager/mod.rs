@@ -30,21 +30,21 @@ pub struct MissingModsReport {
     pub total_count: usize,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_preset_file(preset: ModPreset, file_path: String) -> Result<(), String> {
     let json = serde_json::to_string_pretty(&preset).map_err(|e| e.to_string())?;
     fs::write(Path::new(&file_path), json).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_preset_file(file_path: String) -> Result<ModPreset, String> {
     let content = fs::read_to_string(Path::new(&file_path)).map_err(|e| e.to_string())?;
     let preset: ModPreset = serde_json::from_str(&content).map_err(|e| format!("Invalid .pzpack format: {}", e))?;
     Ok(preset)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn check_missing_preset_mods(preset: ModPreset, user_zomboid_dir: String, workshop_dir: String) -> Result<MissingModsReport, String> {
     let mut installed_mod_ids = std::collections::HashSet::new();
 
