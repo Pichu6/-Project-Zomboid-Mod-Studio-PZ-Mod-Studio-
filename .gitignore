@@ -40,3 +40,6 @@ __pycache__/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+
+# Local backups of replaced executables
+*.old-*.exe
