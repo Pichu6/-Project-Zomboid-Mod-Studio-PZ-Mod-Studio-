@@ -282,6 +282,8 @@ export interface HealthReport {
 export interface CatalogModSummary {
   id: string;
   name: string;
+  source: CatalogSource;
+  origin: ModOrigin | null;
   root_dir: string;
   shadowed_by: string | null;
   loadability: { status: 'loadable' | 'no_folder_for_build' | 'outside_version_range' | 'invalid_mod_info' };
@@ -312,6 +314,38 @@ export interface NexusSearchResult {
   total: number;
   offset: number;
   mods: NexusMod[];
+}
+
+export type ModOrigin =
+  | { kind: 'nexus'; mod_id: number; page_url: string; name: string | null }
+  | { kind: 'manual'; file_name: string | null };
+
+export type CatalogSource =
+  | { kind: 'workshop'; workshop_id: string }
+  | { kind: 'workshop_upload'; item_folder: string }
+  | { kind: 'local' };
+
+export interface WorkshopItem {
+  workshop_id: string;
+  found: boolean;
+  title: string;
+  summary: string;
+  preview_url: string | null;
+  time_updated: number | null;
+  subscriptions: number;
+  favorited: number;
+  file_size: number;
+  tags: string[];
+  builds: string[];
+  is_project_zomboid: boolean;
+  banned: boolean;
+  page_url: string;
+  steam_url: string;
+}
+
+export interface WorkshopLookup {
+  collection: WorkshopItem | null;
+  items: WorkshopItem[];
 }
 
 export interface InstalledMod {

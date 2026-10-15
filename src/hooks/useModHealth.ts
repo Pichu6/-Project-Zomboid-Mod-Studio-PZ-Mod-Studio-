@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { HealthReport, ModInfo } from '../types';
+import { CatalogModSummary, HealthReport, ModInfo } from '../types';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
 import { TauriService, reportBackendError } from '../services/tauri';
 
@@ -9,6 +9,7 @@ import { TauriService, reportBackendError } from '../services/tauri';
  */
 export function useModHealth(paths: StudioPathsUI, mods: ModInfo[]) {
   const [report, setReport] = useState<HealthReport | null>(null);
+  const [catalog, setCatalog] = useState<CatalogModSummary[]>([]);
   const [checking, setChecking] = useState(false);
   const requestId = useRef(0);
 
@@ -22,7 +23,10 @@ export function useModHealth(paths: StudioPathsUI, mods: ModInfo[]) {
     setChecking(true);
     try {
       const health = await TauriService.getModHealth(paths, activeKey ? activeKey.split('\n') : []);
-      if (id === requestId.current) setReport(health.report);
+      if (id === requestId.current) {
+        setReport(health.report);
+        setCatalog(health.catalog.mods);
+      }
     } catch (err) {
       if (id === requestId.current) reportBackendError('Checking mod health', err);
     } finally {
@@ -35,5 +39,12 @@ export function useModHealth(paths: StudioPathsUI, mods: ModInfo[]) {
     return () => clearTimeout(t);
   }, [recheck]);
 
-  return { report, checking, recheck };
+  // Mod id -> the copy the game uses (source, origin), for source tags in the UI.
+  const catalogById = useMemo(() => {
+    const map = new Map<string, CatalogModSummary>();
+    for (const m of catalog) if (!m.shadowed_by) map.set(m.id, m);
+    return map;
+  }, [catalog]);
+
+  return { report, checking, recheck, catalog, catalogById };
 }

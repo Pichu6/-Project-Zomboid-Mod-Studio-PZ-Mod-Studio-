@@ -58,6 +58,8 @@ hosting files. mod.io, Thunderstore, CurseForge and ModDB have no real PZ presen
 few mods and tools; some authors publish on GitHub. **No open, source-agnostic PZ mod index exists**
 (nothing like Modrinth or KSP's CKAN): that gap is the opportunity.
 
+Every mod in the Mod List carries a source tag (Steam, Nexus, Manual, Local, Studio) with a source filter; installs through the Studio record where they came from in `Zomboid/PZModStudio_Origins.json`.
+
 Design: one `ModSource` interface in Rust (`search`, `get_mod`, `list_files`, `resolve_download`,
 `check_updates`) with a provider per platform, and a source badge per mod in the UI. Identity across
 sources is the `mod.info` id **plus** source/author and a content hash, with explicit cross-links
@@ -65,8 +67,8 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview) | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
-| ⬜ | Import a Workshop collection (URL) into a profile | `GetCollectionDetails`, no key |
+| ✅ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview): Browse Mods > Steam Workshop shows your subscriptions with live details | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
+| 🔨 | Import a Workshop collection (URL) into a profile. Done: paste a collection link to see its items, which are installed and which are missing, and open it in Steam to subscribe. Next: turn it into a profile | `GetCollectionDetails`, no key |
 | ⬜ | Subscribe / unsubscribe / download | ISteamUGC through the running Steam client (steamworks-rs); SteamCMD fallback for dedicated servers |
 | ✅ | **Nexus Mods** browse and search (Browse Mods tab: search, sort, build hint, open page / Files tab) | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |
 | ⬜ | Nexus downloads | v1 `download_link.json`. Premium users directly; free users through the website's "Mod Manager Download" button (`nxm://` link handled by the Studio, like Vortex/MO2) |

@@ -60,6 +60,9 @@ pub struct CatalogMod {
     pub loadability: Loadability,
     /// When another copy with the same id is found first, the root of that copy: this one is ignored.
     pub shadowed_by: Option<String>,
+    /// For mods in Zomboid/mods installed by the Studio: where they were downloaded from.
+    #[serde(default)]
+    pub origin: Option<crate::origins::ModOrigin>,
     pub info: GameModInfo,
 }
 
@@ -138,6 +141,10 @@ pub fn build_catalog(workshop_dir: &str, user_zomboid_dir: &str, game_version_ov
     let game_version = game_version_override.or_else(|| read_installed_game_version(user_zomboid_dir));
     let mut mods: Vec<CatalogMod> = Vec::new();
     let mut first_copy: HashMap<String, String> = HashMap::new();
+    let recorded_origins = get_existing_user_zomboid_dirs(user_zomboid_dir)
+        .first()
+        .map(|dir| crate::origins::load(dir))
+        .unwrap_or_default();
 
     for (mods_dir, source) in mod_folders_in_game_order(workshop_dir, user_zomboid_dir) {
         for root in child_dirs(&mods_dir) {
@@ -209,6 +216,7 @@ pub fn build_catalog(workshop_dir: &str, user_zomboid_dir: &str, game_version_ov
                 has_root_mod_info,
                 loadability,
                 shadowed_by,
+                origin: if source == ModSource::Local { recorded_origins.get(&folder_name).map(|r| r.origin.clone()) } else { None },
                 info,
             });
         }

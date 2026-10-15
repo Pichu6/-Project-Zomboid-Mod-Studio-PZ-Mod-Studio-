@@ -541,6 +541,7 @@ export const App: React.FC = () => {
               onApplyPresetLoadOrder={handleApplyPresetLoadOrder}
               openedPackageFolder={openedPackageFolder}
               healthIssues={health.report?.issues ?? null}
+              catalogById={health.catalogById}
             />
           )}
 
@@ -553,7 +554,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'BROWSE' && <BrowseModule paths={paths} onInstalled={handleRefreshMods} />}
+          {activeTab === 'BROWSE' && <BrowseModule paths={paths} catalog={health.catalog} onInstalled={handleRefreshMods} />}
 
           {activeTab === 'HEALTH' && (
             <HealthModule

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -273,8 +273,18 @@ export const TauriService = {
    * Rejects with a message starting with INSTALL_CONFLICT: (JSON {existing_folders}) when
    * folders already exist and replaceExisting is false.
    */
-  installMods: async (source: string, paths: StudioPathsUI, replaceExisting: boolean): Promise<InstallResult> => {
-    return await invoke<InstallResult>('install_mods_cmd', { source, paths, replaceExisting });
+  installMods: async (source: string, paths: StudioPathsUI, replaceExisting: boolean, origin?: ModOrigin): Promise<InstallResult> => {
+    return await invoke<InstallResult>('install_mods_cmd', { source, paths, replaceExisting, origin: origin ?? null });
+  },
+
+  /** Steam Workshop details for item ids (no key needed). Throws on failure. */
+  workshopDetails: async (ids: string[]): Promise<WorkshopItem[]> => {
+    return await invoke<WorkshopItem[]>('workshop_details_cmd', { ids });
+  },
+
+  /** Looks up pasted Workshop links / ids / a collection link. Throws on failure. */
+  workshopLookup: async (input: string): Promise<WorkshopLookup> => {
+    return await invoke<WorkshopLookup>('workshop_lookup_cmd', { input });
   },
 
   /**

@@ -189,7 +189,15 @@ fn describe_candidates(staging: &Path, fallback_name: &str) -> Result<Vec<Candid
 }
 
 /// Installs the mod(s) found in `source` (a .zip file or a folder) into `<Zomboid>/mods`.
-pub fn install_mods(source: &str, user_zomboid_dir: &str, workshop_dir: &str, replace_existing: bool) -> Result<InstallResult, String> {
+/// `origin` says where the file came from (e.g. the Nexus page the user downloaded it from);
+/// without it the install is recorded as a manual one with the file name.
+pub fn install_mods(
+    source: &str,
+    user_zomboid_dir: &str,
+    workshop_dir: &str,
+    replace_existing: bool,
+    origin: Option<crate::origins::ModOrigin>,
+) -> Result<InstallResult, String> {
     let source_path = Path::new(source);
     let zomboid = get_existing_user_zomboid_dirs(user_zomboid_dir)
         .into_iter()
@@ -229,6 +237,7 @@ pub fn install_mods(source: &str, user_zomboid_dir: &str, workshop_dir: &str, re
 
         let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
         let mut installed = Vec::new();
+        let mut warnings = Vec::new();
         for c in candidates {
             let dest = mods_dir.join(&c.folder);
             if staging_to_clean.is_none() && dest.starts_with(&c.root) {
@@ -259,9 +268,16 @@ pub fn install_mods(source: &str, user_zomboid_dir: &str, workshop_dir: &str, re
             });
         }
 
+        let origin = origin.unwrap_or_else(|| crate::origins::ModOrigin::Manual {
+            file_name: source_path.file_name().map(|n| n.to_string_lossy().to_string()),
+        });
+        let folders: Vec<String> = installed.iter().map(|m| m.folder.clone()).collect();
+        if let Err(e) = crate::origins::record(&zomboid, &folders, &origin) {
+            warnings.push(format!("Installed, but where it came from could not be saved: {}", e));
+        }
+
         // What the game will make of it, using the same catalog as the health check.
         let catalog = crate::catalog::build_catalog(workshop_dir, &zomboid.to_string_lossy(), None);
-        let mut warnings = Vec::new();
         for m in &installed {
             let Some(id) = &m.mod_id else {
                 warnings.push(format!("{}: its mod.info has no usable id= line, so the game cannot load it.", m.folder));
@@ -329,7 +345,7 @@ mod tests {
             ("SomeMod-v2/Contents/mods/SomeMod/common/.keep", ""),
             ("SomeMod-v2/readme.txt", "hi"),
         ]);
-        let r = install_mods(&archive.to_string_lossy(), &z, "", false).unwrap();
+        let r = install_mods(&archive.to_string_lossy(), &z, "", false, None).unwrap();
         assert_eq!(r.installed.len(), 1);
         assert_eq!(r.installed[0].folder, "SomeMod");
         assert_eq!(r.installed[0].mod_id.as_deref(), Some("SomeMod"));
@@ -337,9 +353,9 @@ mod tests {
         assert!(r.warnings.is_empty(), "{:?}", r.warnings);
 
         // Second time: conflict unless replace is confirmed; with replace the old copy is backed up.
-        let err = install_mods(&archive.to_string_lossy(), &z, "", false).unwrap_err();
+        let err = install_mods(&archive.to_string_lossy(), &z, "", false, None).unwrap_err();
         assert!(err.starts_with(CONFLICT_PREFIX), "{}", err);
-        let again = install_mods(&archive.to_string_lossy(), &z, "", true).unwrap();
+        let again = install_mods(&archive.to_string_lossy(), &z, "", true, None).unwrap();
         assert!(again.installed[0].replaced);
         assert!(Path::new(again.installed[0].backup.as_ref().unwrap()).join("42/mod.info").is_file());
     }
@@ -351,9 +367,21 @@ mod tests {
         let archive = t.0.join("old.zip");
         make_zip(&archive, &[("mod.info", "id=OldOne\nname=Old\n"), ("media/lua/client/x.lua", "")]);
         fs::write(t.0.join("Zomboid/version.txt"), "42.21.0 abc").unwrap();
-        let r = install_mods(&archive.to_string_lossy(), &z, "", false).unwrap();
+        let r = install_mods(&archive.to_string_lossy(), &z, "", false, None).unwrap();
         assert_eq!(r.installed[0].folder, "OldOne");
         assert!(r.warnings.iter().any(|w| w.contains("cannot load")), "{:?}", r.warnings);
+    }
+
+    #[test]
+    fn records_where_the_mod_came_from() {
+        let t = zomboid("origin");
+        let z = t.0.join("Zomboid").to_string_lossy().to_string();
+        let archive = t.0.join("grmt.zip");
+        make_zip(&archive, &[("GRMT/42/mod.info", "id=GRMT\n")]);
+        let nexus = crate::origins::ModOrigin::Nexus { mod_id: 445, page_url: "https://www.nexusmods.com/projectzomboid/mods/445".into(), name: None };
+        install_mods(&archive.to_string_lossy(), &z, "", false, Some(nexus.clone())).unwrap();
+        let catalog = crate::catalog::build_catalog("", &z, Some(42_021));
+        assert_eq!(catalog.get("GRMT").unwrap().origin, Some(nexus));
     }
 
     #[test]
@@ -362,12 +390,12 @@ mod tests {
         let z = t.0.join("Zomboid").to_string_lossy().to_string();
         let evil = t.0.join("evil.zip");
         make_zip(&evil, &[("../../outside.txt", "x"), ("M/mod.info", "id=M\n")]);
-        let err = install_mods(&evil.to_string_lossy(), &z, "", false).unwrap_err();
+        let err = install_mods(&evil.to_string_lossy(), &z, "", false, None).unwrap_err();
         assert!(err.contains("unsafe path"), "{}", err);
         assert!(!t.0.join("outside.txt").exists());
 
         fs::write(t.0.join("mod.7z"), b"7z").unwrap();
-        let err = install_mods(&t.0.join("mod.7z").to_string_lossy(), &z, "", false).unwrap_err();
+        let err = install_mods(&t.0.join("mod.7z").to_string_lossy(), &z, "", false, None).unwrap_err();
         assert!(err.contains("not supported"), "{}", err);
     }
 
@@ -380,7 +408,7 @@ mod tests {
             fs::create_dir_all(src.join("mods").join(m).join(layout)).unwrap();
             fs::write(src.join("mods").join(m).join(layout).join("mod.info"), format!("id={}\n", m)).unwrap();
         }
-        let r = install_mods(&src.to_string_lossy(), &z, "", false).unwrap();
+        let r = install_mods(&src.to_string_lossy(), &z, "", false, None).unwrap();
         let folders: Vec<_> = r.installed.iter().map(|m| m.folder.as_str()).collect();
         assert_eq!(folders, vec!["A", "B"]);
         assert!(src.join("mods/A/42/mod.info").is_file(), "the source folder is left as it was");

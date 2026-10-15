@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { ModInfo, ModPreset, MissingModsReport, HealthIssue } from '../../types';
+import { ModInfo, ModPreset, MissingModsReport, HealthIssue, CatalogModSummary } from '../../types';
+import { SourceBadge, sourceOf } from '../common/SourceBadge';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -50,6 +51,8 @@ interface LoadOrderModuleProps {
   openedPackageFolder?: string | null;
   /** Issues from the shared health check (useModHealth); null until the first check. */
   healthIssues?: HealthIssue[] | null;
+  /** Installed mods as the game sees them (source, origin), from useModHealth. */
+  catalogById?: Map<string, CatalogModSummary>;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -196,6 +199,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onApplyPresetLoadOrder,
   openedPackageFolder,
   healthIssues = null,
+  catalogById,
 }) => {
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
@@ -546,16 +550,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     handleJumpToMod(modId);
   };
 
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
   const filteredMods = useMemo(() => {
-    if (!searchQuery.trim()) return mods;
     const query = searchQuery.toLowerCase().trim();
-    return mods.filter(
-      (m) =>
+    return mods.filter((m) => {
+      if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
+      if (!query) return true;
+      return (
         m.name.toLowerCase().includes(query) ||
         m.mod_id.toLowerCase().includes(query) ||
         (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
-    );
-  }, [mods, searchQuery]);
+      );
+    });
+  }, [mods, searchQuery, sourceFilter, catalogById]);
 
   const reverseDependents = useMemo(() => {
     if (!selectedMod) return [];
@@ -1039,6 +1046,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            aria-label="Filter by source"
+            title="Show only mods from one source"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 cursor-pointer"
+          >
+            <option value="all">All sources</option>
+            <option value="steam">Steam Workshop</option>
+            <option value="nexus">Nexus Mods</option>
+            <option value="manual">Installed by hand</option>
+            <option value="local">Local (other)</option>
+            <option value="studio">PZ Mod Studio</option>
+          </select>
+
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
             <button
               onClick={() => handleEnableAllWithoutDiscrimination(true)}
@@ -1316,6 +1338,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                               <span>PACKAGED</span>
                             </span>
                           )}
+
+                          <SourceBadge modId={mod.mod_id} entry={catalogById?.get(mod.mod_id)} />
 
                           {!mod.enabled && (
                             <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">

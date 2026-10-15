@@ -6,11 +6,13 @@ pub mod load_order;
 pub mod mcp;
 pub mod mod_install;
 pub mod nexus;
+pub mod origins;
 pub mod patch_generator;
 pub mod preset_manager;
 pub mod sandbox;
 pub mod server_manager;
 pub mod vfs;
+pub mod workshop;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
 use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
@@ -90,10 +92,27 @@ fn nexus_search_cmd(query: Option<String>, sort: nexus::NexusSort, offset: u64, 
     nexus::search_mods(query.as_deref(), sort, offset, count)
 }
 
+/// Steam Workshop details for item ids (public Web API, no key).
+#[tauri::command(async)]
+fn workshop_details_cmd(ids: Vec<String>) -> Result<Vec<workshop::WorkshopItem>, String> {
+    workshop::get_details(&ids)
+}
+
+/// Looks up pasted Workshop links / ids / a collection link.
+#[tauri::command(async)]
+fn workshop_lookup_cmd(input: String) -> Result<workshop::WorkshopLookup, String> {
+    workshop::lookup(&input)
+}
+
 /// Installs the mod(s) in a downloaded .zip or an extracted folder into Zomboid/mods.
 #[tauri::command(async)]
-fn install_mods_cmd(source: String, paths: StudioPaths, replace_existing: bool) -> Result<mod_install::InstallResult, String> {
-    mod_install::install_mods(&source, &paths.user_zomboid_dir, &paths.workshop_dir, replace_existing)
+fn install_mods_cmd(
+    source: String,
+    paths: StudioPaths,
+    replace_existing: bool,
+    origin: Option<origins::ModOrigin>,
+) -> Result<mod_install::InstallResult, String> {
+    mod_install::install_mods(&source, &paths.user_zomboid_dir, &paths.workshop_dir, replace_existing, origin)
 }
 
 /// Game-exact load-order sort of the whole list (enabled and disabled), keeping the user's order
@@ -230,6 +249,13 @@ fn open_external_url_cmd(url: String) -> Result<(), String> {
 fn validate_external_url(url: &str) -> Result<&str, String> {
     let url = url.trim();
     let lower = url.to_ascii_lowercase();
+    // Steam client links for Workshop pages (to subscribe there): only these exact shapes.
+    let steam_link = ["steam://url/communityfilepage/", "steam://url/steamworkshoppage/"].iter().any(|prefix| {
+        lower.strip_prefix(prefix).is_some_and(|rest| !rest.is_empty() && rest.len() <= 20 && rest.chars().all(|c| c.is_ascii_digit()))
+    });
+    if steam_link {
+        return Ok(url);
+    }
     let has_web_scheme = lower.starts_with("https://") || lower.starts_with("http://");
     let has_control_chars = url.chars().any(|c| c.is_control() || c == '"');
     if !has_web_scheme || has_control_chars || url.len() > 2048 {
@@ -348,6 +374,8 @@ pub fn run() {
             sort_load_order_cmd,
             nexus_search_cmd,
             install_mods_cmd,
+            workshop_details_cmd,
+            workshop_lookup_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,
@@ -410,7 +438,9 @@ mod tests {
     fn only_web_urls_are_opened() {
         assert!(validate_external_url("https://steamcommunity.com/sharedfiles/filedetails/?id=1&b=2").is_ok());
         assert!(validate_external_url(" HTTP://example.com ").is_ok());
-        for bad in ["ftp://x&calc", "file:///C:/Windows/System32/calc.exe", "calc.exe", "ms-settings:", "https://x\"&calc", "https://x\r\ncalc"] {
+        assert!(validate_external_url("steam://url/CommunityFilePage/2699828474").is_ok());
+        assert!(validate_external_url("steam://url/SteamWorkshopPage/108600").is_ok());
+        for bad in ["steam://run/108600", "steam://url/CommunityFilePage/1&calc", "steam://url/CommunityFilePage/", "ftp://x&calc", "file:///C:/Windows/System32/calc.exe", "calc.exe", "ms-settings:", "https://x\"&calc", "https://x\r\ncalc"] {
             assert!(validate_external_url(bad).is_err(), "accepted {:?}", bad);
         }
     }

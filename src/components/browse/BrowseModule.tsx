@@ -1,48 +1,68 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, Loader2, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { InstallResult, NexusMod, NexusSort } from '../../types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle, CheckCircle2, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, Library, Link2, Loader2, Search, Users, X,
+} from 'lucide-react';
+import { CatalogModSummary, InstallResult, ModOrigin, NexusMod, NexusSort, WorkshopItem, WorkshopLookup } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 
 interface BrowseModuleProps {
   paths: StudioPathsUI;
+  /** Installed mods as the game sees them (from useModHealth). */
+  catalog: CatalogModSummary[];
   /** Called after mods were installed, so the mod list is rescanned. */
   onInstalled: () => void;
 }
 
-const PAGE_SIZE = 24;
-const CONFLICT_PREFIX = 'INSTALL_CONFLICT:';
+type SourceTab = 'workshop' | 'nexus';
 
-const SORTS: { id: NexusSort; label: string }[] = [
-  { id: 'updated', label: 'Recently updated' },
-  { id: 'downloads', label: 'Most downloaded' },
-  { id: 'endorsements', label: 'Most endorsed' },
-  { id: 'newest', label: 'Newest' },
-];
+const CONFLICT_PREFIX = 'INSTALL_CONFLICT:';
+const NEXUS_PAGE_SIZE = 24;
 
 const formatCount = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '');
+const formatIsoDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '');
+const formatUnixDate = (secs: number | null) => (secs ? new Date(secs * 1000).toLocaleDateString() : '');
 
-const BuildBadge: React.FC<{ hint: string | null }> = ({ hint }) => {
-  if (!hint) {
-    return <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-500" title="The page does not say which game build it is for">build ?</span>;
-  }
-  const color = hint.includes('42') ? 'border-emerald-600/60 text-emerald-300' : 'border-amber-600/60 text-amber-300';
-  return <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${color}`} title="From the mod's name/summary">B{hint}</span>;
-};
+const Chip: React.FC<{ className: string; title?: string; children: React.ReactNode }> = ({ className, title, children }) => (
+  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${className}`} title={title}>{children}</span>
+);
 
-/** Install a mod downloaded by hand (any site) from a .zip or an extracted folder. */
-const InstallBox: React.FC<{ paths: StudioPathsUI; onInstalled: () => void }> = ({ paths, onInstalled }) => {
+const BuildChips: React.FC<{ builds: string[]; source: string }> = ({ builds, source }) =>
+  builds.length === 0 ? (
+    <Chip className="border-slate-700 text-slate-500" title={`${source} does not say which game build it is for`}>build ?</Chip>
+  ) : (
+    <>
+      {builds.map((b) => (
+        <Chip key={b} className={b === '42' ? 'border-emerald-600/60 text-emerald-300' : 'border-amber-600/60 text-amber-300'} title={`Tagged for Build ${b} (${source})`}>
+          B{b}
+        </Chip>
+      ))}
+    </>
+  );
+
+const InstalledChip: React.FC = () => <Chip className="border-emerald-500/60 text-emerald-300 bg-emerald-950/40">Installed</Chip>;
+
+// ---------------------------------------------------------------------------------------------
+// Install a downloaded mod
+// ---------------------------------------------------------------------------------------------
+
+const InstallBox: React.FC<{
+  paths: StudioPathsUI;
+  pendingOrigin: (ModOrigin & { kind: 'nexus' }) | null;
+  onClearOrigin: () => void;
+  onInstalled: () => void;
+}> = ({ paths, pendingOrigin, onClearOrigin, onInstalled }) => {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<InstallResult | null>(null);
 
   const install = async (source: string) => {
     setBusy(true);
     setResult(null);
+    const origin = pendingOrigin ?? undefined;
     try {
       let res: InstallResult;
       try {
-        res = await TauriService.installMods(source, paths, false);
+        res = await TauriService.installMods(source, paths, false, origin);
       } catch (err) {
         const text = String(err);
         if (!text.startsWith(CONFLICT_PREFIX)) throw err;
@@ -51,9 +71,10 @@ const InstallBox: React.FC<{ paths: StudioPathsUI; onInstalled: () => void }> = 
           `Already installed in Zomboid/mods: ${existing_folders.join(', ')}.\n\nReplace? The current copy is moved to Zomboid/PZModStudio_Backups/mods first.`
         );
         if (!ok) return;
-        res = await TauriService.installMods(source, paths, true);
+        res = await TauriService.installMods(source, paths, true, origin);
       }
       setResult(res);
+      onClearOrigin();
       onInstalled();
     } catch (err) {
       reportBackendError('Installing the mod', err);
@@ -94,6 +115,17 @@ const InstallBox: React.FC<{ paths: StudioPathsUI; onInstalled: () => void }> = 
           </button>
         </div>
       </div>
+      {pendingOrigin && (
+        <div className="flex items-center gap-2 text-[11px] text-orange-200 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-1.5">
+          <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span className="flex-1">
+            The next install will be tagged as downloaded from Nexus: <b>{pendingOrigin.name}</b>
+          </span>
+          <button type="button" onClick={onClearOrigin} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label="Do not tag the next install">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       {result && (
         <div className="flex flex-col gap-1.5 text-xs">
           {result.installed.map((m) => (
@@ -117,7 +149,200 @@ const InstallBox: React.FC<{ paths: StudioPathsUI; onInstalled: () => void }> = 
   );
 };
 
-export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, onInstalled }) => {
+// ---------------------------------------------------------------------------------------------
+// Steam Workshop
+// ---------------------------------------------------------------------------------------------
+
+const WorkshopCard: React.FC<{ item: WorkshopItem; installedIds: string[] }> = ({ item, installedIds }) => (
+  <article className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+    <div className="aspect-video bg-slate-950 overflow-hidden">
+      {item.preview_url ? (
+        <img src={item.preview_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">No image</div>
+      )}
+    </div>
+    <div className="flex flex-col gap-1.5 p-3 flex-1">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-xs font-bold text-slate-100 leading-snug">{item.found ? item.title : `Item ${item.workshop_id}`}</h3>
+        <div className="flex flex-wrap justify-end gap-1">
+          {installedIds.length > 0 && <InstalledChip />}
+          {item.found && <BuildChips builds={item.builds} source="The Workshop page" />}
+        </div>
+      </div>
+      {!item.found ? (
+        <p className="text-[11px] text-amber-300">Steam has no public item with this id (removed, private or wrong id).</p>
+      ) : (
+        <>
+          {!item.is_project_zomboid && <p className="text-[11px] text-amber-300">This item is for another game.</p>}
+          {item.banned && <p className="text-[11px] text-red-300">Steam has banned this item.</p>}
+          <div className="text-[10px] text-slate-500">updated {formatUnixDate(item.time_updated)}</div>
+          {installedIds.length > 0 && (
+            <div className="text-[10px] font-mono text-emerald-400/80 truncate" title={installedIds.join(', ')}>mods: {installedIds.join(', ')}</div>
+          )}
+          {item.summary && <p className="text-[11px] text-slate-400 line-clamp-3">{item.summary}</p>}
+          <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 mt-auto pt-1">
+            <span className="flex items-center gap-1" title="Subscribers"><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
+            <span className="flex items-center gap-1" title="Favorites"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
+          </div>
+        </>
+      )}
+      <div className="flex gap-2 pt-1">
+        <button type="button" onClick={() => TauriService.openExternalUrl(item.page_url)}
+          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
+          <ExternalLink className="w-3 h-3" aria-hidden="true" /> Page
+        </button>
+        <button type="button" onClick={() => TauriService.openExternalUrl(item.steam_url)}
+          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer"
+          title={installedIds.length > 0 ? 'Open in the Steam client' : 'Open in the Steam client to subscribe'}>
+          {installedIds.length > 0 ? 'Open in Steam' : 'Subscribe in Steam'}
+        </button>
+      </div>
+    </div>
+  </article>
+);
+
+const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) => {
+  // Workshop id -> mod ids installed from it.
+  const installedByItem = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const m of catalog) {
+      if (m.source.kind === 'workshop' && !m.shadowed_by) {
+        map.set(m.source.workshop_id, [...(map.get(m.source.workshop_id) ?? []), m.id]);
+      }
+    }
+    return map;
+  }, [catalog]);
+  const subscribedIds = useMemo(() => [...installedByItem.keys()].sort(), [installedByItem]);
+
+  const [subscribed, setSubscribed] = useState<WorkshopItem[]>([]);
+  const [loadingSubs, setLoadingSubs] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [lookupText, setLookupText] = useState('');
+  const [lookup, setLookup] = useState<WorkshopLookup | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+
+  const subscribedKey = subscribedIds.join(',');
+  useEffect(() => {
+    if (!subscribedKey) return;
+    let cancelled = false;
+    setLoadingSubs(true);
+    TauriService.workshopDetails(subscribedKey.split(','))
+      .then((items) => !cancelled && setSubscribed(items))
+      .catch((err) => !cancelled && reportBackendError('Loading Workshop details', err))
+      .finally(() => !cancelled && setLoadingSubs(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [subscribedKey]);
+
+  const runLookup = async () => {
+    if (!lookupText.trim()) return;
+    setLookingUp(true);
+    try {
+      setLookup(await TauriService.workshopLookup(lookupText));
+    } catch (err) {
+      reportBackendError('Looking up the Workshop link', err);
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  const visibleSubs = useMemo(() => {
+    const q = filter.toLowerCase().trim();
+    const list = q ? subscribed.filter((i) => i.title.toLowerCase().includes(q) || (installedByItem.get(i.workshop_id) ?? []).some((id) => id.toLowerCase().includes(q))) : subscribed;
+    return [...list].sort((a, b) => (b.time_updated ?? 0) - (a.time_updated ?? 0));
+  }, [subscribed, filter, installedByItem]);
+
+  const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)) : [];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-100">Find Workshop mods</h2>
+            <p className="text-xs text-slate-400 max-w-2xl">
+              Paste Workshop links, ids or a <b>collection</b> link to see what they are and what you are missing. Subscribing
+              happens in the Steam client. (Searching the Workshop from here needs a Steam Web API key: coming soon.)
+            </p>
+          </div>
+          <button type="button" onClick={() => TauriService.openExternalUrl('steam://url/SteamWorkshopPage/108600')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer">
+            <Globe className="w-3.5 h-3.5" aria-hidden="true" /> Browse the Workshop in Steam
+          </button>
+        </div>
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); runLookup(); }}>
+          <input
+            value={lookupText}
+            onChange={(e) => setLookupText(e.target.value)}
+            placeholder="https://steamcommunity.com/sharedfiles/filedetails/?id=..."
+            aria-label="Workshop links, ids or collection link"
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-xs text-slate-100 outline-none placeholder:text-slate-600"
+          />
+          <button type="submit" disabled={lookingUp}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60">
+            {lookingUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Search className="w-3.5 h-3.5" aria-hidden="true" />}
+            Look up
+          </button>
+        </form>
+        {lookup && (
+          <div className="flex flex-col gap-3">
+            <div className="text-[11px] text-slate-300 flex flex-wrap items-center gap-2">
+              {lookup.collection ? (
+                <>
+                  <Library className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
+                  Collection <b>{lookup.collection.title}</b>: {lookup.items.length} items, {lookup.items.length - lookupMissing.length} installed,{' '}
+                  <span className={lookupMissing.length ? 'text-amber-300' : 'text-emerald-300'}>{lookupMissing.length} missing</span>
+                  <button type="button" onClick={() => TauriService.openExternalUrl(lookup.collection!.steam_url)}
+                    className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer">
+                    Open collection in Steam (Subscribe to all)
+                  </button>
+                </>
+              ) : (
+                <>{lookup.items.length} items, {lookupMissing.length} not installed</>
+              )}
+            </div>
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+              {lookup.items.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} />)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-slate-100">
+          Your subscriptions <span className="text-slate-500 font-mono text-xs">({subscribedIds.length})</span>
+          {loadingSubs && <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-slate-500" aria-hidden="true" />}
+        </h2>
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter by title or mod id"
+          aria-label="Filter subscriptions"
+          className="w-64 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 outline-none placeholder:text-slate-600"
+        />
+      </div>
+      {subscribedIds.length === 0 && <p className="text-xs text-slate-500">No subscribed Workshop items found in your Workshop folder.</p>}
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+        {visibleSubs.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} />)}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------------------------
+// Nexus Mods
+// ---------------------------------------------------------------------------------------------
+
+const SORTS: { id: NexusSort; label: string }[] = [
+  { id: 'updated', label: 'Recently updated' },
+  { id: 'downloads', label: 'Most downloaded' },
+  { id: 'endorsements', label: 'Most endorsed' },
+  { id: 'newest', label: 'Newest' },
+];
+
+const NexusPanel: React.FC<{ catalog: CatalogModSummary[]; onDownload: (m: NexusMod) => void }> = ({ catalog, onDownload }) => {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [sort, setSort] = useState<NexusSort>('updated');
@@ -126,10 +351,19 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, onInstalled }
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  // Nexus mod id -> installed mod ids (recorded when installed through the Studio).
+  const installedByNexusId = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const m of catalog) {
+      if (m.origin?.kind === 'nexus' && !m.shadowed_by) map.set(m.origin.mod_id, [...(map.get(m.origin.mod_id) ?? []), m.id]);
+    }
+    return map;
+  }, [catalog]);
+
   const load = useCallback(async (offset: number) => {
     setLoading(true);
     try {
-      const page = await TauriService.nexusSearch(submittedQuery, sort, offset, PAGE_SIZE);
+      const page = await TauriService.nexusSearch(submittedQuery, sort, offset, NEXUS_PAGE_SIZE);
       setTotal(page.total);
       setMods((prev) => (offset === 0 ? page.mods : [...prev, ...page.mods]));
     } catch (err) {
@@ -147,46 +381,16 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, onInstalled }
   const hiddenAdult = mods.length - visible.length;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 gap-4 font-sans">
-      <div className="flex items-start gap-3 p-5 rounded-xl border border-slate-800 bg-slate-900/60">
-        <Globe className="w-6 h-6 text-emerald-400 mt-0.5" aria-hidden="true" />
-        <div>
-          <h1 className="text-lg font-bold text-slate-100">Browse Mods</h1>
-          <p className="text-xs text-slate-400 max-w-3xl">
-            Project Zomboid mods on <b>Nexus Mods</b>. Open a mod's page, download the file there (Files tab), then install it
-            below. Steam Workshop browsing is coming next.
-          </p>
-        </div>
-      </div>
-
-      <InstallBox paths={paths} onInstalled={onInstalled} />
-
-      <form
-        className="flex flex-wrap items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSubmittedQuery(query.trim());
-        }}
-      >
-        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-emerald-700">
+    <div className="flex flex-col gap-4">
+      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); setSubmittedQuery(query.trim()); }}>
+        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-orange-700">
           <Search className="w-4 h-4 text-slate-500" aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search Nexus Mods (words in the mod name)"
-            aria-label="Search Nexus Mods"
-            className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600"
-          />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Nexus Mods (words in the mod name)" aria-label="Search Nexus Mods"
+            className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
         </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as NexusSort)}
-          aria-label="Sort"
-          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 cursor-pointer"
-        >
-          {SORTS.map((s) => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
+        <select value={sort} onChange={(e) => setSort(e.target.value as NexusSort)} aria-label="Sort"
+          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 cursor-pointer">
+          {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
         <button type="submit" className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">Search</button>
         <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
@@ -199,44 +403,46 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, onInstalled }
         {loading && mods.length === 0 ? 'Loading...' : `${total} mods${submittedQuery ? ` matching "${submittedQuery}"` : ''}${hiddenAdult ? ` (${hiddenAdult} adult hidden)` : ''}`}
       </div>
 
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-        {visible.map((m) => (
-          <article key={m.mod_id} className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="aspect-video bg-slate-950 overflow-hidden">
-              {m.thumbnail_url ? (
-                <img src={m.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">No image</div>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5 p-3 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-xs font-bold text-slate-100 leading-snug">{m.name}</h3>
-                <BuildBadge hint={m.build_hint} />
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+        {visible.map((m) => {
+          const installed = installedByNexusId.get(m.mod_id) ?? [];
+          return (
+            <article key={m.mod_id} className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+              <div className="aspect-video bg-slate-950 overflow-hidden">
+                {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">No image</div>}
               </div>
-              <div className="text-[10px] text-slate-500">
-                by {m.author || m.uploader || 'unknown'}
-                {m.version && <> · v{m.version}</>} · updated {formatDate(m.updated_at)}
+              <div className="flex flex-col gap-1.5 p-3 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-xs font-bold text-slate-100 leading-snug">{m.name}</h3>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {installed.length > 0 && <InstalledChip />}
+                    <BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source="The Nexus name/summary" />
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  by {m.author || m.uploader || 'unknown'}{m.version && <> · v{m.version}</>} · updated {formatIsoDate(m.updated_at)}
+                </div>
+                {m.summary && <p className="text-[11px] text-slate-400 line-clamp-3">{m.summary}</p>}
+                <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 mt-auto pt-1">
+                  <span className="flex items-center gap-1" title="Downloads"><Download className="w-3 h-3" aria-hidden="true" />{formatCount(m.downloads)}</span>
+                  <span className="flex items-center gap-1" title="Endorsements"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(m.endorsements)}</span>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button type="button" onClick={() => TauriService.openExternalUrl(m.page_url)}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
+                    <ExternalLink className="w-3 h-3" aria-hidden="true" /> Page
+                  </button>
+                  <button type="button" onClick={() => onDownload(m)}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-orange-700 hover:bg-orange-600 text-white cursor-pointer"
+                    title="Opens the Files tab on Nexus: download there, then use Install .zip above">
+                    <Download className="w-3 h-3" aria-hidden="true" /> Download
+                  </button>
+                </div>
               </div>
-              {m.summary && <p className="text-[11px] text-slate-400 line-clamp-3">{m.summary}</p>}
-              <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 mt-auto pt-1">
-                <span className="flex items-center gap-1"><Download className="w-3 h-3" aria-hidden="true" />{formatCount(m.downloads)}</span>
-                <span className="flex items-center gap-1"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(m.endorsements)}</span>
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => TauriService.openExternalUrl(m.page_url)}
-                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
-                  <ExternalLink className="w-3 h-3" aria-hidden="true" /> Page
-                </button>
-                <button type="button" onClick={() => TauriService.openExternalUrl(`${m.page_url}?tab=files`)}
-                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-emerald-700 hover:bg-emerald-600 text-white cursor-pointer"
-                  title="Opens the Files tab on Nexus: download there, then use Install .zip above">
-                  <Download className="w-3 h-3" aria-hidden="true" /> Download
-                </button>
-              </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
 
       {mods.length < total && (
@@ -245,6 +451,51 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, onInstalled }
           {loading ? 'Loading...' : `Load more (${total - mods.length} left)`}
         </button>
       )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------------------------
+
+const TABS: { id: SourceTab; label: string; active: string }[] = [
+  { id: 'workshop', label: 'Steam Workshop', active: 'bg-sky-950/80 text-sky-200 border-sky-700' },
+  { id: 'nexus', label: 'Nexus Mods', active: 'bg-orange-950/80 text-orange-200 border-orange-700' },
+];
+
+export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled }) => {
+  const [tab, setTab] = useState<SourceTab>('workshop');
+  const [pendingOrigin, setPendingOrigin] = useState<(ModOrigin & { kind: 'nexus' }) | null>(null);
+
+  const handleNexusDownload = (m: NexusMod) => {
+    setPendingOrigin({ kind: 'nexus', mod_id: m.mod_id, page_url: m.page_url, name: m.name });
+    TauriService.openExternalUrl(`${m.page_url}?tab=files`);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 gap-4 font-sans">
+      <div className="flex items-start gap-3 p-5 rounded-xl border border-slate-800 bg-slate-900/60">
+        <Globe className="w-6 h-6 text-emerald-400 mt-0.5" aria-hidden="true" />
+        <div>
+          <h1 className="text-lg font-bold text-slate-100">Browse Mods</h1>
+          <p className="text-xs text-slate-400 max-w-3xl">
+            Find Project Zomboid mods on the Steam Workshop and Nexus Mods. Every mod in your Mod List shows a tag saying where it
+            comes from.
+          </p>
+        </div>
+      </div>
+
+      <div role="tablist" aria-label="Mod source" className="flex gap-2">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2 rounded-lg text-xs font-bold border cursor-pointer transition ${tab === t.id ? t.active : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <InstallBox paths={paths} pendingOrigin={pendingOrigin} onClearOrigin={() => setPendingOrigin(null)} onInstalled={onInstalled} />
+
+      {tab === 'workshop' ? <WorkshopPanel catalog={catalog} /> : <NexusPanel catalog={catalog} onDownload={handleNexusDownload} />}
     </div>
   );
 };
