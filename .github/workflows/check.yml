@@ -1,0 +1,40 @@
+name: 'Check'
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Type-checks and builds dist/, which the Rust build embeds.
+      - name: Build frontend
+        run: npm run build
+
+      - name: Rust tests
+        run: cargo test --lib --manifest-path src-tauri/Cargo.toml
+
+      - name: Build MCP server
+        run: cargo build --bin pz-mcp-server --manifest-path src-tauri/Cargo.toml

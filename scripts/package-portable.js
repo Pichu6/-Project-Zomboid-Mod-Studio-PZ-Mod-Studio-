@@ -24,10 +24,12 @@ if (fs.existsSync(appExeSrc)) {
       console.warn(`[Packaging] Warning: ${appExeDest} is currently open/in use. Close the app to update the root executable.`);
     } else {
       console.error(`[Packaging] Error copying ${appExeDest}:`, err);
+      process.exitCode = 1;
     }
   }
 } else {
   console.error(`[Packaging] Error: ${appExeSrc} not found.`);
+  process.exitCode = 1;
 }
 
 if (fs.existsSync(mcpExeSrc)) {
@@ -39,8 +41,12 @@ if (fs.existsSync(mcpExeSrc)) {
       console.warn(`[Packaging] Warning: ${mcpExeDest} is currently in use.`);
     } else {
       console.error(`[Packaging] Error copying ${mcpExeDest}:`, err);
+      process.exitCode = 1;
     }
   }
+} else {
+  console.error(`[Packaging] Error: ${mcpExeSrc} not found. Build it with: cargo build --release --bin pz-mcp-server`);
+  process.exitCode = 1;
 }
 
 const readmeContent = `=============================================================================

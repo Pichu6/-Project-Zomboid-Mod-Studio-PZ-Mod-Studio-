@@ -18,7 +18,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "build:portable": "tauri build --no-bundle && node scripts/package-portable.js"
+    "build:portable": "tauri build --no-bundle && cargo build --release --bin pz-mcp-server --manifest-path src-tauri/Cargo.toml && node scripts/package-portable.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -26,6 +26,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "clsx": "^2.1.1",
     "lucide-react": "^1.30.0",
+    "monaco-editor": "0.55.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tailwind-merge": "^3.6.0"

@@ -1396,8 +1396,8 @@ mod tests {
     #[test]
     fn test_validate_polyfill_lua_ast() {
         let poly_content = generate_master_polyfill_lua();
-        let parse_result = full_moon::parse(&poly_content);
-        assert!(parse_result.is_ok(), "generate_master_polyfill_lua() must be valid Lua syntax: {:?}", parse_result.err());
+        let parse_result = crate::diff_engine::lua::validate_lua_syntax(&poly_content);
+        assert!(parse_result.is_valid, "generate_master_polyfill_lua() must be valid Lua syntax: {:?}", parse_result.error_message);
     }
 
     #[test]

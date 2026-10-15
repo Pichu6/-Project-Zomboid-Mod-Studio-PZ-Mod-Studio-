@@ -15,15 +15,84 @@ pub struct MergeChunkResult {
 }
 
 /// Validates Lua code syntax using full_moon AST parser.
+/// Rewrites what Kahlua (the game's Lua) accepts but standard Lua 5.1 parsers reject, so syntax
+/// checks agree with the game. Used for validation only, never for files written to disk:
+/// - lone `\r` line endings (old Mac style; vanilla EditVehicleState.lua uses them),
+/// - Java-style number suffixes like `0.0f` / `1d` (Kahlua parses numbers with Java's
+///   Double.parseDouble, which accepts them; vanilla ISFluidEmptyAction.lua uses `0.0f`).
+fn normalize_for_kahlua(code: &str) -> String {
+    let code = code.replace("\r\n", "\n").replace('\r', "\n");
+    let chars: Vec<char> = code.chars().collect();
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(code.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let starts_number = c.is_ascii_digit() && (i == 0 || !is_ident(chars[i - 1]));
+        if !starts_number {
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let start = i;
+        if c == '0' && chars.get(i + 1).is_some_and(|x| *x == 'x' || *x == 'X') {
+            // Hex literal: copied as is (f/d are hex digits there).
+            i += 2;
+            while i < chars.len() && chars[i].is_ascii_hexdigit() {
+                i += 1;
+            }
+        } else {
+            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
+                i += 1;
+            }
+            if i < chars.len() && (chars[i] == 'e' || chars[i] == 'E') {
+                i += 1;
+                if i < chars.len() && (chars[i] == '+' || chars[i] == '-') {
+                    i += 1;
+                }
+                while i < chars.len() && chars[i].is_ascii_digit() {
+                    i += 1;
+                }
+            }
+        }
+        out.extend(&chars[start..i]);
+        let suffix = chars.get(i).is_some_and(|x| matches!(x, 'f' | 'F' | 'd' | 'D'));
+        if suffix && !chars.get(i + 1).is_some_and(|x| is_ident(*x)) {
+            i += 1; // drop the Java suffix
+        }
+    }
+    out
+}
+
 pub fn validate_lua_syntax(code: &str) -> LuaSyntaxCheckResult {
-    match full_moon::parse(code) {
+    // full_moon parses recursively; deeply nested real-world files (huge tables, long
+    // concatenation chains) overflow a normal thread stack, and a stack overflow aborts the
+    // whole app. Parse on a thread with a large stack instead.
+    const PARSER_STACK: usize = 256 * 1024 * 1024;
+    let owned = normalize_for_kahlua(code);
+    let parsed = std::thread::Builder::new()
+        .name("lua-parse".into())
+        .stack_size(PARSER_STACK)
+        .spawn(move || full_moon::parse(&owned).map(|_| ()))
+        .map_err(|e| format!("could not start the Lua parser: {}", e))
+        .and_then(|handle| handle.join().map_err(|_| "the Lua parser crashed".to_string()));
+    let parsed = match parsed {
+        Ok(result) => result,
+        Err(msg) => {
+            return LuaSyntaxCheckResult { is_valid: false, error_message: Some(msg) };
+        }
+    };
+    match parsed {
         Ok(_) => LuaSyntaxCheckResult {
             is_valid: true,
             error_message: None,
         },
         Err(err) => LuaSyntaxCheckResult {
             is_valid: false,
-            error_message: Some(format!("Lua AST Syntax Error: {}", err)),
+            error_message: Some(format!(
+                "Lua AST Syntax Error: {}",
+                err.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("; ")
+            )),
         },
     }
 }
@@ -87,6 +156,10 @@ fn block_comment_level(lines: &[&str]) -> String {
 /// conflicts: the merged text then keeps mod A's version active and includes mod B's version in
 /// a Lua block comment right below it, so the output is still valid Lua and nothing is lost.
 pub fn three_way_merge_lua(base: &str, target_a: &str, target_b: &str) -> MergeChunkResult {
+    // Compare lines regardless of line-ending style (\r\n, \n, or old-Mac lone \r).
+    let unify = |s: &str| if s.contains('\r') { s.replace("\r\n", "\n").replace('\r', "\n") } else { s.to_string() };
+    let (base, target_a, target_b) = (unify(base), unify(target_a), unify(target_b));
+    let (base, target_a, target_b) = (base.as_str(), target_a.as_str(), target_b.as_str());
     let base_lines: Vec<&str> = base.lines().collect();
     let a_lines: Vec<&str> = target_a.lines().collect();
     let b_lines: Vec<&str> = target_b.lines().collect();
@@ -341,6 +414,46 @@ mod tests {
         let fa = r2.merged_text.find("fromA").unwrap();
         let fb = r2.merged_text.find("return 200").unwrap();
         assert!(fa < fb);
+    }
+
+    #[test]
+    fn syntax_check_accepts_what_kahlua_accepts() {
+        assert!(validate_lua_syntax("local r = x > 0.0f and 1d or 2.5F").is_valid);
+        assert!(validate_lua_syntax("--\tcomment\rlocal a = 1\rreturn a").is_valid, "lone CR line endings");
+        assert_eq!(normalize_for_kahlua("a = 0xff + x0f + 1.5e-3f"), "a = 0xff + x0f + 1.5e-3");
+        assert!(!validate_lua_syntax("local = 1").is_valid);
+        // Deep nesting must not crash the app (stack overflow aborts the process).
+        let deep = format!("local x = {}1{}", "(".repeat(3000), ")".repeat(3000));
+        let _ = validate_lua_syntax(&deep);
+    }
+
+    /// Read-only check that the parser accepts real game/mod Lua (the game itself runs it).
+    /// PZMS_LUA_DIRS="<ProjectZomboid/media/lua>;<workshop/content/108600>" cargo test lua_corpus -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn lua_corpus_parses() {
+        let Ok(dirs) = std::env::var("PZMS_LUA_DIRS") else { return };
+        let (mut ok, mut failed) = (0, Vec::new());
+        for dir in dirs.split(';') {
+            for entry in walkdir::WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+                if entry.path().extension().is_some_and(|e| e.eq_ignore_ascii_case("lua")) {
+                    let Ok(bytes) = std::fs::read(entry.path()) else { continue };
+                    let text = String::from_utf8_lossy(&bytes);
+                    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+                    let result = validate_lua_syntax(text);
+                    if result.is_valid {
+                        ok += 1;
+                    } else {
+                        let msg: String = result.error_message.unwrap_or_default().chars().take(200).collect();
+                        failed.push(format!("{} -> {}", entry.path().display(), msg));
+                    }
+                }
+            }
+        }
+        println!("parsed: {ok}, rejected: {}", failed.len());
+        for f in failed.iter().take(10) {
+            println!("  {f}");
+        }
     }
 
     #[test]

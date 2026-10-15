@@ -664,8 +664,8 @@ mod tests {
 
     #[test]
     fn bundled_bridge_script_is_valid_lua() {
-        let parsed = full_moon::parse(BRIDGE_CLIENT_LUA);
-        assert!(parsed.is_ok(), "bridge Lua does not parse: {:?}", parsed.err());
+        let parsed = crate::diff_engine::lua::validate_lua_syntax(BRIDGE_CLIENT_LUA);
+        assert!(parsed.is_valid, "bridge Lua does not parse: {:?}", parsed.error_message);
         assert!(BRIDGE_CLIENT_LUA.contains("PRIVILEGED_ACTIONS"));
     }
 

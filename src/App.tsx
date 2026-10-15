@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile } from './types';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
-import { MergerModule } from './components/merger/MergerModule';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
@@ -13,6 +12,9 @@ import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
+
+// The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
+const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
 
 import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 
@@ -544,6 +546,7 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'MERGER' && (
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-slate-500">Loading the merge editor...</div>}>
             <MergerModule
               conflicts={conflicts}
               paths={paths}
@@ -559,6 +562,7 @@ export const App: React.FC = () => {
               onPackageOpened={(folder) => setOpenedPackageFolder(folder)}
               onPackageClosed={() => setOpenedPackageFolder(null)}
             />
+            </Suspense>
           )}
 
           {activeTab === 'MONITOR' && (

@@ -36,6 +36,7 @@ import {
   Lock,
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import '../../monacoSetup';
 
 interface MergerModuleProps {
   conflicts: VfsConflict[];
@@ -1561,7 +1562,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   <div className="flex-1 border border-slate-800 rounded-lg overflow-hidden relative">
                     <Editor
                       height="100%"
-                      defaultLanguage={currentConflict.file_type === 'LUA' ? 'lua' : 'plaintext'}
+                      language={currentConflict.file_type === 'LUA' ? 'lua' : 'plaintext'}
+                      path={currentConflict.id}
                       theme="vs-dark"
                       value={editorContent}
                       onChange={(val) => {
