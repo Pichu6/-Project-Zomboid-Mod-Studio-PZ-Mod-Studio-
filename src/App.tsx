@@ -13,6 +13,7 @@ import { InstanceModule } from './components/instances/InstanceModule';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
+import { useModHealth } from './hooks/useModHealth';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
 const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
@@ -27,7 +28,6 @@ export const App: React.FC = () => {
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
-  const [healthErrorCount, setHealthErrorCount] = useState<number>(0);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
     total_conflicts: number;
@@ -48,6 +48,9 @@ export const App: React.FC = () => {
     mod_list_ini_path: '',
     is_valid: false,
   });
+
+  // Game-exact health check of the active list, shared by Mod List, Mod Health and the sidebar.
+  const health = useModHealth(paths, mods);
 
   const refreshActiveProfile = useCallback(async (customUserDir?: string): Promise<AppProfile | null> => {
     const userDir = customUserDir || paths.user_zomboid_dir;
@@ -506,7 +509,7 @@ export const App: React.FC = () => {
           hasActiveProfile={!!activeProfile}
           conflictCount={conflicts.length}
           errorCardCount={errorCards.length}
-          healthErrorCount={healthErrorCount}
+          healthErrorCount={health.report?.errors ?? 0}
         />
 
         {/* Tab Modules */}
@@ -536,6 +539,7 @@ export const App: React.FC = () => {
               onLoadMockups={handleLoadModMockups}
               onApplyPresetLoadOrder={handleApplyPresetLoadOrder}
               openedPackageFolder={openedPackageFolder}
+              healthIssues={health.report?.issues ?? null}
             />
           )}
 
@@ -552,8 +556,10 @@ export const App: React.FC = () => {
             <HealthModule
               paths={paths}
               mods={mods}
+              report={health.report}
+              checking={health.checking}
+              onRecheck={health.recheck}
               onApplyModList={handleReorderMods}
-              onErrorCountChange={setHealthErrorCount}
             />
           )}
 

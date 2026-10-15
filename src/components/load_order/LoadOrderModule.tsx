@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { ModInfo, ModPreset, MissingModsReport } from '../../types';
+import { ModInfo, ModPreset, MissingModsReport, HealthIssue } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -48,6 +48,8 @@ interface LoadOrderModuleProps {
   onLoadMockups: (mockMods: ModInfo[]) => void;
   onApplyPresetLoadOrder?: (presetLoadOrder: string[], activeIds: string[]) => void;
   openedPackageFolder?: string | null;
+  /** Issues from the shared health check (useModHealth); null until the first check. */
+  healthIssues?: HealthIssue[] | null;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -193,6 +195,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onGoToSettings,
   onApplyPresetLoadOrder,
   openedPackageFolder,
+  healthIssues = null,
 }) => {
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
@@ -428,139 +431,64 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     return { mapCount, libCount, scriptCount };
   }, [mods]);
 
-  const isExactOrSanitizedMatch = (id1: string, id2: string): boolean => {
-    const n1 = normalizeModId(id1);
-    const n2 = normalizeModId(id2);
-    if (n1 === n2) return true;
-    const a1 = n1.replace(/[^a-z0-9]/g, '');
-    const a2 = n2.replace(/[^a-z0-9]/g, '');
-    return a1 === a2;
-  };
+  // Dependency, order and compatibility problems come from the Rust health check (game-exact
+  // rules: case-sensitive ids, require/loadModAfter/loadModBefore/incompatible from mod.info).
+  // The maps below keep the shapes this screen's badges and buttons already use.
+  // Position of each mod in the full list (rows use it instead of scanning the list each time).
+  const modIndexById = useMemo(() => new Map(mods.map((m, idx) => [m.mod_id, idx])), [mods]);
 
-  const isMutuallyExclusiveVariant = (modA: ModInfo, modB: ModInfo): boolean => {
-    if (modA.mod_id === modB.mod_id) return false;
-
-    // 1. Check explicit incompatibility lists from mod.info or heuristics
-    if (modA.incompatible && modA.incompatible.some((inc: string) => isExactOrSanitizedMatch(inc, modB.mod_id))) {
-      return true;
-    }
-    if (modB.incompatible && modB.incompatible.some((inc: string) => isExactOrSanitizedMatch(inc, modA.mod_id))) {
-      return true;
-    }
-
-    // 2. Check GunFighter 1.0 vs 2.0 specifically by mod ID
-    const idA = modA.mod_id.toLowerCase();
-    const idB = modB.mod_id.toLowerCase();
-    if (idA.includes("gunfighter") && idB.includes("gunfighter")) {
-      const isA20 = idA.includes("2.0") || idA.includes("main");
-      const isB20 = idB.includes("2.0") || idB.includes("main");
-      if (isA20 !== isB20) return true;
-    }
-
-    return false;
-  };
-
-  const activeConflictsMap = useMemo(() => {
-    const map: Record<string, { conflictingModId: string; conflictingModName: string }[]> = {};
-
-    const activeMods = mods.filter((m) => m.enabled);
-
-    for (let i = 0; i < activeMods.length; i++) {
-      for (let j = i + 1; j < activeMods.length; j++) {
-        const modA = activeMods[i];
-        const modB = activeMods[j];
-
-        if (isMutuallyExclusiveVariant(modA, modB)) {
-          if (!map[modA.mod_id]) map[modA.mod_id] = [];
-          map[modA.mod_id].push({ conflictingModId: modB.mod_id, conflictingModName: modB.name });
-
-          if (!map[modB.mod_id]) map[modB.mod_id] = [];
-          map[modB.mod_id].push({ conflictingModId: modA.mod_id, conflictingModName: modA.name });
-        }
+  const {
+    activeConflictsMap,
+    missingActiveDependenciesMap,
+    missingUninstalledDependenciesMap,
+    loadOrderViolationsMap,
+  } = useMemo(() => {
+    const conflicts: Record<string, { conflictingModId: string; conflictingModName: string }[]> = {};
+    const disabledDeps: Record<string, ModInfo[]> = {};
+    const uninstalledDeps: Record<string, string[]> = {};
+    const violations: Record<string, { requiredModId: string; requiredModName: string; requiredModIndex: number }[]> = {};
+    const byId = new Map(mods.map((m, idx) => [m.mod_id, { mod: m, idx }]));
+    const nameOf = (id: string) => byId.get(id)?.mod.name ?? id;
+    const addViolation = (modId: string, requiredId: string) => {
+      const list = (violations[modId] ??= []);
+      if (!list.some((v) => v.requiredModId === requiredId)) {
+        list.push({ requiredModId: requiredId, requiredModName: nameOf(requiredId), requiredModIndex: byId.get(requiredId)?.idx ?? -1 });
       }
-    }
+    };
 
-    return map;
-  }, [mods]);
-
-  const missingActiveDependenciesMap = useMemo(() => {
-    const map: Record<string, ModInfo[]> = {};
-
-    for (const m of mods) {
-      if (m.enabled && m.dependencies && m.dependencies.length > 0) {
-        const disabledDeps: ModInfo[] = [];
-        for (const depRaw of m.dependencies) {
-          const normReq = normalizeModId(depRaw);
-          const matched = mods.find((target) => normalizeModId(target.mod_id) === normReq);
-          if (matched && !matched.enabled) {
-            disabledDeps.push(matched);
+    for (const issue of healthIssues ?? []) {
+      const modId = issue.mod_id;
+      if (!modId) continue;
+      switch (issue.code) {
+        case 'incompatible':
+          for (const other of issue.related) {
+            (conflicts[modId] ??= []).push({ conflictingModId: other, conflictingModName: nameOf(other) });
+            (conflicts[other] ??= []).push({ conflictingModId: modId, conflictingModName: nameOf(modId) });
           }
-        }
-        if (disabledDeps.length > 0) {
-          map[m.mod_id] = disabledDeps;
-        }
+          break;
+        case 'dependency_not_enabled':
+          disabledDeps[modId] = issue.related.map((id) => byId.get(id)?.mod).filter((m): m is ModInfo => !!m);
+          break;
+        case 'missing_dependency':
+          (uninstalledDeps[modId] ??= []).push(...issue.related);
+          break;
+        case 'dependency_after':
+        case 'load_after_order':
+          issue.related.forEach((req) => addViolation(modId, req));
+          break;
+        case 'load_before_order':
+          // modId must load before the related mod: the related mod is the one out of place.
+          issue.related.forEach((other) => addViolation(other, modId));
+          break;
       }
     }
-
-    return map;
-  }, [mods]);
-
-  const missingUninstalledDependenciesMap = useMemo(() => {
-    const map: Record<string, string[]> = {};
-
-    for (const m of mods) {
-      if (m.enabled && m.dependencies && m.dependencies.length > 0) {
-        const uninstalled: string[] = [];
-        for (const depRaw of m.dependencies) {
-          const matched = findInstalledDependencyInMods(depRaw, mods);
-          if (!matched) {
-            uninstalled.push(depRaw);
-          }
-        }
-        if (uninstalled.length > 0) {
-          map[m.mod_id] = uninstalled;
-        }
-      }
-    }
-
-    return map;
-  }, [mods]);
-
-  const loadOrderViolationsMap = useMemo(() => {
-    const map: Record<string, { requiredModId: string; requiredModName: string; requiredModIndex: number }[]> = {};
-
-    const modIndexMap: Record<string, number> = {};
-    mods.forEach((m, idx) => {
-      modIndexMap[normalizeModId(m.mod_id)] = idx;
-    });
-
-    mods.forEach((m, currentIdx) => {
-      if (!m.enabled) return;
-      const allOrderingDeps = [...(m.dependencies || []), ...(m.load_mod_after || [])];
-      if (allOrderingDeps.length === 0) return;
-
-      for (const depRaw of allOrderingDeps) {
-        const reqMod = findInstalledDependencyInMods(depRaw, mods);
-
-        if (reqMod) {
-          const requiredIdx = mods.findIndex((t) => t.mod_id === reqMod.mod_id);
-          // Load Order Violation: 'm' is ABOVE 'reqMod' in active load order (currentIdx < requiredIdx)
-          if (requiredIdx !== -1 && currentIdx < requiredIdx) {
-            if (!map[m.mod_id]) map[m.mod_id] = [];
-            if (!map[m.mod_id].some((v) => v.requiredModId === reqMod.mod_id)) {
-              map[m.mod_id].push({
-                requiredModId: reqMod.mod_id,
-                requiredModName: reqMod.name,
-                requiredModIndex: requiredIdx,
-              });
-            }
-          }
-        }
-      }
-    });
-
-    return map;
-  }, [mods]);
+    return {
+      activeConflictsMap: conflicts,
+      missingActiveDependenciesMap: disabledDeps,
+      missingUninstalledDependenciesMap: uninstalledDeps,
+      loadOrderViolationsMap: violations,
+    };
+  }, [healthIssues, mods]);
 
   const [orderViolationCycleIdx, setOrderViolationCycleIdx] = useState(0);
   const [conflictCycleIdx, setConflictCycleIdx] = useState(0);
@@ -729,8 +657,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           return { ...m, enabled: true };
         }
 
+        // Variants in the same Workshop item that declare each other incompatible (exact ids,
+        // backslashes removed, like the game) cannot run together: switch the other one off.
         if (m.enabled && m.workshop_id === targetMod.workshop_id && m.mod_id !== modId) {
-          if (isMutuallyExclusiveVariant(targetMod, m)) {
+          const clean = (ids?: string[]) => (ids ?? []).map((i) => i.replace(/\\/g, '').trim());
+          if (clean(targetMod.incompatible).includes(m.mod_id) || clean(m.incompatible).includes(targetMod.mod_id)) {
             return { ...m, enabled: false };
           }
         }
@@ -752,147 +683,35 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     triggerReorder(updated);
   };
 
-  const handleAutoSortDependencies = () => {
-    const isMasterPatch = (id: string) => id === 'Z_PZModStudio_MergedPatch' || id.startsWith('Z_PZModStudio_');
-
-    // 1. Separate Master Patch / Fusion Packages
-    const regularMods = mods.filter((m) => !isMasterPatch(m.mod_id));
-    const masterPatchMods = mods.filter((m) => isMasterPatch(m.mod_id));
-
-    // 2. Build Dependency Graph & In-Degree map
-    const inDegree: Map<string, number> = new Map();
-    const graph: Map<string, string[]> = new Map();
-    const modMap: Map<string, ModInfo> = new Map();
-
-    regularMods.forEach((m) => {
-      inDegree.set(m.mod_id, 0);
-      graph.set(m.mod_id, []);
-      modMap.set(m.mod_id, m);
-    });
-
-    regularMods.forEach((m) => {
-      const allOrderingDeps = [...(m.dependencies || []), ...(m.load_mod_after || [])];
-      if (allOrderingDeps.length > 0) {
-        allOrderingDeps.forEach((depRaw) => {
-          const parentMod = findInstalledDependencyInMods(depRaw, regularMods);
-          if (parentMod && parentMod.mod_id !== m.mod_id) {
-            // parentMod MUST load BEFORE m
-            graph.get(parentMod.mod_id)?.push(m.mod_id);
-            inDegree.set(m.mod_id, (inDegree.get(m.mod_id) || 0) + 1);
-          }
-        });
-      }
-    });
-
-    // 3. Kahn's Topological Sort with Mod Family Cohesion Priority
-    const sortedResult: ModInfo[] = [];
-    const availableNodes = new Set<string>();
-
-    inDegree.forEach((deg, id) => {
-      if (deg === 0) availableNodes.add(id);
-    });
-
-    let lastAddedMod: ModInfo | null = null;
-
-    while (availableNodes.size > 0) {
-      const candidates = Array.from(availableNodes).map((id) => modMap.get(id)!);
-
-      // Score candidates to pick the best next mod:
-      // - Prioritize mods belonging to the SAME WORKSHOP ITEM or MOD FAMILY prefix as lastAddedMod!
-      // - Prioritize Base Libraries over normal mods
-      // - Prioritize Normal mods over Map mods
-      // - Stable tie-breaker by name
-      const getModFamilyPriority = (name: string, id: string): number => {
-        const lower = (name + " " + id).toLowerCase();
-        if (lower.includes("neatui_framework") || lower.includes("neatui framework")) return 0;
-        if (lower.includes("spncc") || lower.includes("spongie")) return 15;
-        if (lower.includes("neat_building") || lower.includes("neat building")) return 20;
-        if (lower.includes("neat_crafting") || lower.includes("neat crafting")) return 30;
-        if (lower.includes("neat_rocco") || lower.includes("neat rocco")) return 40;
-        if (lower.includes("neatui_hairstyler") || lower.includes("neatui hairstyler")) return 50;
-        return 100;
-      };
-
-      const getModRoleRank = (name: string, id: string): number => {
-        const lower = (name + " " + id).toLowerCase();
-        if (lower.includes("framework") || lower.includes("library") || lower.includes("core") || lower.includes("manager") || lower.includes("api")) return 0;
-        if (!lower.includes("ui") && !lower.includes("pack") && !lower.includes("addon") && !lower.includes("xp") && !lower.includes("compat") && !lower.includes("railings")) return 1; // Base Mod
-        if (lower.includes("ui")) return 2;
-        if (lower.includes("pack") || lower.includes("compat") || lower.includes("railings")) return 3;
-        if (lower.includes("addon") || lower.includes("xp")) return 4;
-        return 5;
-      };
-
-      candidates.sort((a, b) => {
-        const famA = getModFamilyPriority(a.name, a.mod_id);
-        const famB = getModFamilyPriority(b.name, b.mod_id);
-        if (famA !== famB) return famA - famB;
-
-        if (lastAddedMod) {
-          const aSameWorkshop = a.workshop_id && a.workshop_id === lastAddedMod.workshop_id;
-          const bSameWorkshop = b.workshop_id && b.workshop_id === lastAddedMod.workshop_id;
-          if (aSameWorkshop && !bSameWorkshop) return -1;
-          if (!aSameWorkshop && bSameWorkshop) return 1;
-
-          // Check name prefix similarity (e.g. "Neat Building" and "Neat Building - UI Only")
-          const cleanLast = lastAddedMod.name.split('-')[0].trim().toLowerCase();
-          const aPrefixMatch = a.name.toLowerCase().startsWith(cleanLast);
-          const bPrefixMatch = b.name.toLowerCase().startsWith(cleanLast);
-          if (aPrefixMatch && !bPrefixMatch) return -1;
-          if (!aPrefixMatch && bPrefixMatch) return 1;
-
-          if (aPrefixMatch && bPrefixMatch) {
-            const rankA = getModRoleRank(a.name, a.mod_id);
-            const rankB = getModRoleRank(b.name, b.mod_id);
-            if (rankA !== rankB) return rankA - rankB;
-          }
-        }
-
-        const rankA = getModRoleRank(a.name, a.mod_id);
-        const rankB = getModRoleRank(b.name, b.mod_id);
-        if (rankA !== rankB) return rankA - rankB;
-
-        if (a.is_library && !b.is_library) return -1;
-        if (!a.is_library && b.is_library) return 1;
-
-        if (!a.is_map_mod && b.is_map_mod) return -1;
-        if (a.is_map_mod && !b.is_map_mod) return 1;
-
-        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-      });
-
-      const nextMod = candidates[0];
-      availableNodes.delete(nextMod.mod_id);
-      sortedResult.push(nextMod);
-      lastAddedMod = nextMod;
-
-      // Decrement in-degree for neighbors
-      const neighbors = graph.get(nextMod.mod_id) || [];
-      neighbors.forEach((neighborId) => {
-        const currentDeg = inDegree.get(neighborId) || 0;
-        const newDeg = Math.max(0, currentDeg - 1);
-        inDegree.set(neighborId, newDeg);
-        if (newDeg === 0) {
-          availableNodes.add(neighborId);
-        }
-      });
+  // Game-exact sort in Rust: moves only what require / loadModAfter / loadModBefore force and keeps
+  // the user's order everywhere else (Studio packages last). The previous order can be restored.
+  const [orderBeforeSort, setOrderBeforeSort] = useState<ModInfo[] | null>(null);
+  const [lastSortMoved, setLastSortMoved] = useState<number>(0);
+  const handleAutoSortDependencies = async () => {
+    let result;
+    try {
+      result = await TauriService.sortLoadOrder(paths, mods.map((m) => m.mod_id));
+    } catch {
+      return; // already shown by TauriService
     }
-
-    // Append any remaining mods (e.g. if circular dependencies exist)
-    const processedSet = new Set(sortedResult.map((m) => m.mod_id));
-    regularMods.forEach((m) => {
-      if (!processedSet.has(m.mod_id)) {
-        sortedResult.push(m);
-      }
-    });
-
-    // 4. Master Patch / Fusion packages go at the very bottom
-    const finalSorted = [...sortedResult, ...masterPatchMods];
-
-    triggerReorder(finalSorted);
+    const byId = new Map(mods.map((m) => [m.mod_id, m]));
+    const sorted = result.order.map((id) => byId.get(id)).filter((m): m is ModInfo => !!m);
+    if (sorted.length !== mods.length) return; // list changed meanwhile; do nothing
+    setLastSortMoved(result.moved.length);
+    if (result.moved.length > 0) {
+      setOrderBeforeSort(mods);
+      triggerReorder(sorted);
+    }
     const isSilenced = localStorage.getItem('pz_hide_autosort_notice') === 'true';
     if (!isSilenced) {
       setShowAutoSortNotice(true);
+    }
+  };
+
+  const handleUndoSort = () => {
+    if (orderBeforeSort) {
+      triggerReorder(orderBeforeSort);
+      setOrderBeforeSort(null);
     }
   };
 
@@ -1336,7 +1155,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               </div>
             ) : (
               filteredMods.map((mod) => {
-                const originalIndex = mods.findIndex((m) => m.mod_id === mod.mod_id);
+                const originalIndex = modIndexById.get(mod.mod_id) ?? -1;
                 const isSelected = mod.mod_id === selectedModId;
                 const isHighlighted = mod.mod_id === highlightedModId;
                 const isAssigningThis = assigningModId === mod.mod_id;
@@ -2014,17 +1833,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <Wand2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">✨ Auto-Sorting Completed</h3>
-                <p className="text-xs text-slate-400">Priority and hierarchy of dependencies applied</p>
+                <h3 className="text-base font-bold text-slate-100">Auto-sort completed</h3>
+                <p className="text-xs text-slate-400">
+                  {lastSortMoved === 0 ? 'Your load order already follows every rule: nothing moved.' : `${lastSortMoved} mods moved.`}
+                </p>
               </div>
             </div>
 
             <ul className="text-xs text-slate-300 space-y-2 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-sans leading-relaxed">
-              <li className="flex items-center gap-2 text-emerald-300">📦 Sub-mods of the same package grouped together.</li>
-              <li className="flex items-center gap-2">📚 Base libraries moved to the TOP (Load priority).</li>
-              <li className="flex items-center gap-2">🔗 Required dependencies placed BEFORE their dependents.</li>
-              <li className="flex items-center gap-2">🗺️ Map mods located NEAR THE END.</li>
-              <li className="flex items-center gap-2 font-bold text-amber-300">🛡️ PZ Mod Studio Master Patch placed LAST at the end.</li>
+              <li>Mods load after the mods they require and their <code>loadModAfter</code> mods, and before their <code>loadModBefore</code> mods (read from mod.info exactly like the game does).</li>
+              <li>Everything else keeps the order you chose.</li>
+              <li className="text-amber-300">PZ Mod Studio merge packages are placed last.</li>
             </ul>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800 gap-4">
@@ -2038,6 +1857,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <span>Do not show this message again</span>
               </label>
 
+              {orderBeforeSort && (
+                <button
+                  onClick={() => {
+                    handleUndoSort();
+                    setShowAutoSortNotice(false);
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
+                >
+                  Undo
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (dontShowNoticeChecked) {

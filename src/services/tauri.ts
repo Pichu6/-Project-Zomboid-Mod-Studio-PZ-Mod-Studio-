@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -261,6 +261,19 @@ export const TauriService = {
    */
   getModHealth: async (paths: StudioPathsUI, active: string[]): Promise<ModHealth> => {
     return await invoke<ModHealth>('get_mod_health_cmd', { paths, active });
+  },
+
+  /**
+   * Game-exact load-order sort: moves only what require/loadModAfter/loadModBefore force,
+   * keeps everything else in place, Studio packages last.
+   */
+  sortLoadOrder: async (paths: StudioPathsUI, order: string[]): Promise<SortResult> => {
+    try {
+      return await invoke<SortResult>('sort_load_order_cmd', { paths, order });
+    } catch (err) {
+      reportBackendError('Sorting the load order', err);
+      throw err;
+    }
   },
 
   /**

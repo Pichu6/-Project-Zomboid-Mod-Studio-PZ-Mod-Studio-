@@ -2,7 +2,6 @@ use super::protocol::{McpTool, ToolCallResult, ToolContent};
 use crate::claude_agent;
 use crate::diff_engine::lua::{three_way_merge_lua, validate_lua_syntax};
 use crate::load_order::mod_info::scan_all_installed_mods;
-use crate::load_order::topological_sort::sort_dependencies_topologically;
 use crate::instance_manager::{activate_instance, create_instance, list_instances};
 use crate::patch_generator::{get_master_patch_status, list_merged_packages, save_draft_resolution};
 use crate::sandbox::{
@@ -282,13 +281,13 @@ pub fn get_available_tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "sort_mod_load_order".to_string(),
-            description: "Performs topological dependency sorting on installed mods and reports missing dependencies or circular load-order conflicts.".to_string(),
+            description: "Sorts a load order with the game's own mod.info rules: each mod after what it requires and its loadModAfter mods, before its loadModBefore mods, everything else kept in place, PZ Mod Studio packages last. Read-only: returns {order, moved, cycle}. Defaults to the active list in default.txt.".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "pz_install_dir": { "type": "string" },
                     "user_zomboid_dir": { "type": "string" },
-                    "workshop_dir": { "type": "string" }
+                    "workshop_dir": { "type": "string" },
+                    "order": { "type": "array", "items": { "type": "string" }, "description": "Mod ids to sort instead of default.txt" }
                 }
             }),
         },
@@ -697,8 +696,12 @@ fn handle_list_installed_mods(args: Value) -> ToolCallResult {
 
 fn handle_sort_mod_load_order(args: Value) -> ToolCallResult {
     let paths = resolve_paths(&args);
-    let manifests = scan_all_installed_mods(&paths);
-    let analysis = sort_dependencies_topologically(&manifests);
+    let order: Vec<String> = match args.get("order").and_then(|v| v.as_array()) {
+        Some(list) => list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+        None => crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path).map(|d| d.active_mods).unwrap_or_default(),
+    };
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let analysis = crate::catalog::sort_load_order(&catalog, &order);
 
     ToolCallResult {
         content: vec![ToolContent {

@@ -265,6 +265,36 @@ pub struct HealthIssue {
     pub mod_id: Option<String>,
     pub message: String,
     pub fixes: Vec<SuggestedFix>,
+    /// The other mod ids involved (the dependency, the incompatible mod, ...), for UIs that
+    /// show the issue next to each mod.
+    pub related: Vec<String>,
+}
+
+/// Collects issues; `related` is filled from the fixes (every fix names the other mod).
+struct IssueList(Vec<HealthIssue>);
+
+impl IssueList {
+    fn push(&mut self, severity: Severity, code: &str, mod_id: Option<&str>, message: String, fixes: Vec<SuggestedFix>) {
+        let mut related: Vec<String> = Vec::new();
+        for fix in &fixes {
+            let other = match fix {
+                SuggestedFix::EnableMod { mod_id: m } | SuggestedFix::DisableMod { mod_id: m } => Some(m),
+                SuggestedFix::MoveBefore { mod_id: m, before } => Some(if Some(m.as_str()) == mod_id { before } else { m }),
+                SuggestedFix::SubscribeWorkshop { hint } => Some(hint),
+                SuggestedFix::RemoveFromList { .. } => None,
+            };
+            if let Some(other) = other.filter(|o| Some(o.as_str()) != mod_id && !related.contains(o)) {
+                related.push(other.clone());
+            }
+        }
+        self.0.push(HealthIssue { severity, code: code.to_string(), mod_id: mod_id.map(str::to_string), message, fixes, related });
+    }
+
+    fn relate_last(&mut self, other: &str) {
+        if let Some(last) = self.0.last_mut() {
+            last.related.push(other.to_string());
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -314,10 +344,7 @@ fn near_match<'a>(catalog: &'a ModCatalog, id: &str) -> Option<&'a CatalogMod> {
 
 /// Everything that will go wrong when the game loads `active` (the default.txt list, in order).
 pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
-    let mut issues: Vec<HealthIssue> = Vec::new();
-    let mut push = |severity, code: &str, mod_id: Option<&str>, message: String, fixes: Vec<SuggestedFix>| {
-        issues.push(HealthIssue { severity, code: code.to_string(), mod_id: mod_id.map(str::to_string), message, fixes });
-    };
+    let mut list = IssueList(Vec::new());
 
     let active_ids: Vec<&str> = active
         .iter()
@@ -356,7 +383,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
         let entry = entry.trim();
         let id = active_ids[idx];
         if !seen_entries.insert(id) {
-            push(Severity::Warning, "duplicate_entry", Some(id), format!("{} is in the active list more than once", id),
+            list.push(Severity::Warning, "duplicate_entry", Some(id), format!("{} is in the active list more than once", id),
                 vec![SuggestedFix::RemoveFromList { entry: entry.to_string() }]);
             continue;
         }
@@ -372,27 +399,27 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                     format!("{} is enabled but not installed (unsubscribed or deleted)", id)
                 }
             };
-            push(Severity::Error, "missing_mod", Some(id), message, fixes);
+            list.push(Severity::Error, "missing_mod", Some(id), message, fixes);
             continue;
         };
 
         match &m.loadability {
             Loadability::Loadable => {}
-            Loadability::NoFolderForBuild { available_folders } => push(
+            Loadability::NoFolderForBuild { available_folders } => list.push(
                 Severity::Error, "not_for_build", Some(id),
                 format!("{} has no files for game build {} (it has: {}). The game will not load it.",
                     describe(m), catalog.game_version.as_deref().unwrap_or("?"),
                     if available_folders.is_empty() { "nothing usable".to_string() } else { available_folders.join(", ") }),
                 vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }],
             ),
-            Loadability::OutsideVersionRange { version_min, version_max } => push(
+            Loadability::OutsideVersionRange { version_min, version_max } => list.push(
                 Severity::Error, "outside_version_range", Some(id),
                 format!("{} supports game versions {} to {}; you have {}. The game will not load it.",
                     describe(m), version_min.as_deref().unwrap_or("any"), version_max.as_deref().unwrap_or("any"),
                     catalog.game_version.as_deref().unwrap_or("?")),
                 vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }],
             ),
-            Loadability::InvalidModInfo { reason } => push(
+            Loadability::InvalidModInfo { reason } => list.push(
                 Severity::Error, "invalid_mod_info", Some(id),
                 format!("{}: {}", describe(m), reason),
                 vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }],
@@ -406,24 +433,25 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                         Some(similar) => format!("{} requires {}, which is not installed (an installed mod is called {}: ids are case-sensitive)", describe(m), req, similar.id),
                         None => format!("{} requires {}, which is not installed", describe(m), req),
                     };
-                    push(Severity::Error, "missing_dependency", Some(id), message,
+                    list.push(Severity::Error, "missing_dependency", Some(id), message,
                         vec![SuggestedFix::SubscribeWorkshop { hint: req.clone() }, SuggestedFix::DisableMod { mod_id: m.id.clone() }]);
                 }
                 Some(dep) => match position.get(req.as_str()) {
-                    None => push(Severity::Error, "dependency_not_enabled", Some(id),
+                    None => list.push(Severity::Error, "dependency_not_enabled", Some(id),
                         format!("{} requires {}, which is installed but not enabled", describe(m), describe(dep)),
                         vec![
                             SuggestedFix::EnableMod { mod_id: dep.id.clone() },
                             // ...and place it before the mod that needs it.
                             SuggestedFix::MoveBefore { mod_id: dep.id.clone(), before: m.id.clone() },
                         ]),
-                    Some(&dep_pos) if dep_pos > idx => push(Severity::Warning, "dependency_after", Some(id),
+                    Some(&dep_pos) if dep_pos > idx => list.push(Severity::Warning, "dependency_after", Some(id),
                         format!("{} requires {}, but {} loads after it", describe(m), dep.id, dep.id),
                         vec![SuggestedFix::MoveBefore { mod_id: dep.id.clone(), before: m.id.clone() }]),
                     Some(_) => {
                         if let Some(reason) = why_unavailable(catalog, req, &mut HashSet::new(), &mut unavailable_memo) {
-                            push(Severity::Error, "dependency_unavailable", Some(id),
+                            list.push(Severity::Error, "dependency_unavailable", Some(id),
                                 format!("{} requires {}, which is unavailable: {}", describe(m), dep.id, reason), vec![]);
+                            list.relate_last(&dep.id);
                         }
                     }
                 },
@@ -433,7 +461,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
         for after in &m.info.load_after {
             if let Some(&p) = position.get(after.as_str()) {
                 if p > idx {
-                    push(Severity::Warning, "load_after_order", Some(id),
+                    list.push(Severity::Warning, "load_after_order", Some(id),
                         format!("{} asks to load after {}, but {} comes later in the list", describe(m), after, after),
                         vec![SuggestedFix::MoveBefore { mod_id: after.clone(), before: m.id.clone() }]);
                 }
@@ -442,7 +470,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
         for before in &m.info.load_before {
             if let Some(&p) = position.get(before.as_str()) {
                 if p < idx {
-                    push(Severity::Warning, "load_before_order", Some(id),
+                    list.push(Severity::Warning, "load_before_order", Some(id),
                         format!("{} asks to load before {}, but {} comes earlier in the list", describe(m), before, before),
                         vec![SuggestedFix::MoveBefore { mod_id: m.id.clone(), before: before.clone() }]);
                 }
@@ -452,7 +480,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             if let Some(&p) = position.get(other.as_str()) {
                 // Report each pair once, on the later mod.
                 if p < idx || !catalog.get(other).is_some_and(|o| o.info.incompatible.contains(&m.id)) {
-                    push(Severity::Error, "incompatible", Some(id),
+                    list.push(Severity::Error, "incompatible", Some(id),
                         format!("{} is marked incompatible with {}, and both are enabled", describe(m), other),
                         vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }, SuggestedFix::DisableMod { mod_id: other.clone() }]);
                 }
@@ -460,15 +488,95 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
         }
 
         for copy in catalog.mods.iter().filter(|c| c.id == m.id && c.shadowed_by.is_some()) {
-            push(Severity::Info, "shadowed_copy", Some(id),
+            list.push(Severity::Info, "shadowed_copy", Some(id),
                 format!("Another copy of {} at {} is ignored: the game uses the one at {}", m.id, copy.root_dir, m.root_dir), vec![]);
         }
     }
 
+    let mut issues = list.0;
     issues.sort_by(|a, b| a.severity.cmp(&b.severity));
     let errors = issues.iter().filter(|i| i.severity == Severity::Error).count();
     let warnings = issues.iter().filter(|i| i.severity == Severity::Warning).count();
     HealthReport { game_version: catalog.game_version.clone(), active_count: active.len(), errors, warnings, issues }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Load-order sort
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SortResult {
+    /// The new order: every input entry exactly once.
+    pub order: Vec<String>,
+    /// Entries whose position changed.
+    pub moved: Vec<String>,
+    /// Entries caught in a require/loadModAfter/loadModBefore cycle (kept in their old order).
+    pub cycle: Vec<String>,
+}
+
+/// Studio merge packages go last so they override the mods they merge.
+fn is_studio_package(id: &str) -> bool {
+    id.starts_with("Z_PZModStudio_") && id != "Z_PZModStudio_Bridge"
+}
+
+/// Sorts `order` (the full list, enabled and disabled) so every mod comes after what it
+/// requires and its loadModAfter mods, and before its loadModBefore mods, using the
+/// mod.info data the game reads. Everything else keeps the user's order: among mods that are
+/// free to go next, the one that was earliest goes first, so an already valid list is unchanged.
+pub fn sort_load_order(catalog: &ModCatalog, order: &[String]) -> SortResult {
+    let ids: Vec<String> = order
+        .iter()
+        .map(|e| resolve_entry(catalog, e.trim()).map(|m| m.id.clone()).unwrap_or_else(|| e.trim().to_string()))
+        .collect();
+    let (regular, packages): (Vec<usize>, Vec<usize>) = (0..ids.len()).partition(|&i| !is_studio_package(&ids[i]));
+    let index_of: HashMap<&str, usize> = regular.iter().rev().map(|&i| (ids[i].as_str(), i)).collect();
+
+    let mut successors: Vec<Vec<usize>> = vec![Vec::new(); ids.len()];
+    let mut in_degree = vec![0usize; ids.len()];
+    let mut edges: HashSet<(usize, usize)> = HashSet::new();
+    let mut add_edge = |before: usize, after: usize| {
+        if before != after && edges.insert((before, after)) {
+            successors[before].push(after);
+            in_degree[after] += 1;
+        }
+    };
+    for &i in &regular {
+        if index_of.get(ids[i].as_str()) != Some(&i) {
+            continue; // duplicate entry: only the first one carries constraints
+        }
+        let Some(m) = catalog.get(&ids[i]) else { continue };
+        for dep in m.info.require.iter().chain(&m.info.load_after) {
+            if let Some(&d) = index_of.get(dep.as_str()) {
+                add_edge(d, i);
+            }
+        }
+        for later in &m.info.load_before {
+            if let Some(&l) = index_of.get(later.as_str()) {
+                add_edge(i, l);
+            }
+        }
+    }
+
+    let mut ready: std::collections::BTreeSet<usize> = regular.iter().copied().filter(|&i| in_degree[i] == 0).collect();
+    let mut placed = vec![false; ids.len()];
+    let mut sorted: Vec<usize> = Vec::with_capacity(ids.len());
+    while let Some(i) = ready.pop_first() {
+        placed[i] = true;
+        sorted.push(i);
+        for &n in &successors[i] {
+            in_degree[n] -= 1;
+            if in_degree[n] == 0 {
+                ready.insert(n);
+            }
+        }
+    }
+    let cycle: Vec<usize> = regular.iter().copied().filter(|&i| !placed[i]).collect();
+    sorted.extend(&cycle);
+    sorted.extend(&packages);
+
+    let new_order: Vec<String> = sorted.iter().map(|&i| order[i].clone()).collect();
+    let moved = sorted.iter().enumerate().filter(|(pos, &i)| *pos != i).map(|(_, &i)| order[i].clone()).collect();
+    SortResult { order: new_order, moved, cycle: cycle.iter().map(|&i| order[i].clone()).collect() }
 }
 
 #[cfg(test)]
@@ -564,6 +672,13 @@ mod tests {
         assert!(has("missing_mod", "a"), "ids are case-sensitive");
         assert!(has("duplicate_entry", "A"));
         assert_eq!(report.issues.iter().filter(|i| i.code == "incompatible").count(), 1);
+        let related = |code: &str, id: &str| {
+            report.issues.iter().find(|i| i.code == code && i.mod_id.as_deref() == Some(id)).unwrap().related.clone()
+        };
+        assert_eq!(related("dependency_after", "UsesLib"), vec!["Lib"]);
+        assert_eq!(related("dependency_unavailable", "NeedsOld"), vec!["Old"]);
+        assert_eq!(related("incompatible", "A"), vec!["B"]);
+        assert_eq!(related("load_after_order", "Late"), vec!["B"]);
         assert!(report.issues.windows(2).all(|w| w[0].severity <= w[1].severity), "errors first");
 
         // A clean list has no issues.
@@ -575,6 +690,44 @@ mod tests {
         // ...and an id that itself contains a slash (real mod 2858201402) is matched exactly.
         let slashy = health_report(&cat, &["11/slashy".to_string()]);
         assert!(slashy.issues.is_empty(), "{:?}", slashy.issues);
+    }
+
+    #[test]
+    fn sort_moves_only_what_the_rules_require() {
+        let f = fixture("sort");
+        let ws = f.root.join("workshop");
+        write_mod(&ws.join("1/mods/Lib/42"), "id=Lib\n");
+        write_mod(&ws.join("2/mods/UsesLib/42"), "id=UsesLib\nrequire=\\Lib\n");
+        write_mod(&ws.join("3/mods/Late/42"), "id=Late\nloadModAfter=Zed\n");
+        write_mod(&ws.join("4/mods/Early/42"), "id=Early\nloadModBefore=Alpha\n");
+        write_mod(&ws.join("5/mods/Alpha/42"), "id=Alpha\n");
+        write_mod(&ws.join("6/mods/Zed/42"), "id=Zed\n");
+        write_mod(&ws.join("7/mods/CycA/42"), "id=CycA\nrequire=CycB\n");
+        write_mod(&ws.join("8/mods/CycB/42"), "id=CycB\nrequire=CycA\n");
+        let (w, z) = paths(&f);
+        let cat = build_catalog(&w, &z, Some(42_021));
+        let list = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        let r = sort_load_order(&cat, &list(&["Z_PZModStudio_Pack", "UsesLib", "Alpha", "Late", "Lib", "Early", "Zed", "NotInstalled"]));
+        // Lib moves up to just before UsesLib, Early before Alpha, Zed before Late; the rest keeps its order.
+        assert_eq!(r.order, list(&["Lib", "UsesLib", "Early", "Alpha", "Zed", "Late", "NotInstalled", "Z_PZModStudio_Pack"]));
+        let pos = |id: &str| r.order.iter().position(|x| x == id).unwrap();
+        assert!(pos("Lib") < pos("UsesLib"));
+        assert!(pos("Zed") < pos("Late"));
+        assert!(pos("Early") < pos("Alpha"));
+        assert_eq!(r.order.last().unwrap(), "Z_PZModStudio_Pack", "Studio packages go last");
+        assert!(r.cycle.is_empty());
+
+        // An already valid order is left alone.
+        let valid = list(&["Lib", "UsesLib", "Zed", "Late", "Early", "Alpha"]);
+        let again = sort_load_order(&cat, &valid);
+        assert_eq!(again.order, valid);
+        assert!(again.moved.is_empty());
+
+        // Cycles are kept (not dropped) and reported.
+        let c = sort_load_order(&cat, &list(&["CycA", "Lib", "CycB"]));
+        assert_eq!(c.order.len(), 3);
+        assert_eq!(c.cycle, list(&["CycA", "CycB"]));
     }
 
     /// Read-only report over the real install. Run with:
@@ -591,5 +744,7 @@ mod tests {
         for i in &report.issues {
             println!("  [{:?}] {}: {}", i.severity, i.code, i.message);
         }
+        let sorted = sort_load_order(&cat, &active);
+        println!("sort: {} moved, {} in cycles: {:?}", sorted.moved.len(), sorted.cycle.len(), sorted.moved);
     }
 }

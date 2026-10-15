@@ -1,16 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, reportBackendError } from '../../services/tauri';
+import { TauriService } from '../../services/tauri';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
   mods: ModInfo[];
+  /** Latest report from useModHealth (shared with the Mod List and the sidebar badge). */
+  report: HealthReport | null;
+  checking: boolean;
+  onRecheck: () => void;
   /** Replaces the whole list (order + enabled flags) and persists it. */
   onApplyModList: (mods: ModInfo[]) => void;
-  /** Called with the error count after each check (sidebar badge). */
-  onErrorCountChange?: (errors: number) => void;
 }
 
 /** Fixes the "fix all" button may apply without asking: they only enable or reorder. */
@@ -64,35 +66,7 @@ const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: str
   info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400', label: 'Info' },
 };
 
-export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, onApplyModList, onErrorCountChange }) => {
-  const [report, setReport] = useState<HealthReport | null>(null);
-  const [checking, setChecking] = useState(false);
-  const requestId = useRef(0);
-
-  const activeIds = useMemo(() => mods.filter((m) => m.enabled).map((m) => m.mod_id), [mods]);
-
-  const runCheck = useCallback(async () => {
-    if (!paths.is_valid) return;
-    const id = ++requestId.current;
-    setChecking(true);
-    try {
-      const health = await TauriService.getModHealth(paths, activeIds);
-      if (id !== requestId.current) return; // a newer check started meanwhile
-      setReport(health.report);
-      onErrorCountChange?.(health.report.errors);
-    } catch (err) {
-      if (id === requestId.current) reportBackendError('Checking mod health', err);
-    } finally {
-      if (id === requestId.current) setChecking(false);
-    }
-  }, [paths, activeIds, onErrorCountChange]);
-
-  // Re-check shortly after the list changes (toggles come in bursts).
-  useEffect(() => {
-    const t = setTimeout(runCheck, 300);
-    return () => clearTimeout(t);
-  }, [runCheck]);
-
+export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList }) => {
   const handleFix = (fix: HealthFix) => {
     if (fix.action === 'subscribe_workshop') {
       TauriService.openExternalUrl(
@@ -173,7 +147,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, onApply
           )}
           <button
             type="button"
-            onClick={runCheck}
+            onClick={onRecheck}
             disabled={checking}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60"
           >

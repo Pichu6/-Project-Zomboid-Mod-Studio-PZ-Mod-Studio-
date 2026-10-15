@@ -82,6 +82,14 @@ fn get_mod_health_cmd(paths: StudioPaths, active: Vec<String>) -> catalog::ModHe
     catalog::mod_health(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
 }
 
+/// Game-exact load-order sort of the whole list (enabled and disabled), keeping the user's order
+/// wherever no require/loadModAfter/loadModBefore rule forces a change.
+#[tauri::command(async)]
+fn sort_load_order_cmd(paths: StudioPaths, order: Vec<String>) -> catalog::SortResult {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    catalog::sort_load_order(&catalog, &order)
+}
+
 #[tauri::command(async)]
 fn sort_mod_dependencies_cmd(manifests: Vec<ModManifest>) -> DependencyAnalysisResult {
     sort_dependencies_topologically(&manifests)
@@ -323,6 +331,7 @@ pub fn run() {
             scan_all_installed_mods_cmd,
             sort_mod_dependencies_cmd,
             get_mod_health_cmd,
+            sort_load_order_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,

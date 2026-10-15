@@ -267,6 +267,8 @@ export interface HealthIssue {
   mod_id: string | null;
   message: string;
   fixes: HealthFix[];
+  /** Other mod ids involved (dependency, incompatible mod, ...). */
+  related: string[];
 }
 
 export interface HealthReport {
@@ -283,6 +285,12 @@ export interface CatalogModSummary {
   root_dir: string;
   shadowed_by: string | null;
   loadability: { status: 'loadable' | 'no_folder_for_build' | 'outside_version_range' | 'invalid_mod_info' };
+}
+
+export interface SortResult {
+  order: string[];
+  moved: string[];
+  cycle: string[];
 }
 
 export interface ModHealth {

@@ -33,8 +33,8 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | ✅ | Errors surfaced in the UI; slow commands off the UI thread; CI + releases | Basic quality |
 | ✅ | **Mod catalog** (`src-tauri/src/catalog`): one read-only model of every installed mod (sources, version folders, chosen `mod.info`, loadability, which copy the game uses, relations) | Every feature below reads from it instead of re-scanning |
 | ✅ | **Health report**: everything that will go wrong on launch, with the reason (Mod Health tab, MCP `get_mod_health`) | The thing players need most |
-| ⬜ | Catalog cache (rescan only changed folders) | Instant start with 1000+ mods |
-| ⬜ | Split the 2000-line components; virtualized mod list; one state store | Speed and maintainability |
+| ⬜ | Catalog cache (rescan only changed folders) | Measured: the full catalog of 115 mods builds in well under 0.5 s, so this waits until it is needed |
+| 🔨 | Split the 2000-line components; virtualized mod list; one state store | Done: the Mod List takes its problems from the health check (no more guessed conflicts) and no longer scans the list per row. Next: virtualization and splitting |
 | ⬜ | Polyfills split into: B41→B42 compatibility layer · vanilla/MP bug fixes · per-mod patches that only run when that mod is active. Settings toggles control what ships (today they do nothing) | Honest, opt-in patching |
 
 ## Phase 1: The manager everyone expects
@@ -43,21 +43,37 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 |---|---|---|
 | 🔨 | Health report UI with one-click fixes: enable missing dependency, move library up, disable mod not for this build, search Workshop for missing mods (done); next: show issues inline in the Mod List | Skyve compatibility report |
 | ⬜ | Load-order rules: user rules + community rules database (GitHub, versioned, PR-based) on top of `require`/`loadModAfter`/`loadModBefore` | LOOT masterlist, RimSort rules DB |
-| ⬜ | Undo / history for every load-order change | MO2, Vortex complaints |
+| 🔨 | Undo / history for every load-order change | Auto-sort is now game-exact (moves only what rules force) and can be undone; full history next |
 | ⬜ | Filters and search (enabled, broken, maps, libraries, not for this build, updated recently), drag and drop | Every manager |
 | ⬜ | Profiles with share codes and `.pzpack` export (exists) including sandbox settings | r2modman, Modrinth `.mrpack` |
 | ⬜ | Per-file conflict view: which mod's file the game actually uses, plus script-level conflicts (same item/recipe defined twice) | MO2 conflict pane |
 | ⬜ | Server tools: build `WorkshopItems=` / `Mods=` / `Map=` from a profile using real IDs from `mod.info`; detect client/server mismatches | Top server-admin pain point |
 
-## Phase 2: Steam Workshop inside the Studio
+## Phase 2: Every mod source in one place (a "Modrinth for Project Zomboid")
+
+Research (2026-10-15): Steam Workshop is where almost all PZ mods live. **Nexus Mods** is the only
+other real host (298 mods, about 1M downloads, actively updated, many marked "Build 42" in their
+names but no build tag). The Indie Stone forums announce mods but link to the Workshop instead of
+hosting files. mod.io, Thunderstore, CurseForge and ModDB have no real PZ presence; itch.io has a
+few mods and tools; some authors publish on GitHub. **No open, source-agnostic PZ mod index exists**
+(nothing like Modrinth or KSP's CKAN): that gap is the opportunity.
+
+Design: one `ModSource` interface in Rust (`search`, `get_mod`, `list_files`, `resolve_download`,
+`check_updates`) with a provider per platform, and a source badge per mod in the UI. Identity across
+sources is the `mod.info` id **plus** source/author and a content hash, with explicit cross-links
+(`workshop:2392709985` ↔ `nexus:projectzomboid/445`); never merged on the id alone (forks reuse ids).
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | Workshop metadata (title, B41/B42 tags, last update, size, preview) | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key needed |
+| ⬜ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview) | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
 | ⬜ | Import a Workshop collection (URL) into a profile | `GetCollectionDetails`, no key |
-| ⬜ | Subscribe / unsubscribe / download from the Studio | ISteamUGC through the running Steam client (steamworks-rs); SteamCMD fallback for dedicated servers |
+| ⬜ | Subscribe / unsubscribe / download | ISteamUGC through the running Steam client (steamworks-rs); SteamCMD fallback for dedicated servers |
+| ⬜ | **Nexus Mods** browse and search | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |
+| ⬜ | Nexus downloads | v1 `download_link.json`. Premium users directly; free users through the website's "Mod Manager Download" button (`nxm://` link handled by the Studio, like Vortex/MO2) |
+| ⬜ | Nexus app registration and SSO login | Required by Nexus before a public release (email support@nexusmods.com with a test build). Personal API keys only for development. No rehosting of Nexus data; 20k requests/day, then 500/hour per user |
+| ⬜ | **PZ community mod index** on GitHub, CKAN-style | One small CC-0 file per mod by pull request: `id`, authors, sources (Workshop / Nexus / GitHub / URL + sha256), supported builds, requires, incompatible, load-after, tags. A GitHub Action builds one `index.json` the app downloads. Main value: B41/B42 compatibility data nobody else has |
+| ⬜ | GitHub releases and "install from URL / zip" (forum, Discord, itch.io) | Every non-Workshop install is hash-checked and goes through the Lua scan before it can be enabled |
 | ⬜ | Update tracking and "what changed" per mod; snapshot a mod before it updates so a save can roll back | Workshop only serves the latest version (Wabbajack-style pinning) |
-| ⬜ | Browse/search the Workshop in-app | Needs the user's own Steam Web API key (optional) |
 
 ## Phase 3: Any mod, any version
 
