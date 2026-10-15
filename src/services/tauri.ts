@@ -246,6 +246,7 @@ export const TauriService = {
         is_library: m.is_library ?? false,
         is_map_mod: m.is_map_mod ?? false,
         is_packaged: m.is_packaged,
+        loadable_on_installed_build: m.loadable_on_installed_build,
         load_order_index: idx + 1,
       }));
     } catch (err) {

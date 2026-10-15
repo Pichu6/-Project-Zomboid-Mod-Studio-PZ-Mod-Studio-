@@ -28,50 +28,155 @@ pub fn validate_lua_syntax(code: &str) -> LuaSyntaxCheckResult {
     }
 }
 
-/// Performs line-by-line and AST-aware 3-way merge (Base Vanilla vs Mod A vs Mod B).
-pub fn three_way_merge_lua(base: &str, target_a: &str, target_b: &str) -> MergeChunkResult {
-    let mut merged_lines = Vec::new();
-    let mut has_conflict = false;
-    let mut conflict_line_start = None;
-    let mut conflict_line_end = None;
+/// One side's change relative to the base: base lines `start..end` become `lines`
+/// (an insertion has `start == end`, a deletion has no `lines`).
+#[derive(Debug, Clone)]
+struct Hunk<'a> {
+    start: usize,
+    end: usize,
+    lines: Vec<&'a str>,
+}
 
+/// Changes needed to turn `base` into `other`, as non-overlapping hunks sorted by position.
+fn diff_hunks<'a>(base: &[&'a str], other: &[&'a str]) -> Vec<Hunk<'a>> {
+    let mut hunks: Vec<Hunk<'a>> = Vec::new();
+    for op in similar::capture_diff_slices(similar::Algorithm::Patience, base, other) {
+        let (tag, old, new) = op.as_tag_tuple();
+        if tag == similar::DiffTag::Equal {
+            continue;
+        }
+        match hunks.last_mut() {
+            // A delete directly followed by an insert is one replacement.
+            Some(last) if last.end == old.start => {
+                last.end = old.end;
+                last.lines.extend_from_slice(&other[new]);
+            }
+            _ => hunks.push(Hunk { start: old.start, end: old.end, lines: other[new].to_vec() }),
+        }
+    }
+    hunks
+}
+
+/// The text one side has for base lines `start..end`, given that side's hunks inside the range.
+fn side_text<'a>(base: &[&'a str], hunks: &[Hunk<'a>], start: usize, end: usize) -> Vec<&'a str> {
+    let mut out = Vec::new();
+    let mut pos = start;
+    for h in hunks {
+        out.extend_from_slice(&base[pos..h.start]);
+        out.extend_from_slice(&h.lines);
+        pos = h.end;
+    }
+    out.extend_from_slice(&base[pos..end]);
+    out
+}
+
+/// Longest run of `=` that would close a `--[==[ ]==]` comment early inside `lines`.
+fn block_comment_level(lines: &[&str]) -> String {
+    let mut level = 1;
+    while lines.iter().any(|l| l.contains(&format!("]{}]", "=".repeat(level)))) {
+        level += 1;
+    }
+    "=".repeat(level)
+}
+
+/// Real three-way merge (diff3) of two edited versions of a Lua file against the vanilla base.
+///
+/// Each side's edits are computed as a diff against the base, so inserted or removed lines no
+/// longer shift everything below them. Edits to different parts of the file are all applied;
+/// identical edits are applied once. Only edits that touch the same base lines differently are
+/// conflicts: the merged text then keeps mod A's version active and includes mod B's version in
+/// a Lua block comment right below it, so the output is still valid Lua and nothing is lost.
+pub fn three_way_merge_lua(base: &str, target_a: &str, target_b: &str) -> MergeChunkResult {
     let base_lines: Vec<&str> = base.lines().collect();
     let a_lines: Vec<&str> = target_a.lines().collect();
     let b_lines: Vec<&str> = target_b.lines().collect();
+    let a_hunks = diff_hunks(&base_lines, &a_lines);
+    let b_hunks = diff_hunks(&base_lines, &b_lines);
 
-    let max_len = base_lines.len().max(a_lines.len()).max(b_lines.len());
+    let mut merged: Vec<String> = Vec::new();
+    let mut conflict_line_start = None;
+    let mut conflict_line_end = None;
+    let (mut ia, mut ib, mut pos) = (0usize, 0usize, 0usize);
 
-    for i in 0..max_len {
-        let base_line = base_lines.get(i).copied().unwrap_or("");
-        let a_line = a_lines.get(i).copied().unwrap_or("");
-        let b_line = b_lines.get(i).copied().unwrap_or("");
+    loop {
+        let next_a = a_hunks.get(ia);
+        let next_b = b_hunks.get(ib);
+        // Earliest hunk; at the same position an insertion goes first (it sits before the line).
+        let start = match (next_a, next_b) {
+            (None, None) => break,
+            (Some(a), None) => a.start,
+            (None, Some(b)) => b.start,
+            (Some(a), Some(b)) => a.start.min(b.start),
+        };
+        merged.extend(base_lines[pos..start].iter().map(|s| s.to_string()));
 
-        if a_line == b_line {
-            // Both mods agree or are unchanged
-            merged_lines.push(a_line.to_string());
-        } else if a_line != base_line && b_line == base_line {
-            // Mod A modified line, Mod B left it vanilla -> Take Mod A
-            merged_lines.push(a_line.to_string());
-        } else if b_line != base_line && a_line == base_line {
-            // Mod B modified line, Mod A left it vanilla -> Take Mod B
-            merged_lines.push(b_line.to_string());
-        } else {
-            // Both mods modified the same line differently -> Conflict!
-            has_conflict = true;
-            if conflict_line_start.is_none() {
-                conflict_line_start = Some(i + 1);
+        // Build one group of hunks that touch the same base lines. Touching edits are merged by
+        // diff_hunks, so each side has at most one hunk starting at `start`.
+        let (a_from, b_from) = (ia, ib);
+        let group_start = start;
+        let is_insert_at = |h: Option<&Hunk>| h.is_some_and(|h| h.start == start && h.end == start);
+        let mut group_end = start;
+        if is_insert_at(a_hunks.get(ia)) || is_insert_at(b_hunks.get(ib)) {
+            // Insertions before line `start`: they only collide with another insertion there.
+            // An edit of the lines that follow is handled as its own group.
+            if is_insert_at(a_hunks.get(ia)) {
+                ia += 1;
             }
-            conflict_line_end = Some(i + 1);
-            
-            // Default conflict fallback: prefer Mod A, flag for UI review
-            merged_lines.push(format!("-- [[ CONFLICT @ Line {} ]] --", i + 1));
-            merged_lines.push(a_line.to_string());
+            if is_insert_at(b_hunks.get(ib)) {
+                ib += 1;
+            }
+        } else {
+            // Edits of base lines: absorb every hunk (from either side) starting inside the range.
+            loop {
+                if let Some(h) = a_hunks.get(ia).filter(|h| h.start == start || h.start < group_end) {
+                    group_end = group_end.max(h.end);
+                    ia += 1;
+                } else if let Some(h) = b_hunks.get(ib).filter(|h| h.start == start || h.start < group_end) {
+                    group_end = group_end.max(h.end);
+                    ib += 1;
+                } else {
+                    break;
+                }
+            }
         }
-    }
 
+        let a_group = &a_hunks[a_from..ia];
+        let b_group = &b_hunks[b_from..ib];
+        let a_text = side_text(&base_lines, a_group, group_start, group_end);
+        let b_text = side_text(&base_lines, b_group, group_start, group_end);
+
+        if b_group.is_empty() || a_text == b_text {
+            merged.extend(a_text.iter().map(|s| s.to_string()));
+        } else if a_group.is_empty() {
+            merged.extend(b_text.iter().map(|s| s.to_string()));
+        } else {
+            if conflict_line_start.is_none() {
+                conflict_line_start = Some(merged.len() + 1);
+            }
+            let eq = block_comment_level(&b_text);
+            merged.push(format!(
+                "-- [[ PZ Mod Studio CONFLICT (vanilla lines {}-{}): mod A's version is active, mod B's is in the comment below ]]",
+                group_start + 1,
+                group_end.max(group_start + 1)
+            ));
+            merged.extend(a_text.iter().map(|s| s.to_string()));
+            merged.push(format!("--[{}[ PZ Mod Studio: mod B's version", eq));
+            merged.extend(b_text.iter().map(|s| s.to_string()));
+            merged.push(format!("]{}]", eq));
+            merged.push("-- [[ END CONFLICT ]]".to_string());
+            conflict_line_end = Some(merged.len());
+        }
+        pos = group_end;
+    }
+    merged.extend(base_lines[pos..].iter().map(|s| s.to_string()));
+
+    let mut merged_text = merged.join("\n");
+    if target_a.ends_with('\n') || (target_a.is_empty() && base.ends_with('\n')) {
+        merged_text.push('\n');
+    }
     MergeChunkResult {
-        merged_text: merged_lines.join("\n"),
-        has_conflict,
+        merged_text,
+        has_conflict: conflict_line_start.is_some(),
         conflict_line_start,
         conflict_line_end,
     }
@@ -141,4 +246,109 @@ pub fn combine_n_way_lua_or_script(
     }
 
     out.trim_end().to_string() + "\n"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lua(lines: &[&str]) -> String {
+        lines.iter().map(|l| format!("{}\n", l)).collect()
+    }
+
+    fn assert_valid_lua(text: &str) {
+        assert!(validate_lua_syntax(text).is_valid, "merged output is not valid Lua:\n{}", text);
+    }
+
+    const BASE: &[&str] = &[
+        "local M = {}",
+        "function M.a() return 1 end",
+        "function M.b() return 2 end",
+        "function M.c() return 3 end",
+        "return M",
+    ];
+
+    #[test]
+    fn insertion_in_one_mod_does_not_shift_the_other_mods_edit() {
+        let mut a = BASE.to_vec();
+        a.insert(1, "local extra = true"); // A adds a line near the top
+        let mut b = BASE.to_vec();
+        b[3] = "function M.c() return 30 end"; // B edits a line further down
+        let r = three_way_merge_lua(&lua(BASE), &lua(&a), &lua(&b));
+        assert!(!r.has_conflict, "{}", r.merged_text);
+        assert!(r.merged_text.contains("local extra = true"));
+        assert!(r.merged_text.contains("return 30"));
+        assert!(!r.merged_text.contains("return 3 end"));
+        assert_valid_lua(&r.merged_text);
+    }
+
+    #[test]
+    fn edits_to_different_lines_and_deletions_are_all_applied() {
+        let mut a = BASE.to_vec();
+        a[1] = "function M.a() return 10 end";
+        let mut b = BASE.to_vec();
+        b.remove(2); // B deletes M.b
+        let r = three_way_merge_lua(&lua(BASE), &lua(&a), &lua(&b));
+        assert!(!r.has_conflict, "{}", r.merged_text);
+        assert!(r.merged_text.contains("return 10"));
+        assert!(!r.merged_text.contains("M.b"));
+        assert_valid_lua(&r.merged_text);
+    }
+
+    #[test]
+    fn identical_edits_are_applied_once() {
+        let mut a = BASE.to_vec();
+        a[2] = "function M.b() return 22 end";
+        let r = three_way_merge_lua(&lua(BASE), &lua(&a), &lua(&a));
+        assert!(!r.has_conflict);
+        assert_eq!(r.merged_text, lua(&a));
+    }
+
+    #[test]
+    fn conflicting_edits_keep_both_versions_and_stay_valid_lua() {
+        let mut a = BASE.to_vec();
+        a[2] = "function M.b() return \"from A\" end";
+        let mut b = BASE.to_vec();
+        b[2] = "function M.b() return \"from B\" ]] end";
+        b[4] = "return M -- B touched the end too";
+        let r = three_way_merge_lua(&lua(BASE), &lua(&a), &lua(&b));
+        assert!(r.has_conflict);
+        assert!(r.merged_text.contains("from A"));
+        assert!(r.merged_text.contains("from B"), "mod B's version must not be lost");
+        assert!(r.merged_text.contains("B touched the end too"), "non-conflicting edit still applied");
+        let start = r.conflict_line_start.unwrap();
+        let end = r.conflict_line_end.unwrap();
+        let lines: Vec<&str> = r.merged_text.lines().collect();
+        assert!(lines[start - 1].contains("CONFLICT"));
+        assert!(lines[end - 1].contains("END CONFLICT"));
+        assert_valid_lua(&r.merged_text);
+    }
+
+    #[test]
+    fn insertions_at_the_same_place_conflict_but_an_insertion_before_an_edit_does_not() {
+        let mut a = BASE.to_vec();
+        a.insert(2, "local fromA = 1");
+        let mut b = BASE.to_vec();
+        b.insert(2, "local fromB = 2");
+        let r = three_way_merge_lua(&lua(BASE), &lua(&a), &lua(&b));
+        assert!(r.has_conflict);
+        assert_valid_lua(&r.merged_text);
+
+        let mut b2 = BASE.to_vec();
+        b2[2] = "function M.b() return 200 end";
+        let r2 = three_way_merge_lua(&lua(BASE), &lua(&a), &lua(&b2));
+        assert!(!r2.has_conflict, "{}", r2.merged_text);
+        let fa = r2.merged_text.find("fromA").unwrap();
+        let fb = r2.merged_text.find("return 200").unwrap();
+        assert!(fa < fb);
+    }
+
+    #[test]
+    fn unchanged_sides_return_the_other_side() {
+        let mut b = BASE.to_vec();
+        b.push("print('B')");
+        let r = three_way_merge_lua(&lua(BASE), &lua(BASE), &lua(&b));
+        assert!(!r.has_conflict);
+        assert_eq!(r.merged_text, lua(&b));
+    }
 }

@@ -173,6 +173,7 @@ mod tests {
             is_map_mod: false,
             enabled: true,
             is_packaged: None,
+            loadable_on_installed_build: None,
         }
     }
 

@@ -1504,6 +1504,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </span>
                           )}
 
+                          {mod.loadable_on_installed_build === false && (
+                            <span
+                              className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
+                              title="This mod has no mod.info the installed game build reads (B41-only, or only folders for newer builds). The game will not load it."
+                            >
+                              NOT FOR THIS BUILD
+                            </span>
+                          )}
+
                           {/* Grave 1: Dependencies missing (Red) */}
                           {hasMissingUninstalledDep && (
                             <button

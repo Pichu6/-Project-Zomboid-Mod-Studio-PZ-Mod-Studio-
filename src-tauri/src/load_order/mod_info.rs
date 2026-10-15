@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use crate::load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini};
 use crate::vfs::StudioPaths;
@@ -25,6 +25,9 @@ pub struct ModManifest {
     pub is_map_mod: bool,
     pub enabled: bool,
     pub is_packaged: Option<bool>,
+    /// Whether the installed game build can load this mod (None: build unknown).
+    #[serde(default)]
+    pub loadable_on_installed_build: Option<bool>,
 }
 
 /// Helper function to sanitize and clean raw mod ID strings.
@@ -309,6 +312,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         is_map_mod,
         enabled: false,
         is_packaged: None,
+        loadable_on_installed_build: None,
     };
 
     apply_known_dependency_heuristics(&mut manifest);
@@ -565,29 +569,94 @@ pub fn get_subscribed_workshop_ids(workshop_dir: &Path) -> Option<HashSet<String
     None
 }
 
-/// Returns version priority score for a mod.info path (e.g. 42.20 > 42.18 > 42 > common > root).
-pub fn get_mod_info_version_score(path: &Path) -> u32 {
-    if let Some(parent) = path.parent() {
-        let dir_name = parent.file_name().unwrap_or_default().to_string_lossy();
-        if dir_name.starts_with("42.") {
-            if let Ok(minor) = dir_name[3..].parse::<u32>() {
-                return 4200 + minor;
+/// Lowest version folder Build 42 reads (ChooseGameInfo.minRequiredVersion).
+const MIN_VERSION_DIR: u32 = 42_000;
+
+/// A version folder name as the game reads it (ZomboidFileSystem.getGameVersionIntFromName):
+/// only major.minor count, so "42" -> 42000 and "42.13" / "42.13.1" -> 42013.
+pub fn version_dir_int(name: &str) -> Option<u32> {
+    let mut parts = name.trim().split('.');
+    let major: u32 = parts.next()?.parse().ok()?;
+    let minor = parts.next().map_or(0, |m| m.parse::<u32>().unwrap_or(0).min(999));
+    Some(major * 1000 + minor)
+}
+
+/// The game build last run from this Zomboid folder, from `Zomboid/version.txt` ("42.21.0 <rev>").
+pub fn read_installed_game_version(user_zomboid_dir: &str) -> Option<u32> {
+    get_existing_user_zomboid_dirs(user_zomboid_dir).iter().find_map(|dir| {
+        fs::read_to_string(dir.join("version.txt"))
+            .ok()
+            .and_then(|text| text.split_whitespace().next().and_then(version_dir_int))
+    })
+}
+
+/// The mod.info the game reads for the mod folder `mod_root` (e.g. `.../mods/MyMod`) on build
+/// `game_version`, following ZomboidFileSystem.getModVersionDirName + ChooseGameInfo:
+/// B42 picks the highest version folder between 42.0 and the installed build (default "42.0")
+/// and reads its mod.info, falling back to `common/mod.info`; the mod root is never read.
+/// Build 41 reads only the root mod.info. An unknown build behaves like the newest one.
+pub fn select_mod_info_for_build(mod_root: &Path, game_version: Option<u32>) -> Option<PathBuf> {
+    let game = game_version.unwrap_or(u32::MAX);
+    if game < MIN_VERSION_DIR {
+        let root = mod_root.join("mod.info");
+        return root.is_file().then_some(root);
+    }
+    let mut best_name = "42.0".to_string();
+    let mut best = MIN_VERSION_DIR;
+    if let Ok(entries) = fs::read_dir(mod_root) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(v) = version_dir_int(&name) {
+                if v >= best && v <= game {
+                    best = v;
+                    best_name = name;
+                }
             }
-            return 4200;
-        } else if dir_name == "42" {
-            return 4200;
-        } else if dir_name == "common" {
-            return 4000;
         }
     }
-    1000
+    [mod_root.join(&best_name).join("mod.info"), mod_root.join("common").join("mod.info")]
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
+/// The mod folder (the direct child of a `mods` folder) that a mod.info belongs to.
+fn mod_root_of(mod_info: &Path) -> Option<&Path> {
+    let mut dir = mod_info.parent()?;
+    loop {
+        let parent = dir.parent()?;
+        if parent.file_name().is_some_and(|n| n.eq_ignore_ascii_case("mods")) {
+            return Some(dir);
+        }
+        dir = parent;
+    }
+}
+
+/// How a scanned mod.info relates to what the game loads on the installed build:
+/// Some(2) = this is the mod.info the game reads; Some(1) = the mod cannot load on this build
+/// (B41-only, or only folders newer than the build) and this is the mod.info kept so the mod is
+/// still listed: its newest one, else its root one; None = skip (another copy of the same mod
+/// is the one that counts).
+fn mod_info_rank(mod_info: &Path, game_version: Option<u32>) -> Option<(u8, Option<bool>)> {
+    let root = mod_root_of(mod_info)?;
+    match select_mod_info_for_build(root, game_version) {
+        Some(selected) if selected == mod_info => Some((2, game_version.map(|_| true))),
+        Some(_) => None,
+        None => {
+            let listed = select_mod_info_for_build(root, None).or_else(|| {
+                let root_info = root.join("mod.info");
+                root_info.is_file().then_some(root_info)
+            });
+            (listed.as_deref() == Some(mod_info)).then_some((1, game_version.map(|_| false)))
+        }
+    }
 }
 
 /// Scans all subscribed Workshop & local mods recursively without depth limits.
 /// Preserves exact ModListData.ini load order for active mods, and sorts remaining mods deterministically.
 pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     let mut all_mods_map: std::collections::HashMap<String, ModManifest> = std::collections::HashMap::new();
-    let mut mod_scores: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut mod_scores: std::collections::HashMap<String, u8> = std::collections::HashMap::new();
+    let game_version = read_installed_game_version(&paths.user_zomboid_dir);
 
     // 1. Scan Steam Workshop mods (content/108600/) with depth 8
     let workshop_path = Path::new(&paths.workshop_dir);
@@ -609,19 +678,22 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                 }
 
                 // Steam owns everything under the Workshop folder: never create or copy files here.
-                // (B41-only mods without a 42/ or common/ folder are simply not loadable in B42.)
+                // Read the same mod.info the game reads on the installed build.
+                let Some((new_score, loadable)) = mod_info_rank(&mod_file_path, game_version) else {
+                    continue;
+                };
 
                 if let Some(mut manifest) = parse_mod_info(&mod_file_path) {
                     if manifest.id == "PZModStudioCarrier" {
                         continue;
                     }
                     manifest.workshop_id = workshop_id;
+                    manifest.loadable_on_installed_build = loadable;
                     apply_known_dependency_heuristics(&mut manifest);
 
-                    let new_score = get_mod_info_version_score(&mod_file_path);
                     if let Some(existing_score) = mod_scores.get(&manifest.id) {
                         if new_score <= *existing_score {
-                            continue; // Keep higher version-specific manifest (e.g. 42.20 > 42 > root)
+                            continue; // Same ID twice: keep the first loadable copy
                         }
                     }
                     mod_scores.insert(manifest.id.clone(), new_score);
@@ -649,10 +721,14 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         if user_mods_path.exists() {
             for entry in WalkDir::new(&user_mods_path).max_depth(8).into_iter().filter_map(|e| e.ok()) {
                 if entry.file_name() == "mod.info" {
+                    let Some((_, loadable)) = mod_info_rank(entry.path(), game_version) else {
+                        continue;
+                    };
                     if let Some(mut manifest) = parse_mod_info(entry.path()) {
                         if manifest.id == "PZModStudioCarrier" {
                             continue;
                         }
+                        manifest.loadable_on_installed_build = loadable;
 
                         // Check visibility for synthetic fusion packages and Live Bridge
                         if manifest.id.starts_with("Z_PZModStudio_") {
@@ -1295,18 +1371,82 @@ mod tests {
         }
     }
 
+    /// Read-only report over a real Workshop folder. Run with:
+    /// PZMS_WORKSHOP_DIR=<steamapps/workshop/content/108600> PZMS_GAME_VERSION=42.21 cargo test version_report -- --ignored --nocapture
     #[test]
-    fn test_bandits_week_one_version_resolution() {
-        let root_info = Path::new("G:/Juegos/steamapps/workshop/content/108600/3403180543/mods/BanditsWeekOne/mod.info");
-        let v42_20_info = Path::new("G:/Juegos/steamapps/workshop/content/108600/3403180543/mods/BanditsWeekOne/42.20/mod.info");
+    #[ignore]
+    fn version_report_for_real_workshop() {
+        let Ok(dir) = std::env::var("PZMS_WORKSHOP_DIR") else { return };
+        let game = std::env::var("PZMS_GAME_VERSION").ok().and_then(|v| version_dir_int(&v));
+        let (mut loadable, mut not_loadable, mut changed) = (0, 0, Vec::new());
+        for entry in WalkDir::new(&dir).max_depth(8).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_name() != "mod.info" {
+                continue;
+            }
+            match mod_info_rank(entry.path(), game) {
+                Some((2, _)) => {
+                    loadable += 1;
+                    // Would the old scorer (highest 42.x regardless of build) have picked another folder?
+                    let root = mod_root_of(entry.path()).unwrap();
+                    if let Some(newest) = select_mod_info_for_build(root, None) {
+                        if newest != entry.path() {
+                            changed.push(format!("{} -> now {}", newest.display(), entry.path().display()));
+                        }
+                    }
+                }
+                Some(_) => not_loadable += 1,
+                None => {}
+            }
+        }
+        println!("loadable: {loadable}, not loadable on this build: {not_loadable}");
+        println!("mods whose mod.info changes vs. 'newest folder wins': {}", changed.len());
+        for c in changed.iter().take(15) {
+            println!("  {c}");
+        }
+    }
 
-        if root_info.exists() && v42_20_info.exists() {
-            let root_score = get_mod_info_version_score(root_info);
-            let v42_20_score = get_mod_info_version_score(v42_20_info);
-            assert!(v42_20_score > root_score);
+    /// Builds `<tmp>/mods/<name>/<dir>/mod.info` for each dir ("" = the mod root).
+    fn fake_mod(tag: &str, dirs: &[&str]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("pzms-vdir-{}-{}", tag, std::process::id())).join("mods").join("M");
+        let _ = fs::remove_dir_all(root.parent().unwrap().parent().unwrap());
+        for d in dirs {
+            let dir = if d.is_empty() { root.clone() } else { root.join(d) };
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("mod.info"), format!("name=M\nid=M_{}\n", d.replace('.', "_"))).unwrap();
+        }
+        root
+    }
 
-            let manifest = parse_mod_info(v42_20_info).expect("Must parse 42.20 mod.info");
-            assert_eq!(manifest.require, vec!["Bandits2".to_string()]);
+    #[test]
+    fn version_folder_selection_matches_the_game() {
+        assert_eq!(version_dir_int("42"), Some(42_000));
+        assert_eq!(version_dir_int("42.13.1"), Some(42_013));
+        assert_eq!(version_dir_int("common"), None);
+
+        // Same layout as Workshop item 2699828474: B41 root + common + several 42.x folders.
+        let root = fake_mod("multi", &["", "common", "42.0", "42.13", "42.16", "42.21"]);
+        let pick = |v: Option<u32>| select_mod_info_for_build(&root, v).map(|p| p.parent().unwrap().file_name().unwrap().to_string_lossy().to_string());
+        assert_eq!(pick(Some(42_015)), Some("42.13".into()), "highest folder not newer than the build");
+        assert_eq!(pick(Some(42_021)), Some("42.21".into()));
+        assert_eq!(pick(Some(42_010)), Some("42.0".into()));
+        assert_eq!(pick(None), Some("42.21".into()), "unknown build behaves like the newest");
+        assert_eq!(pick(Some(41_078)), Some("M".into()), "Build 41 reads the root mod.info");
+
+        // Version folder without its own mod.info falls back to common/, never to an older folder.
+        let root2 = fake_mod("fallback", &["common", "42.13"]);
+        fs::create_dir_all(root2.join("42.21")).unwrap();
+        let chosen = select_mod_info_for_build(&root2, Some(42_021)).unwrap();
+        assert_eq!(chosen.parent().unwrap().file_name().unwrap(), "common", "{:?}", chosen);
+
+        // B41-only mod on B42: not loadable, but still listed through its root mod.info.
+        let root3 = fake_mod("b41only", &[""]);
+        assert_eq!(select_mod_info_for_build(&root3, Some(42_021)), None);
+        assert_eq!(mod_info_rank(&root3.join("mod.info"), Some(42_021)), Some((1, Some(false))));
+        assert_eq!(mod_info_rank(&root.join("42.13").join("mod.info"), Some(42_015)), Some((2, Some(true))));
+        assert_eq!(mod_info_rank(&root.join("42.21").join("mod.info"), Some(42_015)), None);
+
+        for r in [root, root2, root3] {
+            let _ = fs::remove_dir_all(r.parent().unwrap().parent().unwrap());
         }
     }
 }

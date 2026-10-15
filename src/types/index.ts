@@ -96,6 +96,8 @@ export interface ModInfo {
   is_library?: boolean;
   is_map_mod?: boolean;
   is_packaged?: boolean;
+  /** false: the installed game build cannot load this mod (B41-only or only newer folders). */
+  loadable_on_installed_build?: boolean | null;
   load_order_index: number;
 }
 
