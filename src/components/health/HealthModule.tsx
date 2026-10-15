@@ -57,8 +57,8 @@ const fixLabel = (fix: HealthFix): string => {
       return `Remove ${fix.entry}`;
     case 'subscribe_workshop':
       return `Search Workshop for "${fix.hint}"`;
-    case 'open_in_steam':
-      return 'Open in Steam';
+    case 'open_workshop_page':
+      return 'Open Workshop page';
   }
 };
 
@@ -70,8 +70,8 @@ const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: str
 
 export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList }) => {
   const handleFix = (fix: HealthFix) => {
-    if (fix.action === 'open_in_steam') {
-      TauriService.openExternalUrl(`steam://url/CommunityFilePage/${fix.workshop_id}`);
+    if (fix.action === 'open_workshop_page') {
+      TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${fix.workshop_id}`);
       return;
     }
     if (fix.action === 'subscribe_workshop') {
@@ -180,7 +180,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
               const style = SEVERITY_STYLE[sev];
               const Icon = style.icon;
               // "Enable X" + "Move X before Y" for the same issue are shown as one button doing both.
-              const applicable = issue.fixes.filter((f) => f.action === 'subscribe_workshop' || f.action === 'open_in_steam' || applyFix(mods, f) !== null);
+              const applicable = issue.fixes.filter((f) => f.action === 'subscribe_workshop' || f.action === 'open_workshop_page' || applyFix(mods, f) !== null);
               const enableThenMove = applicable.length === 2 && applicable[0].action === 'enable_mod' && applicable[1].action === 'move_before';
               const fixes = enableThenMove ? [applicable[0]] : applicable;
               return (

@@ -286,13 +286,6 @@ fn open_external_url_cmd(url: String) -> Result<(), String> {
 fn validate_external_url(url: &str) -> Result<&str, String> {
     let url = url.trim();
     let lower = url.to_ascii_lowercase();
-    // Steam client links for Workshop pages (to subscribe there): only these exact shapes.
-    let steam_link = ["steam://url/communityfilepage/", "steam://url/steamworkshoppage/"].iter().any(|prefix| {
-        lower.strip_prefix(prefix).is_some_and(|rest| !rest.is_empty() && rest.len() <= 20 && rest.chars().all(|c| c.is_ascii_digit()))
-    });
-    if steam_link {
-        return Ok(url);
-    }
     let has_web_scheme = lower.starts_with("https://") || lower.starts_with("http://");
     let has_control_chars = url.chars().any(|c| c.is_control() || c == '"');
     if !has_web_scheme || has_control_chars || url.len() > 2048 {
@@ -479,9 +472,7 @@ mod tests {
     fn only_web_urls_are_opened() {
         assert!(validate_external_url("https://steamcommunity.com/sharedfiles/filedetails/?id=1&b=2").is_ok());
         assert!(validate_external_url(" HTTP://example.com ").is_ok());
-        assert!(validate_external_url("steam://url/CommunityFilePage/2699828474").is_ok());
-        assert!(validate_external_url("steam://url/SteamWorkshopPage/108600").is_ok());
-        for bad in ["steam://run/108600", "steam://url/CommunityFilePage/1&calc", "steam://url/CommunityFilePage/", "ftp://x&calc", "file:///C:/Windows/System32/calc.exe", "calc.exe", "ms-settings:", "https://x\"&calc", "https://x\r\ncalc"] {
+        for bad in ["steam://url/CommunityFilePage/2699828474", "steam://run/108600", "ftp://x&calc", "file:///C:/Windows/System32/calc.exe", "calc.exe", "ms-settings:", "https://x\"&calc", "https://x\r\ncalc"] {
             assert!(validate_external_url(bad).is_err(), "accepted {:?}", bad);
         }
     }

@@ -269,8 +269,8 @@ pub enum SuggestedFix {
     MoveBefore { mod_id: String, before: String },
     RemoveFromList { entry: String },
     SubscribeWorkshop { hint: String },
-    /// Open the item in the Steam client (e.g. to let a pending update download).
-    OpenInSteam { workshop_id: String },
+    /// Open the item's Workshop page in the browser.
+    OpenWorkshopPage { workshop_id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,7 +299,7 @@ impl IssueList {
                 SuggestedFix::EnableMod { mod_id: m } | SuggestedFix::DisableMod { mod_id: m } => Some(m),
                 SuggestedFix::MoveBefore { mod_id: m, before } => Some(if Some(m.as_str()) == mod_id { before } else { m }),
                 SuggestedFix::SubscribeWorkshop { hint } => Some(hint),
-                SuggestedFix::RemoveFromList { .. } | SuggestedFix::OpenInSteam { .. } => None,
+                SuggestedFix::RemoveFromList { .. } | SuggestedFix::OpenWorkshopPage { .. } => None,
             };
             if let Some(other) = other.filter(|o| Some(o.as_str()) != mod_id && !related.contains(o)) {
                 related.push(other.clone());
@@ -512,7 +512,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                 list.push(Severity::Warning, "workshop_update_pending", Some(id),
                     format!("Steam has a newer version of {}{} that is not downloaded yet. Let Steam download it (restart Steam if it is stuck): servers reject players whose mod versions differ (\"Workshop item version is different than the server's\").",
                         describe(m), when.map(|w| format!(" (published {})", w)).unwrap_or_default()),
-                    vec![SuggestedFix::OpenInSteam { workshop_id: workshop_id.clone() }]);
+                    vec![SuggestedFix::OpenWorkshopPage { workshop_id: workshop_id.clone() }]);
             }
             if state.updated_since_last_play {
                 updated_since_play.push(describe(m));

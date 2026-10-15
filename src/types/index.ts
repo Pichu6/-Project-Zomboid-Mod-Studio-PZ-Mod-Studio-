@@ -260,7 +260,7 @@ export type HealthFix =
   | { action: 'move_before'; mod_id: string; before: string }
   | { action: 'remove_from_list'; entry: string }
   | { action: 'subscribe_workshop'; hint: string }
-  | { action: 'open_in_steam'; workshop_id: string };
+  | { action: 'open_workshop_page'; workshop_id: string };
 
 export interface HealthIssue {
   severity: HealthSeverity;
@@ -350,7 +350,6 @@ export interface WorkshopItem {
   is_project_zomboid: boolean;
   banned: boolean;
   page_url: string;
-  steam_url: string;
 }
 
 export type WorkshopSort = 'relevance' | 'trending' | 'most_subscribed' | 'recently_updated' | 'newest' | 'top_rated';

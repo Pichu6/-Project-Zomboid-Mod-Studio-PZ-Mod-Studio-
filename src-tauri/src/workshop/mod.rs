@@ -1,7 +1,7 @@
 //! Steam Workshop details for Project Zomboid items through Steam's public Web API (no key):
 //! `ISteamRemoteStorage/GetPublishedFileDetails` and `GetCollectionDetails`.
 //! Searching the Workshop (`IPublishedFileService/QueryFiles`) needs a Steam Web API key and is
-//! not done here; subscribing happens in the Steam client (`steam://` links).
+//! not done here; users subscribe on the item's Workshop page in their browser.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,9 +32,8 @@ pub struct WorkshopItem {
     /// False for items of another game.
     pub is_project_zomboid: bool,
     pub banned: bool,
+    /// The item's Workshop page (subscribe there when logged in on steamcommunity.com).
     pub page_url: String,
-    /// Opens the item in the Steam client, where the user can subscribe.
-    pub steam_url: String,
 }
 
 /// What Steam has installed for one subscribed item (from appworkshop_108600.acf, offline).
@@ -185,7 +184,6 @@ fn parse_item(v: &Value) -> Option<WorkshopItem> {
         is_project_zomboid: num("consumer_app_id").or_else(|| num("consumer_appid")) == Some(PZ_APP_ID),
         banned: num("banned").unwrap_or(0) != 0,
         page_url: page_url(&id),
-        steam_url: format!("steam://url/CommunityFilePage/{}", id),
         tags,
         builds,
         workshop_id: id,
@@ -361,7 +359,7 @@ mod tests {
         assert_eq!(item.builds, vec!["42"]);
         assert_eq!(item.file_size, 13_119_426);
         assert_eq!(item.summary, "Project Zomboid Build 42.12.3 Clean UI");
-        assert_eq!(item.steam_url, "steam://url/CommunityFilePage/3437629766");
+        assert_eq!(item.page_url, "https://steamcommunity.com/sharedfiles/filedetails/?id=3437629766");
         assert!(!parse_item(&json!({ "publishedfileid": "1", "result": 9 })).unwrap().found);
         // QueryFiles field names.
         let q = parse_item(&json!({ "publishedfileid": "2", "result": 1, "consumer_appid": 108600,
