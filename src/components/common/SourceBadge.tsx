@@ -14,7 +14,8 @@ const STYLE: Record<SourceKind, { label: string; className: string }> = {
 };
 
 export function sourceOf(modId: string, entry: CatalogModSummary | undefined): { kind: SourceKind; title: string; url?: string } {
-  if (modId.startsWith('Z_PZModStudio_')) return { kind: 'studio', title: 'Created by PZ Mod Studio' };
+  // Studio packages, the Live Bridge and the Claude Agent mod are all installed by the Studio.
+  if (modId.startsWith('Z_PZModStudio_') || modId === 'Z_ClaudeAgent') return { kind: 'studio', title: 'Installed by PZ Mod Studio' };
   if (!entry) return { kind: 'local', title: 'Installed in Zomboid/mods' };
   switch (entry.source.kind) {
     case 'workshop':

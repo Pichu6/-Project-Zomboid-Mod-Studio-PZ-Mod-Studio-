@@ -752,6 +752,14 @@ mod tests {
         for i in &report.issues {
             println!("  [{:?}] {}: {}", i.severity, i.code, i.message);
         }
+        let mut by_source: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        for m in cat.mods.iter().filter(|m| m.shadowed_by.is_none()) {
+            let key = match &m.source { ModSource::Workshop { .. } => "workshop", ModSource::WorkshopUpload { .. } => "upload", ModSource::Local => "local" };
+            by_source.entry(key.to_string()).or_default().push(m.id.clone());
+        }
+        for (k, v) in &by_source {
+            println!("source {}: {} {:?}", k, v.len(), if v.len() <= 10 { v.clone() } else { vec![] });
+        }
         let sorted = sort_load_order(&cat, &active);
         println!("sort: {} moved, {} in cycles: {:?}", sorted.moved.len(), sorted.cycle.len(), sorted.moved);
     }
