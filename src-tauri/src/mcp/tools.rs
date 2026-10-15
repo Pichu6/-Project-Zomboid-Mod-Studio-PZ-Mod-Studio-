@@ -293,6 +293,19 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "get_mod_health".to_string(),
+            description: "Checks the active mod list (Zomboid/mods/default.txt) against the installed mods using the game's own rules: mods not installed, not loadable on the installed build (B41-only, versionMin/versionMax), invalid mod.info, missing or disabled dependencies, dependencies loading after their dependents, loadModAfter/loadModBefore order, incompatible pairs, duplicates. Read-only. Each issue has a severity, a code and suggested fixes.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string" },
+                    "workshop_dir": { "type": "string" },
+                    "active_mod_ids": { "type": "array", "items": { "type": "string" }, "description": "Load order to check instead of default.txt" },
+                    "include_catalog": { "type": "boolean", "description": "Also return every installed mod (large)" }
+                }
+            }),
+        },
+        McpTool {
             name: "scan_mod_conflicts".to_string(),
             description: "Scans active mods for Virtual File System (VFS) conflicts where multiple mods overwrite the same Lua scripts or PZ data definitions.".to_string(),
             input_schema: json!({
@@ -454,6 +467,7 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "list_installed_mods" => handle_list_installed_mods(args),
         "sort_mod_load_order" => handle_sort_mod_load_order(args),
         "scan_mod_conflicts" => handle_scan_mod_conflicts(args),
+        "get_mod_health" => handle_get_mod_health(args),
         "validate_lua_syntax" => handle_validate_lua_syntax(args),
         "merge_lua_scripts" => handle_merge_lua_scripts(args),
         "get_master_patch_status" => handle_get_master_patch_status(args),
@@ -690,6 +704,27 @@ fn handle_sort_mod_load_order(args: Value) -> ToolCallResult {
         content: vec![ToolContent {
             content_type: "text".to_string(),
             text: serde_json::to_string_pretty(&analysis).unwrap_or_else(|e| format!("Error: {}", e)),
+        }],
+        is_error: false,
+    }
+}
+
+fn handle_get_mod_health(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let active: Vec<String> = match args.get("active_mod_ids").and_then(|v| v.as_array()) {
+        Some(list) => list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+        None => crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path).map(|d| d.active_mods).unwrap_or_default(),
+    };
+    let health = crate::catalog::mod_health(&paths.workshop_dir, &paths.user_zomboid_dir, &active);
+    let body = if args.get("include_catalog").and_then(|v| v.as_bool()).unwrap_or(false) {
+        serde_json::to_value(&health)
+    } else {
+        serde_json::to_value(&health.report)
+    };
+    ToolCallResult {
+        content: vec![ToolContent {
+            content_type: "text".to_string(),
+            text: body.map(|v| serde_json::to_string_pretty(&v).unwrap_or_default()).unwrap_or_else(|e| format!("Error: {}", e)),
         }],
         is_error: false,
     }

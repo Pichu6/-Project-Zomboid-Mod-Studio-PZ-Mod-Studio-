@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveTab } from '../../types';
-import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -8,6 +8,8 @@ interface StudioSidebarProps {
   hasActiveProfile?: boolean;
   conflictCount: number;
   errorCardCount: number;
+  /** Errors found by the last Mod Health check. */
+  healthErrorCount?: number;
 }
 
 export const StudioSidebar: React.FC<StudioSidebarProps> = ({
@@ -16,6 +18,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   hasActiveProfile = true,
   conflictCount: _conflictCount,
   errorCardCount,
+  healthErrorCount = 0,
 }) => {
   const navItems = [
     {
@@ -40,6 +43,14 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: ListOrdered,
       badge: null,
       badgeColor: '',
+      requiresProfile: true,
+    },
+    {
+      id: 'HEALTH' as ActiveTab,
+      label: 'Mod Health',
+      icon: HeartPulse,
+      badge: healthErrorCount > 0 ? healthErrorCount : null,
+      badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40',
       requiresProfile: true,
     },
     {

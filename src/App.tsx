@@ -12,6 +12,7 @@ import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
+import { HealthModule } from './components/health/HealthModule';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
 const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
@@ -26,6 +27,7 @@ export const App: React.FC = () => {
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
+  const [healthErrorCount, setHealthErrorCount] = useState<number>(0);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
     total_conflicts: number;
@@ -504,6 +506,7 @@ export const App: React.FC = () => {
           hasActiveProfile={!!activeProfile}
           conflictCount={conflicts.length}
           errorCardCount={errorCards.length}
+          healthErrorCount={healthErrorCount}
         />
 
         {/* Tab Modules */}
@@ -543,6 +546,15 @@ export const App: React.FC = () => {
                 mods={mods}
               />
             </div>
+          )}
+
+          {activeTab === 'HEALTH' && (
+            <HealthModule
+              paths={paths}
+              mods={mods}
+              onApplyModList={handleReorderMods}
+              onErrorCountChange={setHealthErrorCount}
+            />
           )}
 
           {activeTab === 'MERGER' && (

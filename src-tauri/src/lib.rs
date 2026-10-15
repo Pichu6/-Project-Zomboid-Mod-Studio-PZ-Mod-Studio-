@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod claude_agent;
 pub mod diff_engine;
 pub mod instance_manager;
@@ -72,6 +73,13 @@ fn write_mod_list_ini_cmd(ini_path: String, active_mods: Vec<String>) -> Result<
 #[tauri::command(async)]
 fn scan_all_installed_mods_cmd(paths: StudioPaths) -> Vec<ModManifest> {
     scan_all_installed_mods(&paths)
+}
+
+/// Read-only health check of `active` (mod ids in load order) against what is installed,
+/// following the game's own rules. Returns the catalog too, so the UI can show details.
+#[tauri::command(async)]
+fn get_mod_health_cmd(paths: StudioPaths, active: Vec<String>) -> catalog::ModHealth {
+    catalog::mod_health(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
 }
 
 #[tauri::command(async)]
@@ -314,6 +322,7 @@ pub fn run() {
             write_mod_list_ini_cmd,
             scan_all_installed_mods_cmd,
             sort_mod_dependencies_cmd,
+            get_mod_health_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,

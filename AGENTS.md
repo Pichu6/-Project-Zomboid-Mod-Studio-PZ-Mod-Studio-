@@ -145,6 +145,7 @@ Uses the `Z_ClaudeAgent` companion mod (source: `mods/Z_ClaudeAgent/`). Unlike t
 | :--- | :--- | :--- |
 | `get_studio_paths` | `{}` | Auto-detects and returns installation paths for the game, Steam Workshop, and user Zomboid folder. |
 | `list_installed_mods` | `pz_install_dir`, `user_zomboid_dir`, `workshop_dir` (optional) | Scans and lists all installed Steam Workshop and local mods along with metadata and IDs. |
+| `get_mod_health` | `active_mod_ids` (array, optional; default: `default.txt`)<br>`include_catalog` (bool)<br>path parameters | Read-only check of the active list using the game's own rules: not installed, not loadable on the installed build, invalid `mod.info`, missing/disabled dependencies, dependency or `loadModAfter`/`loadModBefore` order, incompatible pairs, duplicates. Issues carry severity, code and suggested fixes. |
 | `sort_mod_load_order` | Same path parameters | Executes topological dependency sorting and detects circular or missing dependencies. |
 | `scan_mod_conflicts` | Same path parameters | Scans the Virtual File System (VFS) to detect collisions between mods and the vanilla base game. |
 | `list_mod_profiles` | `user_zomboid_dir` (optional) | Lists all saved mod profiles, active mod IDs, and custom load orders. |

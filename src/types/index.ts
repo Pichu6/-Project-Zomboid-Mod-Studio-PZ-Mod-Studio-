@@ -249,4 +249,43 @@ export interface AppInstance {
 
 export type AppProfile = AppInstance;
 
-export type ActiveTab = 'MOD_LIST' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
+
+// ---- Mod health (Rust catalog module) ----
+export type HealthSeverity = 'error' | 'warning' | 'info';
+
+export type HealthFix =
+  | { action: 'enable_mod'; mod_id: string }
+  | { action: 'disable_mod'; mod_id: string }
+  | { action: 'move_before'; mod_id: string; before: string }
+  | { action: 'remove_from_list'; entry: string }
+  | { action: 'subscribe_workshop'; hint: string };
+
+export interface HealthIssue {
+  severity: HealthSeverity;
+  code: string;
+  mod_id: string | null;
+  message: string;
+  fixes: HealthFix[];
+}
+
+export interface HealthReport {
+  game_version: string | null;
+  active_count: number;
+  errors: number;
+  warnings: number;
+  issues: HealthIssue[];
+}
+
+export interface CatalogModSummary {
+  id: string;
+  name: string;
+  root_dir: string;
+  shadowed_by: string | null;
+  loadability: { status: 'loadable' | 'no_folder_for_build' | 'outside_version_range' | 'invalid_mod_info' };
+}
+
+export interface ModHealth {
+  catalog: { game_version: string | null; mods: CatalogModSummary[] };
+  report: HealthReport;
+}

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -253,6 +253,14 @@ export const TauriService = {
       reportBackendError('Scanning installed mods', err);
       return [];
     }
+  },
+
+  /**
+   * Read-only health check of the active load order (game rules: build, dependencies, order,
+   * incompatibilities). Throws on backend failure so callers can show it.
+   */
+  getModHealth: async (paths: StudioPathsUI, active: string[]): Promise<ModHealth> => {
+    return await invoke<ModHealth>('get_mod_health_cmd', { paths, active });
   },
 
   /**
