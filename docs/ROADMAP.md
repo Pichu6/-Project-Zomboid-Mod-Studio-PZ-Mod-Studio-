@@ -69,6 +69,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 |---|---|---|
 | ✅ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview): Browse Mods > Steam Workshop shows your subscriptions with live details | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
 | 🔨 | Import a Workshop collection (URL) into a profile. Done: paste a collection link to see its items, which are installed and which are missing, and open it in Steam to subscribe. Next: turn it into a profile | `GetCollectionDetails`, no key |
+| ✅ | In-app Workshop search (text, trending, most subscribed, updated, newest, top rated; Build 41/42 filter) with the user's own Steam Web API key, verified and kept in Windows Credential Manager |
 | ⬜ | Subscribe / unsubscribe / download | ISteamUGC through the running Steam client (steamworks-rs); SteamCMD fallback for dedicated servers |
 | ✅ | **Nexus Mods** browse and search (Browse Mods tab: search, sort, build hint, open page / Files tab) | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |
 | ⬜ | Nexus downloads | v1 `download_link.json`. Premium users directly; free users through the website's "Mod Manager Download" button (`nxm://` link handled by the Studio, like Vortex/MO2) |

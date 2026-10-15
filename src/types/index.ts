@@ -343,6 +343,14 @@ export interface WorkshopItem {
   steam_url: string;
 }
 
+export type WorkshopSort = 'relevance' | 'trending' | 'most_subscribed' | 'recently_updated' | 'newest' | 'top_rated';
+
+export interface WorkshopSearchResult {
+  total: number;
+  page: number;
+  items: WorkshopItem[];
+}
+
 export interface WorkshopLookup {
   collection: WorkshopItem | null;
   items: WorkshopItem[];

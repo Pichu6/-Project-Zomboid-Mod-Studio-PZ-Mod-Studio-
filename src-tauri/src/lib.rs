@@ -10,6 +10,7 @@ pub mod origins;
 pub mod patch_generator;
 pub mod preset_manager;
 pub mod sandbox;
+pub mod secrets;
 pub mod server_manager;
 pub mod vfs;
 pub mod workshop;
@@ -90,6 +91,41 @@ fn get_mod_health_cmd(paths: StudioPaths, active: Vec<String>) -> catalog::ModHe
 #[tauri::command(async)]
 fn nexus_search_cmd(query: Option<String>, sort: nexus::NexusSort, offset: u64, count: u64) -> Result<nexus::NexusSearchResult, String> {
     nexus::search_mods(query.as_deref(), sort, offset, count)
+}
+
+/// Whether a Steam Web API key is saved (the key itself never goes back to the UI).
+#[tauri::command(async)]
+fn steam_key_status_cmd() -> Result<bool, String> {
+    Ok(secrets::get(secrets::STEAM_WEB_API_KEY)?.is_some())
+}
+
+/// Checks the key with a one-item Workshop search, then saves it in Windows Credential Manager.
+#[tauri::command(async)]
+fn set_steam_key_cmd(key: String) -> Result<(), String> {
+    let key = key.trim();
+    if key.len() != 32 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("A Steam Web API key is 32 characters, 0-9 and A-F.".to_string());
+    }
+    workshop::search(key, None, workshop::WorkshopSort::Trending, None, 1, 1)?;
+    secrets::set(secrets::STEAM_WEB_API_KEY, key)
+}
+
+#[tauri::command(async)]
+fn delete_steam_key_cmd() -> Result<(), String> {
+    secrets::delete(secrets::STEAM_WEB_API_KEY)
+}
+
+/// Searches the Project Zomboid Workshop with the saved key.
+#[tauri::command(async)]
+fn workshop_search_cmd(
+    text: Option<String>,
+    sort: workshop::WorkshopSort,
+    build: Option<String>,
+    page: u32,
+) -> Result<workshop::WorkshopSearchResult, String> {
+    let key = secrets::get(secrets::STEAM_WEB_API_KEY)?
+        .ok_or("Add your Steam Web API key in Browse Mods > Steam Workshop to search the Workshop here.")?;
+    workshop::search(&key, text.as_deref(), sort, build.as_deref(), page, 24)
 }
 
 /// Steam Workshop details for item ids (public Web API, no key).
@@ -376,6 +412,10 @@ pub fn run() {
             install_mods_cmd,
             workshop_details_cmd,
             workshop_lookup_cmd,
+            steam_key_status_cmd,
+            set_steam_key_cmd,
+            delete_steam_key_cmd,
+            workshop_search_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,

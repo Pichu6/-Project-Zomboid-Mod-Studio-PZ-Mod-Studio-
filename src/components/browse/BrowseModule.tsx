@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, Library, Link2, Loader2, Search, Users, X,
+  AlertTriangle, CheckCircle2, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Library, Link2, Loader2, Search, Users, X,
 } from 'lucide-react';
-import { CatalogModSummary, InstallResult, ModOrigin, NexusMod, NexusSort, WorkshopItem, WorkshopLookup } from '../../types';
+import { CatalogModSummary, InstallResult, ModOrigin, NexusMod, NexusSort, WorkshopItem, WorkshopLookup, WorkshopSort } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 
@@ -202,6 +202,175 @@ const WorkshopCard: React.FC<{ item: WorkshopItem; installedIds: string[] }> = (
   </article>
 );
 
+const WORKSHOP_SORTS: { id: WorkshopSort; label: string }[] = [
+  { id: 'trending', label: 'Trending (7 days)' },
+  { id: 'most_subscribed', label: 'Most subscribed' },
+  { id: 'recently_updated', label: 'Recently updated' },
+  { id: 'newest', label: 'Newest' },
+  { id: 'top_rated', label: 'Top rated' },
+];
+
+type WorkshopQuery = { text: string; sort: WorkshopSort; build: string };
+
+/** In-app Workshop search; needs the user's own Steam Web API key (kept in Windows Credential Manager). */
+const WorkshopSearch: React.FC<{ installedByItem: Map<string, string[]> }> = ({ installedByItem }) => {
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [keyInput, setKeyInput] = useState('');
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  const [text, setText] = useState('');
+  const [sort, setSort] = useState<WorkshopSort>('trending');
+  const [build, setBuild] = useState('42');
+  const [submitted, setSubmitted] = useState<WorkshopQuery | null>(null);
+  const [items, setItems] = useState<WorkshopItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    TauriService.steamKeyStatus().then(setHasKey).catch(() => setHasKey(false));
+  }, []);
+
+  const runSearch = useCallback(async (query: WorkshopQuery, nextPage: number) => {
+    setSearching(true);
+    try {
+      const r = await TauriService.workshopSearch(query.text, query.sort, query.build || null, nextPage);
+      setTotal(r.total);
+      setPage(nextPage);
+      setItems((prev) => (nextPage === 1 ? r.items : [...prev, ...r.items]));
+    } catch (err) {
+      reportBackendError('Searching the Workshop', err);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  // Show results as soon as a key is available (trending Build 42 mods).
+  useEffect(() => {
+    if (hasKey && !submitted) {
+      const initial: WorkshopQuery = { text: '', sort: 'trending', build: '42' };
+      setSubmitted(initial);
+      runSearch(initial, 1);
+    }
+  }, [hasKey, submitted, runSearch]);
+
+  const saveKey = async () => {
+    setSavingKey(true);
+    setKeyError(null);
+    try {
+      await TauriService.setSteamKey(keyInput);
+      setKeyInput('');
+      setHasKey(true);
+    } catch (err) {
+      setKeyError(String(err));
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const removeKey = async () => {
+    if (!confirm('Remove the saved Steam Web API key from this PC?')) return;
+    try {
+      await TauriService.deleteSteamKey();
+      setHasKey(false);
+      setItems([]);
+      setSubmitted(null);
+    } catch (err) {
+      reportBackendError('Removing the Steam key', err);
+    }
+  };
+
+  if (hasKey === null) return null;
+
+  if (!hasKey) {
+    return (
+      <div className="p-4 rounded-xl border border-sky-900/60 bg-sky-950/20 flex flex-col gap-3">
+        <div className="flex items-start gap-3">
+          <KeyRound className="w-5 h-5 text-sky-400 mt-0.5 shrink-0" aria-hidden="true" />
+          <div>
+            <h2 className="text-sm font-bold text-slate-100">Search the Workshop from here</h2>
+            <p className="text-xs text-slate-400 max-w-2xl">
+              Steam only allows Workshop search with a personal Steam Web API key. Create one for free (any domain name works,
+              for example <code>localhost</code>) and paste it below. It is checked with Steam, then saved in Windows Credential
+              Manager on this PC only: never in a file, and never shown again.
+            </p>
+          </div>
+        </div>
+        <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); saveKey(); }}>
+          <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/dev/apikey')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
+            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Get a key
+          </button>
+          <input
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="Paste your Steam Web API key"
+            aria-label="Steam Web API key"
+            className="flex-1 min-w-[260px] px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-xs text-slate-100 outline-none placeholder:text-slate-600 font-mono"
+          />
+          <button type="submit" disabled={savingKey || !keyInput.trim()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
+            {savingKey && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />} Check and save
+          </button>
+        </form>
+        {keyError && <p className="text-xs text-red-300">{keyError}</p>}
+      </div>
+    );
+  }
+
+  const submit = () => {
+    const query: WorkshopQuery = { text: text.trim(), sort, build };
+    setSubmitted(query);
+    runSearch(query, 1);
+  };
+
+  return (
+    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-slate-100">Search the Workshop</h2>
+        <button type="button" onClick={removeKey} className="text-[11px] text-slate-500 hover:text-slate-300 cursor-pointer">Remove saved key</button>
+      </div>
+      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 focus-within:border-sky-700">
+          <Search className="w-4 h-4 text-slate-500" aria-hidden="true" />
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search Workshop mods" aria-label="Search the Workshop"
+            className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
+        </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value as WorkshopSort)} aria-label="Workshop sort" disabled={!!text.trim()}
+          title={text.trim() ? 'Text searches are ordered by relevance' : undefined}
+          className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer disabled:opacity-50">
+          {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+        <select value={build} onChange={(e) => setBuild(e.target.value)} aria-label="Game build"
+          className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer">
+          <option value="42">Build 42 only</option>
+          <option value="41">Build 41 only</option>
+          <option value="">Any build</option>
+        </select>
+        <button type="submit" disabled={searching} className="px-3 py-2 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-60">Search</button>
+      </form>
+      {submitted && (
+        <div className="text-[11px] font-mono text-slate-500">
+          {searching && items.length === 0 ? 'Searching...' : `${total.toLocaleString()} items${submitted.text ? ` for "${submitted.text}"` : ''}`}
+        </div>
+      )}
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+        {items.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} />)}
+      </div>
+      {submitted && items.length < total && (
+        <button type="button" onClick={() => runSearch(submitted, page + 1)} disabled={searching}
+          className="self-center px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60">
+          {searching ? 'Loading...' : 'Load more'}
+        </button>
+      )}
+    </div>
+  );
+};
+
 const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) => {
   // Workshop id -> mod ids installed from it.
   const installedByItem = useMemo(() => {
@@ -258,13 +427,15 @@ const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) 
 
   return (
     <div className="flex flex-col gap-4">
+      <WorkshopSearch installedByItem={installedByItem} />
+
       <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-slate-100">Find Workshop mods</h2>
+            <h2 className="text-sm font-bold text-slate-100">Look up links or a collection</h2>
             <p className="text-xs text-slate-400 max-w-2xl">
               Paste Workshop links, ids or a <b>collection</b> link to see what they are and what you are missing. Subscribing
-              happens in the Steam client. (Searching the Workshop from here needs a Steam Web API key: coming soon.)
+              happens in the Steam client.
             </p>
           </div>
           <button type="button" onClick={() => TauriService.openExternalUrl('steam://url/SteamWorkshopPage/108600')}

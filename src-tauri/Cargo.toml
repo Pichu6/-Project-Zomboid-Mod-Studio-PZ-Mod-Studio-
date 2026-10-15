@@ -37,9 +37,11 @@ open = "5.3"
 chrono = "0.4"
 png = "0.17"
 ureq = { version = "3.4.2", default-features = false, features = ["native-tls", "json", "gzip"] }
+keyring-core = "=1.0.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate", "deflate64"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = "1.1.0"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

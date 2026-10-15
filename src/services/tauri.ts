@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -280,6 +280,25 @@ export const TauriService = {
   /** Steam Workshop details for item ids (no key needed). Throws on failure. */
   workshopDetails: async (ids: string[]): Promise<WorkshopItem[]> => {
     return await invoke<WorkshopItem[]>('workshop_details_cmd', { ids });
+  },
+
+  /** Whether a Steam Web API key is saved (the key is never returned). */
+  steamKeyStatus: async (): Promise<boolean> => {
+    return await invoke<boolean>('steam_key_status_cmd');
+  },
+
+  /** Verifies and saves the key in Windows Credential Manager. Throws with the reason on failure. */
+  setSteamKey: async (key: string): Promise<void> => {
+    await invoke('set_steam_key_cmd', { key });
+  },
+
+  deleteSteamKey: async (): Promise<void> => {
+    await invoke('delete_steam_key_cmd');
+  },
+
+  /** Workshop search with the saved key. Throws on failure (no key, rejected key, offline). */
+  workshopSearch: async (text: string, sort: WorkshopSort, build: string | null, page: number): Promise<WorkshopSearchResult> => {
+    return await invoke<WorkshopSearchResult>('workshop_search_cmd', { text: text || null, sort, build, page });
   },
 
   /** Looks up pasted Workshop links / ids / a collection link. Throws on failure. */

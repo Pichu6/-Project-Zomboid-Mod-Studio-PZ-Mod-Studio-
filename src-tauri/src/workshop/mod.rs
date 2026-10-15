@@ -9,6 +9,7 @@ use std::time::Duration;
 
 const DETAILS_URL: &str = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
 const COLLECTION_URL: &str = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/";
+const QUERY_URL: &str = "https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/";
 const PZ_APP_ID: u64 = 108600;
 const BATCH: usize = 100;
 
@@ -116,13 +117,18 @@ fn parse_item(v: &Value) -> Option<WorkshopItem> {
     Some(WorkshopItem {
         found,
         title: v.get("title").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-        summary: v.get("description").and_then(|x| x.as_str()).map(summarize).unwrap_or_default(),
+        // GetPublishedFileDetails sends "description"; QueryFiles "short_description"/"file_description".
+        summary: ["short_description", "description", "file_description"]
+            .iter()
+            .find_map(|k| v.get(*k).and_then(|x| x.as_str()).filter(|s| !s.is_empty()))
+            .map(summarize)
+            .unwrap_or_default(),
         preview_url: v.get("preview_url").and_then(|x| x.as_str()).filter(|s| !s.is_empty()).map(str::to_string),
         time_updated: num("time_updated"),
         subscriptions: num("subscriptions").unwrap_or(0),
         favorited: num("favorited").unwrap_or(0),
         file_size: num("file_size").unwrap_or(0),
-        is_project_zomboid: num("consumer_app_id") == Some(PZ_APP_ID),
+        is_project_zomboid: num("consumer_app_id").or_else(|| num("consumer_appid")) == Some(PZ_APP_ID),
         banned: num("banned").unwrap_or(0) != 0,
         page_url: page_url(&id),
         steam_url: format!("steam://url/CommunityFilePage/{}", id),
@@ -176,6 +182,91 @@ fn collection_children(id: &str) -> Result<Option<Vec<String>>, String> {
     Ok(Some(children))
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkshopSort {
+    /// Best text match (used automatically when there is search text).
+    Relevance,
+    Trending,
+    MostSubscribed,
+    RecentlyUpdated,
+    Newest,
+    TopRated,
+}
+
+impl WorkshopSort {
+    /// EPublishedFileQueryType values.
+    fn query_type(self) -> u32 {
+        match self {
+            WorkshopSort::TopRated => 0,
+            WorkshopSort::Newest => 1,
+            WorkshopSort::Trending => 3,
+            WorkshopSort::MostSubscribed => 9,
+            WorkshopSort::Relevance => 12,
+            WorkshopSort::RecentlyUpdated => 21,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkshopSearchResult {
+    pub total: u64,
+    pub page: u32,
+    pub items: Vec<WorkshopItem>,
+}
+
+/// Searches Project Zomboid Workshop items with the user's own Steam Web API key.
+/// `build` ("41" / "42") keeps only items tagged "Build NN".
+pub fn search(key: &str, text: Option<&str>, sort: WorkshopSort, build: Option<&str>, page: u32, per_page: u32) -> Result<WorkshopSearchResult, String> {
+    let text = text.map(str::trim).filter(|t| !t.is_empty());
+    // Text search only works with the relevance ranking; without text, relevance means trending.
+    let sort = match (text.is_some(), sort) {
+        (true, _) => WorkshopSort::Relevance,
+        (false, WorkshopSort::Relevance) => WorkshopSort::Trending,
+        (false, s) => s,
+    };
+    let page = page.max(1);
+    let mut req = agent()
+        .get(QUERY_URL)
+        .query("key", key)
+        .query("appid", PZ_APP_ID.to_string())
+        .query("query_type", sort.query_type().to_string())
+        .query("page", page.to_string())
+        .query("numperpage", per_page.clamp(1, 100).to_string())
+        .query("filetype", "0")
+        .query("return_tags", "true")
+        .query("return_previews", "true")
+        .query("return_short_description", "true")
+        .query("return_vote_data", "false");
+    if sort == WorkshopSort::Trending {
+        req = req.query("days", "7");
+    }
+    if let Some(t) = text {
+        req = req.query("search_text", t);
+    }
+    if let Some(b) = build.filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_digit())) {
+        req = req.query("requiredtags[0]", format!("Build {}", b)).query("match_all_tags", "true");
+    }
+    let response = req.call().map_err(|e| match e {
+        ureq::Error::StatusCode(401) | ureq::Error::StatusCode(403) => {
+            "Steam rejected the Web API key. Check it in Browse Mods > Steam Workshop (or create a new one at steamcommunity.com/dev/apikey).".to_string()
+        }
+        ureq::Error::StatusCode(429) => "Steam is rate-limiting searches; try again in a minute.".to_string(),
+        other => format!("Steam could not be reached: {}", other),
+    })?;
+    let v: Value = response.into_body().read_json().map_err(|e| format!("Unexpected answer from Steam: {}", e))?;
+    let r = v.get("response").ok_or("Unexpected answer from Steam (no response)")?;
+    Ok(WorkshopSearchResult {
+        total: r.get("total").and_then(|t| t.as_u64()).unwrap_or(0),
+        page,
+        items: r
+            .get("publishedfiledetails")
+            .and_then(|a| a.as_array())
+            .map(|a| a.iter().filter_map(parse_item).collect())
+            .unwrap_or_default(),
+    })
+}
+
 /// Looks up whatever the user pasted: item links/ids, or one collection link (expanded).
 pub fn lookup(input: &str) -> Result<WorkshopLookup, String> {
     let ids = parse_ids(input);
@@ -218,6 +309,21 @@ mod tests {
         assert_eq!(item.summary, "Project Zomboid Build 42.12.3 Clean UI");
         assert_eq!(item.steam_url, "steam://url/CommunityFilePage/3437629766");
         assert!(!parse_item(&json!({ "publishedfileid": "1", "result": 9 })).unwrap().found);
+        // QueryFiles field names.
+        let q = parse_item(&json!({ "publishedfileid": "2", "result": 1, "consumer_appid": 108600,
+            "short_description": "Short [b]text[/b]", "tags": [{ "tag": "Build 41", "display_name": "Build 41" }] })).unwrap();
+        assert!(q.is_project_zomboid);
+        assert_eq!(q.summary, "Short text");
+        assert_eq!(q.builds, vec!["41"]);
+    }
+
+    /// Live Steam call with a deliberately invalid key: must come back as a clear key error.
+    #[test]
+    #[ignore]
+    fn workshop_live_search_rejects_bad_key() {
+        let err = search("00000000000000000000000000000000", Some("horror"), WorkshopSort::Relevance, Some("42"), 1, 5).unwrap_err();
+        println!("{}", err);
+        assert!(err.contains("rejected the Web API key"), "{}", err);
     }
 
     /// Live Steam call. cargo test workshop_live -- --ignored --nocapture
