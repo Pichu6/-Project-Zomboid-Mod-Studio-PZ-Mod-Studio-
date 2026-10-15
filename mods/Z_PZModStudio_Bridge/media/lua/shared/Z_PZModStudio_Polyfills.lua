@@ -326,7 +326,9 @@ end
 -- ----------------------------------------------------------------------------
 local function initB42Polyfills()
     -- FluidContainer & Drainable Bridge (getUsedDelta / setUsedDelta)
-    if InventoryItem then
+    -- initB42Polyfills runs again on later ticks: each wrap below is applied once only.
+    if InventoryItem and not InventoryItem._pzms_useddelta then
+        InventoryItem._pzms_useddelta = true
         local old_getUsedDelta = InventoryItem.getUsedDelta
         if old_getUsedDelta then
             InventoryItem.getUsedDelta = function(self)
@@ -444,7 +446,8 @@ local function initB42Polyfills()
         end
     end
 
-    if BaseCraftingLogic and BaseCraftingLogic.setContainers then
+    if BaseCraftingLogic and BaseCraftingLogic.setContainers and not BaseCraftingLogic._pzms_setcontainers then
+        BaseCraftingLogic._pzms_setcontainers = true
         local orig_bcl_setContainers = BaseCraftingLogic.setContainers
         BaseCraftingLogic.setContainers = function(self, list)
             local safeList = list
@@ -1081,7 +1084,8 @@ local function initB42Polyfills()
     end
 
     -- VehiclePart getDeviceData Safety Shim
-    if VehiclePart and VehiclePart.getDeviceData then
+    if VehiclePart and VehiclePart.getDeviceData and not VehiclePart._pzms_devicedata then
+        VehiclePart._pzms_devicedata = true
         local old_gdd = VehiclePart.getDeviceData
         VehiclePart.getDeviceData = function(self)
             local status, res = pcall(old_gdd, self)
@@ -1945,137 +1949,113 @@ local function initB42Polyfills()
             end
         end
     end
-end
 
--- ----------------------------------------------------------------------------
--- Live IPC Bridge Command Processor (Embedded in Master Polyfills)
--- ----------------------------------------------------------------------------
-local function checkIPCCommands()
-    local player = getPlayer and getPlayer()
-    if not player then return end
-    local qFiles = { "pz_ipc_queue.json", "pz_server_commands.json" }
-    for _, qFile in ipairs(qFiles) do
-        local reader = getFileReader and getFileReader(qFile, false)
-        if reader then
-            local raw = ""
-            local line = reader:readLine()
-            while line do
-                raw = raw .. line
-                line = reader:readLine()
+    -- ----------------------------------------------------------------------------
+    -- Rest Action & Bed / Cot / Seating Protection (B42.20 ISRestAction Fix)
+    -- Fixes: B42.20 resting self-completing on frame 1, and missing SeatingManager on cots/beds
+    -- ----------------------------------------------------------------------------
+    if ISRestAction then
+        ISRestAction.update = function(self)
+            if not self.character then return end
+            local endurance = 1.0
+            if self.character.getStats and self.character:getStats() then
+                local stats = self.character:getStats()
+                if stats.get then
+                    endurance = stats:get(CharacterStat.ENDURANCE) or 1.0
+                end
             end
-            reader:close()
-            if raw ~= "" and raw ~= "{}" and not raw:match("^%s*$") then
-                local writer = getFileWriter and getFileWriter(qFile, true, false)
-                if writer then
-                    writer:write("{}")
-                    writer:close()
+            if not isServer() then
+                if self.action then
+                    self.action:setTime(100)
                 end
-                
-                local actionMatch = raw:match('"action"%s*:%s*"([^"]+)"')
-                if actionMatch == "spawn_vehicle" then
-                    local vehicleMatch = raw:match('"vehicle"%s*:%s*"([^"]+)"') or "Base.StepVan"
-                    local cell = getCell and getCell()
-                    local dir = player.getDir and player:getDir() or IsoDirections.S
-                    local dx, dy = 0, 0
-                    if dir == IsoDirections.N then dy = -4
-                    elseif dir == IsoDirections.S then dy = 4
-                    elseif dir == IsoDirections.W then dx = -4
-                    elseif dir == IsoDirections.E then dx = 4
-                    elseif dir == IsoDirections.NW then dx = -3; dy = -3
-                    elseif dir == IsoDirections.NE then dx = 3; dy = -3
-                    elseif dir == IsoDirections.SW then dx = -3; dy = 3
-                    elseif dir == IsoDirections.SE then dx = 3; dy = 3
-                    else dx = 3 end
-                    
-                    local targetSq = (cell and cell.getGridSquare and cell:getGridSquare(player:getX() + dx, player:getY() + dy, player:getZ())) or (player.getCurrentSquare and player:getCurrentSquare())
-                    
-                    local sm = ScriptManager and ScriptManager.instance
-                    local chosenScript = vehicleMatch
-                    if not (sm and sm.getVehicle and sm:getVehicle(chosenScript)) then
-                        local candidateScripts = {
-                            "Base.86bounder",
-                            "Base.73Winnebago",
-                            "Base.pzkBounder86",
-                            "Base.fr_fl_bounder_86",
-                            "Base.86econolinerv",
-                            "Base.StepVan",
-                            "Base.VanSeats",
-                            "Base.Van"
-                        }
-                        for _, s in ipairs(candidateScripts) do
-                            if sm and sm:getVehicle(s) then
-                                chosenScript = s
-                                break
-                            end
-                        end
-                    end
-                    
-                    if addVehicleDebug and targetSq then
-                        local v = addVehicleDebug(chosenScript, dir, nil, targetSq)
-                        if v then
-                            local key = v.createVehicleKey and v:createVehicleKey()
-                            if key and player.getInventory then
-                                player:getInventory():AddItem(key)
-                                if sendClientCommand then
-                                    pcall(sendClientCommand, player, "vehicle", "getKey", { vehicle = v:getId() })
-                                end
-                            end
-                            local gas = v.getPartById and v:getPartById("GasTank")
-                            if gas and gas.getContainerCapacity then
-                                pcall(function() gas:setContainerContentAmount(gas:getContainerCapacity()) end)
-                            end
-                            if player.setHaloNote then
-                                player:setHaloNote("Vehicle Spawned: " .. chosenScript .. " (Key Added)", 0, 255, 128, 300)
-                            end
-                        end
-                    end
-                elseif actionMatch == "eval_lua" then
-                    local sStart, sEnd = raw:find('"code"%s*:%s*"')
-                    if sStart and sEnd then
-                        local i = sEnd + 1
-                        local len = #raw
-                        local codeChars = {}
-                        while i <= len do
-                            local c = raw:sub(i, i)
-                            if c == '\\' then
-                                local nextC = raw:sub(i + 1, i + 1)
-                                if nextC == '"' then table.insert(codeChars, '"'); i = i + 2
-                                elseif nextC == 'n' then table.insert(codeChars, '\n'); i = i + 2
-                                elseif nextC == 'r' then table.insert(codeChars, '\r'); i = i + 2
-                                elseif nextC == 't' then table.insert(codeChars, '\t'); i = i + 2
-                                elseif nextC == '\\' then table.insert(codeChars, '\\'); i = i + 2
-                                else table.insert(codeChars, c); i = i + 1 end
-                            elseif c == '"' then break
-                            else table.insert(codeChars, c); i = i + 1 end
-                        end
-                        local codeStr = table.concat(codeChars)
-                        local func, loadErr = loadstring(codeStr)
-                        if func then
-                            local ok, execErr = pcall(func)
-                            if not ok and player.setHaloNote then
-                                player:setHaloNote("Lua Error: " .. tostring(execErr), 255, 0, 0, 300)
-                            end
-                        end
-                    end
-                elseif actionMatch == "give_item" then
-                    local itemMatch = raw:match('"item"%s*:%s*"([^"]+)"')
-                    local countMatch = tonumber(raw:match('"count"%s*:%s*(%d+)')) or 1
-                    if itemMatch and player.getInventory then
-                        for i = 1, countMatch do
-                            player:getInventory():AddItem(itemMatch)
-                        end
-                    end
+                self:setCurrentTime(endurance * 100)
+                if endurance >= 1.0 then
+                    self:forceComplete()
                 end
-                
-                local respWriter = getFileWriter and getFileWriter("pz_ipc_resp.json", true, false)
-                if respWriter then
-                    respWriter:write('{"status": "ok", "timestamp": "' .. tostring(getTimeInMillis and getTimeInMillis() or 0) .. '"}')
-                    respWriter:close()
+            else
+                if endurance >= 1.0 then
+                    if self.netAction then
+                        self.netAction:forceComplete()
+                    else
+                        self:forceComplete()
+                    end
                 end
             end
         end
+
+        local orig_rest_start = ISRestAction.start
+        ISRestAction.start = function(self)
+            if self.bed and self.bed.isFurnitureOccupied and self.bed:isFurnitureOccupied(self.character) then
+                self:forceStop()
+                return
+            end
+            if self.bed and self.furnitureHasSittingData and self:furnitureHasSittingData(self.bed) and self.useAnimations then
+                self.character:reportEvent("EventSitOnFurniture")
+                if self.setWhileSittingDirection then
+                    self:setWhileSittingDirection()
+                end
+            end
+            self.character:setVariable("ExerciseStarted", false)
+            self.character:setVariable("ExerciseEnded", true)
+            self.character:setIsResting(true)
+            self.character:setBed(self.bed)
+        end
+    end
+
+    if ISWorldObjectContextMenu then
+        ISWorldObjectContextMenu.onRestPathFound = function(playerObj, action)
+            if not playerObj then return end
+            local goalObj = action and action.goalFurnitureObject or nil
+            local stats = playerObj:getStats()
+            local endurance = 1.0
+            if stats and stats.get then
+                endurance = stats:get(CharacterStat.ENDURANCE) or 1.0
+            end
+            if endurance >= 0.999 then
+                if HaloTextHelper and HaloTextHelper.addBadText then
+                    HaloTextHelper.addBadText(playerObj, getText("IGUI_NotTired") or "Fully Rested")
+                elseif playerObj.setHaloNote then
+                    playerObj:setHaloNote("Fully Rested", 200, 200, 200, 200)
+                end
+                return
+            end
+            local after = ISRestAction:new(playerObj, goalObj, false)
+            ISTimedActionQueue.add(after)
+        end
+
+        ISWorldObjectContextMenu.onRestPathFailed = function(playerObj, bed, action)
+            if not playerObj or not bed then return end
+            local stats = playerObj:getStats()
+            local endurance = 1.0
+            if stats and stats.get then
+                endurance = stats:get(CharacterStat.ENDURANCE) or 1.0
+            end
+            if endurance >= 0.999 then
+                if HaloTextHelper and HaloTextHelper.addBadText then
+                    HaloTextHelper.addBadText(playerObj, getText("IGUI_NotTired") or "Fully Rested")
+                elseif playerObj.setHaloNote then
+                    playerObj:setHaloNote("Fully Rested", 200, 200, 200, 200)
+                end
+                return
+            end
+            local adjacent = AdjacentFreeTileFinder.Find(bed:getSquare(), playerObj, nil)
+            if adjacent ~= nil then
+                if adjacent ~= playerObj:getCurrentSquare() then
+                    ISTimedActionQueue.add(ISWalkToTimedAction:new(playerObj, adjacent))
+                end
+                local restAction = ISRestAction:new(playerObj, bed, false)
+                ISTimedActionQueue.add(restAction)
+            end
+        end
+    end
+
+    if ISPathFindAction and ISBaseTimedAction then
+        if not ISPathFindAction.addAfter then
+            ISPathFindAction.addAfter = ISBaseTimedAction.addAfter
+        end
     end
 end
+
 
 initB42Polyfills()
 
@@ -2089,9 +2069,6 @@ if Events then
             pzms_ticks = pzms_ticks + 1
             if pzms_ticks <= 60 or pzms_ticks % 120 == 0 then
                 initB42Polyfills()
-            end
-            if pzms_ticks % 15 == 0 then
-                checkIPCCommands()
             end
         end)
     end

@@ -147,9 +147,28 @@ function Bridge.OnTick()
     end
 end
 
+-- Actions that run code or cheat. On a multiplayer server they are only honoured for staff:
+-- the queue files can be written by any local process or mod, and these would otherwise act
+-- as a client-side cheat (desync, anti-cheat kicks).
+Bridge.PRIVILEGED_ACTIONS = {
+    give_item = true, spawn_vehicle = true, eval_lua = true, teleport = true,
+    set_access_level = true, grant_admin = true, set_role = true,
+    set_godmode = true, godmode = true,
+}
+
+function Bridge.IsStaff(player)
+    local ok, level = pcall(function() return player:getAccessLevel() end)
+    local lvl = ok and level and tostring(level):lower() or "none"
+    return lvl ~= "none" and lvl ~= "" and lvl ~= "nil" and lvl ~= "player"
+end
+
 function Bridge.ExecuteCommand(jsonStr, player)
     local actionMatch = jsonStr:match('"action"%s*:%s*"([^"]+)"')
-    if not actionMatch then return end
+    if not actionMatch then error("missing \"action\"") end
+
+    if Bridge.PRIVILEGED_ACTIONS[actionMatch] and isClient() and not Bridge.IsStaff(player) then
+        error("'" .. actionMatch .. "' is refused on multiplayer servers unless you are admin/staff")
+    end
 
     if actionMatch == "broadcast" then
         local msgMatch = jsonStr:match('"message"%s*:%s*"([^"]+)"')
@@ -348,9 +367,10 @@ function Bridge.ExecuteCommand(jsonStr, player)
             safeHaloText(player, "Godmode DISABLED", 200, 200, 200)
         end
     elseif actionMatch == "teleport" then
-        local xMatch = tonumber(jsonStr:match('"x"%s*:%s*([%d%.]+)'))
-        local yMatch = tonumber(jsonStr:match('"y"%s*:%s*([%d%.]+)'))
-        local zMatch = tonumber(jsonStr:match('"z"%s*:%s*([%d%.]+)')) or 0
+        -- z is negative for B42 basements
+        local xMatch = tonumber(jsonStr:match('"x"%s*:%s*(%-?[%d%.]+)'))
+        local yMatch = tonumber(jsonStr:match('"y"%s*:%s*(%-?[%d%.]+)'))
+        local zMatch = tonumber(jsonStr:match('"z"%s*:%s*(%-?[%d%.]+)')) or 0
         if xMatch and yMatch then
             if player.teleportTo then
                 -- B42: setX/setY alone snap back and setLx/setLy/setLz no longer exist
@@ -365,8 +385,10 @@ function Bridge.ExecuteCommand(jsonStr, player)
                     player:setLz(zMatch)
                 end
             end
-            safeHaloText(player, string.format("Teleported to %d, %d, %d", xMatch, yMatch, zMatch), 200, 100, 255)
+            safeHaloText(player, string.format("Teleported to %d, %d, %d", math.floor(xMatch), math.floor(yMatch), math.floor(zMatch)), 200, 100, 255)
         end
+    else
+        error("unknown action '" .. actionMatch .. "'")
     end
 end
 

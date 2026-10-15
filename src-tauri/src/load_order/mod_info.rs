@@ -635,9 +635,9 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     //    (never create Zomboid trees in candidate locations that do not exist).
     let user_dirs = get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
     if let Some(user_dir) = get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).first() {
-        let bridge_dir = user_dir.join("mods").join("Z_PZModStudio_Bridge");
-        if !bridge_dir.exists() {
-            let _ = crate::sandbox::install_bridge_companion_mod(&user_dir.to_string_lossy());
+        let user_dir_str = user_dir.to_string_lossy();
+        if crate::sandbox::bridge_companion_mod_needs_update(&user_dir_str) {
+            let _ = crate::sandbox::install_bridge_companion_mod(&user_dir_str);
         }
     }
 

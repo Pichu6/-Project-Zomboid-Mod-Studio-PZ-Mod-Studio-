@@ -472,7 +472,23 @@ pub fn read_game_ipc_response(user_zomboid_dir: &str) -> Result<Option<serde_jso
     Ok(Some(parsed))
 }
 
-/// Installs the Z_PZModStudio_Bridge companion mod into the user's Zomboid/mods directory.
+/// Canonical bridge script from mods/Z_PZModStudio_Bridge, compiled in.
+const BRIDGE_CLIENT_LUA: &str =
+    include_str!("../../../mods/Z_PZModStudio_Bridge/media/lua/client/PZModStudio_Bridge.lua");
+
+/// True when the bridge in `<user_zomboid_dir>/mods` is missing or differs from the scripts
+/// bundled in this build (so fixes reach existing installs, not only new ones).
+pub fn bridge_companion_mod_needs_update(user_zomboid_dir: &str) -> bool {
+    let b42 = Path::new(user_zomboid_dir).join("mods").join("Z_PZModStudio_Bridge").join("42").join("media").join("lua");
+    let same = |path: std::path::PathBuf, expected: &str| {
+        std::fs::read_to_string(path).is_ok_and(|current| current == expected)
+    };
+    !(same(b42.join("client").join("PZModStudio_Bridge.lua"), BRIDGE_CLIENT_LUA)
+        && same(b42.join("shared").join("Z_PZModStudio_Polyfills.lua"), crate::patch_generator::MASTER_POLYFILL_LUA)
+        && !b42.join("server").join("PZModStudio_Bridge_Server.lua").exists())
+}
+
+/// Installs (or refreshes) the Z_PZModStudio_Bridge companion mod in the user's Zomboid/mods directory.
 pub fn install_bridge_companion_mod(user_zomboid_dir: &str) -> Result<String, String> {
     let target_mod_dir = Path::new(user_zomboid_dir)
         .join("mods")
@@ -503,399 +519,23 @@ modversion=1.0.0
 versionMin=42.0.0
 "#;
 
-    let lua_script_content = r#"-- =============================================================================
--- PZ Mod Studio — Live Companion Bridge Mod
--- Allows AI Agents & Developer Tools to execute in-game commands, spawn/equip items,
--- evaluate dynamic Lua, broadcast server alerts, and stream player telemetry.
--- =============================================================================
-
-local Bridge = {}
-Bridge.tickCount = 0
-Bridge.wasConnected = false
-Bridge.RESP_FILE = "pz_ipc_resp.json"
-Bridge.PLAYERS_FILE = "pz_server_players.json"
-Bridge.QUEUE_FILES = { "pz_ipc_queue.json", "pz_server_commands.json" }
-
-function Bridge.ClearPlayersState()
-    pcall(function()
-        local writer = getFileWriter(Bridge.PLAYERS_FILE, true, false)
-        if writer then
-            writer:write("[]")
-            writer:close()
-        end
-    end)
-end
-
-local function safeHaloText(player, text, r, g, b)
-    if not player or not text then return end
-    pcall(function()
-        if player.setHaloNote then
-            player:setHaloNote(tostring(text), r or 255, g or 215, b or 0, 350)
-        elseif HaloTextHelper and HaloTextHelper.addText then
-            HaloTextHelper.addText(player, tostring(text))
-        end
-    end)
-end
-
-function Bridge.UpdatePlayersState(player)
-    if not player then return end
-    local username = player:getUsername() or "Player"
-    local x = math.floor(player:getX() or 0)
-    local y = math.floor(player:getY() or 0)
-    local z = math.floor(player:getZ() or 0)
-    local health = 1.0
-    if player.getBodyDamage and player:getBodyDamage() then
-        health = (player:getBodyDamage():getOverallBodyHealth() or 100) / 100
-    end
-    local isGod = false
-    if player.isGodMod then
-        isGod = player:isGodMod() == true
-    end
-    local role = Bridge.customRole or "User"
-    if player.getAccessLevel then
-        local acc = player:getAccessLevel()
-        if acc and tostring(acc):lower() ~= "none" and tostring(acc) ~= "" then
-            role = acc
-        end
-    end
-    local steamId = ""
-    if player.getSteamID then
-        local s = player:getSteamID()
-        if s then steamId = tostring(s) end
-    end
-    local ping = 35
-    if player.getPing then
-        ping = player:getPing() or 35
-    end
-
-    local jsonStr = string.format(
-        '[{"username":"%s","role":"%s","ping":%d,"health":%.2f,"is_godmode":%s,"x":%d,"y":%d,"z":%d,"steam_id":"%s"}]',
-        username:gsub('"', '\\"'),
-        role:gsub('"', '\\"'),
-        ping,
-        health,
-        tostring(isGod),
-        x,
-        y,
-        z,
-        steamId:gsub('"', '\\"')
-    )
-
-    local writer = getFileWriter(Bridge.PLAYERS_FILE, true, false)
-    if writer then
-        writer:write(jsonStr)
-        writer:close()
-    end
-end
-
-function Bridge.ProcessQueueFile(queueFile, player)
-    local reader = getFileReader(queueFile, false)
-    if not reader then return end
-
-    local raw = ""
-    local line = reader:readLine()
-    while line do
-        raw = raw .. line
-        line = reader:readLine()
-    end
-    reader:close()
-
-    if raw ~= "" and raw ~= "{}" and not raw:match("^%s*$") then
-        -- Immediately clear queue file to prevent repeated execution on error
-        local writer = getFileWriter(queueFile, true, false)
-        if writer then
-            writer:write("{}")
-            writer:close()
-        end
-
-        local success, err = pcall(function()
-            Bridge.ExecuteCommand(raw, player)
-        end)
-
-        -- Write response
-        local respWriter = getFileWriter(Bridge.RESP_FILE, true, false)
-        if respWriter then
-            if success then
-                respWriter:write('{"status": "ok", "timestamp": "' .. tostring(getTimeInMillis()) .. '"}')
-            else
-                respWriter:write('{"status": "error", "message": "' .. tostring(err):gsub('"', '\\"') .. '"}')
-            end
-            respWriter:close()
-        end
-    end
-end
-
-function Bridge.OnTick()
-    Bridge.tickCount = Bridge.tickCount + 1
-
-    local player = getPlayer()
-    if not player then
-        if Bridge.wasConnected then
-            Bridge.wasConnected = false
-            Bridge.ClearPlayersState()
-        end
-        return
-    end
-
-    Bridge.wasConnected = true
-
-    -- Update live players JSON every 30 frames (~0.5 sec)
-    if Bridge.tickCount % 30 == 0 then
-        pcall(function() Bridge.UpdatePlayersState(player) end)
-    end
-
-    -- Check for commands every 10 frames (~0.15s)
-    if Bridge.tickCount % 10 ~= 0 then return end
-
-    for _, qFile in ipairs(Bridge.QUEUE_FILES) do
-        Bridge.ProcessQueueFile(qFile, player)
-    end
-end
-
-function Bridge.ExecuteCommand(jsonStr, player)
-    local actionMatch = jsonStr:match('"action"%s*:%s*"([^"]+)"')
-    if not actionMatch then return end
-
-    if actionMatch == "broadcast" then
-        local msgMatch = jsonStr:match('"message"%s*:%s*"([^"]+)"')
-        if msgMatch then
-            local unescaped = msgMatch:gsub('\\n', ' '):gsub('\\"', '"')
-            safeHaloText(player, "[SERVER]: " .. unescaped, 255, 69, 0)
-            pcall(function()
-                if processSayMessage then
-                    processSayMessage("[ANNOUNCEMENT]: " .. unescaped)
-                elseif ISChat and ISChat.addLineToChat then
-                    ISChat.addLineToChat("[ANNOUNCEMENT]: " .. unescaped, 0)
-                end
-            end)
-            print("[PZModStudio_Bridge] Broadcast received: " .. unescaped)
-        end
-    elseif actionMatch == "kick" then
-        local targetMatch = jsonStr:match('"target"%s*:%s*"([^"]+)"')
-        local reasonMatch = jsonStr:match('"reason"%s*:%s*"([^"]+)"') or "Kicked by admin"
-        if not targetMatch or targetMatch == player:getUsername() then
-            safeHaloText(player, "YOU HAVE BEEN KICKED: " .. reasonMatch, 255, 0, 0)
-            pcall(function()
-                if isClient() and getCore() then
-                    getCore():quit()
-                end
-            end)
-        end
-    elseif actionMatch == "ban" then
-        local targetMatch = jsonStr:match('"target"%s*:%s*"([^"]+)"')
-        local reasonMatch = jsonStr:match('"reason"%s*:%s*"([^"]+)"') or "Banned by admin"
-        if not targetMatch or targetMatch == player:getUsername() then
-            safeHaloText(player, "YOU HAVE BEEN BANNED: " .. reasonMatch, 255, 0, 0)
-            pcall(function()
-                if isClient() and getCore() then
-                    getCore():quit()
-                end
-            end)
-        end
-    elseif actionMatch == "set_access_level" or actionMatch == "grant_admin" or actionMatch == "set_role" then
-        local targetMatch = jsonStr:match('"target"%s*:%s*"([^"]+)"')
-        local roleMatch = jsonStr:match('"message"%s*:%s*"([^"]+)"') or jsonStr:match('"role"%s*:%s*"([^"]+)"') or "admin"
-        if not targetMatch or targetMatch == player:getUsername() then
-            local isRevoke = roleMatch:lower() == "none" or roleMatch:lower() == "user" or roleMatch == ""
-            Bridge.customRole = isRevoke and "User" or roleMatch
-            pcall(function()
-                if player.setAccessLevel then
-                    player:setAccessLevel(isRevoke and "None" or roleMatch)
-                end
-                if roleMatch:lower() == "admin" then
-                    if player.setGodMod then player:setGodMod(true) end
-                    if player.setGhostMode then player:setGhostMode(true) end
-                elseif isRevoke then
-                    if player.setGodMod then player:setGodMod(false) end
-                    if player.setGhostMode then player:setGhostMode(false) end
-                end
-            end)
-            safeHaloText(player, "ACCESS LEVEL: " .. (isRevoke and "USER" or string.upper(roleMatch)), 255, 215, 0)
-            print("[PZModStudio_Bridge] Access level updated to " .. roleMatch .. " for " .. (targetMatch or player:getUsername()))
-        end
-    elseif actionMatch == "give_item" then
-        local itemMatch = jsonStr:match('"item"%s*:%s*"([^"]+)"')
-        local countMatch = tonumber(jsonStr:match('"count"%s*:%s*(%d+)')) or 1
-        local equipMatch = jsonStr:match('"equip"%s*:%s*true') or jsonStr:match('"equip"%s*:%s*"primary"')
-        if itemMatch then
-            local lastItem = nil
-            for i = 1, countMatch do
-                lastItem = player:getInventory():AddItem(itemMatch)
-            end
-            if lastItem and equipMatch then
-                player:setPrimaryHandItem(lastItem)
-                player:setSecondaryHandItem(lastItem)
-            end
-            safeHaloText(player, "Added: " .. itemMatch .. (countMatch > 1 and (" x" .. tostring(countMatch)) or ""), 0, 255, 0)
-            print("[PZModStudio_Bridge] Successfully added item: " .. itemMatch)
-        end
-    elseif actionMatch == "spawn_vehicle" then
-        local vehicleMatch = jsonStr:match('"vehicle"%s*:%s*"([^"]+)"') or "Base.StepVan"
-        local cell = getCell()
-        local dir = player:getDir()
-        local dx, dy = 0, 0
-        if dir == IsoDirections.N then dy = -4
-        elseif dir == IsoDirections.S then dy = 4
-        elseif dir == IsoDirections.W then dx = -4
-        elseif dir == IsoDirections.E then dx = 4
-        elseif dir == IsoDirections.NW then dx = -3; dy = -3
-        elseif dir == IsoDirections.NE then dx = 3; dy = -3
-        elseif dir == IsoDirections.SW then dx = -3; dy = 3
-        elseif dir == IsoDirections.SE then dx = 3; dy = 3
-        else dx = 3 end
-        
-        local targetSq = cell:getGridSquare(player:getX() + dx, player:getY() + dy, player:getZ()) or player:getCurrentSquare()
-        
-        local sm = ScriptManager.instance
-        local chosenScript = vehicleMatch
-        if not (sm and sm:getVehicle(chosenScript)) then
-            local candidateScripts = {
-                "Base.86bounder",
-                "Base.73Winnebago",
-                "Base.pzkBounder86",
-                "Base.fr_fl_bounder_86",
-                "Base.86econolinerv",
-                "Base.StepVan",
-                "Base.VanSeats",
-                "Base.Van"
-            }
-            for _, s in ipairs(candidateScripts) do
-                if sm and sm:getVehicle(s) then
-                    chosenScript = s
-                    break
-                end
-            end
-        end
-        
-        local v = addVehicleDebug(chosenScript, dir, nil, targetSq)
-        if v then
-            local key = v:createVehicleKey()
-            if key then
-                player:getInventory():AddItem(key)
-                if sendClientCommand then
-                    pcall(sendClientCommand, player, "vehicle", "getKey", { vehicle = v:getId() })
-                end
-            end
-            local gas = v:getPartById("GasTank")
-            if gas then
-                gas:setContainerContentAmount(gas:getContainerCapacity())
-            end
-            safeHaloText(player, "Vehicle Spawned: " .. chosenScript .. " (Key Added)", 0, 255, 128)
-            print("[PZModStudio_Bridge] Successfully spawned " .. chosenScript .. " with key at (" .. tostring(targetSq:getX()) .. "," .. tostring(targetSq:getY()) .. ")")
-        else
-            safeHaloText(player, "Failed to spawn vehicle: " .. tostring(chosenScript), 255, 0, 0)
-        end
-    elseif actionMatch == "eval_lua" then
-        local codeMatch = nil
-        local sStart, sEnd = jsonStr:find('"code"%s*:%s*"')
-        if sStart and sEnd then
-            local i = sEnd + 1
-            local len = #jsonStr
-            local codeChars = {}
-            while i <= len do
-                local c = jsonStr:sub(i, i)
-                if c == '\\' then
-                    local nextC = jsonStr:sub(i + 1, i + 1)
-                    if nextC == '"' then
-                        table.insert(codeChars, '"')
-                        i = i + 2
-                    elseif nextC == 'n' then
-                        table.insert(codeChars, '\n')
-                        i = i + 2
-                    elseif nextC == 'r' then
-                        table.insert(codeChars, '\r')
-                        i = i + 2
-                    elseif nextC == 't' then
-                        table.insert(codeChars, '\t')
-                        i = i + 2
-                    elseif nextC == '\\' then
-                        table.insert(codeChars, '\\')
-                        i = i + 2
-                    else
-                        table.insert(codeChars, c)
-                        i = i + 1
-                    end
-                elseif c == '"' then
-                    break
-                else
-                    table.insert(codeChars, c)
-                    i = i + 1
-                end
-            end
-            codeMatch = table.concat(codeChars)
-        end
-        if codeMatch then
-            local loadFn = loadstring or load
-            if loadFn then
-                local func, loadErr = loadFn(codeMatch)
-                if func then
-                    local execOk, execErr = pcall(func)
-                    if not execOk then
-                        print("[PZModStudio_Bridge] Lua runtime error in eval: " .. tostring(execErr))
-                        safeHaloText(player, "Lua Error: " .. tostring(execErr), 255, 0, 0)
-                    else
-                        safeHaloText(player, "Lua Executed", 100, 200, 255)
-                    end
-                else
-                    print("[PZModStudio_Bridge] Lua syntax error in eval: " .. tostring(loadErr))
-                end
-            else
-                print("[PZModStudio_Bridge] dynamic load/loadstring not supported in this Kahlua scope")
-            end
-        end
-    elseif actionMatch == "set_godmode" or actionMatch == "godmode" then
-        local current = false
-        if player.isGodMod then current = player:isGodMod() == true end
-        player:setGodMod(not current)
-        if not current then
-            safeHaloText(player, "Godmode ENABLED", 255, 215, 0)
-        else
-            safeHaloText(player, "Godmode DISABLED", 200, 200, 200)
-        end
-    elseif actionMatch == "teleport" then
-        local xMatch = tonumber(jsonStr:match('"x"%s*:%s*([%d%.]+)'))
-        local yMatch = tonumber(jsonStr:match('"y"%s*:%s*([%d%.]+)'))
-        local zMatch = tonumber(jsonStr:match('"z"%s*:%s*([%d%.]+)')) or 0
-        if xMatch and yMatch then
-            if player.teleportTo then
-                -- B42: setX/setY alone snap back and setLx/setLy/setLz no longer exist
-                player:teleportTo(xMatch, yMatch, zMatch)
-            else
-                player:setX(xMatch)
-                player:setY(yMatch)
-                player:setZ(zMatch)
-                if player.setLx then
-                    player:setLx(xMatch)
-                    player:setLy(yMatch)
-                    player:setLz(zMatch)
-                end
-            end
-            safeHaloText(player, string.format("Teleported to %d, %d, %d", xMatch, yMatch, zMatch), 200, 100, 255)
-        end
-    end
-end
-
-if Events then
-    if Events.OnTick then Events.OnTick.Add(Bridge.OnTick) end
-    if Events.OnDisconnect then Events.OnDisconnect.Add(Bridge.ClearPlayersState) end
-    if Events.OnMainMenuEnter then Events.OnMainMenuEnter.Add(Bridge.ClearPlayersState) end
-    if Events.OnDestroyIsoCode then Events.OnDestroyIsoCode.Add(Bridge.ClearPlayersState) end
-end
-print("[PZModStudio_Bridge] Live Companion Mod Initialized successfully!")
-"#;
+    let lua_script_content = BRIDGE_CLIENT_LUA;
 
     let shared_lua_dir = target_mod_dir.join("media").join("lua").join("shared");
-    let server_lua_dir = target_mod_dir.join("media").join("lua").join("server");
     let _ = std::fs::create_dir_all(&shared_lua_dir);
-    let _ = std::fs::create_dir_all(&server_lua_dir);
 
     let b42_media_dir = b42_dir.join("media");
     let b42_client_dir = b42_media_dir.join("lua").join("client");
-    let b42_server_dir = b42_media_dir.join("lua").join("server");
     let b42_shared_dir = b42_media_dir.join("lua").join("shared");
     let _ = std::fs::create_dir_all(&b42_client_dir);
-    let _ = std::fs::create_dir_all(&b42_server_dir);
     let _ = std::fs::create_dir_all(&b42_shared_dir);
+
+    // Older versions also installed the client script under server/, which made it load twice
+    // in single player (two consumers racing for the same queue file). Remove those copies.
+    for server_dir in [target_mod_dir.join("media").join("lua").join("server"), b42_media_dir.join("lua").join("server")] {
+        let _ = std::fs::remove_file(server_dir.join("PZModStudio_Bridge_Server.lua"));
+        let _ = std::fs::remove_dir(&server_dir); // only if now empty
+    }
 
     let polyfills_content = crate::patch_generator::generate_master_polyfill_lua();
     let _ = std::fs::write(shared_lua_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfills_content);
@@ -904,9 +544,7 @@ print("[PZModStudio_Bridge] Live Companion Mod Initialized successfully!")
     let _ = std::fs::write(target_mod_dir.join("mod.info"), mod_info_content);
     let _ = std::fs::write(b42_dir.join("mod.info"), b42_mod_info_content);
     let _ = std::fs::write(client_lua_dir.join("PZModStudio_Bridge.lua"), lua_script_content);
-    let _ = std::fs::write(server_lua_dir.join("PZModStudio_Bridge_Server.lua"), lua_script_content);
     let _ = std::fs::write(b42_client_dir.join("PZModStudio_Bridge.lua"), lua_script_content);
-    let _ = std::fs::write(b42_server_dir.join("PZModStudio_Bridge_Server.lua"), lua_script_content);
 
     let png_bytes = crate::patch_generator::get_preview_png_bytes();
     let _ = std::fs::write(target_mod_dir.join("poster.png"), &png_bytes);
@@ -1019,3 +657,31 @@ pub fn read_log_file(file_path: &str, max_lines: Option<usize>) -> Result<Vec<St
     Ok(lines)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_bridge_script_is_valid_lua() {
+        let parsed = full_moon::parse(BRIDGE_CLIENT_LUA);
+        assert!(parsed.is_ok(), "bridge Lua does not parse: {:?}", parsed.err());
+        assert!(BRIDGE_CLIENT_LUA.contains("PRIVILEGED_ACTIONS"));
+    }
+
+    #[test]
+    fn install_refreshes_stale_bridge_and_removes_server_copy() {
+        let dir = std::env::temp_dir().join(format!("pzms-bridge-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let dir_str = dir.to_string_lossy().to_string();
+        let server_copy = dir.join("mods/Z_PZModStudio_Bridge/42/media/lua/server/PZModStudio_Bridge_Server.lua");
+        std::fs::create_dir_all(server_copy.parent().unwrap()).unwrap();
+        std::fs::write(&server_copy, "-- old").unwrap();
+
+        assert!(bridge_companion_mod_needs_update(&dir_str));
+        install_bridge_companion_mod(&dir_str).unwrap();
+        assert!(!server_copy.exists());
+        assert!(!bridge_companion_mod_needs_update(&dir_str));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
