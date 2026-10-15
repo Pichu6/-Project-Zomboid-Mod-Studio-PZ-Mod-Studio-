@@ -65,6 +65,25 @@ export interface MergedPackageInfoUI {
 
 const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
 
+/** Window event fired when a backend operation fails; App shows it to the user. */
+export const BACKEND_ERROR_EVENT = 'pzms-backend-error';
+
+export interface BackendErrorDetail {
+  action: string;
+  message: string;
+}
+
+const errorMessage = (err: unknown): string =>
+  typeof err === 'string' ? err : err instanceof Error ? err.message : JSON.stringify(err);
+
+/** Logs a failed backend call and tells the UI about it, so failures never look like success. */
+export const reportBackendError = (action: string, err: unknown): void => {
+  console.error(`${action} failed:`, err);
+  window.dispatchEvent(
+    new CustomEvent<BackendErrorDetail>(BACKEND_ERROR_EVENT, { detail: { action, message: errorMessage(err) } })
+  );
+};
+
 /**
  * Service layer wrapping all native Tauri Rust backend IPC calls
  */
@@ -230,7 +249,7 @@ export const TauriService = {
         load_order_index: idx + 1,
       }));
     } catch (err) {
-      console.warn('Failed to scan installed mods:', err);
+      reportBackendError('Scanning installed mods', err);
       return [];
     }
   },
@@ -275,7 +294,8 @@ export const TauriService = {
     try {
       await invoke('write_mod_list_ini_cmd', { iniPath, activeMods });
     } catch (err) {
-      console.error('Failed to write ModListData.ini:', err);
+      reportBackendError('Saving the mod list', err);
+      throw err;
     }
   },
 
@@ -294,8 +314,8 @@ export const TauriService = {
     try {
       return await invoke<MasterPatchResultUI>('generate_master_patch_cmd', { req });
     } catch (err) {
-      console.error('Failed to generate master patch:', err);
-      return { success: false, patch_mod_dir: '', files_written: 0, polyfills_injected: 0 };
+      reportBackendError('Generating the merge package', err);
+      throw err;
     }
   },
 
@@ -320,7 +340,7 @@ export const TauriService = {
         },
       });
     } catch (err) {
-      console.error('Failed to clean master patch:', err);
+      reportBackendError('Unpacking the merge package', err);
       return false;
     }
   },
@@ -365,7 +385,7 @@ export const TauriService = {
     try {
       return await invoke<MergedPackageInfoUI>('create_merged_package_cmd', { userZomboidDir, modListIniPath, name, description });
     } catch (err) {
-      console.error('Failed to create merged package:', err);
+      reportBackendError('Creating the package', err);
       return null;
     }
   },
@@ -377,7 +397,7 @@ export const TauriService = {
     try {
       return await invoke<MergedPackageInfoUI>('rename_merged_package_cmd', { userZomboidDir, modListIniPath, oldFolder, newName, description });
     } catch (err) {
-      console.error('Failed to rename merged package:', err);
+      reportBackendError('Renaming the package', err);
       return null;
     }
   },
@@ -399,7 +419,7 @@ export const TauriService = {
         enabled,
       });
     } catch (err) {
-      console.error('Failed to toggle package in modlist:', err);
+      reportBackendError('Updating the package in the mod list', err);
       return false;
     }
   },
@@ -415,7 +435,7 @@ export const TauriService = {
         folderName,
       });
     } catch (err) {
-      console.error('Failed to delete merged package:', err);
+      reportBackendError('Deleting the package', err);
       return false;
     }
   },
@@ -436,7 +456,7 @@ export const TauriService = {
         status,
       });
     } catch (err) {
-      console.error('Failed to save draft resolution:', err);
+      reportBackendError('Saving the draft', err);
       return false;
     }
   },
@@ -469,7 +489,7 @@ export const TauriService = {
         packageFolderName,
       });
     } catch (err) {
-      console.error('Failed to clear draft resolutions:', err);
+      reportBackendError('Clearing drafts', err);
       return false;
     }
   },
@@ -485,7 +505,7 @@ export const TauriService = {
         targetFilePath,
       });
     } catch (err) {
-      console.error('Failed to export merged package:', err);
+      reportBackendError('Exporting the package', err);
       throw err;
     }
   },
@@ -502,7 +522,7 @@ export const TauriService = {
         sourceFilePath,
       });
     } catch (err) {
-      console.error('Failed to import merged package:', err);
+      reportBackendError('Importing the package', err);
       throw err;
     }
   },
@@ -514,8 +534,8 @@ export const TauriService = {
     try {
       return await invoke<number>('launch_sandbox_cmd', { config });
     } catch (err) {
-      console.error('Sandbox launch failed:', err);
-      return 0;
+      reportBackendError('Launching the game', err);
+      throw err;
     }
   },
 

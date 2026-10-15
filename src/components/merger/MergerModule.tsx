@@ -41,8 +41,8 @@ interface MergerModuleProps {
   conflicts: VfsConflict[];
   paths: StudioPathsUI;
   onResolveConflict: (conflictId: string, resolvedCode: string, packageFolderName?: string) => void;
-  onAutoMergeAll?: (packageFolderName?: string) => void;
-  onOptimizeAndResolve: (packageFolderName?: string) => void;
+  onAutoMergeAll?: (packageFolderName?: string) => Promise<boolean>;
+  onOptimizeAndResolve: (packageFolderName?: string) => Promise<boolean>;
   onGoToSettings: () => void;
   onRescan: () => Promise<void> | void;
   onClearConflicts?: () => void;
@@ -313,7 +313,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       return;
     }
     if (confirm(`Are you sure you want to delete the package "${folderName}" from disk?`)) {
-      await TauriService.deleteMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName);
+      const deleted = await TauriService.deleteMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName);
+      if (!deleted) return; // failure already shown by TauriService
       if (paths.user_zomboid_dir) {
         const remainingPackages = await TauriService.listMergedPackages(paths.user_zomboid_dir, paths.mod_list_ini_path);
         setPackages(remainingPackages);
@@ -378,13 +379,14 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const handleCleanMasterPatch = async () => {
     setIsCleaning(true);
     try {
-      await TauriService.cleanMasterPatch({
+      const cleaned = await TauriService.cleanMasterPatch({
         workshop_dir: paths.workshop_dir,
         pz_install_dir: paths.pz_install_dir,
         user_zomboid_dir: paths.user_zomboid_dir,
         mod_list_ini_path: paths.mod_list_ini_path,
         package_folder_name: selectedPackageFolder,
       });
+      if (!cleaned) return; // failure already shown by TauriService
       showToast(`Package "${selectedPackageFolder}" unpacked. Ready to edit.`);
       await fetchPatchStatus();
       await fetchPackages();
@@ -398,10 +400,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   // Step 1: Auto-Merge All in memory
-  const handleAutoMergeAllClick = () => {
-    if (onAutoMergeAll) {
-      onAutoMergeAll(selectedPackageFolder);
-    }
+  const handleAutoMergeAllClick = async () => {
+    // A failure was already shown by TauriService; don't claim success.
+    if (onAutoMergeAll && !(await onAutoMergeAll(selectedPackageFolder))) return;
     if (currentConflict) {
       const targetAst = currentConflict.auto_ast_output || currentConflict.merged_output || currentConflict.base_content || '';
       setEditorContent(targetAst);
@@ -474,7 +475,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const handleGenerateMasterPatch = async () => {
     setIsGenerating(true);
     try {
-      await onOptimizeAndResolve(selectedPackageFolder);
+      if (!(await onOptimizeAndResolve(selectedPackageFolder))) return;
       showToast(`Package packed and successfully published in Zomboid/mods/${selectedPackageFolder}.`);
       await fetchPatchStatus();
       await fetchPackages();

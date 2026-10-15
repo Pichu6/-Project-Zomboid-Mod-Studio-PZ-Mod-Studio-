@@ -12,6 +12,7 @@ import { TauriService } from './services/tauri';
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SplashScreen } from './components/layout/SplashScreen';
+import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 
 import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 
@@ -173,16 +174,16 @@ export const App: React.FC = () => {
     setMods(mockMods);
   };
 
-  // Auto-Merge All conflicts in memory (without premature packaging)
-  const handleAutoMergeAll = async () => {
+  // Auto-Merge All conflicts into the selected package (or the default one) on disk.
+  // Returns whether the package was written, so callers only report success when it was.
+  const handleAutoMergeAll = async (packageFolderName?: string): Promise<boolean> => {
     if (!paths.is_valid) {
       alert('Configure and validate PZ paths before generating automatic patches.');
-      return;
+      return false;
     }
 
     try {
       const activePolyfillIds = rules.filter((r) => r.enabled).map((r) => r.id);
-      const defaultPkgName = 'Z_PZModStudio_MergedPatch';
 
       const mergedFiles = conflicts.map((c) => ({
         relative_path: c.relative_path,
@@ -196,8 +197,9 @@ export const App: React.FC = () => {
         mod_list_ini_path: paths.mod_list_ini_path,
         merged_files: mergedFiles,
         active_polyfill_ids: activePolyfillIds,
-        package_folder_name: defaultPkgName,
+        package_folder_name: packageFolderName || 'Z_PZModStudio_MergedPatch',
       });
+      if (!result.success) return false;
 
       setAutoMergeResultModal({
         patch_mod_dir: result.patch_mod_dir,
@@ -207,20 +209,16 @@ export const App: React.FC = () => {
       });
 
       await handleRefreshMods();
-    } catch (err: any) {
-      alert(`Error generating Auto-Merge: ${err}`);
+      return true;
+    } catch {
+      // Already shown to the user by TauriService.
+      return false;
     }
   };
 
   // Explicit Packaging: Generates Master Patch mod on Disk and Publishes to ModListData.ini
-  const handleOptimizeAndResolve = async (packageFolderName?: string) => {
+  const handleOptimizeAndResolve = async (packageFolderName?: string): Promise<boolean> => {
     const totalCount = conflicts.length;
-
-    const updatedRules = rules.map((r) => ({
-      ...r,
-      enabled: true,
-    }));
-    setRules(updatedRules);
 
     // Call Rust to generate synthetic Master Patch mod on disk
     if (paths.is_valid && paths.user_zomboid_dir) {
@@ -229,17 +227,24 @@ export const App: React.FC = () => {
         content: c.merged_output || c.base_content,
       }));
 
-      const activePolyfillIds = updatedRules.filter((r) => r.enabled).map((r) => r.id);
+      // Respect the polyfill rules the user enabled in Settings.
+      const activePolyfillIds = rules.filter((r) => r.enabled).map((r) => r.id);
 
-      const result = await TauriService.generateMasterPatch({
-        workshop_dir: paths.workshop_dir,
-        pz_install_dir: paths.pz_install_dir,
-        user_zomboid_dir: paths.user_zomboid_dir,
-        mod_list_ini_path: paths.mod_list_ini_path,
-        merged_files: mergedFilesPayload,
-        active_polyfill_ids: activePolyfillIds,
-        package_folder_name: packageFolderName,
-      });
+      let result;
+      try {
+        result = await TauriService.generateMasterPatch({
+          workshop_dir: paths.workshop_dir,
+          pz_install_dir: paths.pz_install_dir,
+          user_zomboid_dir: paths.user_zomboid_dir,
+          mod_list_ini_path: paths.mod_list_ini_path,
+          merged_files: mergedFilesPayload,
+          active_polyfill_ids: activePolyfillIds,
+          package_folder_name: packageFolderName,
+        });
+      } catch {
+        return false; // Already shown to the user by TauriService; conflicts stay unresolved.
+      }
+      if (!result.success) return false;
 
       // Mark all conflicts as resolved
       setConflicts((prev) =>
@@ -255,15 +260,15 @@ export const App: React.FC = () => {
         setMods([...allSubscribedMods]);
       }
 
-      if (result.success) {
-        setAutoMergeResultModal({
-          patch_mod_dir: result.patch_mod_dir,
-          total_conflicts: totalCount,
-          files_written: result.files_written,
-          polyfills_injected: result.polyfills_injected,
-        });
-      }
+      setAutoMergeResultModal({
+        patch_mod_dir: result.patch_mod_dir,
+        total_conflicts: totalCount,
+        files_written: result.files_written,
+        polyfills_injected: result.polyfills_injected,
+      });
+      return true;
     }
+    return false;
   };
 
   const [pendingLaunchMode, setPendingLaunchMode] = useState<GameLaunchMode | null>(null);
@@ -285,8 +290,9 @@ export const App: React.FC = () => {
       if (mode.includes('DEBUG') || mode === 'MONITORED' || mode === 'WINDOWED') {
         setActiveTab('MONITOR');
       }
-    } catch (err: any) {
-      alert(`Error launching PZ sandbox: ${err}`);
+    } catch {
+      // The failed step (saving the mod list or launching) was already shown by TauriService;
+      // the game is not started with a mod list that was not saved.
     }
   };
 
@@ -424,14 +430,18 @@ export const App: React.FC = () => {
     setErrorCards((prev) => prev.filter((card) => card.polyfill_rule_id_suggestion !== polyfillRuleId));
 
     if (paths.is_valid && paths.user_zomboid_dir) {
-      await TauriService.generateMasterPatch({
-        workshop_dir: paths.workshop_dir,
-        pz_install_dir: paths.pz_install_dir,
-        user_zomboid_dir: paths.user_zomboid_dir,
-        mod_list_ini_path: paths.mod_list_ini_path,
-        merged_files: conflicts.map((c) => ({ relative_path: c.relative_path, content: c.merged_output || c.base_content })),
-        active_polyfill_ids: updatedRules.filter((r) => r.enabled).map((r) => r.id),
-      });
+      try {
+        await TauriService.generateMasterPatch({
+          workshop_dir: paths.workshop_dir,
+          pz_install_dir: paths.pz_install_dir,
+          user_zomboid_dir: paths.user_zomboid_dir,
+          mod_list_ini_path: paths.mod_list_ini_path,
+          merged_files: conflicts.map((c) => ({ relative_path: c.relative_path, content: c.merged_output || c.base_content })),
+          active_polyfill_ids: updatedRules.filter((r) => r.enabled).map((r) => r.id),
+        });
+      } catch {
+        // Already shown to the user by TauriService.
+      }
     }
   };
 
@@ -701,6 +711,7 @@ export const App: React.FC = () => {
         );
       })()}
     </div>
+    <BackendErrorToasts />
     </>
   );
 };
