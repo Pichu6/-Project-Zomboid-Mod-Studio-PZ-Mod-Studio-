@@ -163,3 +163,30 @@ end
 
 Events.OnTick.Add(Bridge.OnTick)
 ```
+
+---
+
+## 5. Claude Agent Protocol (`Z_ClaudeAgent`)
+
+`Z_ClaudeAgent` (source: `mods/Z_ClaudeAgent/`, installed by `install_claude_agent_mod` or `install_bridge_companion_mod` with `include_claude_agent: true`) is a second companion mod for agents that play the game. The bridge above only polls from `OnTick` with a player present; the Claude Agent polls from `OnFETick` (main menu), `OnTickEvenPaused` (in game, also paused) and `OnPreUIDraw`, so it also drives the new-game, sandbox-options, character-creation and spawn-select screens, and it returns values.
+
+Files in `<Zomboid>/Lua/`:
+
+| File | Writer | Content |
+| :--- | :--- | :--- |
+| `claude_cmd.lua` | agent | Line 1 `--id:<n>`, then Lua; the chunk may `return` a value. Runs once per new id. |
+| `claude_out.txt` | mod | `id:<n>\n<ok\|err>\n<result>`; result is `CA.ser` output (JSON when the value serializes cleanly) or the error message. |
+| `claude_log.txt` | mod | `CA.log(...)` lines, cleared at boot. |
+
+The MCP server writes the command atomically (temp file + rename) with a fresh id and polls `claude_out.txt` until the same id appears or `timeout_ms` passes. Sending the whole `ClaudeAgent.lua` as a command hot-reloads it (event handlers are registered only once, guarded by `CA.registered`).
+
+**Helpers on the global `CA`:** `state()`, `ui(filter)`, `find(text, type)`, `click(text, type)`, `answer("YES"|"NO"|"OK")`, `stats()`, `zombies(r)`, `speed(n)` (presses the speed-widget buttons: "Play", "Fast Forward x 1" = x5, "Fast Forward x 2" = x20, "Wait" = x40, since `SetCurrentGameSpeed` alone does not move the clock; fast-forward is refused near zombies), `walkTo(x,y,z)`, `travel(tx, ty, alert, hop)`, `findItem/take/invItem/equip/eat/inventory`, `findFood(r)`, `drink(r)`, `sleep(r)`, `craft(recipe, item)`, `wounds()`, `bandageAll()`, `busy()` (`{actions, current, moving}`), `flee(dist)`, `fight(radius, minHealth, crowd)`, `buildings(r)`, `enter(b)`, `door(x, y, want)` / `doorAt(x, y, z)`, `eachObject(r, fn, z)`, `zombies(r)` (with inside / sameBuilding flags), `methods(obj, filter)`, `fields(obj, filter)`, `try(fn)`, `task(name, ms, fn)` / `untask(name)`, `log(...)`. Distances use euclidean `getDistanceSq` (`DistTo` is ~1.41x off on diagonals). Under `-debug` the mod calls `UIManager.setShowLuaDebuggerOnError(false)` so errors do not freeze the game; cheats (`setGhostMode`, `setGodMod`, `setInvisible`) only work under `-debug`. `IsoStove` objects are replaced when toggled or burnt, so look them up again instead of keeping references. A hot reload keeps the running `CA.tasks`.
+
+**MCP tools:** `agent_eval_lua` (any code; `wait_idle_ms` waits for `CA.busy().actions == 0` first), `agent_ui_list` (`CA.ui`), `agent_ui_click` (`CA.click`), `agent_dialog_answer` (`CA.answer`), `agent_game_state` (`CA.state`).
+
+**Window tools (Win32, never take focus unless asked):**
+- `game_window` `park` restores a minimized window (minimized GL windows stop presenting), moves it to 0,0 at 1280x720 (or `width`/`height`) and puts it at the bottom of the z-order with `SWP_NOACTIVATE`. `minimize` uses `SW_SHOWMINNOACTIVE`; `show` restores and brings it forward (thread-input attach + ALT tap, so `SetForegroundWindow` is allowed); `info` reports rect, client size, foreground and minimized state.
+- `capture_game_screenshot` uses `PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)`, which captures the game while other windows cover it, and saves a PNG (default `<temp>/pz-mod-studio/game_screenshot.png`, downscaled to `max_width`). `looks_blank: true` means the capture came back a single color.
+- **Click to start:** after Continue/Play the game sits on a black "click to start" screen (GameLoadingState) that suppresses Lua callbacks, so the mod is silent there. `agent_enter_game` polls `CA.state()` (2 s timeout); once the mod has been silent >20 s it posts a centre click every ~3 s via `game_click_window` (WM_MOUSEMOVE + WM_LBUTTONDOWN/UP, no focus) until `"ingame":true`. Clicks are only sent while the mod is silent, so nothing in game gets clicked. `agent_ui_click` retries while `CA.click` answers "not found" (`retry_ms`, default 20 s), because menus build over several frames.
+- `game_send_key` posts `WM_KEYDOWN` / `WM_KEYUP` to the game window (lParam = repeat 1 + `MapVirtualKeyW` scan code, extended bit for arrows/navigation keys); modifiers go down first and up last, so `SHIFT+O` works while the window is parked and unfocused.
+- `launch_game` with `agent_mode: true` starts without `-debug` (under `-debug` the Lua debugger halts on any error, even inside `pcall`), adds `-windowed`, and runs a background guard that waits for the window, keeps it parked and hands focus back to the previously focused window for about 45 s while the game boots (`park` / `no_focus_steal` toggle each part).

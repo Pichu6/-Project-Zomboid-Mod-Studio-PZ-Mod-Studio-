@@ -271,6 +271,20 @@ pub fn launch_dedicated_server(
     let is_nosteam = nosteam.unwrap_or(false);
     let clean_admin_pass = admin_password.unwrap_or_default().trim().to_string();
 
+    // The name becomes a file name and, with the .bat fallbacks, part of a cmd.exe command
+    // line, so only allow characters that are inert in both.
+    if clean_name.is_empty()
+        || !clean_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(format!(
+            "Invalid server name '{}': use only letters, digits, '_' and '-'.",
+            server_name
+        ));
+    }
+    if clean_admin_pass.chars().any(|c| "&|<>^%\"!()".contains(c) || c.is_control()) {
+        return Err("The admin password cannot contain any of: & | < > ^ % \" ! ( )".to_string());
+    }
+
     let java_exe = install_path.join("jre64").join("bin").join("java.exe");
     let pz_server_bat = install_path.join("ProjectZomboidServer.bat");
     let start_server_bat = install_path.join("StartServer64.bat");
@@ -384,6 +398,43 @@ pub fn launch_dedicated_server(
     }
 }
 
+/// Images the launcher can start: java.exe directly, cmd.exe for ProjectZomboidServer.bat,
+/// or ProjectZomboid64.exe. A PID read back from the state file is only trusted if it still
+/// belongs to one of these (PIDs are reused after a process exits).
+#[cfg(target_os = "windows")]
+const SERVER_PROCESS_IMAGES: &[&str] = &["java.exe", "cmd.exe", "projectzomboid64.exe"];
+
+/// Returns the lowercase image name of a running process, or None if no process has that PID.
+#[cfg(target_os = "windows")]
+fn process_image_name(pid: u32) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    let output = Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+        .creation_flags(0x08000000)
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let line = text.lines().find(|l| l.starts_with('"'))?;
+    let mut cols = line.split(',').map(|c| c.trim_matches('"'));
+    let image = cols.next()?.to_lowercase();
+    let listed_pid = cols.next()?.parse::<u32>().ok()?;
+    (listed_pid == pid).then_some(image)
+}
+
+#[cfg(target_os = "windows")]
+fn is_tracked_server_alive(pid: u32) -> bool {
+    process_image_name(pid).is_some_and(|img| SERVER_PROCESS_IMAGES.contains(&img.as_str()))
+}
+
+fn read_server_state(state_file: &Path) -> Option<DedicatedServerStatus> {
+    fs::read_to_string(state_file)
+        .ok()
+        .and_then(|c| serde_json::from_str::<DedicatedServerStatus>(&c).ok())
+}
+
+/// Stops the dedicated server this app launched (the PID saved in pz_server_state.json),
+/// together with its child processes. Never touches unrelated java.exe processes.
+/// Returns Ok(false) when there is no tracked server to stop.
 #[tauri::command]
 pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
@@ -399,33 +450,37 @@ pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Res
         };
 
         let state_file = primary_user_dir.join("pz_server_state.json");
-        let srv_name = if state_file.exists() {
-            fs::read_to_string(&state_file)
-                .ok()
-                .and_then(|c| serde_json::from_str::<DedicatedServerStatus>(&c).ok())
-                .and_then(|s| s.server_name)
-                .unwrap_or_else(|| "servertest".to_string())
-        } else {
-            "servertest".to_string()
+        let Some(state) = read_server_state(&state_file) else {
+            return Ok(false);
         };
+        let srv_name = state.server_name.clone().unwrap_or_else(|| "servertest".to_string());
 
-        // Automatically archive the full server session log with timestamp
-        let _ = save_server_log_snapshot(user_zomboid_dir.clone(), srv_name, None);
+        let mut stopped = false;
+        if let Some(pid) = state.pid.filter(|&p| is_tracked_server_alive(p)) {
+            // Automatically archive the full server session log with timestamp
+            let _ = save_server_log_snapshot(user_zomboid_dir.clone(), srv_name, None);
 
-        // Terminate java.exe / ProjectZomboid64.exe dedicated server processes
-        let mut cmd1 = Command::new("taskkill");
-        cmd1.args(&["/F", "/IM", "java.exe"]);
-        cmd1.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        let _ = cmd1.output();
+            // /T also ends the java.exe child when the server was started through the .bat
+            let output = Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| format!("Failed to run taskkill: {}", e))?;
+            if !output.status.success() && is_tracked_server_alive(pid) {
+                return Err(format!(
+                    "Could not stop server process {}: {}",
+                    pid,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ));
+            }
+            stopped = true;
+        }
 
         let _ = fs::remove_file(primary_user_dir.join("Lua").join("pz_server_players.json"));
         let _ = fs::remove_file(primary_user_dir.join("pz_server_players.json"));
+        let _ = fs::remove_file(&state_file);
 
-        if state_file.exists() {
-            let _ = fs::remove_file(state_file);
-        }
-
-        Ok(true)
+        Ok(stopped)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -468,41 +523,22 @@ pub fn get_dedicated_server_status(user_zomboid_dir: String) -> Result<Dedicated
 
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        let mut cmd = Command::new("tasklist");
-        cmd.args(&["/FO", "CSV", "/NH"]);
-        cmd.creation_flags(0x08000000);
-
-        if let Ok(output) = cmd.output() {
-            let text = String::from_utf8_lossy(&output.stdout);
-            let found_proc = text.lines().find(|l| {
-                l.contains("java.exe")
-            });
-
-            if let Some(proc_line) = found_proc {
-                let pid_from_tasklist = proc_line
-                    .split(',')
-                    .nth(1)
-                    .and_then(|p| p.trim_matches('"').parse::<u32>().ok());
-
-                state.is_running = true;
-                if state.pid.is_none() {
-                    state.pid = pid_from_tasklist;
-                }
-                if state.server_name.is_none() {
-                    state.server_name = Some("servertest".to_string());
-                }
-                return Ok(state);
-            } else {
-                if state_file.exists() {
-                    let srv_name = state.server_name.clone().unwrap_or_else(|| "servertest".to_string());
-                    let _ = save_server_log_snapshot(user_zomboid_dir.clone(), srv_name, None);
-                    let _ = fs::remove_file(&state_file);
-                }
-                state.is_running = false;
-                state.pid = None;
+        // Only the process this app launched counts; any other java.exe is not our server.
+        if state.pid.is_some_and(is_tracked_server_alive) {
+            state.is_running = true;
+            if state.server_name.is_none() {
+                state.server_name = Some("servertest".to_string());
             }
+            return Ok(state);
         }
+
+        if state_file.exists() {
+            let srv_name = state.server_name.clone().unwrap_or_else(|| "servertest".to_string());
+            let _ = save_server_log_snapshot(user_zomboid_dir.clone(), srv_name, None);
+            let _ = fs::remove_file(&state_file);
+        }
+        state.is_running = false;
+        state.pid = None;
     }
 
     Ok(state)

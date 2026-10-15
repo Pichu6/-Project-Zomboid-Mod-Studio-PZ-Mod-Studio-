@@ -103,15 +103,42 @@ Connected MCP clients can invoke the following tools via `tools/call`:
 | Tool | Parameters | Description |
 | :--- | :--- | :--- |
 | `get_game_status` | `{}` | Checks whether `ProjectZomboid64.exe` is running and returns its Process ID (PID). |
-| `launch_game` | `debug_mode` (bool), `windowed` (bool), `nosteam` (bool), `extra_args` (array) | Launches `ProjectZomboid64.exe` with configurable debug flags and windowed mode. |
+| `launch_game` | `debug_mode` (bool), `windowed` (bool), `nosteam` (bool), `extra_args` (array)<br>`agent_mode`, `park`, `no_focus_steal` (bool), `park_width`, `park_height` (int) | Launches `ProjectZomboid64.exe` with configurable debug flags and windowed mode. `agent_mode: true` = no `-debug`, `-windowed`, window parked behind others and focus handed back while it boots. |
 | `terminate_game` | `pid` (int optional), `force` (bool default true) | Closes or forcefully terminates the Project Zomboid process. |
 | `send_game_ipc_command` | `command` (object: `give_item`, `eval_lua`, `set_godmode`, etc.) | Sends a command to the active game session through the companion mod `Z_PZModStudio_Bridge`. |
 | `get_game_ipc_response` | `{}` | Reads the latest execution response returned by the companion mod. |
-| `install_bridge_companion_mod` | `user_zomboid_dir` (optional) | Installs the companion mod `Z_PZModStudio_Bridge` into `Zomboid/mods` to enable the IPC bridge. |
+| `install_bridge_companion_mod` | `user_zomboid_dir` (optional)<br>`include_claude_agent` (bool, default false) | Installs the companion mod `Z_PZModStudio_Bridge` into `Zomboid/mods` to enable the IPC bridge; optionally also `Z_ClaudeAgent`. |
 | `get_monitor_logs` | `max_lines` (int, default 100)<br>`errors_only` (bool)<br>`user_zomboid_dir` (string optional) | Reads and filters recent lines from the active log file `console.txt`. |
 | `list_available_logs` | `user_zomboid_dir` (optional) | Lists all session log files on disk (`console.txt` and `Zomboid/Logs/`). |
 | `read_log_file` | `file_path` (string required)<br>`max_lines` (int)<br>`errors_only` (bool) | Reads a specific log file with exception filtering. |
 | `get_crash_diagnostics` | `user_zomboid_dir` (string optional) | Parses Java/Lua exceptions and generates Build 41 & 42 diagnostic cards with recommended fixes and polyfills. |
+
+### Claude Agent (menus + in-game control, window, screenshots)
+Uses the `Z_ClaudeAgent` companion mod (source: `mods/Z_ClaudeAgent/`). Unlike the bridge it runs in the main menu, new-game / sandbox / character / spawn screens and while paused, and returns values. Protocol and helpers: [docs/09 §5](docs/09-game-control-and-ipc-bridge.md#5-claude-agent-protocol-z_claudeagent). The `agent_*` tools accept `timeout_ms` (default 15000) and `user_zomboid_dir`; `status` `err`/`timeout` sets `isError`.
+
+| Tool | Parameters | Description |
+| :--- | :--- | :--- |
+| `install_claude_agent_mod` | `user_zomboid_dir` (optional) | Installs `Z_ClaudeAgent` into `Zomboid/mods` (then enable it in the Mods list). |
+| `agent_eval_lua` | `code` (string required), `wait_idle_ms` (int, default 0) | Runs Lua in the game and waits for the answer; `return` values come back as JSON when possible. `wait_idle_ms` first waits for `CA.busy().actions == 0` (timed-action queue empty). |
+| `agent_ui_list` | `filter` (string optional) | `return CA.ui(filter)`: visible buttons, ticks, combos, entries and labels with position/size. |
+| `agent_ui_click` | `text` (string required), `type_name` (optional), `retry_ms` (default 20000) | `return CA.click(text)`: clicks by visible label (exact, then substring); retries about once a second while the answer is "not found" (menus build over several frames). |
+| `agent_enter_game` | `timeout_ms` (default 300000) | After Continue/Play: polls `CA.state()`; once the mod has been silent >20 s (black "click to start" screen, where Lua does not run) it posts a centre click every ~3 s until `ingame` is true. Returns clicks sent and the final state. |
+| `agent_dialog_answer` | `answer` (`YES`/`NO`/`OK`, default `YES`) | `return CA.answer(answer)` on the front-most modal dialog. |
+| `agent_game_state` | — | `return CA.state()`: in game, menu visible, paused, speed, time, player position. |
+| `capture_game_screenshot` | `path` (optional), `max_width` (int, default 1280) | PrintWindow capture of the game window to PNG (works while covered). Returns the path and `looks_blank`. |
+| `game_window` | `mode` (`park`/`minimize`/`show`/`info`), `width`, `height` | Park = 0,0 at width x height, bottom of the z-order, not activated; show = restore + foreground. |
+| `game_click_window` | `x_frac`, `y_frac` (0..1, default 0.5) | Posts WM_MOUSEMOVE + WM_LBUTTONDOWN/UP at that point of the client area without focusing the window. |
+| `game_send_key` | `key` (e.g. `O`, `SHIFT+O`, `F9`, `ESC`), `hold_ms` (default 80) | Posts WM_KEYDOWN/WM_KEYUP (scan codes in lParam) to the game window without focusing it; modifiers pressed first, released last. |
+
+> **Agent play notes (verified live, B42):**
+> - Launch without `-debug` (`launch_game` with `agent_mode: true`) unless you need cheats: under `-debug` the Lua debugger stops the game on any error, even inside `pcall`.
+> - Cheats (`setGhostMode`, `setGodMod`, `setInvisible`) only take effect when the game was launched with `-debug`. In that case `Z_ClaudeAgent` turns break-on-error off with `UIManager.setShowLuaDebuggerOnError(false)`.
+> - `IsoMovingObject:DistTo` is not euclidean (about 1.41x on diagonals). Use `getDistanceSq` (compare with radius²) for ranges.
+> - After Continue/Play the game waits on a black "click to start" screen (GameLoadingState) that suppresses Lua callbacks, so the mod cannot answer; use `agent_enter_game` (or `game_click_window`) to post the click.
+> - Game speed: `CA.speed(n)` presses the speed-widget buttons ("Play", "Fast Forward x 1" = x5, "Fast Forward x 2" = x20, "Wait" = x40), because `SetCurrentGameSpeed` alone does not change the clock. The game refuses fast-forward when zombies are near.
+> - `IsoStove` objects are replaced when toggled or burnt: look them up again instead of keeping references.
+> - Hot-reloading the mod (sending `ClaudeAgent.lua` as a command) keeps running `CA.tasks`.
+> - Teleport in B42 with `player:teleportTo(x, y, z)`; `setX/setY` alone snap back and `setLx/setLy/setLz` no longer exist. The bridge `teleport` action uses `teleportTo` when available.
 
 ### Paths, Mods, Profiles & Load Order
 | Tool | Parameters | Description |
@@ -158,7 +185,7 @@ For in-depth architectural details, refer to the [**Modular Technical Wiki**](do
 - **[06. ModData Persistence, Networking & Security](docs/06-networking-moddata-and-security.md):** Persistence scopes, client-server sync, and CHAP anti-cheat attestation.
 - **[07. FMOD Audio, JSON Translations & 3D Z-Levels](docs/07-sound-translations-and-b42-space.md):** Sound scripts, mandatory JSON format (B42.15+), and Z-coordinates (-32 to +32).
 - **[08. Crash Diagnostics, VFS & 3-Way AST Merging](docs/08-crash-diagnostics-and-vfs.md):** `console.txt` error taxonomy and 3-way AST merge.
-- **[09. Game Process Control & Live IPC Bridge](docs/09-game-control-and-ipc-bridge.md):** `ProjectZomboid64.exe` lifecycle control and live in-game execution.
+- **[09. Game Process Control & Live IPC Bridge](docs/09-game-control-and-ipc-bridge.md):** `ProjectZomboid64.exe` lifecycle control, live in-game execution and the Claude Agent protocol.
 
 ---
 

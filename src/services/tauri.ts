@@ -25,6 +25,9 @@ export interface DependencyAnalysisRaw {
   sorted_mod_ids: string[];
   missing_dependencies: string[];
   has_circular_dependency: boolean;
+  circular_mod_ids: string[];
+  duplicate_mod_ids: string[];
+  incompatible_pairs: [string, string][];
 }
 
 export interface SandboxLogPayload {

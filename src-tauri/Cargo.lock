@@ -2795,6 +2795,7 @@ dependencies = [
  "dirs-next",
  "full_moon",
  "open",
+ "png 0.17.16",
  "rfd",
  "serde",
  "serde_json",
@@ -2803,6 +2804,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "walkdir",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

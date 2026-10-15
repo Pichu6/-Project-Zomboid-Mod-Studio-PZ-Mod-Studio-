@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 use crate::load_order::mod_info::sanitize_mod_id;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +22,9 @@ fn resolve_default_txt_path(ini_path: &str) -> PathBuf {
                 if let Some(pz_dir) = parent.parent() {
                     return pz_dir.join("mods").join("default.txt");
                 }
+            } else if parent.join("mods").is_dir() {
+                // e.g. <Zomboid>/ModListData.ini
+                return parent.join("mods").join("default.txt");
             }
         }
     }
@@ -95,8 +100,8 @@ fn parse_plain_list_file(path: &Path) -> Vec<String> {
     active
 }
 
-/// Reads active mods from Project Zomboid's most recently modified load order file on disk
-/// (checking ModListData.ini, mods/default.txt, mods.txt, and loadorder.ini)
+/// Reads the active mods from Zomboid/mods/default.txt; when that file does not exist, falls back
+/// to the most recently modified legacy list (ModListData.ini, mods.txt, Lua/loadorder.ini).
 pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
     let default_txt_path = resolve_default_txt_path(ini_path);
     let ini_p = Path::new(ini_path);
@@ -145,6 +150,15 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
         }
     }
 
+    // mods/default.txt is the only list the game reads, so when it exists it is the truth,
+    // even when it is empty (no mods active). The other files are legacy fallbacks only.
+    if default_txt_path.exists() {
+        return Ok(ModListData {
+            active_mods: parse_default_txt(&default_txt_path),
+            raw_ini_content: String::new(),
+        });
+    }
+
     // Sort candidates by modification time DESCENDING (newest file modified on disk wins!)
     candidate_paths.sort_by(|a, b| b.1.cmp(&a.1));
 
@@ -170,128 +184,294 @@ pub fn read_mod_list_ini(ini_path: &str) -> Result<ModListData, String> {
     })
 }
 
-/// Writes active mod load order list back to Zomboid/mods/default.txt (Project Zomboid's actual primary active mods file)
-/// in exact Project Zomboid Lua table format (safely quoting IDs with spaces or brackets), as well as ModListData.ini, loadorder.ini, ModManager, and modgroups.ini.
-pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
-    let default_txt_path = resolve_default_txt_path(ini_path);
-    let mut target_zomboid_dirs = Vec::new();
+/// Helper to detect custom map folders for active mods across workshop and local mod paths
+pub fn detect_active_maps(active_mods: &[String], user_zomboid_str: &str) -> Vec<String> {
+    let mut detected_maps = Vec::new();
+    let mut seen_maps = HashSet::new();
 
-    if let Some(mods_dir) = default_txt_path.parent() {
-        if let Some(z_dir) = mods_dir.parent() {
-            target_zomboid_dirs.push(z_dir.to_path_buf());
-        }
+    let paths = crate::vfs::auto_detect_paths();
+    let mut search_dirs = Vec::new();
+
+    if !paths.workshop_dir.is_empty() {
+        search_dirs.push(PathBuf::from(&paths.workshop_dir));
+    }
+    if !paths.pz_install_dir.is_empty() {
+        search_dirs.push(PathBuf::from(&paths.pz_install_dir).join("mods"));
+    }
+    for u_dir in crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_str) {
+        search_dirs.push(u_dir.join("mods"));
     }
 
-    let user_zomboid_str = if !ini_path.is_empty() {
-        if let Some(parent) = Path::new(ini_path).parent() {
-            if parent.file_name().map_or(false, |n| n == "mods") {
-                parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
-            } else if parent.file_name().map_or(false, |n| n == "Lua") {
-                parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
-            } else {
-                parent.to_string_lossy().to_string()
-            }
-        } else {
-            String::new()
+    let clean_active_ids: HashSet<String> = active_mods
+        .iter()
+        .map(|s| sanitize_mod_id(s).to_lowercase())
+        .collect();
+
+    // Map mod ID (lowercase) -> list of map folder names
+    let mut mod_to_maps: HashMap<String, Vec<String>> = HashMap::new();
+
+    for root in &search_dirs {
+        if !root.exists() {
+            continue;
         }
-    } else {
-        String::new()
-    };
+        for entry in WalkDir::new(root).max_depth(6).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_name() == "map.info" {
+                if let Some(map_dir) = entry.path().parent() {
+                    let map_folder_name = map_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    if map_folder_name.is_empty() {
+                        continue;
+                    }
 
-    for u_dir in crate::load_order::mod_info::get_all_user_zomboid_dirs(&user_zomboid_str) {
-        if !target_zomboid_dirs.contains(&u_dir) {
-            target_zomboid_dirs.push(u_dir);
-        }
-    }
+                    // Traverse up to find the enclosing mod.info
+                    let mut current = map_dir.parent();
+                    let mut found_mod_id = None;
+                    for _ in 0..5 {
+                        if let Some(p) = current {
+                            let mod_info = p.join("mod.info");
+                            if mod_info.exists() {
+                                if let Some(manifest) = crate::load_order::mod_info::parse_mod_info(&mod_info) {
+                                    let clean_id = sanitize_mod_id(&manifest.id).to_lowercase();
+                                    if clean_active_ids.contains(&clean_id) {
+                                        found_mod_id = Some(clean_id);
+                                        break;
+                                    }
+                                }
+                            }
+                            current = p.parent();
+                        } else {
+                            break;
+                        }
+                    }
 
-    // 1. Build default.txt content in exact Project Zomboid native format (mod = <id>,)
-    let mut default_txt_content = String::from("VERSION = 1,\n\nmods\n{\n");
-    for mod_id in active_mods {
-        let clean_id = sanitize_mod_id(mod_id);
-        if !clean_id.is_empty() {
-            default_txt_content.push_str(&format!("    mod = {},\n", clean_id));
-        }
-    }
-    default_txt_content.push_str("}\n\nmaps\n{\n}\n");
-
-    let clean_mods: Vec<String> = active_mods.iter().map(|id| sanitize_mod_id(id)).filter(|s| !s.is_empty()).collect();
-    let active_lines = clean_mods.join("\n");
-    let mods_joined = clean_mods.join(";");
-
-    let ini_content = format!("[ModList]\nactiveMods={}\n", mods_joined);
-    let loadorder_content = format!("[LoadOrder]\nmods={}\n", mods_joined);
-    let modgroups_content = format!("[ModGroups]\nactive={}\n", mods_joined);
-
-    for zomboid_dir in target_zomboid_dirs {
-        // A. Primary Zomboid/mods/default.txt & lock file
-        let mods_dir = zomboid_dir.join("mods");
-        let _ = fs::create_dir_all(&mods_dir);
-        let _ = fs::write(mods_dir.join("default.txt"), &default_txt_content);
-        let _ = fs::write(mods_dir.join("reset-mods-42_00.txt"), "If this file does not exist, default.txt will be reset to empty (no mods active).");
-
-        // B. Root Zomboid/mods.txt
-        let _ = fs::write(zomboid_dir.join("mods.txt"), &active_lines);
-
-        // C. Zomboid/Lua/mods/default.txt
-        let lua_mods_dir = zomboid_dir.join("Lua").join("mods");
-        let _ = fs::create_dir_all(&lua_mods_dir);
-        let _ = fs::write(lua_mods_dir.join("default.txt"), &default_txt_content);
-        let _ = fs::write(lua_mods_dir.join("reset-mods-42_00.txt"), "If this file does not exist, default.txt will be reset to empty.");
-
-        // D. Zomboid/saved_modlists/ and Zomboid/Lua/saved_modlists/
-        let saved_modlists_dir = zomboid_dir.join("saved_modlists");
-        let _ = fs::create_dir_all(&saved_modlists_dir);
-        let _ = fs::write(saved_modlists_dir.join("default.txt"), &default_txt_content);
-        let _ = fs::write(saved_modlists_dir.join("PZModStudio.txt"), &default_txt_content);
-        let _ = fs::write(saved_modlists_dir.join("PZ Mod Studio.txt"), &default_txt_content);
-
-        let lua_saved_dir = zomboid_dir.join("Lua").join("saved_modlists");
-        let _ = fs::create_dir_all(&lua_saved_dir);
-        let _ = fs::write(lua_saved_dir.join("default.txt"), &default_txt_content);
-        let _ = fs::write(lua_saved_dir.join("PZModStudio.txt"), &default_txt_content);
-        let _ = fs::write(lua_saved_dir.join("PZ Mod Studio.txt"), &default_txt_content);
-
-        // E. Zomboid/Lua config files
-        let lua_dir = zomboid_dir.join("Lua");
-        let _ = fs::create_dir_all(&lua_dir);
-        let _ = fs::write(lua_dir.join("ModListData.ini"), &ini_content);
-        let _ = fs::write(lua_dir.join("loadorder.ini"), &loadorder_content);
-        let _ = fs::write(lua_dir.join("modgroups.ini"), &modgroups_content);
-        let _ = fs::write(lua_dir.join("ModLoadOrderSorter.txt"), &active_lines);
-        let _ = fs::write(lua_dir.join("mod_order.txt"), &active_lines);
-        let _ = fs::write(lua_dir.join("mod_load_order.txt"), &active_lines);
-        let _ = fs::write(lua_dir.join("ModLoadOrderExporter.txt"), &active_lines);
-
-        // F. Zomboid/Lua/ModManager/ (In-game Mod Manager mod support)
-        let mm_dir = lua_dir.join("ModManager");
-        let mm_mods_dir = mm_dir.join("mods");
-        let _ = fs::create_dir_all(&mm_mods_dir);
-        let _ = fs::write(mm_mods_dir.join("default.txt"), &default_txt_content);
-        let _ = fs::write(mm_mods_dir.join("reset-mods-42_00.txt"), "If this file does not exist, default.txt will be reset to empty.");
-
-        let mm_saved_dir = mm_dir.join("saved_modlists");
-        let _ = fs::create_dir_all(&mm_saved_dir);
-        let _ = fs::write(mm_saved_dir.join("default.txt"), &default_txt_content);
-        let _ = fs::write(mm_saved_dir.join("PZModStudio.txt"), &default_txt_content);
-        let _ = fs::write(mm_saved_dir.join("PZ Mod Studio.txt"), &default_txt_content);
-
-        let _ = fs::write(mm_dir.join("loadorder.ini"), &loadorder_content);
-        let _ = fs::write(mm_dir.join("modgroups.ini"), &modgroups_content);
-        let _ = fs::write(mm_dir.join("ModLoadOrderSorter.txt"), &active_lines);
-        let _ = fs::write(mm_dir.join("mod_order.txt"), &active_lines);
-        let _ = fs::write(mm_dir.join("mod_load_order.txt"), &active_lines);
-        let _ = fs::write(mm_dir.join("ModLoadOrderExporter.txt"), &active_lines);
-
-        // G. Sync active mods to existing save game folders (Zomboid/Saves/*/*/mods.txt and default.txt)
-        let saves_dir = zomboid_dir.join("Saves");
-        if saves_dir.exists() {
-            for entry in walkdir::WalkDir::new(&saves_dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
-                if entry.file_name() == "mods.txt" {
-                    let _ = fs::write(entry.path(), &default_txt_content);
+                    if let Some(mod_id) = found_mod_id {
+                        let list = mod_to_maps.entry(mod_id).or_default();
+                        if !list.contains(&map_folder_name) {
+                            list.push(map_folder_name);
+                        }
+                    }
                 }
             }
         }
     }
 
+    // Preserve active_mods load order when ordering map folders
+    for mod_id in active_mods {
+        let clean = sanitize_mod_id(mod_id).to_lowercase();
+        if let Some(maps) = mod_to_maps.get(&clean) {
+            for m in maps {
+                if seen_maps.insert(m.clone()) {
+                    detected_maps.push(m.clone());
+                }
+            }
+        }
+    }
+
+    detected_maps
+}
+
+/// Zomboid folder that owns the active mod list for `ini_path` (parent of `mods/default.txt`).
+fn zomboid_dir_for(default_txt_path: &Path) -> Option<PathBuf> {
+    default_txt_path.parent().and_then(|m| m.parent()).map(Path::to_path_buf)
+}
+
+/// Builds `mods/default.txt` the way the game writes it (ActiveModsFile, VERSION = 1).
+/// The game splits values on every comma and never strips quotes, so values are written bare
+/// and map names containing a comma (they cannot round-trip) are skipped.
+pub fn build_default_txt(active_mods: &[String], maps: &[String]) -> String {
+    // Same line ending as the game (Java's System.lineSeparator()).
+    let eol = if cfg!(windows) { "\r\n" } else { "\n" };
+    let mut out = format!("VERSION = 1,{eol}{eol}mods{eol}{{{eol}");
+    for mod_id in active_mods {
+        let clean_id = sanitize_mod_id(mod_id);
+        if !clean_id.is_empty() && !clean_id.contains(',') {
+            out.push_str(&format!("    mod = {},{eol}", clean_id));
+        }
+    }
+    out.push_str(&format!("}}{eol}{eol}maps{eol}{{{eol}"));
+    for map_name in maps {
+        let clean = map_name.trim();
+        if !clean.is_empty() && !clean.contains(',') {
+            out.push_str(&format!("    map = {},{eol}", clean));
+        }
+    }
+    out.push_str(&format!("}}{eol}"));
+    out
+}
+
+/// Map entries currently in a default.txt `maps { }` block, in order.
+fn read_existing_maps(path: &Path) -> Vec<String> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut maps = Vec::new();
+    let mut in_maps = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("maps") {
+            in_maps = true;
+            continue;
+        }
+        if in_maps {
+            if trimmed.starts_with('}') {
+                break;
+            }
+            if let Some(rest) = trimmed.strip_prefix("map") {
+                let value = rest.trim().trim_start_matches('=').trim().trim_end_matches(',').trim();
+                if !value.is_empty() {
+                    maps.push(value.to_string());
+                }
+            }
+        }
+    }
+    maps
+}
+
+/// Keeps the newest `keep` files in `dir` whose names start with `prefix`.
+fn prune_backups(dir: &Path, prefix: &str, keep: usize) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let mut backups: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(prefix)))
+        .collect();
+    // Names embed a sortable timestamp, so name order is age order.
+    backups.sort();
+    let excess = backups.len().saturating_sub(keep);
+    for old in backups.into_iter().take(excess) {
+        let _ = fs::remove_file(old);
+    }
+}
+
+/// Replaces `path` with `content`: skips the write when nothing changed, copies the previous
+/// version into `backup_dir` first, and writes through a temp file + rename so a crash can
+/// never leave a truncated file behind.
+pub fn write_file_with_backup(path: &Path, content: &str, backup_dir: &Path) -> Result<bool, String> {
+    if let Ok(existing) = fs::read_to_string(path) {
+        if existing == content {
+            return Ok(false);
+        }
+        fs::create_dir_all(backup_dir)
+            .map_err(|e| format!("Cannot create backup folder {}: {}", backup_dir.display(), e))?;
+        let stem = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "file".into());
+        let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S%.3f");
+        let backup_path = backup_dir.join(format!("{}.{}.bak", stem, stamp));
+        fs::copy(path, &backup_path)
+            .map_err(|e| format!("Cannot back up {}: {}", path.display(), e))?;
+        prune_backups(backup_dir, &format!("{}.", stem), 20);
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Cannot create {}: {}", parent.display(), e))?;
+    }
+    let tmp_path = path.with_extension("pzms-tmp");
+    fs::write(&tmp_path, content).map_err(|e| format!("Cannot write {}: {}", tmp_path.display(), e))?;
+    fs::rename(&tmp_path, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp_path);
+        format!("Cannot replace {}: {}", path.display(), e)
+    })?;
+    Ok(true)
+}
+
+/// Writes the active mod list to `Zomboid/mods/default.txt`, the only global mod list file the
+/// game reads (ZomboidFileSystem / ActiveModsFile). The previous file is backed up to
+/// `Zomboid/PZModStudio_Backups/`. Save folders are not touched: the game rewrites each save's
+/// own `mods.txt` itself whenever that save is loaded.
+pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), String> {
+    let default_txt_path = resolve_default_txt_path(ini_path);
+    let zomboid_dir = zomboid_dir_for(&default_txt_path)
+        .ok_or_else(|| format!("Cannot resolve the Zomboid folder for {}", default_txt_path.display()))?;
+
+    let mut maps = read_existing_maps(&default_txt_path);
+    for detected in detect_active_maps(active_mods, &zomboid_dir.to_string_lossy()) {
+        if !maps.contains(&detected) {
+            maps.push(detected);
+        }
+    }
+
+    let content = build_default_txt(active_mods, &maps);
+    write_file_with_backup(&default_txt_path, &content, &zomboid_dir.join("PZModStudio_Backups"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A throwaway Zomboid folder under the system temp dir (never the user's real one).
+    fn temp_zomboid(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pzms-{}-{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("mods")).unwrap();
+        dir
+    }
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn default_txt_round_trips_and_keeps_workshop_prefixed_ids() {
+        let mods = ids(&["ModA", "\\ModB", "2858201402/dailystatisticsandgains"]);
+        let text = build_default_txt(&mods, &ids(&["MyMap", "Bad, Map"]));
+        assert!(text.starts_with("VERSION = 1,"));
+        assert!(!text.contains('"'), "the game does not strip quotes");
+        assert!(!text.contains("Bad"), "comma map names cannot round-trip");
+
+        let dir = temp_zomboid("roundtrip");
+        let path = dir.join("mods").join("default.txt");
+        fs::write(&path, &text).unwrap();
+        assert_eq!(parse_default_txt(&path), ids(&["ModA", "ModB", "2858201402/dailystatisticsandgains"]));
+        assert_eq!(read_existing_maps(&path), ids(&["MyMap"]));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_with_backup_keeps_previous_version_and_skips_no_ops() {
+        let dir = temp_zomboid("backup");
+        let path = dir.join("mods").join("default.txt");
+        let backups = dir.join("PZModStudio_Backups");
+        fs::write(&path, "old").unwrap();
+
+        assert!(write_file_with_backup(&path, "new", &backups).unwrap());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+        let saved: Vec<_> = fs::read_dir(&backups).unwrap().filter_map(|e| e.ok()).collect();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(fs::read_to_string(saved[0].path()).unwrap(), "old");
+        assert!(!path.with_extension("pzms-tmp").exists());
+
+        // Same content again: no write, no extra backup.
+        assert!(!write_file_with_backup(&path, "new", &backups).unwrap());
+        assert_eq!(fs::read_dir(&backups).unwrap().count(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_mod_list_only_touches_default_txt() {
+        let dir = temp_zomboid("writer");
+        let save = dir.join("Saves").join("Sandbox").join("MySave");
+        fs::create_dir_all(&save).unwrap();
+        fs::write(save.join("mods.txt"), "save's own list").unwrap();
+        let ini_path = dir.join("mods").join("default.txt");
+        fs::write(&ini_path, "VERSION = 1,\nmods\n{\n    mod = Old,\n}\nmaps\n{\n}\n").unwrap();
+
+        write_mod_list_ini(&ini_path.to_string_lossy(), &ids(&["A", "B"])).unwrap();
+
+        assert_eq!(read_mod_list_ini(&ini_path.to_string_lossy()).unwrap().active_mods, ids(&["A", "B"]));
+        assert_eq!(fs::read_to_string(save.join("mods.txt")).unwrap(), "save's own list");
+        for never_written in ["mods.txt", "Lua"] {
+            assert!(!dir.join(never_written).exists(), "{} was created", never_written);
+        }
+        assert_eq!(fs::read_dir(dir.join("PZModStudio_Backups")).unwrap().count(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn empty_default_txt_wins_over_stale_legacy_lists() {
+        let dir = temp_zomboid("reader");
+        let ini_path = dir.join("mods").join("default.txt");
+        fs::write(&ini_path, build_default_txt(&[], &[])).unwrap();
+        fs::write(dir.join("mods.txt"), "Stale\nList").unwrap();
+        assert!(read_mod_list_ini(&ini_path.to_string_lossy()).unwrap().active_mods.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

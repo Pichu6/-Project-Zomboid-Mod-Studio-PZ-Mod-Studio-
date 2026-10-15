@@ -1,3 +1,4 @@
+pub mod claude_agent;
 pub mod diff_engine;
 pub mod instance_manager;
 pub mod load_order;
@@ -190,18 +191,21 @@ fn read_log_file_cmd(file_path: String, max_lines: Option<usize>) -> Result<Vec<
 
 #[tauri::command]
 fn open_external_url_cmd(url: String) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::process::Command;
-        use std::os::windows::process::CommandExt;
-        let mut cmd = Command::new("cmd");
-        cmd.args(&["/c", "start", "", &url]);
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        if let Ok(_) = cmd.spawn() {
-            return Ok(());
-        }
+    let url = validate_external_url(&url)?;
+    open::that(url).map_err(|e| format!("Failed to open URL in browser: {}", e))
+}
+
+/// Only plain http(s) links are opened. URLs come from mod.info `url=` lines, which mod
+/// authors control, so anything else (file:, ms-settings:, shell metacharacters...) is refused.
+fn validate_external_url(url: &str) -> Result<&str, String> {
+    let url = url.trim();
+    let lower = url.to_ascii_lowercase();
+    let has_web_scheme = lower.starts_with("https://") || lower.starts_with("http://");
+    let has_control_chars = url.chars().any(|c| c.is_control() || c == '"');
+    if !has_web_scheme || has_control_chars || url.len() > 2048 {
+        return Err(format!("Refusing to open non-web URL: {}", url));
     }
-    open::that(&url).map_err(|e| format!("Failed to open URL in browser: {}", e))
+    Ok(url)
 }
 
 #[tauri::command]
@@ -362,4 +366,18 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_external_url;
+
+    #[test]
+    fn only_web_urls_are_opened() {
+        assert!(validate_external_url("https://steamcommunity.com/sharedfiles/filedetails/?id=1&b=2").is_ok());
+        assert!(validate_external_url(" HTTP://example.com ").is_ok());
+        for bad in ["ftp://x&calc", "file:///C:/Windows/System32/calc.exe", "calc.exe", "ms-settings:", "https://x\"&calc", "https://x\r\ncalc"] {
+            assert!(validate_external_url(bad).is_err(), "accepted {:?}", bad);
+        }
+    }
 }

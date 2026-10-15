@@ -1,4 +1,5 @@
 use super::protocol::{McpTool, ToolCallResult, ToolContent};
+use crate::claude_agent;
 use crate::diff_engine::lua::{three_way_merge_lua, validate_lua_syntax};
 use crate::load_order::mod_info::scan_all_installed_mods;
 use crate::load_order::topological_sort::sort_dependencies_topologically;
@@ -36,16 +37,21 @@ pub fn get_available_tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "launch_game".to_string(),
-            description: "Launches ProjectZomboid64.exe process with configurable flags such as debug mode, windowed mode, and nosteam.".to_string(),
+            description: "Launches ProjectZomboid64.exe process with configurable flags such as debug mode, windowed mode, and nosteam. With agent_mode=true it starts windowed, without -debug, parked behind other windows and without keeping focus (for Claude Agent play).".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "pz_install_dir": { "type": "string", "description": "Optional custom game installation path" },
                     "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
-                    "debug_mode": { "type": "boolean", "description": "If true, launches with -debug flag (default: true)" },
+                    "debug_mode": { "type": "boolean", "description": "If true, launches with -debug flag (default: true, or false when agent_mode is true; under -debug the Lua debugger breaks on errors even inside pcall)" },
                     "windowed": { "type": "boolean", "description": "If true, forces windowed execution with -windowed (default: true)" },
                     "nosteam": { "type": "boolean", "description": "If true, launches with -nosteam (default: false)" },
-                    "extra_args": { "type": "array", "items": { "type": "string" }, "description": "Optional extra CLI arguments" }
+                    "extra_args": { "type": "array", "items": { "type": "string" }, "description": "Optional extra CLI arguments" },
+                    "agent_mode": { "type": "boolean", "description": "Agent play preset: no -debug, -windowed, park the window and give focus back (default: false)" },
+                    "park": { "type": "boolean", "description": "Keep the new game window parked at the bottom of the z-order, not activated (default: agent_mode)" },
+                    "no_focus_steal": { "type": "boolean", "description": "Hand focus back to the previously focused window while the game boots (default: agent_mode)" },
+                    "park_width": { "type": "integer", "description": "Parked window width (default: 1280)" },
+                    "park_height": { "type": "integer", "description": "Parked window height (default: 720)" }
                 }
             }),
         },
@@ -87,12 +93,145 @@ pub fn get_available_tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "install_bridge_companion_mod".to_string(),
-            description: "Installs the Z_PZModStudio_Bridge companion mod into the user's Zomboid/mods directory to enable live in-game Lua execution and item equipping.".to_string(),
+            description: "Installs the Z_PZModStudio_Bridge companion mod into the user's Zomboid/mods directory to enable live in-game Lua execution and item equipping. Optionally also installs the Z_ClaudeAgent mod.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "include_claude_agent": { "type": "boolean", "description": "If true, also installs the Z_ClaudeAgent companion mod used by the agent_* tools (default: false)" }
+                }
+            }),
+        },
+        McpTool {
+            name: "install_claude_agent_mod".to_string(),
+            description: "Installs the Z_ClaudeAgent companion mod into Zomboid/mods. It runs Lua sent by the agent_* tools in the main menu, new-game/sandbox/character screens, spawn select and in game (also while paused). Enable it in the game's Mods list afterwards.".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
                 }
+            }),
+        },
+        McpTool {
+            name: "agent_eval_lua".to_string(),
+            description: "Runs Lua in the live game through the Z_ClaudeAgent mod (works in the main menu and in game) and waits for the answer. The code may `return` a value; it comes back serialized (JSON when possible). The global CA has helpers: CA.state(), CA.ui(filter), CA.find(text), CA.click(text), CA.answer('YES'|'NO'|'OK'), CA.stats(), CA.zombies(r), CA.speed(n), CA.walkTo(x,y,z), CA.inventory(), CA.methods(obj,filter), CA.fields(obj,filter), CA.task(name,ms,fn)/CA.untask(name), CA.log(...).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "code": { "type": "string", "description": "Lua source to run, e.g. \"return CA.state()\"" },
+                    "wait_idle_ms": { "type": "integer", "description": "Before running the code, wait up to this long for the player's timed-action queue to empty (polls CA.busy().actions until 0). Default: 0 (no wait)" },
+                    "timeout_ms": { "type": "integer", "description": "How long to wait for the answer (default: 15000)" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                },
+                "required": ["code"]
+            }),
+        },
+        McpTool {
+            name: "agent_ui_list".to_string(),
+            description: "Lists visible UI elements (buttons, ticks, combos, text entries, labels) with type, position, size and label via CA.ui(filter). Works in menus and in game.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "filter": { "type": "string", "description": "Optional case-insensitive label substring or exact type name (e.g. ISButton)" },
+                    "timeout_ms": { "type": "integer", "description": "How long to wait for the answer (default: 15000)" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                }
+            }),
+        },
+        McpTool {
+            name: "agent_ui_click".to_string(),
+            description: "Clicks a visible button or menu entry by its text via CA.click(text) (exact label first, then substring). Retries while the element is not found yet, since menus build over several frames.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string", "description": "Visible label of the element to click" },
+                    "type_name": { "type": "string", "description": "Optional UI type to restrict the match (e.g. ISButton)" },
+                    "retry_ms": { "type": "integer", "description": "Keep retrying (about once per second) while the answer is 'not found' for up to this long (default: 20000, 0 = single try)" },
+                    "timeout_ms": { "type": "integer", "description": "How long to wait for the answer (default: 15000)" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                },
+                "required": ["text"]
+            }),
+        },
+        McpTool {
+            name: "agent_dialog_answer".to_string(),
+            description: "Answers the front-most modal dialog via CA.answer(answer). Works even when UI mods hide the vanilla buttons.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "answer": { "type": "string", "enum": ["YES", "NO", "OK"], "description": "Dialog answer (default: YES)" },
+                    "timeout_ms": { "type": "integer", "description": "How long to wait for the answer (default: 15000)" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                }
+            }),
+        },
+        McpTool {
+            name: "agent_game_state".to_string(),
+            description: "Returns CA.state(): whether in game, main screen visibility, paused, game speed, in-game time and player position/dead flag.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "timeout_ms": { "type": "integer", "description": "How long to wait for the answer (default: 15000)" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                }
+            }),
+        },
+        McpTool {
+            name: "capture_game_screenshot".to_string(),
+            description: "Captures the Project Zomboid main window to a PNG with PrintWindow (works while the window is covered by other windows; a minimized window is restored behind the others first). Returns the saved path.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Output PNG path (default: <temp>/pz-mod-studio/game_screenshot.png)" },
+                    "max_width": { "type": "integer", "description": "Downscale to at most this width in pixels, 0 = full size (default: 1280)" }
+                }
+            }),
+        },
+        McpTool {
+            name: "game_window".to_string(),
+            description: "Controls the Project Zomboid window without stealing focus: park (restore if minimized, move to 0,0, resize, send behind all windows, no activation), minimize (no activation), show (restore and bring to the foreground), info (rect, client size, foreground, minimized).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "mode": { "type": "string", "enum": ["park", "minimize", "show", "info"], "description": "Window action" },
+                    "width": { "type": "integer", "description": "Width for park (default: 1280)" },
+                    "height": { "type": "integer", "description": "Height for park (default: 720)" }
+                },
+                "required": ["mode"]
+            }),
+        },
+        McpTool {
+            name: "game_click_window".to_string(),
+            description: "Posts a left click (WM_MOUSEMOVE + WM_LBUTTONDOWN/UP) at a fraction of the game window's client area without focusing it. Used e.g. to get past the black 'click to start' screen, where Lua does not run.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "x_frac": { "type": "number", "description": "Horizontal position as a fraction of the client width, 0..1 (default: 0.5)" },
+                    "y_frac": { "type": "number", "description": "Vertical position as a fraction of the client height, 0..1 (default: 0.5)" }
+                }
+            }),
+        },
+        McpTool {
+            name: "agent_enter_game".to_string(),
+            description: "After Continue/Play: waits for the world to load and gets past the black 'click to start' screen (GameLoadingState suppresses Lua, so the mod cannot answer there). Polls CA.state() every ~3 s; once the mod has been silent for more than 20 s it posts a centre click each round. Returns clicks sent and the final state.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "timeout_ms": { "type": "integer", "description": "Give up after this long (default: 300000)" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                }
+            }),
+        },
+        McpTool {
+            name: "game_send_key".to_string(),
+            description: "Posts a key press (WM_KEYDOWN/WM_KEYUP with scan codes) to the Project Zomboid window without focusing it. Modifiers are pressed first and released last. Keys: A-Z, 0-9, F1-F12, ESC, SPACE, TAB, ENTER, BACKSPACE, DELETE, INSERT, HOME, END, PAGEUP, PAGEDOWN, UP/DOWN/LEFT/RIGHT, SHIFT, CTRL, ALT, SEMICOLON, APOSTROPHE, COMMA, PERIOD, MINUS, EQUALS, TILDE.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "key": { "type": "string", "description": "Key or combination, e.g. \"O\", \"SHIFT+O\", \"F9\", \"ESC\"" },
+                    "hold_ms": { "type": "integer", "description": "How long to hold the keys down (default: 80)" }
+                },
+                "required": ["key"]
             }),
         },
         McpTool {
@@ -299,6 +438,17 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "send_game_ipc_command" => handle_send_game_ipc_command(args),
         "get_game_ipc_response" => handle_get_game_ipc_response(args),
         "install_bridge_companion_mod" => handle_install_bridge_companion_mod(args),
+        "install_claude_agent_mod" => handle_install_claude_agent_mod(args),
+        "agent_eval_lua" => handle_agent_eval_lua(args),
+        "agent_ui_list" => handle_agent_ui_list(args),
+        "agent_ui_click" => handle_agent_ui_click(args),
+        "agent_dialog_answer" => handle_agent_dialog_answer(args),
+        "agent_game_state" => handle_agent_game_state(args),
+        "capture_game_screenshot" => handle_capture_game_screenshot(args),
+        "game_window" => handle_game_window(args),
+        "game_send_key" => handle_game_send_key(args),
+        "game_click_window" => handle_game_click_window(args),
+        "agent_enter_game" => handle_agent_enter_game(args),
         "get_monitor_logs" => handle_get_monitor_logs(args),
         "get_crash_diagnostics" => handle_get_crash_diagnostics(args),
         "list_installed_mods" => handle_list_installed_mods(args),
@@ -663,28 +813,48 @@ fn handle_save_draft_resolution(args: Value) -> ToolCallResult {
 
 fn handle_launch_game(args: Value) -> ToolCallResult {
     let paths = resolve_paths(&args);
-    let debug_mode = args.get("debug_mode").and_then(|v| v.as_bool()).unwrap_or(true);
+    let agent_mode = args.get("agent_mode").and_then(|v| v.as_bool()).unwrap_or(false);
+    let debug_mode = args.get("debug_mode").and_then(|v| v.as_bool()).unwrap_or(!agent_mode);
     let windowed = args.get("windowed").and_then(|v| v.as_bool()).unwrap_or(true);
     let nosteam = args.get("nosteam").and_then(|v| v.as_bool()).unwrap_or(false);
-    let extra_args = args.get("extra_args").and_then(|v| v.as_array()).map(|arr| {
+    let park = args.get("park").and_then(|v| v.as_bool()).unwrap_or(agent_mode);
+    let no_focus_steal = args.get("no_focus_steal").and_then(|v| v.as_bool()).unwrap_or(agent_mode);
+    let park_width = args.get("park_width").and_then(|v| v.as_i64()).unwrap_or(1280) as i32;
+    let park_height = args.get("park_height").and_then(|v| v.as_i64()).unwrap_or(720) as i32;
+    let mut extra_args = args.get("extra_args").and_then(|v| v.as_array()).map(|arr| {
         arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect::<Vec<String>>()
     }).unwrap_or_default();
+    if agent_mode && windowed && !extra_args.iter().any(|a| a.eq_ignore_ascii_case("-windowed")) {
+        extra_args.push("-windowed".to_string());
+    }
 
+    let prev_foreground = claude_agent::current_foreground_window();
     match launch_pz_direct(&paths.pz_install_dir, &paths.user_zomboid_dir, debug_mode, windowed, nosteam, &extra_args) {
-        Ok(pid) => ToolCallResult {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&json!({
-                    "status": "launched",
-                    "pid": pid,
-                    "debug_mode": debug_mode,
-                    "windowed": windowed,
-                    "nosteam": nosteam,
-                    "message": format!("Project Zomboid launched successfully with PID: {}", pid)
-                })).unwrap_or_else(|e| format!("Error: {}", e)),
-            }],
-            is_error: false,
-        },
+        Ok(pid) => {
+            claude_agent::start_launch_window_guard(prev_foreground, park, no_focus_steal, park_width, park_height);
+            ToolCallResult {
+                content: vec![ToolContent {
+                    content_type: "text".to_string(),
+                    text: serde_json::to_string_pretty(&json!({
+                        "status": "launched",
+                        "pid": pid,
+                        "debug_mode": debug_mode,
+                        "windowed": windowed,
+                        "nosteam": nosteam,
+                        "agent_mode": agent_mode,
+                        "park": park,
+                        "no_focus_steal": no_focus_steal,
+                        "extra_args": extra_args,
+                        "message": if park || no_focus_steal {
+                            format!("Project Zomboid launched with PID: {}. A background guard waits for the window and keeps it parked / returns focus for ~45s after it appears.", pid)
+                        } else {
+                            format!("Project Zomboid launched successfully with PID: {}", pid)
+                        }
+                    })).unwrap_or_else(|e| format!("Error: {}", e)),
+                }],
+                is_error: false,
+            }
+        }
         Err(e) => ToolCallResult {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
@@ -783,17 +953,32 @@ fn handle_get_game_ipc_response(args: Value) -> ToolCallResult {
 fn handle_install_bridge_companion_mod(args: Value) -> ToolCallResult {
     let paths = resolve_paths(&args);
 
+    let include_claude_agent = args.get("include_claude_agent").and_then(|v| v.as_bool()).unwrap_or(false);
+
     match install_bridge_companion_mod(&paths.user_zomboid_dir) {
-        Ok(msg) => ToolCallResult {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&json!({
-                    "status": "installed",
-                    "message": msg
-                })).unwrap_or_else(|e| format!("Error: {}", e)),
-            }],
-            is_error: false,
-        },
+        Ok(msg) => {
+            let agent = if include_claude_agent {
+                Some(claude_agent::install_claude_agent_mod(&paths.user_zomboid_dir))
+            } else {
+                None
+            };
+            let agent_failed = matches!(agent, Some(Err(_)));
+            ToolCallResult {
+                content: vec![ToolContent {
+                    content_type: "text".to_string(),
+                    text: serde_json::to_string_pretty(&json!({
+                        "status": if agent_failed { "partial" } else { "installed" },
+                        "message": msg,
+                        "claude_agent": match &agent {
+                            None => Value::Null,
+                            Some(Ok(m)) => json!({ "status": "installed", "message": m }),
+                            Some(Err(e)) => json!({ "status": "failed", "message": e }),
+                        }
+                    })).unwrap_or_else(|e| format!("Error: {}", e)),
+                }],
+                is_error: agent_failed,
+            }
+        }
         Err(e) => ToolCallResult {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
@@ -801,6 +986,246 @@ fn handle_install_bridge_companion_mod(args: Value) -> ToolCallResult {
             }],
             is_error: true,
         },
+    }
+}
+
+fn text_result(value: &Value, is_error: bool) -> ToolCallResult {
+    ToolCallResult {
+        content: vec![ToolContent {
+            content_type: "text".to_string(),
+            text: serde_json::to_string_pretty(value).unwrap_or_else(|e| format!("Error: {}", e)),
+        }],
+        is_error,
+    }
+}
+
+fn error_result(message: String) -> ToolCallResult {
+    ToolCallResult {
+        content: vec![ToolContent {
+            content_type: "text".to_string(),
+            text: message,
+        }],
+        is_error: true,
+    }
+}
+
+fn handle_install_claude_agent_mod(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    match claude_agent::install_claude_agent_mod(&paths.user_zomboid_dir) {
+        Ok(msg) => text_result(&json!({ "status": "installed", "mod_id": claude_agent::MOD_ID, "message": msg }), false),
+        Err(e) => error_result(format!("Failed to install Claude Agent mod: {}", e)),
+    }
+}
+
+/// Sends Lua to the Z_ClaudeAgent mod and formats the answer. `status` err/timeout => is_error.
+fn run_agent_lua(args: &Value, code: &str) -> ToolCallResult {
+    let paths = resolve_paths(args);
+    let timeout_ms = args.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(15000);
+
+    match claude_agent::eval_lua(&paths.user_zomboid_dir, code, timeout_ms) {
+        Ok(outcome) => {
+            let parsed: Option<Value> = serde_json::from_str(outcome.raw.trim()).ok();
+            let mut body = json!({
+                "id": outcome.id,
+                "status": outcome.status,
+                "elapsed_ms": outcome.elapsed_ms,
+                "result_is_json": parsed.is_some(),
+                "result": parsed.unwrap_or_else(|| Value::String(outcome.raw.clone())),
+            });
+            if outcome.status == "timeout" {
+                body["game_running"] = json!(find_running_pz_pid().is_some());
+            }
+            text_result(&body, outcome.status != "ok")
+        }
+        Err(e) => error_result(format!("Failed to send command to Z_ClaudeAgent: {}", e)),
+    }
+}
+
+fn handle_agent_eval_lua(args: Value) -> ToolCallResult {
+    let code = match args.get("code").and_then(|v| v.as_str()) {
+        Some(c) if !c.trim().is_empty() => c.to_string(),
+        _ => return error_result("Missing or empty required argument 'code'.".to_string()),
+    };
+    let wait_idle_ms = args.get("wait_idle_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+    if wait_idle_ms == 0 {
+        return run_agent_lua(&args, &code);
+    }
+
+    // Poll CA.busy().actions until the timed-action queue is empty or wait_idle_ms passes.
+    let paths = resolve_paths(&args);
+    let start = std::time::Instant::now();
+    let deadline = start + std::time::Duration::from_millis(wait_idle_ms);
+    let mut idle = json!({ "waited_ms": 0, "idle": false });
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now()).as_millis() as u64;
+        let poll = claude_agent::eval_lua(&paths.user_zomboid_dir, "return CA.busy().actions", remaining.clamp(500, 5000));
+        match poll {
+            Ok(o) if o.status == "ok" => {
+                if o.raw.trim().parse::<f64>().map(|n| n <= 0.0).unwrap_or(false) {
+                    idle["idle"] = json!(true);
+                    break;
+                }
+            }
+            Ok(o) => {
+                idle["poll_error"] = json!(format!("{}: {}", o.status, o.raw));
+                break;
+            }
+            Err(e) => {
+                idle["poll_error"] = json!(e);
+                break;
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    idle["waited_ms"] = json!(start.elapsed().as_millis() as u64);
+
+    let mut result = run_agent_lua(&args, &code);
+    if let Some(first) = result.content.first_mut() {
+        if let Ok(mut body) = serde_json::from_str::<Value>(&first.text) {
+            body["idle_wait"] = idle;
+            first.text = serde_json::to_string_pretty(&body).unwrap_or_else(|e| format!("Error: {}", e));
+        }
+    }
+    result
+}
+
+fn handle_game_send_key(args: Value) -> ToolCallResult {
+    let key = match args.get("key").and_then(|v| v.as_str()) {
+        Some(k) if !k.trim().is_empty() => k.to_string(),
+        _ => return error_result("Missing or empty required argument 'key'.".to_string()),
+    };
+    let hold_ms = args.get("hold_ms").and_then(|v| v.as_u64()).unwrap_or(80).min(10000);
+    match claude_agent::send_game_key(&key, hold_ms) {
+        Ok(msg) => text_result(&json!({ "status": "posted", "key": key, "hold_ms": hold_ms, "message": msg }), false),
+        Err(e) => error_result(format!("game_send_key '{}' failed: {}", key, e)),
+    }
+}
+
+fn handle_agent_ui_list(args: Value) -> ToolCallResult {
+    let filter = args.get("filter").and_then(|v| v.as_str());
+    let code = format!("return CA.ui({})", claude_agent::lua_opt(filter));
+    run_agent_lua(&args, &code)
+}
+
+fn handle_agent_ui_click(args: Value) -> ToolCallResult {
+    let text = match args.get("text").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t,
+        _ => return error_result("Missing or empty required argument 'text'.".to_string()),
+    };
+    let type_name = args.get("type_name").and_then(|v| v.as_str());
+    let code = format!(
+        "return CA.click({}, {})",
+        claude_agent::lua_quote(text),
+        claude_agent::lua_opt(type_name)
+    );
+    // Screens build over several frames: retry while CA.click answers "not found".
+    let retry_ms = args.get("retry_ms").and_then(|v| v.as_u64()).unwrap_or(20000);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(retry_ms);
+    let mut attempts = 0u32;
+    loop {
+        attempts += 1;
+        let mut result = run_agent_lua(&args, &code);
+        let mut body: Option<Value> = result.content.first().and_then(|c| serde_json::from_str(&c.text).ok());
+        let not_found = body
+            .as_ref()
+            .and_then(|b| b.get("result"))
+            .and_then(|r| r.as_str())
+            .map(|s| s.contains("not found"))
+            .unwrap_or(false);
+        if !not_found || std::time::Instant::now() >= deadline {
+            if let (Some(b), Some(first)) = (body.as_mut(), result.content.first_mut()) {
+                b["attempts"] = json!(attempts);
+                if not_found {
+                    b["found"] = json!(false);
+                }
+                first.text = serde_json::to_string_pretty(b).unwrap_or_else(|e| format!("Error: {}", e));
+            }
+            if not_found {
+                result.is_error = true;
+            }
+            return result;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
+}
+
+fn handle_game_click_window(args: Value) -> ToolCallResult {
+    let fx = args.get("x_frac").and_then(|v| v.as_f64()).unwrap_or(0.5);
+    let fy = args.get("y_frac").and_then(|v| v.as_f64()).unwrap_or(0.5);
+    match claude_agent::click_game_window(fx, fy) {
+        Ok((x, y)) => text_result(&json!({ "status": "clicked", "x": x, "y": y, "x_frac": fx, "y_frac": fy }), false),
+        Err(e) => error_result(format!("game_click_window failed: {}", e)),
+    }
+}
+
+fn handle_agent_enter_game(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let timeout_ms = args.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(300000);
+    let outcome = claude_agent::enter_game(&paths.user_zomboid_dir, timeout_ms);
+    let state = outcome.last_state.as_deref().map(|s| {
+        serde_json::from_str::<Value>(s.trim()).unwrap_or_else(|_| Value::String(s.to_string()))
+    });
+    text_result(&json!({
+        "status": if outcome.in_game { "in_game" } else { "not_in_game" },
+        "in_game": outcome.in_game,
+        "clicks": outcome.clicks,
+        "elapsed_ms": outcome.elapsed_ms,
+        "state": state,
+        "game_running": find_running_pz_pid().is_some()
+    }), !outcome.in_game)
+}
+
+fn handle_agent_dialog_answer(args: Value) -> ToolCallResult {
+    let answer = args.get("answer").and_then(|v| v.as_str()).unwrap_or("YES").to_uppercase();
+    if !matches!(answer.as_str(), "YES" | "NO" | "OK") {
+        return error_result(format!("Invalid 'answer' value '{}'. Use YES, NO or OK.", answer));
+    }
+    let code = format!("return CA.answer({})", claude_agent::lua_quote(&answer));
+    run_agent_lua(&args, &code)
+}
+
+fn handle_agent_game_state(args: Value) -> ToolCallResult {
+    run_agent_lua(&args, "return CA.state()")
+}
+
+fn handle_capture_game_screenshot(args: Value) -> ToolCallResult {
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(claude_agent::default_screenshot_path);
+    let max_width = args.get("max_width").and_then(|v| v.as_u64()).unwrap_or(1280) as u32;
+
+    match claude_agent::capture_game_screenshot(&path, max_width) {
+        Ok(info) => text_result(&json!({
+            "status": "saved",
+            "path": info.path,
+            "width": info.width,
+            "height": info.height,
+            "source_width": info.source_width,
+            "source_height": info.source_height,
+            "print_window_ok": info.print_window_ok,
+            "looks_blank": info.looks_blank
+        }), false),
+        Err(e) => error_result(format!("Failed to capture game screenshot: {}", e)),
+    }
+}
+
+fn handle_game_window(args: Value) -> ToolCallResult {
+    let mode = match args.get("mode").and_then(|v| v.as_str()) {
+        Some(m) => m.to_lowercase(),
+        None => return error_result("Missing required argument 'mode' (park, minimize, show, info).".to_string()),
+    };
+    let width = args.get("width").and_then(|v| v.as_i64()).unwrap_or(1280) as i32;
+    let height = args.get("height").and_then(|v| v.as_i64()).unwrap_or(720) as i32;
+
+    match claude_agent::game_window_action(&mode, width, height) {
+        Ok((msg, info)) => text_result(&json!({ "status": "ok", "mode": mode, "message": msg, "window": info }), false),
+        Err(e) => error_result(format!("game_window '{}' failed: {}", mode, e)),
     }
 }
 

@@ -1,7 +1,56 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use crate::load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini};
+
+pub const PACKAGE_PREFIX: &str = "Z_PZModStudio_";
+pub const BRIDGE_FOLDER: &str = "Z_PZModStudio_Bridge";
+
+/// Maps a package name ("My Patch", "PZ Mod Studio Patch: My Patch" or "Z_PZModStudio_My_Patch")
+/// to its folder name, and refuses anything that is not one plain folder name inside the
+/// Z_PZModStudio_ namespace. Every function that creates, writes or deletes a package folder
+/// goes through this, so an empty name, ".." or a path can never reach fs::remove_dir_all.
+pub fn to_package_folder(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    let folder = if trimmed.starts_with(PACKAGE_PREFIX) {
+        trimmed.to_string()
+    } else {
+        let sub = trimmed.replace("PZ Mod Studio Patch: ", "");
+        format!("{}{}", PACKAGE_PREFIX, sub.trim().replace(' ', "_"))
+    };
+    let suffix = &folder[PACKAGE_PREFIX.len()..];
+    let invalid = suffix.is_empty()
+        || suffix.chars().all(|c| c == '.' || c == '_')
+        || folder.ends_with('.')
+        || folder.chars().any(|c| c.is_control() || "<>:\"/\\|?*".contains(c));
+    if invalid {
+        return Err(format!("Invalid package name: '{}'", raw));
+    }
+    Ok(folder)
+}
+
+/// Joins a relative path taken from a request or an imported file onto `base`, refusing
+/// absolute paths, drive prefixes and `..` so the result always stays inside `base`.
+pub fn safe_join(base: &Path, relative: &str) -> Result<PathBuf, String> {
+    let rel = Path::new(relative.trim());
+    let mut has_normal = false;
+    for comp in rel.components() {
+        match comp {
+            Component::Normal(part) => {
+                if part.to_string_lossy().contains(':') {
+                    return Err(format!("Unsafe file path: '{}'", relative));
+                }
+                has_normal = true;
+            }
+            Component::CurDir => {}
+            _ => return Err(format!("Unsafe file path: '{}'", relative)),
+        }
+    }
+    if !has_normal {
+        return Err(format!("Empty file path: '{}'", relative));
+    }
+    Ok(base.join(rel))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergedFilePayload {
@@ -567,32 +616,29 @@ local function initB42Polyfills()
     end
 
     -- ----------------------------------------------------------------------------
-    -- ISHandcraftAction MP Null-Safety & Stuck-State Protection Guard
+    -- ISHandcraftAction MP Null-Safety & Containers Guard
     -- ----------------------------------------------------------------------------
     if ISHandcraftAction and not ISHandcraftAction._pzms_wrapped then
         ISHandcraftAction._pzms_wrapped = true
-        
-        local orig_handcraft_new = ISHandcraftAction.new
-        if orig_handcraft_new then
-            ISHandcraftAction.new = function(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                local safeContainers = containers
-                if not safeContainers then
-                    safeContainers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
-                local o = orig_handcraft_new(self, character, craftRecipe, safeContainers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                if o and not o.containers then
-                    o.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
-                return o
+
+        local function ensureJavaArrayList(contList, character)
+            if contList and type(contList) == "userdata" and contList.size and contList.addAll then
+                return contList
             end
+            local list = ArrayList and ArrayList.new and ArrayList.new() or nil
+            if list then
+                if character and character.getInventory then
+                    list:add(character:getInventory())
+                end
+                return list
+            end
+            return contList
         end
 
         local orig_handcraft_start = ISHandcraftAction.start
         if orig_handcraft_start then
             ISHandcraftAction.start = function(self)
-                if not self.containers then
-                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
+                self.containers = ensureJavaArrayList(self.containers, self.character)
                 return orig_handcraft_start(self)
             end
         end
@@ -600,9 +646,7 @@ local function initB42Polyfills()
         local orig_handcraft_serverStart = ISHandcraftAction.serverStart
         if orig_handcraft_serverStart then
             ISHandcraftAction.serverStart = function(self)
-                if not self.containers then
-                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
+                self.containers = ensureJavaArrayList(self.containers, self.character)
                 return orig_handcraft_serverStart(self)
             end
         end
@@ -611,20 +655,8 @@ local function initB42Polyfills()
         if orig_handcraft_update then
             ISHandcraftAction.update = function(self)
                 local ok, err = pcall(orig_handcraft_update, self)
-                if not ok then
+                if not ok and err then
                     print("[PZModStudio_Polyfills] Handcraft update error caught: " .. tostring(err))
-                end
-                -- Stuck prevention: if action reached 100% completion but network did not release
-                if self.action and self.getJobDelta then
-                    local delta = self:getJobDelta()
-                    if delta and delta >= 0.999 then
-                        self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 25 then
-                            pcall(function()
-                                self:forceComplete()
-                            end)
-                        end
-                    end
                 end
             end
         end
@@ -633,10 +665,287 @@ local function initB42Polyfills()
     if BaseCraftingLogic and BaseCraftingLogic.setContainers then
         local orig_bcl_setContainers = BaseCraftingLogic.setContainers
         BaseCraftingLogic.setContainers = function(self, list)
-            if not list then
-                list = ArrayList and ArrayList.new and ArrayList.new() or {}
+            local safeList = list
+            if not safeList or type(safeList) ~= "userdata" or not safeList.size then
+                local al = ArrayList and ArrayList.new and ArrayList.new() or nil
+                if al then
+                    if self.player and self.player.getInventory then
+                        al:add(self.player:getInventory())
+                    elseif self.character and self.character.getInventory then
+                        al:add(self.character:getInventory())
+                    end
+                    safeList = al
+                end
             end
-            return orig_bcl_setContainers(self, list)
+            local ok, res = pcall(orig_bcl_setContainers, self, safeList)
+            if ok then return res end
+            return false
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- ISBaseTimedAction Universal MP Network Shield
+    -- Intercepts all timed actions right before serialization in LuaTimedActionNew
+    -- Prevents ContainerID.findObject crashes caused by bags, floor containers, or onCompleteArgs
+    -- ----------------------------------------------------------------------------
+    if ISBaseTimedAction and not ISBaseTimedAction._pzms_shielded then
+        ISBaseTimedAction._pzms_shielded = true
+
+        local orig_bta_setOnComplete = ISBaseTimedAction.setOnComplete
+        if orig_bta_setOnComplete then
+            ISBaseTimedAction.setOnComplete = function(self, func, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+                self.onCompleteFunc = func
+                local function sanitizeArg(v)
+                    if v == self then return true end
+                    if v and type(v) == "userdata" then
+                        if v.size and v.addAll then return nil end
+                        if v.getType and v.AddItem then return nil end
+                    end
+                    return v
+                end
+                self.onCompleteArgs = {
+                    sanitizeArg(arg1),
+                    sanitizeArg(arg2),
+                    sanitizeArg(arg3),
+                    sanitizeArg(arg4),
+                    sanitizeArg(arg5),
+                    sanitizeArg(arg6),
+                    sanitizeArg(arg7),
+                    sanitizeArg(arg8)
+                }
+            end
+        end
+
+        local orig_bta_begin = ISBaseTimedAction.begin
+        if orig_bta_begin then
+            ISBaseTimedAction.begin = function(self)
+                if self.containersIn and type(self.containersIn) == "userdata" and self.containersIn.size then
+                    self.containersIn = nil
+                end
+                if self.containers and type(self.containers) == "userdata" and self.containers.size then
+                    if self.recipe then
+                        self.containers = nil
+                    end
+                end
+                if self.container and type(self.container) == "userdata" and self.container.getContainingItem and self.container:getContainingItem() ~= nil then
+                    if self.character and self.character.getInventory then
+                        self.container = self.character:getInventory()
+                    else
+                        self.container = nil
+                    end
+                end
+                if self.onCompleteArgs and type(self.onCompleteArgs) == "table" then
+                    for k, v in pairs(self.onCompleteArgs) do
+                        if v == self then
+                            self.onCompleteArgs[k] = true
+                        elseif v and type(v) == "userdata" then
+                            if v.size and v.addAll then
+                                self.onCompleteArgs[k] = nil
+                            elseif v.getType and v.AddItem then
+                                self.onCompleteArgs[k] = nil
+                            end
+                        end
+                    end
+                end
+                return orig_bta_begin(self)
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- ISCraftAction MP Network Crash Prevention & Execution Guard
+    -- Fixes: "Make sheet", "Rip clothing", "Open can/box/packet", etc. in Multiplayer
+    -- Prevents: NullPointerException at ContainerID.findObject when serializing floor containers
+    -- ----------------------------------------------------------------------------
+    if ISCraftAction then
+        ISCraftAction._pzms_wrapped = true
+
+        function ISCraftAction:new(character, item, recipe, container, containersIn)
+            local o = ISBaseTimedAction.new(self, character)
+            o.character = character
+            o.item = item
+            o.recipe = recipe
+            -- CRITICAL: Always use character's main inventory to prevent ContainerID.java:435 crash on server
+            o.container = character and character.getInventory and character:getInventory() or nil
+            o.containersIn = nil
+            o.containers = nil
+
+            o.stopOnWalk = recipe and recipe.isStopOnWalk and recipe:isStopOnWalk() or false
+            o.stopOnRun = recipe and recipe.isStopOnRun and recipe:isStopOnRun() or false
+            o.stopOnAim = true
+            o.maxTime = o:getDuration()
+            o.jobType = recipe and recipe.getName and recipe:getName() or "Craft"
+            o.forceProgressBar = true
+            return o
+        end
+
+        function ISCraftAction:setOnComplete(func, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+            self.onCompleteFunc = func
+            -- Avoid storing action self-references or container ArrayLists in onCompleteArgs
+            self.onCompleteArgs = { true, arg2, arg3, nil, nil, arg6, nil }
+        end
+
+        function ISCraftAction:isValid()
+            if self.character and self.character.getInventory and self.item and self.item.getID then
+                local inv = self.character:getInventory()
+                if inv then
+                    local fresh = inv:getItemById(self.item:getID())
+                    if fresh then
+                        self.item = fresh
+                    end
+                end
+            end
+            if self.item and self.item.getContainer and self.item:getContainer() == nil then
+                self.item = nil
+            end
+            if not self.recipe or not self.character then
+                return false
+            end
+            local ok, res = pcall(function()
+                return RecipeManager.IsRecipeValid(self.recipe, self.character, self.item, self.containers) and not (self.character.isDriving and self.character:isDriving())
+            end)
+            if ok then return res end
+            return not (self.character.isDriving and self.character:isDriving())
+        end
+
+        function ISCraftAction:start()
+            if self.character and self.character.getInventory and self.item and self.item.getID then
+                local inv = self.character:getInventory()
+                if inv then
+                    local fresh = inv:getItemById(self.item:getID())
+                    if fresh then
+                        self.item = fresh
+                    end
+                end
+            end
+            if showDebugInfoInChat and self.recipe and self.recipe.getOriginalname then
+                showDebugInfoInChat("CRAFT \'" .. tostring(self.recipe:getOriginalname()) .. "\'")
+            end
+            if self.recipe and self.recipe.getSound and self.recipe:getSound() and self.character and self.character.playSound then
+                self.craftSound = self.character:playSound(self.recipe:getSound())
+            end
+            if self.item then
+                if self.recipe and self.recipe.getName then
+                    self.item:setJobType(self.recipe:getName())
+                end
+                self.item:setJobDelta(0.0)
+            end
+            if self.recipe and (self.recipe.getProp1 or self.recipe.getProp2) then
+                local prop1 = self.recipe.getProp1 and self.recipe:getProp1()
+                local prop2 = self.recipe.getProp2 and self.recipe:getProp2()
+                if prop1 or prop2 then
+                    self:setOverrideHandModels(self:getPropItemOrModel(prop1), self:getPropItemOrModel(prop2))
+                end
+            end
+            if self.recipe and self.recipe.getAnimNode and self.recipe:getAnimNode() then
+                self:setActionAnim(self.recipe:getAnimNode())
+            else
+                self:setActionAnim(CharacterActionAnims.Craft)
+            end
+            if self.item and self.item.getContainer and self.item:getContainer() == nil then
+                self.item = nil
+            end
+        end
+
+        function ISCraftAction:stop()
+            if self.craftSound and self.character and self.character.getEmitter and self.character:getEmitter():isPlaying(self.craftSound) then
+                self.character:stopOrTriggerSound(self.craftSound)
+            end
+            if self.item ~= nil then
+                self.item:setJobDelta(0.0)
+            end
+            ISBaseTimedAction.stop(self)
+        end
+
+        function ISCraftAction:perform()
+            if self.craftSound and self.character and self.character.getEmitter and self.character:getEmitter():isPlaying(self.craftSound) then
+                self.character:stopOrTriggerSound(self.craftSound)
+            end
+            if self.item then
+                self.item:setJobDelta(0.0)
+            end
+
+            if ISInventoryPage and ISInventoryPage.dirtyUI then
+                ISInventoryPage.dirtyUI()
+            end
+
+            if self.onCompleteFunc then
+                local playerObj = self.character
+                local recipe = self.recipe
+                local selectedItemType = self.item and self.item.getFullType and self.item:getFullType() or nil
+                pcall(function()
+                    self.onCompleteFunc(self, recipe, playerObj, playerObj and playerObj:getInventory(), nil, selectedItemType, nil)
+                end)
+            end
+
+            ISBaseTimedAction.perform(self)
+        end
+
+        function ISCraftAction:complete()
+            if not self.character or not self.recipe then
+                return false
+            end
+
+            -- Re-resolve character inventory & item
+            local inv = self.character.getInventory and self.character:getInventory()
+            if inv and self.item and self.item.getID then
+                local fresh = inv:getItemById(self.item:getID())
+                if fresh then
+                    self.item = fresh
+                end
+            end
+
+            self.container = inv
+
+            -- Execute PerformMakeItem directly on character inventory
+            local ok, list = pcall(function()
+                return RecipeManager.PerformMakeItem(self.recipe, self.item, self.character, nil)
+            end)
+
+            if not ok or not list then
+                print("[PZModStudio_Polyfills] RecipeManager.PerformMakeItem error: " .. tostring(list))
+                return false
+            end
+
+            if list and list.size then
+                local sz = list:size()
+                for i = 0, sz - 1 do
+                    local outItem = list:get(i)
+                    if outItem then
+                        if Actions and Actions.addOrDropItem then
+                            Actions.addOrDropItem(self.character, outItem)
+                        elseif inv then
+                            inv:AddItem(outItem)
+                            if sendAddItemToContainer then
+                                sendAddItemToContainer(inv, outItem)
+                            end
+                        end
+                    end
+                end
+            end
+
+            return true
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- ISInventoryPaneContextMenu.OnCraft Safe Item Transfer Pre-check
+    -- ----------------------------------------------------------------------------
+    if ISInventoryPaneContextMenu and not ISInventoryPaneContextMenu._pzms_craft_wrapped then
+        ISInventoryPaneContextMenu._pzms_craft_wrapped = true
+        local orig_ipc_onCraft = ISInventoryPaneContextMenu.OnCraft
+        if orig_ipc_onCraft then
+            ISInventoryPaneContextMenu.OnCraft = function(selectedItem, recipe, player, all)
+                if selectedItem and recipe and recipe.isCanBeDoneFromFloor and not recipe:isCanBeDoneFromFloor() then
+                    local playerObj = type(player) == "number" and getSpecificPlayer(player) or player
+                    if playerObj and selectedItem.getContainer and selectedItem:getContainer() ~= playerObj:getInventory() then
+                        if ISInventoryPaneContextMenu.transferIfNeeded then
+                            ISInventoryPaneContextMenu.transferIfNeeded(playerObj, selectedItem)
+                        end
+                    end
+                end
+                return orig_ipc_onCraft(selectedItem, recipe, player, all)
+            end
         end
     end
 
@@ -1803,6 +2112,111 @@ local function initB42Polyfills()
             end
         end
     end
+
+    -- ----------------------------------------------------------------------------
+    -- Rest Action & Bed / Cot / Seating Protection (B42.20 ISRestAction Fix)
+    -- Fixes: B42.20 resting self-completing on frame 1, and missing SeatingManager on cots/beds
+    -- ----------------------------------------------------------------------------
+    if ISRestAction then
+        ISRestAction.update = function(self)
+            if not self.character then return end
+            local endurance = 1.0
+            if self.character.getStats and self.character:getStats() then
+                local stats = self.character:getStats()
+                if stats.get then
+                    endurance = stats:get(CharacterStat.ENDURANCE) or 1.0
+                end
+            end
+            if not isServer() then
+                if self.action then
+                    self.action:setTime(100)
+                end
+                self:setCurrentTime(endurance * 100)
+                if endurance >= 1.0 then
+                    self:forceComplete()
+                end
+            else
+                if endurance >= 1.0 then
+                    if self.netAction then
+                        self.netAction:forceComplete()
+                    else
+                        self:forceComplete()
+                    end
+                end
+            end
+        end
+
+        local orig_rest_start = ISRestAction.start
+        ISRestAction.start = function(self)
+            if self.bed and self.bed.isFurnitureOccupied and self.bed:isFurnitureOccupied(self.character) then
+                self:forceStop()
+                return
+            end
+            if self.bed and self.furnitureHasSittingData and self:furnitureHasSittingData(self.bed) and self.useAnimations then
+                self.character:reportEvent("EventSitOnFurniture")
+                if self.setWhileSittingDirection then
+                    self:setWhileSittingDirection()
+                end
+            end
+            self.character:setVariable("ExerciseStarted", false)
+            self.character:setVariable("ExerciseEnded", true)
+            self.character:setIsResting(true)
+            self.character:setBed(self.bed)
+        end
+    end
+
+    if ISWorldObjectContextMenu then
+        ISWorldObjectContextMenu.onRestPathFound = function(playerObj, action)
+            if not playerObj then return end
+            local goalObj = action and action.goalFurnitureObject or nil
+            local stats = playerObj:getStats()
+            local endurance = 1.0
+            if stats and stats.get then
+                endurance = stats:get(CharacterStat.ENDURANCE) or 1.0
+            end
+            if endurance >= 0.999 then
+                if HaloTextHelper and HaloTextHelper.addBadText then
+                    HaloTextHelper.addBadText(playerObj, getText("IGUI_NotTired") or "Fully Rested")
+                elseif playerObj.setHaloNote then
+                    playerObj:setHaloNote("Fully Rested", 200, 200, 200, 200)
+                end
+                return
+            end
+            local after = ISRestAction:new(playerObj, goalObj, false)
+            ISTimedActionQueue.add(after)
+        end
+
+        ISWorldObjectContextMenu.onRestPathFailed = function(playerObj, bed, action)
+            if not playerObj or not bed then return end
+            local stats = playerObj:getStats()
+            local endurance = 1.0
+            if stats and stats.get then
+                endurance = stats:get(CharacterStat.ENDURANCE) or 1.0
+            end
+            if endurance >= 0.999 then
+                if HaloTextHelper and HaloTextHelper.addBadText then
+                    HaloTextHelper.addBadText(playerObj, getText("IGUI_NotTired") or "Fully Rested")
+                elseif playerObj.setHaloNote then
+                    playerObj:setHaloNote("Fully Rested", 200, 200, 200, 200)
+                end
+                return
+            end
+            local adjacent = AdjacentFreeTileFinder.Find(bed:getSquare(), playerObj, nil)
+            if adjacent ~= nil then
+                if adjacent ~= playerObj:getCurrentSquare() then
+                    ISTimedActionQueue.add(ISWalkToTimedAction:new(playerObj, adjacent))
+                end
+                local restAction = ISRestAction:new(playerObj, bed, false)
+                ISTimedActionQueue.add(restAction)
+            end
+        end
+    end
+
+    if ISPathFindAction and ISBaseTimedAction then
+        if not ISPathFindAction.addAfter then
+            ISPathFindAction.addAfter = ISBaseTimedAction.addAfter
+        end
+    end
 end
 
 -- ----------------------------------------------------------------------------
@@ -1965,11 +2379,7 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
         .clone()
         .unwrap_or_else(|| "Z_PZModStudio_MergedPatch".to_string());
 
-    let clean_pkg_name = if pkg_name.starts_with("Z_PZModStudio_") {
-        pkg_name.clone()
-    } else {
-        format!("Z_PZModStudio_{}", pkg_name.replace(' ', "_"))
-    };
+    let clean_pkg_name = to_package_folder(&pkg_name)?;
 
     let display_name = if clean_pkg_name.starts_with("Z_PZModStudio_") {
         clean_pkg_name["Z_PZModStudio_".len()..].to_string().replace('_', " ")
@@ -1984,6 +2394,11 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
 
     let primary_dir = user_dirs[0].join("mods").join(&clean_pkg_name);
     let target_dirs = vec![primary_dir.clone()];
+
+    // Refuse the whole request up front if any path would escape the package folder.
+    for file in &req.merged_files {
+        safe_join(&primary_dir, &file.relative_path)?;
+    }
 
     let mut mod_info_content = String::new();
     mod_info_content.push_str(&format!("name=PZ Mod Studio Patch: {}\r\n", display_name));
@@ -2052,13 +2467,13 @@ end)
             if file.relative_path.contains("sandbox-options.txt") || file.content.starts_with("-- vanilla file not present") {
                 continue;
             }
-            let dest_path = patch_mod_dir.join(&file.relative_path);
+            let dest_path = safe_join(&patch_mod_dir, &file.relative_path)?;
             if let Some(parent) = dest_path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
             let _ = fs::write(&dest_path, &file.content);
 
-            let dest_42_path = dir_42.join(&file.relative_path);
+            let dest_42_path = safe_join(&dir_42, &file.relative_path)?;
             if let Some(parent) = dest_42_path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
@@ -2172,10 +2587,15 @@ end)
 
 /// Safely removes synthetic patch files for a specific package from disk and removes it from active load order.
 pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
-    let target_folder_name = req.package_folder_name
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "Z_PZModStudio_MergedPatch".to_string());
+    let target_folder_name = to_package_folder(
+        req.package_folder_name
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or("Z_PZModStudio_MergedPatch"),
+    )?;
+    if target_folder_name == BRIDGE_FOLDER {
+        return Err(format!("The companion mod '{}' cannot be cleaned.", BRIDGE_FOLDER));
+    }
 
     let mut target_dirs = Vec::new();
 
@@ -2540,11 +2960,14 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
 }
 
 pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, name: &str, description: Option<&str>) -> Result<MergedPackageInfo, String> {
-    let clean_sub = name.trim().replace("PZ Mod Studio Patch: ", "").replace(' ', "_");
-    if clean_sub.is_empty() {
+    if name.trim().is_empty() {
         return Err("Package name cannot be empty.".to_string());
     }
-    let folder_name = format!("Z_PZModStudio_{}", clean_sub);
+    let folder_name = to_package_folder(name)?;
+    if folder_name == BRIDGE_FOLDER {
+        return Err(format!("'{}' is reserved for the companion mod.", BRIDGE_FOLDER));
+    }
+    let clean_sub = folder_name[PACKAGE_PREFIX.len()..].to_string();
     let display_name = clean_sub.replace('_', " ");
     let in_game_title = format!("PZ Mod Studio Patch: {}", display_name);
     let final_desc = description.unwrap_or("Compatibility merge package synthesized by PZ Mod Studio.").trim();
@@ -2605,28 +3028,16 @@ pub fn rename_merged_package(
     new_name: &str,
     new_description: Option<&str>,
 ) -> Result<MergedPackageInfo, String> {
-    if old_folder == "Z_PZModStudio_Bridge" {
-        return Err("The companion mod 'Z_PZModStudio_Bridge' is an internal system component and cannot be renamed.".to_string());
-    }
+    let old_candidates = package_folder_candidates(old_folder)?;
 
-    let clean_old_sub = old_folder
-        .replace("PZ Mod Studio Patch: ", "")
-        .replace("Z_PZModStudio_", "");
-    let clean_old_sub = clean_old_sub.trim();
-    let old_candidates = vec![
-        old_folder.to_string(),
-        format!("Z_PZModStudio_{}", clean_old_sub),
-        format!("Z_PZModStudio_{}", clean_old_sub.replace(' ', "_")),
-    ];
-
-    let clean_new_sub = new_name
-        .replace("PZ Mod Studio Patch: ", "")
-        .trim()
-        .replace(' ', "_");
-    if clean_new_sub.is_empty() {
+    if new_name.trim().is_empty() {
         return Err("The new name cannot be empty.".to_string());
     }
-    let new_folder = format!("Z_PZModStudio_{}", clean_new_sub);
+    let new_folder = to_package_folder(new_name)?;
+    if new_folder == BRIDGE_FOLDER {
+        return Err(format!("'{}' is reserved for the companion mod.", BRIDGE_FOLDER));
+    }
+    let clean_new_sub = new_folder[PACKAGE_PREFIX.len()..].to_string();
     let display_name = clean_new_sub.replace('_', " ");
     let in_game_title = format!("PZ Mod Studio Patch: {}", display_name);
     let final_desc = new_description.unwrap_or("Compatibility merge package synthesized by PZ Mod Studio.").trim();
@@ -2759,57 +3170,66 @@ pub fn toggle_package_in_modlist(
     Ok(true)
 }
 
+/// Deletes a folder tree, clearing read-only flags on the way. Symlinks and junctions are
+/// removed as links: their targets (which may be a real mod or a whole drive) are never walked.
 fn force_remove_dir_all(path: &Path) -> std::io::Result<()> {
-    if !path.exists() {
+    let Ok(meta) = fs::symlink_metadata(path) else {
         return Ok(());
+    };
+    if meta.file_type().is_symlink() || is_reparse_point(&meta) {
+        // A directory link (junction or dir symlink) is removed with remove_dir on Windows.
+        return fs::remove_dir(path).or_else(|_| fs::remove_file(path));
     }
-    if path.is_dir() {
+    if meta.is_dir() {
         if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.filter_map(|e| e.ok()) {
-                let entry_path = entry.path();
-                if entry_path.is_dir() {
-                    let _ = force_remove_dir_all(&entry_path);
-                } else {
-                    if let Ok(metadata) = fs::metadata(&entry_path) {
-                        let mut permissions = metadata.permissions();
-                        if permissions.readonly() {
-                            permissions.set_readonly(false);
-                            let _ = fs::set_permissions(&entry_path, permissions);
-                        }
-                    }
-                    let _ = fs::remove_file(&entry_path);
-                }
+                let _ = force_remove_dir_all(&entry.path());
             }
         }
         let _ = fs::remove_dir(path);
     } else {
-        if let Ok(metadata) = fs::metadata(path) {
-            let mut permissions = metadata.permissions();
-            if permissions.readonly() {
-                permissions.set_readonly(false);
-                let _ = fs::set_permissions(path, permissions);
-            }
+        let mut permissions = meta.permissions();
+        if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            let _ = fs::set_permissions(path, permissions);
         }
         let _ = fs::remove_file(path);
     }
     Ok(())
 }
 
-pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, folder_name: &str) -> Result<bool, String> {
-    if folder_name == "Z_PZModStudio_Bridge" {
-        return Err("The companion mod 'Z_PZModStudio_Bridge' is an internal system component and cannot be deleted.".to_string());
+#[cfg(windows)]
+fn is_reparse_point(meta: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn is_reparse_point(_meta: &fs::Metadata) -> bool {
+    false
+}
+
+/// The folder names a package may be stored under (older versions kept spaces in the name).
+/// Only names that pass `to_package_folder` are returned, so callers can delete them safely.
+fn package_folder_candidates(folder_name: &str) -> Result<Vec<String>, String> {
+    let primary = to_package_folder(folder_name)?;
+    let mut candidates = vec![primary.clone()];
+    let sub = primary[PACKAGE_PREFIX.len()..].to_string();
+    for alt in [format!("{}{}", PACKAGE_PREFIX, sub.replace('_', " "))] {
+        if !candidates.contains(&alt) && to_package_folder(&alt).as_deref() == Ok(alt.as_str()) {
+            candidates.push(alt);
+        }
     }
+    if candidates.iter().any(|c| c == BRIDGE_FOLDER) {
+        return Err(format!("The companion mod '{}' is an internal system component.", BRIDGE_FOLDER));
+    }
+    Ok(candidates)
+}
 
-    let clean_sub = folder_name
-        .replace("PZ Mod Studio Patch: ", "")
-        .replace("Z_PZModStudio_", "");
-    let clean_sub = clean_sub.trim();
-
-    let candidates = vec![
-        folder_name.to_string(),
-        format!("Z_PZModStudio_{}", clean_sub),
-        format!("Z_PZModStudio_{}", clean_sub.replace(' ', "_")),
-    ];
+pub fn delete_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, folder_name: &str) -> Result<bool, String> {
+    let candidates = package_folder_candidates(folder_name)?;
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     for dir in &user_dirs {
@@ -2862,11 +3282,7 @@ pub fn save_draft_resolution(
     resolved_content: &str,
     status: &str,
 ) -> Result<bool, String> {
-    let clean_pkg_name = if package_folder_name.starts_with("Z_PZModStudio_") {
-        package_folder_name.to_string()
-    } else {
-        format!("Z_PZModStudio_{}", package_folder_name.replace(' ', "_"))
-    };
+    let clean_pkg_name = to_package_folder(package_folder_name)?;
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if user_dirs.is_empty() {
@@ -2904,10 +3320,8 @@ pub fn get_draft_resolutions(
     user_zomboid_dir: &str,
     package_folder_name: &str,
 ) -> std::collections::HashMap<String, DraftResolutionItem> {
-    let clean_pkg_name = if package_folder_name.starts_with("Z_PZModStudio_") {
-        package_folder_name.to_string()
-    } else {
-        format!("Z_PZModStudio_{}", package_folder_name.replace(' ', "_"))
+    let Ok(clean_pkg_name) = to_package_folder(package_folder_name) else {
+        return std::collections::HashMap::new();
     };
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
@@ -2930,11 +3344,7 @@ pub fn clear_draft_resolutions(
     user_zomboid_dir: &str,
     package_folder_name: &str,
 ) -> Result<bool, String> {
-    let clean_pkg_name = if package_folder_name.starts_with("Z_PZModStudio_") {
-        package_folder_name.to_string()
-    } else {
-        format!("Z_PZModStudio_{}", package_folder_name.replace(' ', "_"))
-    };
+    let clean_pkg_name = to_package_folder(package_folder_name)?;
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     for u_dir in user_dirs {
@@ -2963,11 +3373,7 @@ pub fn export_merged_package(
     package_folder_name: &str,
     target_file_path: &str,
 ) -> Result<bool, String> {
-    let clean_pkg_name = if package_folder_name.starts_with("Z_PZModStudio_") {
-        package_folder_name.to_string()
-    } else {
-        format!("Z_PZModStudio_{}", package_folder_name.replace(' ', "_"))
-    };
+    let clean_pkg_name = to_package_folder(package_folder_name)?;
 
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
     if user_dirs.is_empty() {
@@ -3056,16 +3462,25 @@ pub fn import_merged_package(
         return Err("No valid Zomboid user directories found.".to_string());
     }
 
-    let clean_folder = if imported.folder_name.starts_with("Z_PZModStudio_") {
-        imported.folder_name.clone()
-    } else {
-        format!("Z_PZModStudio_{}", imported.folder_name.replace(' ', "_"))
-    };
+    let clean_folder = to_package_folder(&imported.folder_name)?;
+    if clean_folder == BRIDGE_FOLDER {
+        return Err("A .pzmerge package cannot replace the companion mod 'Z_PZModStudio_Bridge'.".to_string());
+    }
 
     let pkg_dir = user_dirs[0].join("mods").join(&clean_folder);
+
+    // Check every path in the (untrusted) file before anything is written.
+    let mut file_targets = Vec::with_capacity(imported.merged_files.len());
+    for file in &imported.merged_files {
+        let dest = safe_join(&pkg_dir, &file.relative_path)?;
+        let dest_42 = safe_join(&pkg_dir.join("42"), &file.relative_path)?;
+        file_targets.push((dest, dest_42, &file.content));
+    }
+
     fs::create_dir_all(&pkg_dir).map_err(|e| e.to_string())?;
 
-    let display_name = imported.display_name.clone();
+    // The name ends up in mod.info, one key per line: keep it on one line.
+    let display_name: String = imported.display_name.chars().filter(|c| !c.is_control()).collect();
     let in_game_title = format!("PZ Mod Studio Patch: {}", display_name);
 
     let mod_info_content = format!(
@@ -3095,20 +3510,14 @@ pub fn import_merged_package(
         let _ = fs::write(pkg_dir.join("draft_resolutions.json"), &draft_json);
     }
 
-    // Write merged files to disk
-    for file in &imported.merged_files {
-        let dest = pkg_dir.join(&file.relative_path);
-        if let Some(parent) = dest.parent() {
-            let _ = fs::create_dir_all(parent);
+    // Write merged files to disk (top level and the 42/ subfolder for native B42 compatibility)
+    for (dest, dest_42, content) in file_targets {
+        for target in [dest, dest_42] {
+            if let Some(parent) = target.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(target, content);
         }
-        let _ = fs::write(dest, &file.content);
-
-        // Also duplicate to 42/ subfolder for native B42 compatibility
-        let dest_42 = pkg_dir.join("42").join(&file.relative_path);
-        if let Some(parent) = dest_42.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let _ = fs::write(dest_42, &file.content);
     }
 
     Ok(MergedPackageInfo {
@@ -3139,30 +3548,76 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_latest_master_polyfills() {
+    fn test_master_polyfill_contains_core_patches() {
+        // Tests must never write into a real Zomboid folder: only check the generated text.
         let poly_content = generate_master_polyfill_lua();
         assert!(poly_content.contains("IGUI_ItemCat_GunMag"));
         assert!(poly_content.contains("sanitizeAllScriptItems") || poly_content.contains("getAllItems"));
         assert!(poly_content.contains("BWORoomPrograms"));
         assert!(poly_content.contains("IsoDoor"));
+    }
 
-        let user_mods = Path::new("C:/Users/javie/Zomboid/mods");
-        if user_mods.exists() {
-            for entry in fs::read_dir(user_mods).unwrap().filter_map(|e| e.ok()) {
-                let p = entry.path();
-                if p.is_dir() {
-                    let name = p.file_name().unwrap().to_string_lossy();
-                    if name.starts_with("Z_PZModStudio_") {
-                        let poly1 = p.join("media").join("lua").join("shared").join("Z_PZModStudio_Polyfills.lua");
-                        let poly2 = p.join("42").join("media").join("lua").join("shared").join("Z_PZModStudio_Polyfills.lua");
-                        if let Some(parent) = poly1.parent() { let _ = fs::create_dir_all(parent); }
-                        if let Some(parent) = poly2.parent() { let _ = fs::create_dir_all(parent); }
-                        let _ = fs::write(poly1, &poly_content);
-                        let _ = fs::write(poly2, &poly_content);
-                    }
-                }
-            }
+    #[test]
+    fn package_folder_names_are_confined_to_the_namespace() {
+        assert_eq!(to_package_folder("My Patch").unwrap(), "Z_PZModStudio_My_Patch");
+        assert_eq!(to_package_folder("PZ Mod Studio Patch: My Patch").unwrap(), "Z_PZModStudio_My_Patch");
+        assert_eq!(to_package_folder("Z_PZModStudio_pack_1").unwrap(), "Z_PZModStudio_pack_1");
+        assert_eq!(to_package_folder("Parche Armas ñ").unwrap(), "Z_PZModStudio_Parche_Armas_ñ");
+        for bad in ["", "   ", "..", "Z_PZModStudio_", "Z_PZModStudio_..", "../Saves", "a/b", "a\\b", "C:", "x\0y", "name."] {
+            assert!(to_package_folder(bad).is_err(), "accepted {:?}", bad);
         }
     }
-}
 
+    #[test]
+    fn bridge_cannot_be_deleted_or_renamed() {
+        assert!(package_folder_candidates("Z_PZModStudio_Bridge").is_err());
+        assert!(package_folder_candidates("Bridge").is_err());
+        assert!(package_folder_candidates("").is_err());
+        assert!(package_folder_candidates("..").is_err());
+        let ok = package_folder_candidates("My Patch").unwrap();
+        assert_eq!(ok, vec!["Z_PZModStudio_My_Patch", "Z_PZModStudio_My Patch"]);
+    }
+
+    #[test]
+    fn safe_join_rejects_escaping_paths() {
+        let base = Path::new("base");
+        assert_eq!(safe_join(base, "media/lua/client/A.lua").unwrap(), base.join("media/lua/client/A.lua"));
+        assert_eq!(safe_join(base, "./media/x.txt").unwrap(), base.join("./media/x.txt"));
+        for bad in ["", ".", "../x.lua", "media/../../x.lua", "/etc/passwd", "C:/Windows/x", "C:x", "\\\\server\\share\\x", "media/a.lua:stream"] {
+            assert!(safe_join(base, bad).is_err(), "accepted {:?}", bad);
+        }
+        #[cfg(windows)]
+        assert!(safe_join(base, "..\\..\\Startup\\evil.bat").is_err());
+    }
+
+    #[test]
+    fn force_remove_does_not_follow_directory_links() {
+        let root = std::env::temp_dir().join(format!("pzms-rm-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let outside = root.join("outside");
+        let pkg = root.join("Z_PZModStudio_Test");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("keep.txt"), "keep").unwrap();
+        fs::create_dir_all(pkg.join("media")).unwrap();
+        fs::write(pkg.join("media").join("a.lua"), "x").unwrap();
+
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_dir(&outside, pkg.join("link")).is_ok()
+            || std::process::Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(pkg.join("link"))
+                .arg(&outside)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&outside, pkg.join("link")).is_ok();
+
+        force_remove_dir_all(&pkg).unwrap();
+        assert!(!pkg.exists());
+        if linked {
+            assert!(outside.join("keep.txt").exists(), "deleted through a link");
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+}

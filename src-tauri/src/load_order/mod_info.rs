@@ -395,6 +395,15 @@ pub fn get_all_user_zomboid_dirs(user_zomboid_dir: &str) -> Vec<std::path::PathB
     dirs
 }
 
+/// The candidate Zomboid folders that exist on disk. Use this, not
+/// `get_all_user_zomboid_dirs`, for anything that writes, so no phantom Zomboid folders appear.
+pub fn get_existing_user_zomboid_dirs(user_zomboid_dir: &str) -> Vec<std::path::PathBuf> {
+    get_all_user_zomboid_dirs(user_zomboid_dir)
+        .into_iter()
+        .filter(|d| d.is_dir())
+        .collect()
+}
+
 pub fn ensure_master_patch_exists_on_disk(paths: &StudioPaths) {
     let mut target_dirs = Vec::new();
     if let Some(ref carrier_id) = paths.carrier_workshop_id {
@@ -599,37 +608,8 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                     }
                 }
 
-                let is_already_version_dir = mod_file_path.iter().any(|comp| {
-                    let s = comp.to_string_lossy();
-                    s == "42" || s.starts_with("42.") || s == "common"
-                });
-
-                if !is_already_version_dir {
-                    if let Some(parent) = mod_file_path.parent() {
-                        let has_any_version_subdir = fs::read_dir(parent)
-                            .map(|entries| {
-                                entries.flatten().any(|e| {
-                                    let name = e.file_name().to_string_lossy().to_string();
-                                    name == "42" || name.starts_with("42.") || name == "common"
-                                })
-                            })
-                            .unwrap_or(false);
-
-                        if !has_any_version_subdir {
-                            let dir_42 = parent.join("42");
-                            let info_42 = dir_42.join("mod.info");
-                            if !info_42.exists() && &mod_file_path != &info_42 {
-                                let _ = fs::create_dir_all(&dir_42);
-                                let _ = fs::copy(&mod_file_path, &info_42);
-                                let top_media = parent.join("media");
-                                let dir_42_media = dir_42.join("media");
-                                if top_media.exists() && !dir_42_media.exists() {
-                                    let _ = copy_dir_all(&top_media, &dir_42_media);
-                                }
-                            }
-                        }
-                    }
-                }
+                // Steam owns everything under the Workshop folder: never create or copy files here.
+                // (B41-only mods without a 42/ or common/ folder are simply not loadable in B42.)
 
                 if let Some(mut manifest) = parse_mod_info(&mod_file_path) {
                     if manifest.id == "PZModStudioCarrier" {
@@ -651,9 +631,10 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         }
     }
 
-    // 2. Auto-install Live Bridge mod if missing in user's Zomboid/mods directory
+    // 2. Auto-install Live Bridge mod if missing, only in the Zomboid folder actually in use
+    //    (never create Zomboid trees in candidate locations that do not exist).
     let user_dirs = get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
-    for user_dir in &user_dirs {
+    if let Some(user_dir) = get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).first() {
         let bridge_dir = user_dir.join("mods").join("Z_PZModStudio_Bridge");
         if !bridge_dir.exists() {
             let _ = crate::sandbox::install_bridge_companion_mod(&user_dir.to_string_lossy());
@@ -918,24 +899,6 @@ pub fn extract_workshop_id_from_path(path: &Path) -> Option<String> {
     None
 }
 
-
-fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        if name.to_string_lossy().eq_ignore_ascii_case("AnimSets") {
-            continue;
-        }
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(&entry.path(), &dst.join(&name))?;
-        } else {
-            fs::copy(entry.path(), dst.join(&name))?;
-        }
-    }
-    Ok(())
-}
 
 /// Converts B41-format `recipe { }` blocks to B42 `craftRecipe { }` format.
 /// Scans all .txt files in src_scripts_dir, converts any recipe blocks found,

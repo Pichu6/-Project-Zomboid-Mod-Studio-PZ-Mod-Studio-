@@ -857,12 +857,19 @@ function Bridge.ExecuteCommand(jsonStr, player)
         local yMatch = tonumber(jsonStr:match('"y"%s*:%s*([%d%.]+)'))
         local zMatch = tonumber(jsonStr:match('"z"%s*:%s*([%d%.]+)')) or 0
         if xMatch and yMatch then
-            player:setX(xMatch)
-            player:setY(yMatch)
-            player:setZ(zMatch)
-            player:setLx(xMatch)
-            player:setLy(yMatch)
-            player:setLz(zMatch)
+            if player.teleportTo then
+                -- B42: setX/setY alone snap back and setLx/setLy/setLz no longer exist
+                player:teleportTo(xMatch, yMatch, zMatch)
+            else
+                player:setX(xMatch)
+                player:setY(yMatch)
+                player:setZ(zMatch)
+                if player.setLx then
+                    player:setLx(xMatch)
+                    player:setLy(yMatch)
+                    player:setLz(zMatch)
+                end
+            end
             safeHaloText(player, string.format("Teleported to %d, %d, %d", xMatch, yMatch, zMatch), 200, 100, 255)
         end
     end

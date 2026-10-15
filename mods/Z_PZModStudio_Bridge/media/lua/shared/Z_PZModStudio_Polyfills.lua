@@ -398,32 +398,29 @@ local function initB42Polyfills()
     end
 
     -- ----------------------------------------------------------------------------
-    -- ISHandcraftAction MP Null-Safety & Stuck-State Protection Guard
+    -- ISHandcraftAction MP Null-Safety & Containers Guard
     -- ----------------------------------------------------------------------------
     if ISHandcraftAction and not ISHandcraftAction._pzms_wrapped then
         ISHandcraftAction._pzms_wrapped = true
-        
-        local orig_handcraft_new = ISHandcraftAction.new
-        if orig_handcraft_new then
-            ISHandcraftAction.new = function(self, character, craftRecipe, containers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                local safeContainers = containers
-                if not safeContainers then
-                    safeContainers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
-                local o = orig_handcraft_new(self, character, craftRecipe, safeContainers, isoObject, craftBench, manualInputs, items, recipeItem, variableInputRatio, eatPercentage)
-                if o and not o.containers then
-                    o.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
-                return o
+
+        local function ensureJavaArrayList(contList, character)
+            if contList and type(contList) == "userdata" and contList.size and contList.addAll then
+                return contList
             end
+            local list = ArrayList and ArrayList.new and ArrayList.new() or nil
+            if list then
+                if character and character.getInventory then
+                    list:add(character:getInventory())
+                end
+                return list
+            end
+            return contList
         end
 
         local orig_handcraft_start = ISHandcraftAction.start
         if orig_handcraft_start then
             ISHandcraftAction.start = function(self)
-                if not self.containers then
-                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
+                self.containers = ensureJavaArrayList(self.containers, self.character)
                 return orig_handcraft_start(self)
             end
         end
@@ -431,9 +428,7 @@ local function initB42Polyfills()
         local orig_handcraft_serverStart = ISHandcraftAction.serverStart
         if orig_handcraft_serverStart then
             ISHandcraftAction.serverStart = function(self)
-                if not self.containers then
-                    self.containers = ArrayList and ArrayList.new and ArrayList.new() or {}
-                end
+                self.containers = ensureJavaArrayList(self.containers, self.character)
                 return orig_handcraft_serverStart(self)
             end
         end
@@ -442,20 +437,8 @@ local function initB42Polyfills()
         if orig_handcraft_update then
             ISHandcraftAction.update = function(self)
                 local ok, err = pcall(orig_handcraft_update, self)
-                if not ok then
+                if not ok and err then
                     print("[PZModStudio_Polyfills] Handcraft update error caught: " .. tostring(err))
-                end
-                -- Stuck prevention: if action reached 100% completion but network did not release
-                if self.action and self.getJobDelta then
-                    local delta = self:getJobDelta()
-                    if delta and delta >= 0.999 then
-                        self._stuck_ticks = (self._stuck_ticks or 0) + 1
-                        if self._stuck_ticks > 25 then
-                            pcall(function()
-                                self:forceComplete()
-                            end)
-                        end
-                    end
                 end
             end
         end
@@ -464,10 +447,286 @@ local function initB42Polyfills()
     if BaseCraftingLogic and BaseCraftingLogic.setContainers then
         local orig_bcl_setContainers = BaseCraftingLogic.setContainers
         BaseCraftingLogic.setContainers = function(self, list)
-            if not list then
-                list = ArrayList and ArrayList.new and ArrayList.new() or {}
+            local safeList = list
+            if not safeList or type(safeList) ~= "userdata" or not safeList.size then
+                local al = ArrayList and ArrayList.new and ArrayList.new() or nil
+                if al then
+                    if self.player and self.player.getInventory then
+                        al:add(self.player:getInventory())
+                    elseif self.character and self.character.getInventory then
+                        al:add(self.character:getInventory())
+                    end
+                    safeList = al
+                end
             end
-            return orig_bcl_setContainers(self, list)
+            local ok, res = pcall(orig_bcl_setContainers, self, safeList)
+            if ok then return res end
+            return false
+        end
+    end
+    -- ----------------------------------------------------------------------------
+    -- ISBaseTimedAction Universal MP Network Shield
+    -- Intercepts all timed actions right before serialization in LuaTimedActionNew
+    -- Prevents ContainerID.findObject crashes caused by bags, floor containers, or onCompleteArgs
+    -- ----------------------------------------------------------------------------
+    if ISBaseTimedAction and not ISBaseTimedAction._pzms_shielded then
+        ISBaseTimedAction._pzms_shielded = true
+
+        local orig_bta_setOnComplete = ISBaseTimedAction.setOnComplete
+        if orig_bta_setOnComplete then
+            ISBaseTimedAction.setOnComplete = function(self, func, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+                self.onCompleteFunc = func
+                local function sanitizeArg(v)
+                    if v == self then return true end
+                    if v and type(v) == "userdata" then
+                        if v.size and v.addAll then return nil end
+                        if v.getType and v.AddItem then return nil end
+                    end
+                    return v
+                end
+                self.onCompleteArgs = {
+                    sanitizeArg(arg1),
+                    sanitizeArg(arg2),
+                    sanitizeArg(arg3),
+                    sanitizeArg(arg4),
+                    sanitizeArg(arg5),
+                    sanitizeArg(arg6),
+                    sanitizeArg(arg7),
+                    sanitizeArg(arg8)
+                }
+            end
+        end
+
+        local orig_bta_begin = ISBaseTimedAction.begin
+        if orig_bta_begin then
+            ISBaseTimedAction.begin = function(self)
+                if self.containersIn and type(self.containersIn) == "userdata" and self.containersIn.size then
+                    self.containersIn = nil
+                end
+                if self.containers and type(self.containers) == "userdata" and self.containers.size then
+                    if self.recipe then
+                        self.containers = nil
+                    end
+                end
+                if self.container and type(self.container) == "userdata" and self.container.getContainingItem and self.container:getContainingItem() ~= nil then
+                    if self.character and self.character.getInventory then
+                        self.container = self.character:getInventory()
+                    else
+                        self.container = nil
+                    end
+                end
+                if self.onCompleteArgs and type(self.onCompleteArgs) == "table" then
+                    for k, v in pairs(self.onCompleteArgs) do
+                        if v == self then
+                            self.onCompleteArgs[k] = true
+                        elseif v and type(v) == "userdata" then
+                            if v.size and v.addAll then
+                                self.onCompleteArgs[k] = nil
+                            elseif v.getType and v.AddItem then
+                                self.onCompleteArgs[k] = nil
+                            end
+                        end
+                    end
+                end
+                return orig_bta_begin(self)
+            end
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- ISCraftAction MP Network Crash Prevention & Execution Guard
+    -- Fixes: "Make sheet", "Rip clothing", "Open can/box/packet", etc. in Multiplayer
+    -- Prevents: NullPointerException at ContainerID.findObject when serializing floor containers
+    -- ----------------------------------------------------------------------------
+    if ISCraftAction then
+        ISCraftAction._pzms_wrapped = true
+
+        function ISCraftAction:new(character, item, recipe, container, containersIn)
+            local o = ISBaseTimedAction.new(self, character)
+            o.character = character
+            o.item = item
+            o.recipe = recipe
+            -- CRITICAL: Always use character's main inventory to prevent ContainerID.java:435 crash on server
+            o.container = character and character.getInventory and character:getInventory() or nil
+            o.containersIn = nil
+            o.containers = nil
+
+            o.stopOnWalk = recipe and recipe.isStopOnWalk and recipe:isStopOnWalk() or false
+            o.stopOnRun = recipe and recipe.isStopOnRun and recipe:isStopOnRun() or false
+            o.stopOnAim = true
+            o.maxTime = o:getDuration()
+            o.jobType = recipe and recipe.getName and recipe:getName() or "Craft"
+            o.forceProgressBar = true
+            return o
+        end
+
+        function ISCraftAction:setOnComplete(func, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+            self.onCompleteFunc = func
+            -- Avoid storing action self-references or container ArrayLists in onCompleteArgs
+            self.onCompleteArgs = { true, arg2, arg3, nil, nil, arg6, nil }
+        end
+
+        function ISCraftAction:isValid()
+            if self.character and self.character.getInventory and self.item and self.item.getID then
+                local inv = self.character:getInventory()
+                if inv then
+                    local fresh = inv:getItemById(self.item:getID())
+                    if fresh then
+                        self.item = fresh
+                    end
+                end
+            end
+            if self.item and self.item.getContainer and self.item:getContainer() == nil then
+                self.item = nil
+            end
+            if not self.recipe or not self.character then
+                return false
+            end
+            local ok, res = pcall(function()
+                return RecipeManager.IsRecipeValid(self.recipe, self.character, self.item, self.containers) and not (self.character.isDriving and self.character:isDriving())
+            end)
+            if ok then return res end
+            return not (self.character.isDriving and self.character:isDriving())
+        end
+
+        function ISCraftAction:start()
+            if self.character and self.character.getInventory and self.item and self.item.getID then
+                local inv = self.character:getInventory()
+                if inv then
+                    local fresh = inv:getItemById(self.item:getID())
+                    if fresh then
+                        self.item = fresh
+                    end
+                end
+            end
+            if showDebugInfoInChat and self.recipe and self.recipe.getOriginalname then
+                showDebugInfoInChat("CRAFT \'" .. tostring(self.recipe:getOriginalname()) .. "\'")
+            end
+            if self.recipe and self.recipe.getSound and self.recipe:getSound() and self.character and self.character.playSound then
+                self.craftSound = self.character:playSound(self.recipe:getSound())
+            end
+            if self.item then
+                if self.recipe and self.recipe.getName then
+                    self.item:setJobType(self.recipe:getName())
+                end
+                self.item:setJobDelta(0.0)
+            end
+            if self.recipe and (self.recipe.getProp1 or self.recipe.getProp2) then
+                local prop1 = self.recipe.getProp1 and self.recipe:getProp1()
+                local prop2 = self.recipe.getProp2 and self.recipe:getProp2()
+                if prop1 or prop2 then
+                    self:setOverrideHandModels(self:getPropItemOrModel(prop1), self:getPropItemOrModel(prop2))
+                end
+            end
+            if self.recipe and self.recipe.getAnimNode and self.recipe:getAnimNode() then
+                self:setActionAnim(self.recipe:getAnimNode())
+            else
+                self:setActionAnim(CharacterActionAnims.Craft)
+            end
+            if self.item and self.item.getContainer and self.item:getContainer() == nil then
+                self.item = nil
+            end
+        end
+
+        function ISCraftAction:stop()
+            if self.craftSound and self.character and self.character.getEmitter and self.character:getEmitter():isPlaying(self.craftSound) then
+                self.character:stopOrTriggerSound(self.craftSound)
+            end
+            if self.item ~= nil then
+                self.item:setJobDelta(0.0)
+            end
+            ISBaseTimedAction.stop(self)
+        end
+
+        function ISCraftAction:perform()
+            if self.craftSound and self.character and self.character.getEmitter and self.character:getEmitter():isPlaying(self.craftSound) then
+                self.character:stopOrTriggerSound(self.craftSound)
+            end
+            if self.item then
+                self.item:setJobDelta(0.0)
+            end
+
+            if ISInventoryPage and ISInventoryPage.dirtyUI then
+                ISInventoryPage.dirtyUI()
+            end
+
+            if self.onCompleteFunc then
+                local playerObj = self.character
+                local recipe = self.recipe
+                local selectedItemType = self.item and self.item.getFullType and self.item:getFullType() or nil
+                pcall(function()
+                    self.onCompleteFunc(self, recipe, playerObj, playerObj and playerObj:getInventory(), nil, selectedItemType, nil)
+                end)
+            end
+
+            ISBaseTimedAction.perform(self)
+        end
+
+        function ISCraftAction:complete()
+            if not self.character or not self.recipe then
+                return false
+            end
+
+            -- Re-resolve character inventory & item
+            local inv = self.character.getInventory and self.character:getInventory()
+            if inv and self.item and self.item.getID then
+                local fresh = inv:getItemById(self.item:getID())
+                if fresh then
+                    self.item = fresh
+                end
+            end
+
+            self.container = inv
+
+            -- Execute PerformMakeItem directly on character inventory
+            local ok, list = pcall(function()
+                return RecipeManager.PerformMakeItem(self.recipe, self.item, self.character, nil)
+            end)
+
+            if not ok or not list then
+                print("[PZModStudio_Polyfills] RecipeManager.PerformMakeItem error: " .. tostring(list))
+                return false
+            end
+
+            if list and list.size then
+                local sz = list:size()
+                for i = 0, sz - 1 do
+                    local outItem = list:get(i)
+                    if outItem then
+                        if Actions and Actions.addOrDropItem then
+                            Actions.addOrDropItem(self.character, outItem)
+                        elseif inv then
+                            inv:AddItem(outItem)
+                            if sendAddItemToContainer then
+                                sendAddItemToContainer(inv, outItem)
+                            end
+                        end
+                    end
+                end
+            end
+
+            return true
+        end
+    end
+
+    -- ----------------------------------------------------------------------------
+    -- ISInventoryPaneContextMenu.OnCraft Safe Item Transfer Pre-check
+    -- ----------------------------------------------------------------------------
+    if ISInventoryPaneContextMenu and not ISInventoryPaneContextMenu._pzms_craft_wrapped then
+        ISInventoryPaneContextMenu._pzms_craft_wrapped = true
+        local orig_ipc_onCraft = ISInventoryPaneContextMenu.OnCraft
+        if orig_ipc_onCraft then
+            ISInventoryPaneContextMenu.OnCraft = function(selectedItem, recipe, player, all)
+                if selectedItem and recipe and recipe.isCanBeDoneFromFloor and not recipe:isCanBeDoneFromFloor() then
+                    local playerObj = type(player) == "number" and getSpecificPlayer(player) or player
+                    if playerObj and selectedItem.getContainer and selectedItem:getContainer() ~= playerObj:getInventory() then
+                        if ISInventoryPaneContextMenu.transferIfNeeded then
+                            ISInventoryPaneContextMenu.transferIfNeeded(playerObj, selectedItem)
+                        end
+                    end
+                end
+                return orig_ipc_onCraft(selectedItem, recipe, player, all)
+            end
         end
     end
 

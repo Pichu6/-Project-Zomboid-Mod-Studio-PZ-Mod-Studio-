@@ -119,18 +119,7 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
         let mods_txt_content = target_instance.active_mod_ids.join("\n");
         let _ = fs::write(mods_txt_path, &mods_txt_content);
 
-        // Write default.txt (PZ Build 41 & legacy)
-        let default_txt_dir = z_dir.join("mods");
-        let _ = fs::create_dir_all(&default_txt_dir);
-        let default_txt_path = default_txt_dir.join("default.txt");
-        let mut default_lines = vec!["VERSION=1".to_string(), "mods {".to_string()];
-        for mod_id in &target_instance.active_mod_ids {
-            default_lines.push(format!("    mod = {},", mod_id));
-        }
-        default_lines.push("}".to_string());
-        let _ = fs::write(default_txt_path, default_lines.join("\r\n"));
-
-        // Write ModListData.ini
+        // Write ModListData.ini and complete default.txt with active mods and maps
         let mod_list_data_path = z_dir.join("ModListData.ini");
         let _ = crate::load_order::ini_parser::write_mod_list_ini(
             &mod_list_data_path.to_string_lossy(),
@@ -159,7 +148,7 @@ pub fn save_master_load_order(
 ) -> Result<(), String> {
     let user_dirs = get_all_user_zomboid_dirs(&user_zomboid_dir);
     for z_dir in &user_dirs {
-        // 1. Write ModListData.ini
+        // 1. Write ModListData.ini and complete default.txt with active mods and maps
         let mod_list_data_path = z_dir.join("ModListData.ini");
         let _ = crate::load_order::ini_parser::write_mod_list_ini(
             &mod_list_data_path.to_string_lossy(),
@@ -169,17 +158,6 @@ pub fn save_master_load_order(
         // 2. Write mods.txt
         let mods_txt_path = z_dir.join("mods.txt");
         let _ = fs::write(mods_txt_path, active_mod_ids.join("\n"));
-
-        // 3. Write default.txt
-        let default_txt_dir = z_dir.join("mods");
-        let _ = fs::create_dir_all(&default_txt_dir);
-        let default_txt_path = default_txt_dir.join("default.txt");
-        let mut default_lines = vec!["VERSION=1".to_string(), "mods {".to_string()];
-        for mod_id in &active_mod_ids {
-            default_lines.push(format!("    mod = {},", mod_id));
-        }
-        default_lines.push("}".to_string());
-        let _ = fs::write(default_txt_path, default_lines.join("\r\n"));
 
         // 4. Write PZModStudio_MasterLoadOrder.json
         let master_order_path = z_dir.join("PZModStudio_MasterLoadOrder.json");
