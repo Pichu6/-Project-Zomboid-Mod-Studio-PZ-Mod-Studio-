@@ -14,6 +14,7 @@ import { SplashScreen } from './components/layout/SplashScreen';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
 import { useModHealth } from './hooks/useModHealth';
+import { BrowseModule } from './components/browse/BrowseModule';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
 const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
@@ -551,6 +552,8 @@ export const App: React.FC = () => {
               />
             </div>
           )}
+
+          {activeTab === 'BROWSE' && <BrowseModule paths={paths} onInstalled={handleRefreshMods} />}
 
           {activeTab === 'HEALTH' && (
             <HealthModule

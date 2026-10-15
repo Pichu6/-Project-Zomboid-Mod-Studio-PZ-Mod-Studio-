@@ -249,7 +249,7 @@ export interface AppInstance {
 
 export type AppProfile = AppInstance;
 
-export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
 
 // ---- Mod health (Rust catalog module) ----
 export type HealthSeverity = 'error' | 'warning' | 'info';
@@ -285,6 +285,47 @@ export interface CatalogModSummary {
   root_dir: string;
   shadowed_by: string | null;
   loadability: { status: 'loadable' | 'no_folder_for_build' | 'outside_version_range' | 'invalid_mod_info' };
+}
+
+export type NexusSort = 'updated' | 'downloads' | 'endorsements' | 'newest';
+
+export interface NexusMod {
+  mod_id: number;
+  name: string;
+  summary: string | null;
+  author: string | null;
+  uploader: string | null;
+  version: string | null;
+  updated_at: string | null;
+  created_at: string | null;
+  downloads: number;
+  endorsements: number;
+  picture_url: string | null;
+  thumbnail_url: string | null;
+  adult_content: boolean;
+  page_url: string;
+  /** '41', '42' or '41+42' when the name/summary says so (Nexus has no build tag). */
+  build_hint: string | null;
+}
+
+export interface NexusSearchResult {
+  total: number;
+  offset: number;
+  mods: NexusMod[];
+}
+
+export interface InstalledMod {
+  folder: string;
+  mod_id: string | null;
+  name: string | null;
+  destination: string;
+  replaced: boolean;
+  backup: string | null;
+}
+
+export interface InstallResult {
+  installed: InstalledMod[];
+  warnings: string[];
 }
 
 export interface SortResult {

@@ -36,6 +36,8 @@ rfd = "0.15"
 open = "5.3"
 chrono = "0.4"
 png = "0.17"
+ureq = { version = "3.4.2", default-features = false, features = ["native-tls", "json", "gzip"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate", "deflate64"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

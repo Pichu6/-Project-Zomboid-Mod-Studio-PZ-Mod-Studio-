@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -261,6 +261,20 @@ export const TauriService = {
    */
   getModHealth: async (paths: StudioPathsUI, active: string[]): Promise<ModHealth> => {
     return await invoke<ModHealth>('get_mod_health_cmd', { paths, active });
+  },
+
+  /** Project Zomboid mods on Nexus Mods (public API). Throws on failure. */
+  nexusSearch: async (query: string, sort: NexusSort, offset: number, count: number): Promise<NexusSearchResult> => {
+    return await invoke<NexusSearchResult>('nexus_search_cmd', { query: query || null, sort, offset, count });
+  },
+
+  /**
+   * Installs the mod(s) in a downloaded .zip or an extracted folder into Zomboid/mods.
+   * Rejects with a message starting with INSTALL_CONFLICT: (JSON {existing_folders}) when
+   * folders already exist and replaceExisting is false.
+   */
+  installMods: async (source: string, paths: StudioPathsUI, replaceExisting: boolean): Promise<InstallResult> => {
+    return await invoke<InstallResult>('install_mods_cmd', { source, paths, replaceExisting });
   },
 
   /**

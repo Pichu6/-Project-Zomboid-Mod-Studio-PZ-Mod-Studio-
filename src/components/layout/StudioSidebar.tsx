@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveTab } from '../../types';
-import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -51,6 +51,14 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: HeartPulse,
       badge: healthErrorCount > 0 ? healthErrorCount : null,
       badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40',
+      requiresProfile: true,
+    },
+    {
+      id: 'BROWSE' as ActiveTab,
+      label: 'Browse Mods',
+      icon: Globe,
+      badge: null,
+      badgeColor: '',
       requiresProfile: true,
     },
     {

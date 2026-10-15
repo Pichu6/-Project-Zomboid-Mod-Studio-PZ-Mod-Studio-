@@ -68,11 +68,11 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | ⬜ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview) | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
 | ⬜ | Import a Workshop collection (URL) into a profile | `GetCollectionDetails`, no key |
 | ⬜ | Subscribe / unsubscribe / download | ISteamUGC through the running Steam client (steamworks-rs); SteamCMD fallback for dedicated servers |
-| ⬜ | **Nexus Mods** browse and search | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |
+| ✅ | **Nexus Mods** browse and search (Browse Mods tab: search, sort, build hint, open page / Files tab) | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |
 | ⬜ | Nexus downloads | v1 `download_link.json`. Premium users directly; free users through the website's "Mod Manager Download" button (`nxm://` link handled by the Studio, like Vortex/MO2) |
 | ⬜ | Nexus app registration and SSO login | Required by Nexus before a public release (email support@nexusmods.com with a test build). Personal API keys only for development. No rehosting of Nexus data; 20k requests/day, then 500/hour per user |
 | ⬜ | **PZ community mod index** on GitHub, CKAN-style | One small CC-0 file per mod by pull request: `id`, authors, sources (Workshop / Nexus / GitHub / URL + sha256), supported builds, requires, incompatible, load-after, tags. A GitHub Action builds one `index.json` the app downloads. Main value: B41/B42 compatibility data nobody else has |
-| ⬜ | GitHub releases and "install from URL / zip" (forum, Discord, itch.io) | Every non-Workshop install is hash-checked and goes through the Lua scan before it can be enabled |
+| 🔨 | GitHub releases and "install from URL / zip" (forum, Discord, itch.io). Done: install from `.zip` or an extracted folder into `Zomboid/mods` (any nesting, zip-slip and size checks, backups on replace, warnings when a Workshop copy wins or the build can't load it). Next: `.7z`/`.rar`, from URL, GitHub | Every non-Workshop install is hash-checked and goes through the Lua scan before it can be enabled |
 | ⬜ | Update tracking and "what changed" per mod; snapshot a mod before it updates so a save can roll back | Workshop only serves the latest version (Wabbajack-style pinning) |
 
 ## Phase 3: Any mod, any version

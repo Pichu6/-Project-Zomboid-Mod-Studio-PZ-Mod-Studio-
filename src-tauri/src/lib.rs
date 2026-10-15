@@ -4,6 +4,8 @@ pub mod diff_engine;
 pub mod instance_manager;
 pub mod load_order;
 pub mod mcp;
+pub mod mod_install;
+pub mod nexus;
 pub mod patch_generator;
 pub mod preset_manager;
 pub mod sandbox;
@@ -80,6 +82,18 @@ fn scan_all_installed_mods_cmd(paths: StudioPaths) -> Vec<ModManifest> {
 #[tauri::command(async)]
 fn get_mod_health_cmd(paths: StudioPaths, active: Vec<String>) -> catalog::ModHealth {
     catalog::mod_health(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
+}
+
+/// One page of Project Zomboid mods from Nexus Mods (public API, no key).
+#[tauri::command(async)]
+fn nexus_search_cmd(query: Option<String>, sort: nexus::NexusSort, offset: u64, count: u64) -> Result<nexus::NexusSearchResult, String> {
+    nexus::search_mods(query.as_deref(), sort, offset, count)
+}
+
+/// Installs the mod(s) in a downloaded .zip or an extracted folder into Zomboid/mods.
+#[tauri::command(async)]
+fn install_mods_cmd(source: String, paths: StudioPaths, replace_existing: bool) -> Result<mod_install::InstallResult, String> {
+    mod_install::install_mods(&source, &paths.user_zomboid_dir, &paths.workshop_dir, replace_existing)
 }
 
 /// Game-exact load-order sort of the whole list (enabled and disabled), keeping the user's order
@@ -332,6 +346,8 @@ pub fn run() {
             sort_mod_dependencies_cmd,
             get_mod_health_cmd,
             sort_load_order_cmd,
+            nexus_search_cmd,
+            install_mods_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,
