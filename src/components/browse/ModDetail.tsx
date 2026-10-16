@@ -133,7 +133,9 @@ const SubscribeButton: React.FC<{
       {done && (
         <span className="flex items-center gap-1 text-[10px] text-emerald-300">
           <Check className="w-3 h-3" aria-hidden="true" />
-          {done === 'subscribed' ? 'Steam is downloading it; it shows up in your Mod List once it finishes.' : 'Steam will remove it.'}
+          {done === 'subscribed'
+            ? 'Steam is downloading it; it shows up in your Mod List once it finishes.'
+            : 'Unsubscribed. Steam deletes the files when it next tidies up, so it may still be in your Mod List until you restart Steam.'}
         </span>
       )}
     </div>

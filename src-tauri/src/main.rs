@@ -7,6 +7,35 @@ fn main() {
         pz_mod_studio_lib::mcp::run_stdio_server();
         return;
     }
+    // Steam's API may only be started once in a process, so the window asks a copy of itself to
+    // do the talking and exit: --steam-subscribe <game folder> <workshop id>...
+    if let Some(at) = args.iter().position(|a| a.starts_with("--steam-")) {
+        std::process::exit(steam_cli(&args[at..]));
+    }
 
     pz_mod_studio_lib::run()
+}
+
+/// Answers on stdout as JSON, or on stderr with the reason; 0 when it worked.
+fn steam_cli(args: &[String]) -> i32 {
+    use pz_mod_studio_lib::steam_client;
+    let folder = args.get(1).cloned().unwrap_or_default();
+    let ids: Vec<String> = args[2.min(args.len())..].to_vec();
+    let answer = match args[0].as_str() {
+        "--steam-check" => steam_client::check(&folder).map(|n| n.to_string()),
+        "--steam-subscribe" => steam_client::set_subscriptions(&folder, &ids, true).map(|o| serde_json::to_string(&o).unwrap_or_default()),
+        "--steam-unsubscribe" => steam_client::set_subscriptions(&folder, &ids, false).map(|o| serde_json::to_string(&o).unwrap_or_default()),
+        other => Err(format!("{} is not a Steam command.", other)),
+    };
+    // Steam's library writes its own lines to stdout, so the answer is marked to stand out.
+    match answer {
+        Ok(text) => {
+            println!("{}{}", pz_mod_studio_lib::STEAM_ANSWER_PREFIX, text);
+            0
+        }
+        Err(e) => {
+            eprintln!("{}{}", pz_mod_studio_lib::STEAM_ANSWER_PREFIX, e);
+            1
+        }
+    }
 }

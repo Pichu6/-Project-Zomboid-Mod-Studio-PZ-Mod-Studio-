@@ -232,10 +232,29 @@ pub fn set_subscriptions(pz_install_dir: &str, ids: &[String], subscribe: bool) 
 }
 
 /// Whether the Steam client can be reached right now, and how many items it has subscribed.
-/// Used to decide whether to offer the Subscribe button at all.
+/// Starts Steam's API, so it belongs in a process that does nothing else afterwards.
 pub fn check(pz_install_dir: &str) -> Result<u32, String> {
     let _only_one = STEAM_LOCK.lock().map_err(|_| "Another subscription is still running.".to_string())?;
     SteamSession::open(pz_install_dir)?.subscribed_count()
+}
+
+/// Is subscribing from here possible: the game's library is there and Steam is signed in?
+///
+/// This only asks the library whether a Steam client is running. It deliberately does not start
+/// Steam's API, both because that would show the user as in-game for no reason and because the
+/// API may only be started once in a process: that one start belongs to the subscription itself.
+pub fn is_ready(pz_install_dir: &str) -> bool {
+    let Ok(path) = library_path(pz_install_dir) else { return false };
+    let Ok(module) = ffi::load(&path) else { return false };
+    let running = match ffi::symbol(module, "SteamAPI_IsSteamRunning") {
+        Ok(address) => {
+            let is_running: unsafe extern "C" fn() -> bool = unsafe { std::mem::transmute(address) };
+            unsafe { is_running() }
+        }
+        Err(_) => false,
+    };
+    ffi::unload(module);
+    running
 }
 
 #[cfg(test)]

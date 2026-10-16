@@ -160,7 +160,12 @@ fn summarize(description: &str) -> String {
 fn parse_item(v: &Value) -> Option<WorkshopItem> {
     let id = v.get("publishedfileid")?.as_str()?.to_string();
     let num = |key: &str| v.get(key).and_then(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.parse().ok())));
-    let found = v.get("result").and_then(|r| r.as_u64()) == Some(1);
+    // GetPublishedFileDetails says whether it found the item; the browse page only ever lists
+    // items that exist, and sends no result code at all.
+    let found = match v.get("result").and_then(|r| r.as_u64()) {
+        Some(code) => code == 1,
+        None => v.get("title").is_some(),
+    };
     let tags: Vec<String> = v
         .get("tags")
         .and_then(|t| t.as_array())
@@ -638,6 +643,9 @@ mod tests {
         assert_eq!(item.summary, "Project Zomboid Build 42.12.3 Clean UI");
         assert_eq!(item.page_url, "https://steamcommunity.com/sharedfiles/filedetails/?id=3437629766");
         assert!(!parse_item(&json!({ "publishedfileid": "1", "result": 9 })).unwrap().found);
+        // A browse result has no "result" field, and is there because it exists.
+        assert!(parse_item(&json!({ "publishedfileid": "3", "title": "From the browse page" })).unwrap().found);
+        assert!(!parse_item(&json!({ "publishedfileid": "4" })).unwrap().found, "nothing at all is not an item");
         // QueryFiles field names.
         let q = parse_item(&json!({ "publishedfileid": "2", "result": 1, "consumer_appid": 108600,
             "short_description": "Short [b]text[/b]", "tags": [{ "tag": "Build 41", "display_name": "Build 41" }] })).unwrap();
@@ -743,6 +751,7 @@ mod tests {
         println!("trending: {} items of {} ({} pages)", trending.items.len(), trending.total, trending.pages);
         assert!(trending.total > 1000 && trending.items.len() == 30);
         assert!(trending.items.iter().all(|i| i.builds.contains(&"42".to_string())));
+        assert!(trending.items.iter().all(|i| i.found), "browse results must count as found, or the cards do not open");
         let page3 = search_public(&b42(3)).unwrap();
         assert_eq!(page3.page, 3);
         assert!(page3.items[0].workshop_id != trending.items[0].workshop_id);

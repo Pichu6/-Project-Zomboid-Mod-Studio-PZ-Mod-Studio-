@@ -173,19 +173,56 @@ fn workshop_search_cmd(query: workshop::BrowseQuery) -> Result<workshop::Worksho
 
 /// Subscribes or unsubscribes through the Steam client that is already signed in. No key.
 /// Steam downloads or removes the files itself afterwards.
+///
+/// The work happens in a short-lived copy of this program, because Steam's API may only be
+/// started once in a process and the window outlives many subscriptions.
 #[tauri::command(async)]
 fn workshop_subscribe_cmd(
     paths: StudioPaths,
     ids: Vec<String>,
     subscribe: bool,
 ) -> Result<steam_client::SubscribeOutcome, String> {
-    steam_client::set_subscriptions(&paths.pz_install_dir, &ids, subscribe)
+    let flag = if subscribe { "--steam-subscribe" } else { "--steam-unsubscribe" };
+    let output = steam_helper(flag, &paths.pz_install_dir, &ids)?;
+    serde_json::from_str(&output).map_err(|e| format!("Unexpected answer from the Steam helper: {}", e))
 }
 
-/// Whether subscribing from here is possible right now (Steam running and signed in).
+/// Marks the Steam helper's own line, among whatever Steam's library prints.
+pub const STEAM_ANSWER_PREFIX: &str = "PZMS-STEAM:";
+
+/// The helper's answer out of its output, ignoring Steam's chatter.
+fn steam_answer(output: &str) -> Option<String> {
+    output
+        .lines()
+        .rev()
+        .find_map(|line| line.trim().strip_prefix(STEAM_ANSWER_PREFIX).map(|a| a.trim().to_string()))
+}
+
+/// Runs this program again with a `--steam-*` flag and returns what it printed.
+fn steam_helper(flag: &str, pz_install_dir: &str, ids: &[String]) -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("Could not find the Studio's own program: {}", e))?;
+    let mut command = std::process::Command::new(exe);
+    command.arg(flag).arg(pz_install_dir).args(ids);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashes up
+    }
+    let done = command.output().map_err(|e| format!("The Steam helper could not be started: {}", e))?;
+    let reason = || {
+        steam_answer(&String::from_utf8_lossy(&done.stderr)).unwrap_or_else(|| "Steam refused the request.".to_string())
+    };
+    if !done.status.success() {
+        return Err(reason());
+    }
+    steam_answer(&String::from_utf8_lossy(&done.stdout)).ok_or_else(reason)
+}
+
+/// Whether subscribing from here is possible right now (the game's Steam library and a running
+/// Steam client). Does not start Steam's API, so it costs nothing and shows no in-game status.
 #[tauri::command(async)]
 fn steam_client_ready_cmd(paths: StudioPaths) -> Result<bool, String> {
-    Ok(steam_client::check(&paths.pz_install_dir).is_ok())
+    Ok(steam_client::is_ready(&paths.pz_install_dir))
 }
 
 /// A mod's own poster/icon as a data URL, so the webview can show a file on disk.
@@ -563,6 +600,13 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_helpers_answer_is_found_among_steams_chatter() {
+        let output = "Setting breakpad minidump AppID = 108600\nSteamInternal_SetMinidumpSteamID: ...\nPZMS-STEAM:{\"done\":[\"7\"]}\n";
+        assert_eq!(super::steam_answer(output).as_deref(), Some("{\"done\":[\"7\"]}"));
+        assert_eq!(super::steam_answer("only steam noise\n"), None);
+    }
+
     use super::validate_external_url;
 
     #[test]
