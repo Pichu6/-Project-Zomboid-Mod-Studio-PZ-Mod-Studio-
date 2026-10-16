@@ -50,8 +50,8 @@ fn set_and_validate_paths(custom_paths: StudioPaths) -> StudioPaths {
 }
 
 #[tauri::command(async)]
-fn scan_conflicts_cmd(paths: StudioPaths) -> Vec<VfsConflictRaw> {
-    scan_conflicts(&paths)
+fn scan_conflicts_cmd(paths: StudioPaths, package_folder: Option<String>) -> Vec<VfsConflictRaw> {
+    vfs::scan_conflicts_in(&paths, package_folder.as_deref())
 }
 
 #[tauri::command(async)]
@@ -589,11 +589,9 @@ pub fn run() {
             update_instance,
             save_master_load_order
         ])
-        .on_window_event(|_window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                let _ = stop_dedicated_server("".to_string(), None);
-            }
-        })
+        // A dedicated server outlives this window on purpose: people close the Studio and keep
+        // playing. Stopping it is the Servers tab's button, where the user means it.
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

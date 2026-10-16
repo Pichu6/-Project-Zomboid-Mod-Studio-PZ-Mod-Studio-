@@ -383,6 +383,7 @@ const WorkshopTab: React.FC<{
               <>{lookup.items.length} items, {lookupMissing} not installed</>
             )}
           </div>
+          <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
           <CardGrid>{lookupItems.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
           <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
         </>
@@ -397,6 +398,7 @@ const WorkshopTab: React.FC<{
             </span>
             <span>page {page} of {pages.toLocaleString()}</span>
           </div>
+          <Pagination page={page} pageCount={pages} onPage={(p) => runSearch(query, p)} disabled={searching} />
           <CardGrid>
             {items.map((i) =>
               query.collections
@@ -516,6 +518,7 @@ const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t
         </span>
         <span>page {page} of {pageCountOf(total)}</span>
       </div>
+      <Pagination page={page} pageCount={pageCountOf(total)} onPage={load} disabled={loading} />
       <CardGrid>{visible.map((m) => nexusCard(m, installedByNexusId.has(m.mod_id), onOpen))}</CardGrid>
       <Pagination page={page} pageCount={pageCountOf(total)} onPage={load} disabled={loading} />
     </div>
@@ -655,6 +658,7 @@ const MyModsTab: React.FC<{
         <span>page {page} of {pageCountOf(filtered.length)}</span>
       </div>
       {rows.length === 0 && !loading && <p className="text-xs text-slate-500">No installed mods found. Check your folders in App Settings.</p>}
+      <Pagination page={page} pageCount={pageCountOf(filtered.length)} onPage={setPage} />
       <CardGrid>
         {pageRows.map((r) => {
           if (r.kind === 'workshop') return workshopCard(r.item, [], r.state, onOpen) // every card here is installed;

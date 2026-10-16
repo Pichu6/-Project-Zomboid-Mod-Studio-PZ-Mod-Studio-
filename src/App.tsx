@@ -153,9 +153,10 @@ export const App: React.FC = () => {
 
 
 
-  const handleRescan = async () => {
+  /** `packageFolder` is the package the Merger has open, whose saved merges should be shown. */
+  const handleRescan = async (packageFolder?: string) => {
     if (paths.is_valid) {
-      const scannedConflicts = await TauriService.scanConflicts(paths);
+      const scannedConflicts = await TauriService.scanConflicts(paths, packageFolder ?? openedPackageFolder);
       setConflicts(scannedConflicts);
       const allSubscribedMods = await TauriService.scanAllInstalledMods(paths);
       if (allSubscribedMods.length > 0) {

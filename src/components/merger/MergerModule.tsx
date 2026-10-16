@@ -46,7 +46,8 @@ interface MergerModuleProps {
   onAutoMergeAll?: (packageFolderName?: string) => Promise<boolean>;
   onOptimizeAndResolve: (packageFolderName?: string) => Promise<boolean>;
   onGoToSettings: () => void;
-  onRescan: () => Promise<void> | void;
+  /** Rescans; the folder names the package whose saved merges should be shown. */
+  onRescan: (packageFolder?: string) => Promise<void> | void;
   onClearConflicts?: () => void;
   onLoadMockups?: (mockups: VfsConflict[]) => void;
   onToggleMod?: (modId: string) => void;
@@ -267,7 +268,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       console.error('Error fetching patch status:', err);
     }
     if (packageSwitchIdRef.current !== switchId) return;
-    if (onRescan) await onRescan();
+    if (onRescan) await onRescan(folderName);
   };
 
   const handleClosePackage = () => {

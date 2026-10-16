@@ -359,6 +359,15 @@ pub fn is_loaded_from_every_mod(rel_path: &str) -> bool {
 /// default.txt, in load order) and, per mod, the folders loaded for the installed build
 /// (`common/` + version folder, or the root on Build 41). A mod's version folder overriding its own
 /// `common/` file is not a conflict. Contents are read only for paths with two or more mods.
+/// `scan_conflicts` showing one package's saved merges instead of the active package's.
+pub fn scan_conflicts_in(paths: &StudioPaths, package_folder: Option<&str>) -> Vec<VfsConflictRaw> {
+    let active: Vec<String> = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
+        .map(|d| d.active_mods)
+        .unwrap_or_default();
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    scan_conflicts_for_package(paths, &catalog, &active, package_folder)
+}
+
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     let active: Vec<String> = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
         .map(|d| d.active_mods)
@@ -369,6 +378,17 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
 
 /// `scan_conflicts` for a given catalog and active list (mod ids in load order).
 pub fn scan_conflicts_with(paths: &StudioPaths, catalog: &crate::catalog::ModCatalog, active: &[String]) -> Vec<VfsConflictRaw> {
+    scan_conflicts_for_package(paths, catalog, active, None)
+}
+
+/// `package_folder` picks whose saved merges are shown. Without it, the active package's are
+/// used: drafts belong to one package, and showing another's would publish the wrong code.
+pub fn scan_conflicts_for_package(
+    paths: &StudioPaths,
+    catalog: &crate::catalog::ModCatalog,
+    active: &[String],
+    package_folder: Option<&str>,
+) -> Vec<VfsConflictRaw> {
     let active: Vec<String> = active
         .iter()
         .filter(|s| !s.starts_with("Z_PZModStudio_") && s.as_str() != "PZModStudioCarrier")
@@ -430,28 +450,20 @@ pub fn scan_conflicts_with(paths: &StudioPaths, catalog: &crate::catalog::ModCat
 
     // Load any saved draft resolutions for active packages
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
+    // Saved merges belong to one package. Reading every package's at once used to show, and
+    // then publish, another package's code.
+    let wanted = package_folder
+        .map(str::to_string)
+        .or_else(|| active_package_dir(catalog, &active).map(|(id, _)| id));
     let mut draft_map: HashMap<String, (String, String)> = HashMap::new();
-    for u_dir in &user_dirs {
-        let mods_dir = u_dir.join("mods");
-        if let Ok(entries) = fs::read_dir(&mods_dir) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let p = entry.path();
-                if p.is_dir() {
-                    let name = p.file_name().unwrap_or_default().to_string_lossy();
-                    if name.starts_with("Z_PZModStudio_") {
-                        let draft_file = p.join("draft_resolutions.json");
-                        if draft_file.exists() {
-                            if let Ok(content) = fs::read_to_string(&draft_file) {
-                                if let Ok(items) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
-                                    for (k, v) in items {
-                                        if let (Some(c), Some(st)) = (v["resolved_content"].as_str(), v["status"].as_str()) {
-                                            draft_map.insert(k, (c.to_string(), st.to_string()));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+    if let Some(wanted) = wanted {
+        for u_dir in &user_dirs {
+            let draft_file = u_dir.join("mods").join(&wanted).join("draft_resolutions.json");
+            let Ok(content) = fs::read_to_string(&draft_file) else { continue };
+            let Ok(items) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) else { continue };
+            for (k, v) in items {
+                if let (Some(c), Some(st)) = (v["resolved_content"].as_str(), v["status"].as_str()) {
+                    draft_map.insert(k, (c.to_string(), st.to_string()));
                 }
             }
         }

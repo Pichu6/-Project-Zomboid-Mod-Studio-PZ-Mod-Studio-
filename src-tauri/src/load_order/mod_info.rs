@@ -723,14 +723,10 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         }
     }
 
-    // 2. Auto-install Live Bridge mod if missing, only in the Zomboid folder actually in use
-    //    (never create Zomboid trees in candidate locations that do not exist).
-    if let Some(user_dir) = get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).first() {
-        let user_dir_str = user_dir.to_string_lossy();
-        if crate::sandbox::bridge_companion_mod_needs_update(&user_dir_str) {
-            let _ = crate::sandbox::install_bridge_companion_mod(&user_dir_str);
-        }
-    }
+    // The Live Bridge companion mod used to be written into Zomboid/mods here, on every scan,
+    // without asking. It lets another program run Lua inside the game, which is not something to
+    // put in a player's mods folder uninvited: it is installed only when the user asks for it
+    // (Settings, or install_bridge_companion_mod over MCP). Existing copies are left alone.
 
     let active_from_disk = crate::patch_generator::get_active_mod_ids_from_disk(&paths.user_zomboid_dir, &paths.mod_list_ini_path);
 

@@ -51,6 +51,18 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       return;
     }
 
+    // Creating a profile writes the mod list the game reads. With nothing scanned — the game
+    // folder is not set yet, or the scan failed — that would switch every mod off and say it
+    // worked. Better to send the user to Settings.
+    if (mods.length === 0) {
+      alert(
+        'No mods found yet, so a profile saved now would switch all your mods off.\n\n' +
+          'Set your game and Zomboid folders in App Settings first; the Studio will find your mods, ' +
+          'and then a profile will remember them.'
+      );
+      return;
+    }
+
     try {
       const activeModIds = activeMods.map((m) => m.mod_id);
       const loadOrder = mods.map((m) => m.mod_id);
@@ -65,11 +77,11 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
       setNewInstanceName('');
       setNewInstanceDesc('');
-      setStatusMessage(`✨ Profile '${created.name}' created and activated successfully.`);
       await loadInstances();
 
-      // Automatically activate the new profile so all tabs unlock immediately
+      // Activate it so the rest of the app unlocks, and only then say so.
       await handleActivateInstance(created);
+      setStatusMessage(`Profile '${created.name}' created and activated.`);
     } catch (err: any) {
       alert(`Error creating profile: ${err}`);
     }

@@ -69,15 +69,13 @@ pub fn configure_options_ini(user_zomboid_dir: &str, is_windowed: bool) {
             if let Ok(content) = std::fs::read_to_string(&options_path) {
                 let mut new_lines = Vec::new();
                 let mut found_fullscreen = false;
-                let mut found_borderless = false;
 
+                // Only the one line the launch mode is about. Everything else the player set —
+                // borderless above all — is theirs and is left alone.
                 for line in content.lines() {
                     if line.starts_with("fullScreen=") {
                         new_lines.push(format!("fullScreen={}", !is_windowed));
                         found_fullscreen = true;
-                    } else if line.starts_with("borderless=") {
-                        new_lines.push("borderless=false".to_string());
-                        found_borderless = true;
                     } else {
                         new_lines.push(line.to_string());
                     }
@@ -86,11 +84,15 @@ pub fn configure_options_ini(user_zomboid_dir: &str, is_windowed: bool) {
                 if !found_fullscreen {
                     new_lines.push(format!("fullScreen={}", !is_windowed));
                 }
-                if !found_borderless {
-                    new_lines.push("borderless=false".to_string());
-                }
 
-                let _ = std::fs::write(&options_path, new_lines.join("\r\n"));
+                let updated = new_lines.join("\r\n");
+                if updated != content {
+                    let _ = crate::load_order::ini_parser::write_file_with_backup(
+                        &options_path,
+                        &updated,
+                        &user_dir.join("PZModStudio_Backups"),
+                    );
+                }
             }
         }
     }

@@ -85,7 +85,8 @@ export const CardGrid: React.FC<{ children: React.ReactNode }> = ({ children }) 
   <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>{children}</div>
 );
 
-/** Page numbers: 1 … 4 5 [6] 7 8 … 40 */
+/** Page numbers: 1 … 4 5 [6] 7 8 … 40. Shown above and below the mods, so long pages need no
+ * scrolling back up to turn them. */
 export const Pagination: React.FC<{ page: number; pageCount: number; onPage: (page: number) => void; disabled?: boolean }> = ({ page, pageCount, onPage, disabled }) => {
   if (pageCount <= 1) return null;
   const pages: (number | 'gap')[] = [];

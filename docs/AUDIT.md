@@ -14,25 +14,25 @@ engine and the health rules are genuinely solid and should not be regressed.
 
 | | What | Where |
 |---|---|---|
-| ☐ | **Kick, Ban, Godmode and Broadcast do nothing and report success.** They write a JSON file no server reads: there is no RCON anywhere. Worse, the one consumer is the *client* bridge, whose kick branch quits the local game — a host who kicks someone can close their own game. | `server_manager/mod.rs:966-1003`, `ServerModule.tsx:250,857,871,1068` |
-| ☐ | **"Make Admin" invents a role.** It writes the role to a local file and reads it back as truth, so the app shows an ADMIN badge for a player who was never promoted. | `server_manager/mod.rs:977-1000`, `:914-934` |
-| ☐ | **The invite link sends friends to their own PC** (`steam://connect/127.0.0.1`). | `ServerModule.tsx:337` |
-| ☐ | **Creating a profile before the game is found switches off every mod.** The Profiles tab is the first screen, is not gated on valid paths, and creating a profile with an empty list writes an empty `default.txt` into the real Zomboid folder — with a success message. Recoverable only from `PZModStudio_Backups`, which nothing mentions. | `InstanceModule.tsx:48-76`, `instance_manager/mod.rs:128-136` |
-| ☐ | **Publishing a merge package silently unpublishes every other one.** Only one package can ever be active, while the UI sells multi-package. | `patch_generator/mod.rs:389-390` |
-| ☐ | **The "visible in mod list" eye scrambles the whole load order**, because the active list is round-tripped through a `HashSet`. Enabling also writes nothing while reporting success. | `patch_generator/mod.rs:996-1019`, `:974-992` |
-| ☐ | **Draft resolutions are shared between packages.** The draft map is keyed by file path only, across every package folder, so opening B can show A's merges and publish them as B's. | `vfs/mod.rs:436-456` |
+| ✅ | **Kick, Ban, Godmode and Broadcast do nothing and report success.** They write a JSON file no server reads: there is no RCON anywhere. Worse, the one consumer is the *client* bridge, whose kick branch quits the local game — a host who kicks someone can close their own game. | `server_manager/mod.rs:966-1003`, `ServerModule.tsx:250,857,871,1068` |
+| ✅ | **"Make Admin" invents a role.** It writes the role to a local file and reads it back as truth, so the app shows an ADMIN badge for a player who was never promoted. | `server_manager/mod.rs:977-1000`, `:914-934` |
+| ✅ | **The invite link sends friends to their own PC** (`steam://connect/127.0.0.1`). | `ServerModule.tsx:337` |
+| ✅ | **Creating a profile before the game is found switches off every mod.** The Profiles tab is the first screen, is not gated on valid paths, and creating a profile with an empty list writes an empty `default.txt` into the real Zomboid folder — with a success message. Recoverable only from `PZModStudio_Backups`, which nothing mentions. | `InstanceModule.tsx:48-76`, `instance_manager/mod.rs:128-136` |
+| ✅ | **Publishing a merge package silently unpublishes every other one.** Only one package can ever be active, while the UI sells multi-package. | `patch_generator/mod.rs:389-390` |
+| ✅ | **The "visible in mod list" eye scrambles the whole load order**, because the active list is round-tripped through a `HashSet`. Enabling also writes nothing while reporting success. | `patch_generator/mod.rs:996-1019`, `:974-992` |
+| ✅ | **Draft resolutions are shared between packages.** The draft map is keyed by file path only, across every package folder, so opening B can show A's merges and publish them as B's. | `vfs/mod.rs:436-456` |
 | ☐ | **"1-Click Repair" on a crash card replaces the user's active package** with `Z_PZModStudio_MergedPatch`, possibly empty, and rewrites the mod list — without fixing the error. | `App.tsx:440-457`, `patch_generator/mod.rs:231-233,389-391` |
-| ☐ | **A mod that runs arbitrary Lua is installed without asking**, on every mod scan. It is not auto-enabled, which is the only thing keeping it safe, and in single player its command queue has no gate at all. | `mod_info.rs:726-733`, `PZModStudio_Bridge.lua:145-169` |
-| ☐ | **Launching rewrites the player's `options.ini`** in every candidate folder, forces `borderless=false`, and keeps no backup. | `sandbox/mod.rs:65-97` |
+| ✅ | **A mod that runs arbitrary Lua is installed without asking**, on every mod scan. It is not auto-enabled, which is the only thing keeping it safe, and in single player its command queue has no gate at all. | `mod_info.rs:726-733`, `PZModStudio_Bridge.lua:145-169` |
+| ✅ | **Launching rewrites the player's `options.ini`** in every candidate folder, forces `borderless=false`, and keeps no backup. | `sandbox/mod.rs:65-97` |
 | ☐ | **The 13 polyfill switches, their counter and the import button do nothing.** The same 2075-line shim is written whether none or all are ticked, and the setting is not even remembered across restarts. | `patch_generator/mod.rs:268` vs `:270`, `SettingsModule.tsx:534-562` |
-| ☐ | **Spanish strings in the English UI.** | `ServerModule.tsx:307,308,314` |
+| ✅ | **Spanish strings in the English UI.** | `ServerModule.tsx:307,308,314` |
 | ☐ | **The MCP tool list is mis-nested** — two group wrappers open one level too deep and a stray `</div>` papers over it, which is why those boxes look uneven. | `SettingsModule.tsx:893,930,1008` |
 
 ## Important
 
 | | What | Where |
 |---|---|---|
-| ☐ | Closing the Studio force-kills a running dedicated server, with no save first. | `lib.rs:592-596`, `server_manager/mod.rs:464` |
+| ✅ | Closing the Studio force-kills a running dedicated server, with no save first. | `lib.rs:592-596`, `server_manager/mod.rs:464` |
 | ☐ | Activating a profile permanently drops mods that are not installed right now, so profiles cannot travel between machines. | `App.tsx:417-435`, `instance_manager/mod.rs:186-191` |
 | ☐ | Profiles cannot be exported or shared at all; presets live in `localStorage` and their export leaks the author's whole library as bare ids. | `LoadOrderModule.tsx:265,331` |
 | ☐ | A published package shows as *disabled* in the Mod List straight afterwards, and the next toggle removes it. | `patch_generator/mod.rs` (no master-order update), `mod_info.rs:955-962` |

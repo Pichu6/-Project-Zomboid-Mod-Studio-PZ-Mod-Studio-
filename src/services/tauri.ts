@@ -188,9 +188,9 @@ export const TauriService = {
   /**
    * Scans Virtual File System for real conflicts between active mods
    */
-  scanConflicts: async (paths: StudioPathsUI): Promise<VfsConflict[]> => {
+  scanConflicts: async (paths: StudioPathsUI, packageFolder?: string | null): Promise<VfsConflict[]> => {
     try {
-      const rawConflicts = await invoke<any[]>('scan_conflicts_cmd', { paths });
+      const rawConflicts = await invoke<any[]>('scan_conflicts_cmd', { paths, packageFolder: packageFolder ?? null });
       if (!rawConflicts || rawConflicts.length === 0) {
         return [];
       }
