@@ -138,8 +138,8 @@ const WORKSHOP_SORTS: { id: WorkshopSort; label: string }[] = [
   { id: 'top_rated', label: 'Top rated' },
 ];
 
-/** Asks for the user's own Steam Web API key (kept in Windows Credential Manager). */
-const SteamKeyForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
+/** Fallback when the public Workshop page cannot be read: the user's own Steam Web API key. */
+const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSaved, reason }) => {
   const [keyInput, setKeyInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,13 +157,13 @@ const SteamKeyForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     }
   };
   return (
-    <div className="flex flex-col gap-2 px-3 py-2.5 rounded-lg border border-sky-900/60 bg-sky-950/20">
+    <div className="flex flex-col gap-2 px-3 py-2.5 rounded-lg border border-amber-900/60 bg-amber-950/20">
       <div className="flex items-start gap-2 text-[11px] text-slate-300">
-        <KeyRound className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
+        <KeyRound className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
         <span>
-          Steam only lets apps browse and search the Workshop with a personal <b>Steam Web API key</b> (free; any domain name works,
-          for example <code>localhost</code>). It is checked with Steam and kept in Windows Credential Manager on this PC only.
-          Without it you can still paste Workshop links or a collection above.
+          <b className="text-amber-200">{reason}</b> You can still paste Workshop links or a collection above. To search anyway, add a
+          personal <b>Steam Web API key</b> (free; any domain name works, for example <code>localhost</code>): it is checked with
+          Steam and kept in Windows Credential Manager on this PC only.
         </span>
       </div>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
@@ -191,39 +191,40 @@ const WorkshopTab: React.FC<{
   stateByItem: Map<string, WorkshopInstallState>;
   onOpen: (t: DetailTarget) => void;
 }> = ({ installedByItem, stateByItem, onOpen }) => {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [text, setText] = useState('');
   const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '' });
   const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
   const [items, setItems] = useState<WorkshopItem[]>([]);
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [lookup, setLookup] = useState<WorkshopLookup | null>(null);
   const [lookupPage, setLookupPage] = useState(1);
-
-  useEffect(() => {
-    TauriService.steamKeyStatus().then(setHasKey).catch(() => setHasKey(false));
-  }, []);
 
   const runSearch = useCallback(async (q: WorkshopQuery, p: number) => {
     setSearching(true);
     try {
       const r = await TauriService.workshopSearch(q.text, q.sort, q.build || null, q.category || null, p);
       setTotal(r.total);
+      setPages(r.pages);
       setItems(r.items);
-      setPage(p);
+      setPage(r.page || p);
+      setSearchError(null);
     } catch (err) {
-      reportBackendError('Searching the Workshop', err);
+      setSearchError(String(err));
+      setItems([]);
+      setTotal(0);
     } finally {
       setSearching(false);
     }
   }, []);
 
   useEffect(() => {
-    if (hasKey && !lookup) runSearch(query, 1);
+    if (!lookup) runSearch(query, 1);
     // Re-run when a filter changes; the text only on submit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasKey, query]);
+  }, [query]);
 
   const submit = async () => {
     const t = text.trim();
@@ -248,18 +249,6 @@ const WorkshopTab: React.FC<{
     setQuery((q) => ({ ...q, ...patch }));
   };
 
-  const removeKey = async () => {
-    if (!confirm('Remove the saved Steam Web API key from this PC?')) return;
-    try {
-      await TauriService.deleteSteamKey();
-      setHasKey(false);
-      setItems([]);
-      setTotal(0);
-    } catch (err) {
-      reportBackendError('Removing the Steam key', err);
-    }
-  };
-
   const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)).length : 0;
   const lookupItems = lookup ? lookup.items.slice((lookupPage - 1) * PAGE_SIZE, lookupPage * PAGE_SIZE) : [];
 
@@ -269,29 +258,25 @@ const WorkshopTab: React.FC<{
         <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-sky-700">
           <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
           <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Search the Workshop or paste links"
-            placeholder={hasKey ? 'Search the Workshop, or paste Workshop links / a collection link' : 'Paste Workshop links, ids or a collection link'}
+            placeholder="Search the Workshop, or paste links / a collection link"
             className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
           {(text || lookup) && (
             <button type="button" onClick={() => { setText(''); setLookup(null); if (query.text) setFilter({ text: '' }); }} aria-label="Clear"
               className="text-slate-500 hover:text-slate-300 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
           )}
         </div>
-        {hasKey && (
-          <>
-            <select value={query.text ? 'relevance' : query.sort} onChange={(e) => setFilter({ sort: e.target.value as WorkshopSort })} aria-label="Sort"
-              disabled={!!query.text} title={query.text ? 'Text searches are ordered by relevance' : undefined} className={selectClass}>
-              {query.text && <option value="relevance">Relevance</option>}
-              {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label="Game build" className={selectClass}>
-              <option value="42">Build 42</option>
-              <option value="41">Build 41</option>
-              <option value="">Any build</option>
-            </select>
-          </>
-        )}
+        <select value={query.text ? 'relevance' : query.sort} onChange={(e) => setFilter({ sort: e.target.value as WorkshopSort })} aria-label="Sort"
+          disabled={!!query.text} title={query.text ? 'Text searches are ordered by relevance' : undefined} className={selectClass}>
+          {query.text && <option value="relevance">Relevance</option>}
+          {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+        <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label="Game build" className={selectClass}>
+          <option value="42">Build 42</option>
+          <option value="41">Build 41</option>
+          <option value="">Any build</option>
+        </select>
         <button type="submit" disabled={searching} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-60">
-          {hasKey ? 'Search' : 'Look up'}
+          Search
         </button>
         <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')} title="Open the Workshop in your browser"
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
@@ -299,8 +284,8 @@ const WorkshopTab: React.FC<{
         </button>
       </Toolbar>
 
-      {hasKey && <CategoryBar categories={WORKSHOP_CATEGORIES} value={query.category} onChange={(c) => setFilter({ category: c })} accent="border-sky-600 bg-sky-900/50 text-sky-200" />}
-      {hasKey === false && !lookup && <SteamKeyForm onSaved={() => setHasKey(true)} />}
+      <CategoryBar categories={WORKSHOP_CATEGORIES} value={query.category} onChange={(c) => setFilter({ category: c })} accent="border-sky-600 bg-sky-900/50 text-sky-200" />
+      {searchError && !lookup && <SteamKeyForm reason={searchError} onSaved={() => runSearch(query, 1)} />}
 
       {lookup ? (
         <>
@@ -323,20 +308,17 @@ const WorkshopTab: React.FC<{
           <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
         </>
       ) : (
-        hasKey && (
-          <>
-            <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
-              <span>
-                {searching && items.length === 0 ? 'Searching...' : `${total.toLocaleString()} items${query.text ? ` for "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}`}
-                {searching && items.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
-              </span>
-              <span>page {page} of {pageCountOf(total).toLocaleString()}</span>
-            </div>
-            <CardGrid>{items.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
-            <Pagination page={page} pageCount={pageCountOf(total)} onPage={(p) => runSearch(query, p)} disabled={searching} />
-            <button type="button" onClick={removeKey} className="self-end text-[10px] text-slate-600 hover:text-slate-400 cursor-pointer">Remove saved Steam key</button>
-          </>
-        )
+        <>
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
+            <span>
+              {searching && items.length === 0 ? 'Searching...' : `${total.toLocaleString()} items${query.text ? ` for "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}`}
+              {searching && items.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
+            </span>
+            <span>page {page} of {pages.toLocaleString()}</span>
+          </div>
+          <CardGrid>{items.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
+          <Pagination page={page} pageCount={pages} onPage={(p) => runSearch(query, p)} disabled={searching} />
+        </>
       )}
     </div>
   );

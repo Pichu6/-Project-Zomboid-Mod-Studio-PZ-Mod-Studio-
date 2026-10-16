@@ -264,7 +264,126 @@ impl WorkshopSort {
 pub struct WorkshopSearchResult {
     pub total: u64,
     pub page: u32,
+    /// Pages available for this search (Steam stops at 1000).
+    pub pages: u32,
     pub items: Vec<WorkshopItem>,
+}
+
+impl WorkshopSort {
+    /// `browsesort` value on the public Workshop browse page.
+    fn browse_sort(self) -> &'static str {
+        match self {
+            WorkshopSort::TopRated => "toprated",
+            WorkshopSort::Newest => "mostrecent",
+            // The page ranks search text by relevance on its own.
+            WorkshopSort::Trending | WorkshopSort::Relevance => "trend",
+            WorkshopSort::MostSubscribed => "totaluniquesubscribers",
+            WorkshopSort::RecentlyUpdated => "lastupdated",
+        }
+    }
+}
+
+/// The `<script type="application/json">` state the Workshop browse page is built from.
+fn page_state(html: &str) -> Option<Value> {
+    let mut rest = html;
+    while let Some(i) = rest.find("type=\"application/json\"") {
+        rest = &rest[i..];
+        let start = rest.find('>')? + 1;
+        let end = rest[start..].find("</script>")? + start;
+        let parsed = serde_json::from_str::<Value>(&rest[start..end]).ok();
+        if let Some(v) = parsed {
+            return Some(v);
+        }
+        rest = &rest[end..];
+    }
+    None
+}
+
+/// The QueryFiles answer embedded in the page: the object holding `total_count` and `results`.
+/// Some of it is nested as JSON inside strings, so those are parsed too.
+fn find_results(value: &Value, depth: u32) -> Option<Value> {
+    if depth > 24 {
+        return None;
+    }
+    match value {
+        Value::Object(map) => {
+            if map.contains_key("total_count") && map.get("results").is_some_and(Value::is_array) {
+                return Some(value.clone());
+            }
+            map.values().find_map(|v| find_results(v, depth + 1))
+        }
+        Value::Array(items) => items.iter().find_map(|v| find_results(v, depth + 1)),
+        Value::String(s) if s.len() > 200 && s.contains("\"total_count\"") => {
+            serde_json::from_str::<Value>(s).ok().and_then(|v| find_results(&v, depth + 1))
+        }
+        _ => None,
+    }
+}
+
+/// Searches the Workshop through its public browse page, which embeds the same item data the
+/// Web API returns. No Steam Web API key needed.
+/// `build` ("41" / "42") and `category` (one of [`CATEGORIES`]) become Workshop tags.
+pub fn search_public(
+    text: Option<&str>,
+    sort: WorkshopSort,
+    build: Option<&str>,
+    category: Option<&str>,
+    page: u32,
+    per_page: u32,
+) -> Result<WorkshopSearchResult, String> {
+    let page = page.max(1);
+    let per_page = per_page.clamp(1, 30);
+    let mut req = agent()
+        .get("https://steamcommunity.com/workshop/browse/")
+        .query("appid", PZ_APP_ID.to_string())
+        .query("section", "readytouseitems")
+        .query("browsesort", sort.browse_sort())
+        .query("numperpage", per_page.to_string())
+        .query("p", page.to_string());
+    if let Some(t) = text.map(str::trim).filter(|t| !t.is_empty()) {
+        req = req.query("searchtext", t);
+    }
+    for tag in tag_filters(build, category) {
+        req = req.query("requiredtags[]", tag);
+    }
+    let html = req
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::StatusCode(429) => "Steam is rate-limiting; try again in a minute.".to_string(),
+            other => format!("The Steam Workshop could not be reached: {}", other),
+        })?
+        .into_body()
+        .with_config()
+        .limit(16 * 1024 * 1024)
+        .read_to_string()
+        .map_err(|e| format!("Unexpected answer from the Steam Workshop: {}", e))?;
+    let results = page_state(&html)
+        .as_ref()
+        .and_then(|v| find_results(v, 0))
+        .ok_or("The Steam Workshop page could not be read (Steam may have changed it).")?;
+    let num = |key: &str| results.get(key).and_then(|x| x.as_u64());
+    Ok(WorkshopSearchResult {
+        total: num("total_count").unwrap_or(0),
+        page: num("current_page").unwrap_or(page as u64) as u32,
+        pages: num("total_pages").unwrap_or(1) as u32,
+        items: results
+            .get("results")
+            .and_then(|a| a.as_array())
+            .map(|a| a.iter().filter_map(parse_item).collect())
+            .unwrap_or_default(),
+    })
+}
+
+/// "Build NN" plus the chosen category, as the Workshop spells its tags.
+fn tag_filters(build: Option<&str>, category: Option<&str>) -> Vec<String> {
+    let mut tags = Vec::new();
+    if let Some(b) = build.filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_digit())) {
+        tags.push(format!("Build {}", b));
+    }
+    if let Some(c) = category.and_then(|c| CATEGORIES.iter().find(|k| k.eq_ignore_ascii_case(c))) {
+        tags.push(c.to_string());
+    }
+    tags
 }
 
 /// Searches Project Zomboid Workshop items with the user's own Steam Web API key.
@@ -304,13 +423,7 @@ pub fn search(
     if let Some(t) = text {
         req = req.query("search_text", t);
     }
-    let mut tags: Vec<String> = Vec::new();
-    if let Some(b) = build.filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_digit())) {
-        tags.push(format!("Build {}", b));
-    }
-    if let Some(c) = category.and_then(|c| CATEGORIES.iter().find(|k| k.eq_ignore_ascii_case(c))) {
-        tags.push(c.to_string());
-    }
+    let tags = tag_filters(build, category);
     for (i, t) in tags.iter().enumerate() {
         req = req.query(format!("requiredtags[{}]", i), t);
     }
@@ -326,9 +439,11 @@ pub fn search(
     })?;
     let v: Value = response.into_body().read_json().map_err(|e| format!("Unexpected answer from Steam: {}", e))?;
     let r = v.get("response").ok_or("Unexpected answer from Steam (no response)")?;
+    let total = r.get("total").and_then(|t| t.as_u64()).unwrap_or(0);
     Ok(WorkshopSearchResult {
-        total: r.get("total").and_then(|t| t.as_u64()).unwrap_or(0),
+        total,
         page,
+        pages: total.div_ceil(per_page.clamp(1, 100) as u64).min(1000) as u32,
         items: r
             .get("publishedfiledetails")
             .and_then(|a| a.as_array())
@@ -571,6 +686,44 @@ mod tests {
                 RequiredItem { workshop_id: "3041733782".into(), title: "Spongie's Unlocker".into() },
             ]
         );
+    }
+
+    #[test]
+    fn reads_the_browse_page_state() {
+        let html = r#"<html><script type="application/json">not json</script>
+            <script type="application/json">{"renderContext":{"queryData":"{\"queries\":[{\"state\":{\"data\":{\"total_count\":903,\"total_pages\":31,\"current_page\":2,\"results\":[{\"publishedfileid\":\"7\",\"result\":1,\"consumer_appid\":108600,\"title\":\"A map\",\"short_description\":\"Hi\",\"tags\":[{\"tag\":\"Build 42\"},{\"tag\":\"Map\"}],\"subscriptions\":18}]}}}]}"}}</script></html>"#;
+        let results = find_results(&page_state(html).unwrap(), 0).unwrap();
+        assert_eq!(results.get("total_count").and_then(|v| v.as_u64()), Some(903));
+        let items: Vec<WorkshopItem> = results.get("results").unwrap().as_array().unwrap().iter().filter_map(parse_item).collect();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "A map");
+        assert_eq!(items[0].builds, vec!["42"]);
+        assert!(items[0].found && items[0].is_project_zomboid);
+        assert!(page_state("<html>no state</html>").is_none());
+    }
+
+    #[test]
+    fn browse_tags_follow_the_workshop_spelling() {
+        assert_eq!(tag_filters(Some("42"), Some("qol")), vec!["Build 42".to_string(), "QoL".to_string()]);
+        assert_eq!(tag_filters(Some(""), Some("not a category")), Vec::<String>::new());
+    }
+
+    /// Live Steam call, no key. cargo test workshop_live_public -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn workshop_live_public_search() {
+        let trending = search_public(None, WorkshopSort::Trending, Some("42"), None, 1, 30).unwrap();
+        println!("trending: {} items of {} ({} pages)", trending.items.len(), trending.total, trending.pages);
+        assert!(trending.total > 1000 && trending.items.len() == 30);
+        assert!(trending.items.iter().all(|i| i.builds.contains(&"42".to_string())));
+        let page3 = search_public(None, WorkshopSort::Trending, Some("42"), None, 3, 30).unwrap();
+        assert_eq!(page3.page, 3);
+        assert!(page3.items[0].workshop_id != trending.items[0].workshop_id);
+        let maps = search_public(Some("car"), WorkshopSort::Relevance, Some("42"), Some("Vehicles"), 1, 30).unwrap();
+        println!("car/Vehicles: {} of {}: {:?}", maps.items.len(), maps.total, maps.items.iter().take(3).map(|i| &i.title).collect::<Vec<_>>());
+        assert!(maps.total > 0 && maps.total < trending.total);
+        let none = search_public(Some("zzzzqqqxxnotamod"), WorkshopSort::Relevance, None, None, 1, 30).unwrap();
+        assert!(none.items.is_empty());
     }
 
     /// Live Steam call. cargo test workshop_live_details -- --ignored --nocapture

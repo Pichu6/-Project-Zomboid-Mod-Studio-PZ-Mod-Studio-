@@ -157,9 +157,13 @@ fn workshop_search_cmd(
     category: Option<String>,
     page: u32,
 ) -> Result<workshop::WorkshopSearchResult, String> {
-    let key = secrets::get(secrets::STEAM_WEB_API_KEY)?
-        .ok_or("Add your Steam Web API key in Browse Mods > Steam Workshop to search the Workshop here.")?;
-    workshop::search(&key, text.as_deref(), sort, build.as_deref(), category.as_deref(), page, 24)
+    // The public browse page needs no key; the Web API is the fallback when Steam changes it.
+    let public = workshop::search_public(text.as_deref(), sort, build.as_deref(), category.as_deref(), page, 30);
+    let Err(err) = public else { return public };
+    match secrets::get(secrets::STEAM_WEB_API_KEY)? {
+        Some(key) => workshop::search(&key, text.as_deref(), sort, build.as_deref(), category.as_deref(), page, 30),
+        None => Err(err),
+    }
 }
 
 /// Steam Workshop details for item ids (public Web API, no key).

@@ -448,6 +448,8 @@ export type WorkshopSort = 'relevance' | 'trending' | 'most_subscribed' | 'recen
 export interface WorkshopSearchResult {
   total: number;
   page: number;
+  /** Pages available for this search (Steam stops at 1000). */
+  pages: number;
   items: WorkshopItem[];
 }
 
