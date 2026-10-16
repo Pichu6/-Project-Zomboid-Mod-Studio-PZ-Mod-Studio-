@@ -185,8 +185,28 @@ pub fn save_master_load_order(
                 if let Ok(c) = fs::read_to_string(&path) {
                     if let Ok(mut inst) = serde_json::from_str::<AppInstance>(&c) {
                         if inst.is_active {
+                            // `load_order` only holds what is installed right now. Anything the
+                            // profile knew about and cannot see — a mod temporarily
+                            // unsubscribed, or one the machine never had — is kept, otherwise
+                            // the profile quietly forgets it and can never be taken elsewhere.
+                            let installed: std::collections::HashSet<&String> = load_order.iter().collect();
+                            let remembered: Vec<String> = inst
+                                .load_order
+                                .iter()
+                                .filter(|id| !installed.contains(id))
+                                .cloned()
+                                .collect();
+                            let still_wanted: Vec<String> = inst
+                                .active_mod_ids
+                                .iter()
+                                .filter(|id| !installed.contains(id))
+                                .cloned()
+                                .collect();
+
                             inst.load_order = load_order.clone();
+                            inst.load_order.extend(remembered);
                             inst.active_mod_ids = active_mod_ids.clone();
+                            inst.active_mod_ids.extend(still_wanted);
                             let _ = fs::write(&path, serde_json::to_string_pretty(&inst).unwrap_or_default());
                         }
                     }

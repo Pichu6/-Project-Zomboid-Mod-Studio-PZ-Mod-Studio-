@@ -249,7 +249,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       id: `preset_${Date.now()}`,
       name: newPresetName.trim(),
       description: newPresetDesc.trim() || undefined,
-      author: 'PZ Mod Studio User',
+      author: undefined,
       created_at: new Date().toISOString(),
       mods: mods.filter((m) => m.enabled).map((m) => ({
         mod_id: m.mod_id,
@@ -257,7 +257,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         workshop_id: m.workshop_id,
         enabled: true,
       })),
-      load_order: mods.map((m) => m.mod_id),
+      // Only the mods this preset is about: the full list would hand the other player every
+      // mod the exporter happens to own, plus packages that exist on no other machine.
+      load_order: mods.filter((m) => m.enabled).map((m) => m.mod_id),
     };
 
     const updated = [newPreset, ...savedPresets.filter((p) => p.name !== newPreset.name)];
@@ -320,7 +322,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       id: `preset_${Date.now()}`,
       name: activePresetName || 'ModList_Preset',
       description: 'Exported from PZ Mod Studio',
-      author: 'PZ Mod Studio User',
+      author: undefined,
       created_at: new Date().toISOString(),
       mods: mods.filter((m) => m.enabled).map((m) => ({
         mod_id: m.mod_id,
@@ -328,7 +330,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         workshop_id: m.workshop_id,
         enabled: true,
       })),
-      load_order: mods.map((m) => m.mod_id),
+      // Only the mods this preset is about: the full list would hand the other player every
+      // mod the exporter happens to own, plus packages that exist on no other machine.
+      load_order: mods.filter((m) => m.enabled).map((m) => m.mod_id),
     };
 
     setIsExportingPreset(true);

@@ -33,13 +33,13 @@ engine and the health rules are genuinely solid and should not be regressed.
 | | What | Where |
 |---|---|---|
 | ✅ | Closing the Studio force-kills a running dedicated server, with no save first. | `lib.rs:592-596`, `server_manager/mod.rs:464` |
-| ☐ | Activating a profile permanently drops mods that are not installed right now, so profiles cannot travel between machines. | `App.tsx:417-435`, `instance_manager/mod.rs:186-191` |
-| ☐ | Profiles cannot be exported or shared at all; presets live in `localStorage` and their export leaks the author's whole library as bare ids. | `LoadOrderModule.tsx:265,331` |
+| ✅ | Activating a profile permanently drops mods that are not installed right now, so profiles cannot travel between machines. | `App.tsx:417-435`, `instance_manager/mod.rs:186-191` |
+| ✅ | Profiles cannot be exported or shared at all; presets live in `localStorage` and their export leaks the author's whole library as bare ids. | `LoadOrderModule.tsx:265,331` |
 | ✅ | A published package shows as *disabled* in the Mod List straight afterwards, and the next toggle removes it. | `patch_generator/mod.rs` (no master-order update), `mod_info.rs:955-962` |
-| ☐ | `.pzmerge` sharing has no compatibility check: no mod versions, no warning when the recipient lacks the mods, and a draft exports as an empty mod. | `patch_generator/mod.rs:1224-1293,1349` |
+| ✅ | `.pzmerge` sharing has no compatibility check: no mod versions, no warning when the recipient lacks the mods, and a draft exports as an empty mod. | `patch_generator/mod.rs:1224-1293,1349` |
 | ✅ | Unsaved merge edits are discarded without a prompt by four ordinary navigations; "Unmerge All" deletes every manual merge with no backup. | `MergerModule.tsx:704-708,253,273-277,304-316` |
 | ✅ | Mod Health's bulk fix reorders and enables mods with no preview and no undo; `disable_mod` has no confirmation; the commonest error (`missing_mod`) has a fix button that never appears. | `HealthModule.tsx:28,173-184,359` |
-| ☐ | "Merge automatically" can create and activate a different package than the one the user is working in. | `vfs/mod.rs:131-171` |
+| ✅ | "Merge automatically" can create and activate a different package than the one the user is working in. | `vfs/mod.rs:131-171` |
 | ✅ | The Monitor's live log only works when the game was launched from the Studio, shows nothing and says nothing otherwise, and leaks one watcher thread per launch click. | `sandbox/mod.rs:171-219`, `lib.rs:294-300` |
 | ✅ | Crash diagnostics name specific third-party mods with invented line numbers, and offer a repair button for errors they did not diagnose. | `sandbox/mod.rs:226-351` |
 | ✅ | Server port, RCON port and map are editable, reported as saved, and never written for configs the app created; the port never reaches the server process. | `server_manager/mod.rs:1118-1124,322-334` |
@@ -69,3 +69,7 @@ engine and the health rules are genuinely solid and should not be regressed.
 - A forced ten-second splash on every start.
 - Every generated mod's poster comes from a file called `111.png`, read relative to the working
   directory, and carries the Studio's repo URL in its `mod.info`.
+
+Everything above the Polish list is done. What is left there is cosmetic: the spacing and
+colour drift, the 9px text, the icon-only buttons without names, the forced splash, and the
+jargon in player-facing copy.

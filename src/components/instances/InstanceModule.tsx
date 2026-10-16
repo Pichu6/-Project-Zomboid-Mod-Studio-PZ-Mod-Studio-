@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw, Edit3, X, Save } from 'lucide-react';
+import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw, Edit3, Share2, X, Save } from 'lucide-react';
 import { ModInfo, StudioPathsUI, AppInstance } from '../../types';
 import { TauriService, explainError } from '../../services/tauri';
 
@@ -126,6 +126,44 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       await loadInstances();
     } catch (err: any) {
       alert(`Error activating profile: ${explainError(err)}`);
+    }
+  };
+
+  /**
+   * A profile is a named mod list, which is exactly what a .pzpack holds, so sharing one reuses
+   * that format: the other player gets the mod ids with their Workshop ids and can subscribe.
+   */
+  const handleShareInstance = async (inst: AppInstance) => {
+    const byId = new Map(mods.map((m) => [m.mod_id, m]));
+    const active = new Set(inst.active_mod_ids);
+    const preset = {
+      id: `profile_${inst.id}`,
+      name: inst.name,
+      description: inst.description || `Mod profile shared from PZ Mod Studio`,
+      author: undefined,
+      created_at: new Date().toISOString(),
+      mods: inst.load_order
+        .filter((id) => active.has(id))
+        .map((id) => ({
+          mod_id: id,
+          name: byId.get(id)?.name ?? id,
+          workshop_id: byId.get(id)?.workshop_id,
+          enabled: true,
+        })),
+      load_order: inst.load_order.filter((id) => active.has(id)),
+    };
+    if (preset.mods.length === 0) {
+      alert('This profile has no mods switched on, so there would be nothing to share.');
+      return;
+    }
+    try {
+      const fileName = `${inst.name.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'profile'}.pzpack`;
+      const filePath = await TauriService.pickSaveFile(fileName, 'PZ Mod Studio profile (.pzpack)', 'pzpack');
+      if (!filePath) return;
+      await TauriService.exportPresetFile(preset as never, filePath);
+      setStatusMessage(`Profile '${inst.name}' saved to ${filePath}. Send that file to anyone.`);
+    } catch (err) {
+      alert(`The profile could not be saved: ${explainError(err)}`);
     }
   };
 
@@ -277,9 +315,19 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                     )}
 
                     <button
+                      onClick={() => handleShareInstance(inst)}
+                      className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl transition cursor-pointer"
+                      title="Save this profile to a file you can send to someone else"
+                      aria-label={`Share the profile ${inst.name}`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+
+                    <button
                       onClick={() => handleOpenEdit(inst)}
                       className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl transition cursor-pointer"
-                      title="Edit profile"
+                      title="Rename this profile"
+                      aria-label={`Rename the profile ${inst.name}`}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -287,7 +335,8 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                     <button
                       onClick={() => handleDeleteInstance(inst)}
                       className="p-2 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 rounded-xl transition cursor-pointer"
-                      title="Delete profile"
+                      title="Delete this profile"
+                      aria-label={`Delete the profile ${inst.name}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

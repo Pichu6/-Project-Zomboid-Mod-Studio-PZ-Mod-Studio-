@@ -398,7 +398,7 @@ The file the game reads to know which mods are on and in what order. Found autom
               </p>
 
               <div className="space-y-3">
-                {/* 1. Advertencia de Lanzamiento sin Merge */}
+                {/* 1. Warning before launching with no merge package */}
                 <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="space-y-1 max-w-xl">
                     <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
@@ -429,7 +429,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                   </div>
                 </div>
 
-                {/* 2. Notificación de Auto-Sort */}
+                {/* 2. The auto-sort explanation */}
                 <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="space-y-1 max-w-xl">
                     <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">

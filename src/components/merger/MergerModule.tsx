@@ -834,7 +834,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 <span>➕ New Package</span>
               </button>
 
-              {/* Botón de Empaquetar deshabilitado en gris porque no hay paquete abierto */}
+              {/* Package & Publish stays greyed out until a package is open */}
               <button
                 disabled
                 className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50 shadow shrink-0"

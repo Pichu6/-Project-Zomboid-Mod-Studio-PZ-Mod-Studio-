@@ -1309,6 +1309,13 @@ pub fn import_merged_package(
     if clean_folder == BRIDGE_FOLDER {
         return Err("A .pzmerge package cannot replace the companion mod 'Z_PZModStudio_Bridge'.".to_string());
     }
+    if imported.merged_files.is_empty() {
+        return Err(
+            "This package has no merged files in it — whoever exported it had not published it yet, \
+             so there is nothing to install. Ask them to press Package & Publish and export again."
+                .to_string(),
+        );
+    }
 
     let pkg_dir = user_dirs[0].join("mods").join(&clean_folder);
 
@@ -1335,8 +1342,29 @@ pub fn import_merged_package(
     let _ = fs::write(pkg_dir.join("poster.png"), &png_256);
     let _ = fs::write(pkg_dir.join("icon.png"), &png_256);
 
+    // A merge package is vanilla files rewritten with other mods' code spliced in. Without
+    // those mods the game runs code that refers to things that are not there, so the import
+    // reports what is missing rather than letting it fail in game.
+    let installed: std::collections::HashSet<String> = crate::catalog::build_catalog(
+        "",
+        user_zomboid_dir,
+        None,
+    )
+    .mods
+    .iter()
+    .map(|m| m.id.to_lowercase())
+    .collect();
+    let missing: Vec<String> = imported
+        .packaged_mod_ids
+        .iter()
+        .filter(|id| !id.starts_with("Z_PZModStudio_") && !installed.contains(&id.to_lowercase()))
+        .cloned()
+        .collect();
+
     let meta = MasterPatchMetadata {
-        is_packaged: imported.is_packaged,
+        // Whoever built it says it is published; on this machine it has not been checked
+        // against anything, so it starts as a draft until the user publishes it here.
+        is_packaged: false,
         created_at: if imported.created_at.is_empty() {
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs().to_string()).unwrap_or_default()
         } else {
@@ -1363,12 +1391,23 @@ pub fn import_merged_package(
         }
     }
 
+    let description = if missing.is_empty() {
+        "Imported merge package. Check it in the Mod Merger, then publish it here.".to_string()
+    } else {
+        format!(
+            "Imported merge package. It patches {} mod(s) you do not have ({}), so parts of it              will not work until you install them. Check it in the Mod Merger before playing.",
+            missing.len(),
+            missing.join(", ")
+        )
+    };
+
     Ok(MergedPackageInfo {
         folder_name: clean_folder.clone(),
         display_name,
         mod_id: clean_folder,
-        description: Some("Package imported from .pzmerge file".to_string()),
-        is_packaged: imported.is_packaged,
+        // It has not been published on this machine yet, whatever the file claims.
+        is_packaged: false,
+        description: Some(description),
         is_active_in_modlist: false,
         is_companion_bridge: false,
         created_at: Some(meta.created_at),
