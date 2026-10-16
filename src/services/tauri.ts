@@ -212,6 +212,9 @@ export const TauriService = {
           content: f.content,
         })),
         status: (c.status as any) || (c.is_identical_noise ? ('AUTO_MERGED' as const) : ('MANUAL_CONFLICT' as const)),
+        mod_changes: c.mod_changes ?? [],
+        collisions: c.collisions ?? [],
+        strategy: c.strategy ?? '',
       }));
     } catch (err) {
       console.warn('Scan conflicts error:', err);

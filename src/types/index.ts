@@ -35,6 +35,34 @@ export interface VfsConflict {
   status: ConflictStatus;
   has_syntax_errors?: boolean;
   syntax_error_message?: string;
+  /** What each mod changes compared to vanilla (empty when vanilla has no such file). */
+  mod_changes?: ModChangeSummary[];
+  /** Vanilla line ranges that several mods change differently. */
+  collisions?: CollisionRegion[];
+  /** How the merged output was built, in plain words. */
+  strategy?: string;
+}
+
+export interface ChangeRegion {
+  kind: 'added' | 'removed' | 'changed';
+  base_start: number;
+  base_end: number;
+  mod_start: number;
+  mod_end: number;
+}
+
+export interface ModChangeSummary {
+  mod_id: string;
+  mod_name: string;
+  lines_added: number;
+  lines_removed: number;
+  regions: ChangeRegion[];
+}
+
+export interface CollisionRegion {
+  base_start: number;
+  base_end: number;
+  mods: string[];
 }
 
 // ==========================================

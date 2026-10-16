@@ -37,6 +37,15 @@ pub struct VfsConflictRaw {
     pub auto_ast_output: String,
     pub is_identical_noise: bool,
     pub status: Option<String>,
+    /// What each mod changes compared to vanilla (empty when vanilla has no such file).
+    #[serde(default)]
+    pub mod_changes: Vec<crate::diff_engine::lua::ModChangeSummary>,
+    /// Vanilla line ranges that several mods change differently.
+    #[serde(default)]
+    pub collisions: Vec<crate::diff_engine::lua::CollisionRegion>,
+    /// How the merged output was built, in plain words.
+    #[serde(default)]
+    pub strategy: String,
 }
 
 /// Auto-detects default Project Zomboid installation and user data paths across drives.
@@ -123,111 +132,89 @@ pub fn validate_paths(mut paths: StudioPaths) -> StudioPaths {
     paths
 }
 
-/// Scans active mods to detect relative file path collisions.
+/// Files the game reads from every active mod and combines itself (checked in the decompiled
+/// 42.20.4 code: CustomPerks, CustomSandboxOptions, TileGeometryManager, TileDepthTexture*,
+/// SeamManager, SeatingManager, SpriteModelManager, ModRegistries, Translator). Several mods
+/// shipping one of these is normal and never a conflict; merging them would load them twice.
+pub fn is_loaded_from_every_mod(rel_path: &str) -> bool {
+    let p = rel_path.replace('\\', "/").to_lowercase();
+    const EACH_MOD: [&str; 8] = [
+        "media/perks.txt",
+        "media/sandbox-options.txt",
+        "media/tilegeometry.txt",
+        "media/tiledepthtextureassignments.txt",
+        "media/seams.txt",
+        "media/seating.txt",
+        "media/spritemodels.txt",
+        "media/registries.lua",
+    ];
+    EACH_MOD.contains(&p.as_str()) || p.starts_with("media/lua/shared/translate/")
+}
+
+/// Finds files that several active mods ship at the same path (the game loads only the copy of
+/// the mod that loads last), looking only at what the game really reads: active mods (from
+/// default.txt, in load order) and, per mod, the folders loaded for the installed build
+/// (`common/` + version folder, or the root on Build 41). A mod's version folder overriding its own
+/// `common/` file is not a conflict. Contents are read only for paths with two or more mods.
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
-    let mut file_map: HashMap<String, Vec<CompetingModFileRaw>> = HashMap::new();
-    let mut active_mods: Vec<String> = Vec::new();
+    let active: Vec<String> = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
+        .map(|d| d.active_mods)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| !s.starts_with("Z_PZModStudio_") && s != "PZModStudioCarrier")
+        .collect();
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let game = catalog.game_version_int();
 
-    if let Ok(ini_data) = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path) {
-        active_mods = ini_data
-            .active_mods
+    // "media/..." path -> (load position, mod id, mod name, file on disk), in load order.
+    let mut by_path: HashMap<String, Vec<(usize, String, String, PathBuf)>> = HashMap::new();
+    let mut seen_mods = HashSet::new();
+    for (position, entry) in active.iter().enumerate() {
+        let Some(m) = catalog.resolve(entry.trim()) else { continue };
+        if m.loadability != crate::catalog::Loadability::Loadable || !seen_mods.insert(m.id.clone()) {
+            continue;
+        }
+        let mut files: std::collections::BTreeMap<String, PathBuf> = std::collections::BTreeMap::new();
+        for layer in crate::load_order::mod_info::media_layers_for_build(Path::new(&m.root_dir), game) {
+            let media = layer.join("media");
+            for e in WalkDir::new(&media).into_iter().filter_map(|e| e.ok()) {
+                if !e.file_type().is_file() {
+                    continue;
+                }
+                let is_text = e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("lua") || x.eq_ignore_ascii_case("txt"));
+                let Ok(rel) = e.path().strip_prefix(&media) else { continue };
+                if is_text {
+                    // A later layer (the version folder) replaces the same file from common/.
+                    files.insert(format!("media/{}", rel.to_string_lossy().replace('\\', "/")), e.path().to_path_buf());
+                }
+            }
+        }
+        for (rel, abs) in files {
+            by_path.entry(rel).or_default().push((position, m.id.clone(), m.name.clone(), abs));
+        }
+    }
+
+    let mut file_map: Vec<(String, Vec<CompetingModFileRaw>)> = Vec::new();
+    for (rel, mut owners) in by_path {
+        if owners.len() < 2 || is_loaded_from_every_mod(&rel) {
+            continue;
+        }
+        owners.sort_by_key(|o| o.0);
+        let files: Vec<CompetingModFileRaw> = owners
             .into_iter()
-            .filter(|s| !s.starts_with("Z_PZModStudio_") && s != "PZModStudioCarrier")
+            .filter_map(|(_, mod_id, mod_name, abs)| {
+                let bytes = fs::read(&abs).ok()?;
+                Some(CompetingModFileRaw {
+                    mod_id,
+                    mod_name,
+                    absolute_path: abs.to_string_lossy().to_string(),
+                    content: String::from_utf8_lossy(&bytes).to_string(),
+                })
+            })
             .collect();
+        file_map.push((rel, files));
     }
-
-    let is_mod_active = |resolved_id: &str, path: &Path| -> bool {
-        if active_mods.is_empty() {
-            return true;
-        }
-
-        let clean_target = resolved_id.trim().to_lowercase();
-        let sanitized_target = crate::load_order::mod_info::sanitize_mod_id(&clean_target);
-        let alpha_target: String = clean_target.chars().filter(|c| c.is_alphanumeric()).collect();
-
-        for active in &active_mods {
-            let clean_act = active.trim().to_lowercase();
-            let sanitized_act = crate::load_order::mod_info::sanitize_mod_id(&clean_act);
-            let alpha_act: String = clean_act.chars().filter(|c| c.is_alphanumeric()).collect();
-
-            if clean_act == clean_target 
-                || sanitized_act == sanitized_target 
-                || (!alpha_target.is_empty() && alpha_target == alpha_act) {
-                return true;
-            }
-        }
-
-        // Fallback: check workshop numeric id from path
-        if let Some(ws_id) = extract_mod_id_from_path(path) {
-            if active_mods.iter().any(|a| a == &ws_id) {
-                return true;
-            }
-        }
-
-        false
-    };
-
-    let workshop_dir = Path::new(&paths.workshop_dir);
-    if workshop_dir.exists() {
-        for entry in WalkDir::new(workshop_dir).max_depth(8).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_file() {
-                let path_str = path.to_string_lossy();
-                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) 
-                   && !path_str.contains("Z_PZModStudio_") 
-                   && !path_str.contains("PZModStudioCarrier") {
-                    if let Some(rel_path) = extract_relative_media_path(path) {
-                        let mod_id = resolve_specific_mod_id(path)
-                            .or_else(|| extract_mod_id_from_path(path))
-                            .unwrap_or_else(|| "workshop_mod".to_string());
-
-                        if is_mod_active(&mod_id, path) {
-                            let mod_name = resolve_specific_mod_name(path, &mod_id);
-                            if let Ok(content) = fs::read_to_string(path) {
-                                file_map.entry(rel_path).or_default().push(CompetingModFileRaw {
-                                    mod_id,
-                                    mod_name,
-                                    absolute_path: path_str.to_string(),
-                                    content,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let user_mods_dir = Path::new(&paths.user_zomboid_dir).join("mods");
-    if user_mods_dir.exists() {
-        for entry in WalkDir::new(&user_mods_dir).max_depth(8).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_file() {
-                let path_str = path.to_string_lossy();
-                if (path_str.ends_with(".lua") || path_str.ends_with(".txt")) 
-                   && !path_str.contains("Z_PZModStudio_") 
-                   && !path_str.contains("PZModStudioCarrier") {
-                    if let Some(rel_path) = extract_relative_media_path(path) {
-                        let mod_id = resolve_specific_mod_id(path)
-                            .or_else(|| extract_local_mod_id(path))
-                            .unwrap_or_else(|| "local_mod".to_string());
-
-                        if is_mod_active(&mod_id, path) {
-                            let mod_name = resolve_specific_mod_name(path, &mod_id);
-                            if let Ok(content) = fs::read_to_string(path) {
-                                file_map.entry(rel_path).or_default().push(CompetingModFileRaw {
-                                    mod_id,
-                                    mod_name,
-                                    absolute_path: path_str.to_string(),
-                                    content,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    file_map.sort_by(|a, b| a.0.cmp(&b.0));
 
     let pz_base_dir = Path::new(&paths.pz_install_dir);
 
@@ -263,34 +250,15 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     let mut conflicts = Vec::new();
     let mut id_counter = 1;
 
-    for (rel_path, mut competing_files) in file_map {
+    for (rel_path, unique_mods) in file_map {
         // In Build 42, media/registries.lua is an additive registration file loaded natively by the game engine from all active mods.
         // It does not clobber other mods and re-registering causes duplicate null returns in Java.
         if rel_path.ends_with("registries.lua") || rel_path.ends_with("registries.LUA") {
             continue;
         }
 
-        if competing_files.len() > 1 {
-            // Prioritize Build 42 (42/) files over legacy B41 fallback copies for the same mod
-            competing_files.sort_by_key(|f| {
-                if f.absolute_path.contains("/42/") || f.absolute_path.contains("\\42\\") {
-                    0
-                } else {
-                    1
-                }
-            });
-
-            let mut unique_mods = Vec::new();
-            let mut seen_mods = HashSet::new();
-
-            for file in competing_files.drain(..) {
-                let norm_mod_id = file.mod_id.to_lowercase().replace('-', "_").replace(' ', "");
-                if !seen_mods.contains(&norm_mod_id) {
-                    seen_mods.insert(norm_mod_id);
-                    unique_mods.push(file);
-                }
-            }
-
+        {
+            // Files are in load order: the last one is the copy the game uses.
             if unique_mods.len() > 1 {
                 let vanilla_file_path = if rel_path.starts_with("media/") || rel_path.starts_with("media\\") {
                     pz_base_dir.join(&rel_path)
@@ -315,6 +283,13 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                 };
 
                 let auto_ast_output = crate::diff_engine::lua::combine_n_way_lua_or_script(&rel_path, &base_content, &unique_mods);
+                let has_base = !base_content.starts_with("-- vanilla file not present") && !base_content.starts_with("-- vanilla file unreadable");
+                let (mod_changes, collisions) = if has_base {
+                    crate::diff_engine::lua::summarize_changes(&base_content, &unique_mods)
+                } else {
+                    (Vec::new(), Vec::new())
+                };
+                let strategy = crate::diff_engine::lua::describe_merge_strategy(&rel_path, &base_content, &unique_mods, collisions.len());
                 let (merged_output, status) = if let Some((saved_content, saved_status)) = draft_map.get(&rel_path) {
                     (saved_content.clone(), Some(saved_status.clone()))
                 } else {
@@ -335,6 +310,9 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                     auto_ast_output,
                     is_identical_noise,
                     status,
+                    mod_changes,
+                    collisions,
+                    strategy,
                 });
 
                 id_counter += 1;
@@ -368,82 +346,29 @@ fn find_first_differing_line(base: &str, files: &[CompetingModFileRaw]) -> usize
     1
 }
 
-fn resolve_specific_mod_id(file_path: &Path) -> Option<String> {
-    let mut current = file_path.parent();
-    while let Some(dir) = current {
-        let info_path = dir.join("mod.info");
-        if info_path.exists() {
-            if let Ok(content) = fs::read_to_string(&info_path) {
-                for line in content.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.starts_with("id=") {
-                        let id_val = trimmed[3..].trim().to_string();
-                        if !id_val.is_empty() {
-                            return Some(id_val);
-                        }
-                    }
-                }
-            }
-            break;
-        }
-        current = dir.parent();
-    }
-    None
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn resolve_specific_mod_name(file_path: &Path, fallback_mod_id: &str) -> String {
-    let mut current = file_path.parent();
-    while let Some(dir) = current {
-        let info_path = dir.join("mod.info");
-        if info_path.exists() {
-            if let Ok(content) = fs::read_to_string(&info_path) {
-                for line in content.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.starts_with("name=") {
-                        let name_val = trimmed[5..].trim().to_string();
-                        if !name_val.is_empty() {
-                            return name_val;
-                        }
-                    }
-                }
-            }
-            break;
-        }
-        current = dir.parent();
-    }
-    fallback_mod_id.to_string()
-}
-
-fn extract_relative_media_path(path: &Path) -> Option<String> {
-    let path_str = path.to_string_lossy().replace('\\', "/");
-    if let Some(idx) = path_str.find("/media/") {
-        let rel = path_str[idx + 1..].to_string();
-        if rel == "media/sandbox-options.txt" || rel.ends_with("/sandbox-options.txt") || rel == "media/mod.info" {
-            return None;
-        }
-        return Some(rel);
-    }
-    None
-}
-
-fn extract_mod_id_from_path(path: &Path) -> Option<String> {
-    let path_str = path.to_string_lossy();
-    if let Some(idx) = path_str.find("108600\\") {
-        let rest = &path_str[idx + 7..];
-        if let Some(end_idx) = rest.find('\\') {
-            return Some(rest[..end_idx].to_string());
+    /// Read-only timing on the real install.
+    /// PZMS_PZ_DIR=... PZMS_WORKSHOP_DIR=... PZMS_ZOMBOID_DIR=... cargo test --release scan_timing -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn scan_timing_on_real_install() {
+        let (Ok(pz), Ok(w), Ok(z)) = (std::env::var("PZMS_PZ_DIR"), std::env::var("PZMS_WORKSHOP_DIR"), std::env::var("PZMS_ZOMBOID_DIR")) else { return };
+        let paths = StudioPaths {
+            pz_install_dir: pz,
+            workshop_dir: w,
+            mod_list_ini_path: format!("{}/mods/default.txt", z),
+            user_zomboid_dir: z,
+            carrier_workshop_id: None,
+            is_valid: true,
+        };
+        let t = std::time::Instant::now();
+        let conflicts = scan_conflicts(&paths);
+        println!("scan: {:?}, {} conflicts", t.elapsed(), conflicts.len());
+        for c in &conflicts {
+            println!("  {} ({} lines base) <- {:?}", c.relative_path, c.total_file_lines, c.competing_files.iter().map(|f| (&f.mod_name, f.content.len())).collect::<Vec<_>>());
         }
     }
-    None
-}
-
-fn extract_local_mod_id(path: &Path) -> Option<String> {
-    let path_str = path.to_string_lossy();
-    if let Some(idx) = path_str.find("mods\\") {
-        let rest = &path_str[idx + 5..];
-        if let Some(end_idx) = rest.find('\\') {
-            return Some(rest[..end_idx].to_string());
-        }
-    }
-    None
 }

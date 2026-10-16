@@ -601,6 +601,28 @@ pub fn select_mod_info_for_build(mod_root: &Path, game_version: Option<u32>) -> 
         let root = mod_root.join("mod.info");
         return root.is_file().then_some(root);
     }
+    let version_dir = version_dir_for_build(mod_root, game);
+    [version_dir.join("mod.info"), mod_root.join("common").join("mod.info")]
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
+/// The folders whose `media/` the game loads for this mod, lowest priority first: Build 42 reads
+/// `common/` and then the version folder (which overrides it); Build 41 reads the mod root.
+pub fn media_layers_for_build(mod_root: &Path, game_version: Option<u32>) -> Vec<PathBuf> {
+    let game = game_version.unwrap_or(u32::MAX);
+    if game < MIN_VERSION_DIR {
+        return vec![mod_root.to_path_buf()];
+    }
+    vec![mod_root.join("common"), version_dir_for_build(mod_root, game)]
+        .into_iter()
+        .filter(|d| d.is_dir())
+        .collect()
+}
+
+/// ZomboidFileSystem.getModVersionDirName: the highest version folder between 42.0 and the build
+/// (default "42.0"), whether or not it holds a mod.info.
+fn version_dir_for_build(mod_root: &Path, game: u32) -> PathBuf {
     let mut best_name = "42.0".to_string();
     let mut best = MIN_VERSION_DIR;
     if let Ok(entries) = fs::read_dir(mod_root) {
@@ -614,9 +636,7 @@ pub fn select_mod_info_for_build(mod_root: &Path, game_version: Option<u32>) -> 
             }
         }
     }
-    [mod_root.join(&best_name).join("mod.info"), mod_root.join("common").join("mod.info")]
-        .into_iter()
-        .find(|p| p.is_file())
+    mod_root.join(best_name)
 }
 
 /// The mod folder (the direct child of a `mods` folder) that a mod.info belongs to.

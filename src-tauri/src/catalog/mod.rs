@@ -83,6 +83,16 @@ impl ModCatalog {
     pub fn get(&self, id: &str) -> Option<&CatalogMod> {
         self.mods.iter().find(|m| m.id == id && m.shadowed_by.is_none())
     }
+
+    /// The mod a default.txt entry refers to (`ModId` or `<workshopId>/<ModId>`).
+    pub fn resolve(&self, entry: &str) -> Option<&CatalogMod> {
+        resolve_entry(self, entry)
+    }
+
+    /// The installed build as major*1000+minor, when known.
+    pub fn game_version_int(&self) -> Option<u32> {
+        self.game_version.as_deref().and_then(crate::load_order::mod_info::version_dir_int)
+    }
 }
 
 fn child_dirs(dir: &Path) -> Vec<PathBuf> {
