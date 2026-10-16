@@ -1,10 +1,14 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { ModInfo, ModPreset, MissingModsReport, HealthIssue, CatalogModSummary } from '../../types';
+import { ModInfo, ModPreset, MissingModsReport, HealthIssue, CatalogModSummary, AppInstance } from '../../types';
 import { SourceBadge, sourceOf } from '../common/SourceBadge';
+import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
 import {
   BookOpen,
+  Copy,
+  EyeOff,
+  FolderOpen,
   ListOrdered,
   RefreshCw,
   Search,
@@ -55,6 +59,9 @@ interface LoadOrderModuleProps {
   catalogById?: Map<string, CatalogModSummary>;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
   onOpenInBrowser?: (workshopId: string) => void;
+  /** Every saved profile, so the list can show which of them a mod belongs to. */
+  profiles?: AppInstance[];
+  activeProfileId?: string | null;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -203,7 +210,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   healthIssues = null,
   catalogById,
   onOpenInBrowser,
+  profiles = [],
+  activeProfileId = null,
 }) => {
+  const showContextMenu = useContextMenu();
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -601,9 +611,32 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  /**
+   * With a profile active the list is about that profile, so the rest of the library is out of
+   * the way until asked for. "Show everything" then labels each mod with the profiles using it,
+   * which is how you add one to the profile you are in.
+   */
+  const [showEveryMod, setShowEveryMod] = useState<boolean>(false);
+
+  const activeProfile = profiles.find((p) => p.id === activeProfileId) ?? null;
+  const inActiveProfile = useMemo(
+    () => new Set(activeProfile ? activeProfile.active_mod_ids : []),
+    [activeProfile]
+  );
+  /** mod id -> the profiles that have it switched on. */
+  const profilesByMod = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const p of profiles) {
+      for (const id of p.active_mod_ids) {
+        map.set(id, [...(map.get(id) ?? []), p.name]);
+      }
+    }
+    return map;
+  }, [profiles]);
   const filteredMods = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     return mods.filter((m) => {
+      if (activeProfile && !showEveryMod && !inActiveProfile.has(m.mod_id) && !m.enabled) return false;
       if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
       if (!query) return true;
       return (
@@ -612,7 +645,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
       );
     });
-  }, [mods, searchQuery, sourceFilter, catalogById]);
+  }, [mods, searchQuery, sourceFilter, catalogById, activeProfile, showEveryMod, inActiveProfile]);
 
   const reverseDependents = useMemo(() => {
     if (!selectedMod) return [];
@@ -678,6 +711,40 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     newOrder.push(item);
     triggerReorder(newOrder);
   };
+
+  /** What right-clicking a mod offers: the things people reach for most. */
+  const modRowMenu = (mod: ModInfo, index: number): MenuItem[] => [
+    {
+      label: mod.enabled ? 'Switch off' : 'Switch on',
+      icon: mod.enabled ? EyeOff : Check,
+      onSelect: () => onToggleMod(mod.mod_id),
+    },
+    { label: 'Move to the top', icon: ChevronsUp, onSelect: () => moveToTop(index), disabled: index === 0,
+      disabledReason: 'Already first' },
+    { label: 'Move to the bottom', icon: ChevronsDown, onSelect: () => moveToBottom(index),
+      disabled: index === mods.length - 1, disabledReason: 'Already last' },
+    {
+      label: 'Open in Mod Browser',
+      icon: BookOpen,
+      separatorBefore: true,
+      onSelect: () => mod.workshop_id && onOpenInBrowser?.(mod.workshop_id),
+      disabled: !mod.workshop_id || !onOpenInBrowser,
+      disabledReason: 'This mod did not come from the Workshop',
+    },
+    {
+      label: 'Open its folder',
+      icon: FolderOpen,
+      onSelect: () => TauriService.openModFolder(paths, catalogById?.get(mod.mod_id)?.root_dir ?? ''),
+      disabled: !catalogById?.get(mod.mod_id)?.root_dir,
+      disabledReason: 'The Studio does not know where this mod lives',
+    },
+    {
+      label: 'Copy the mod id',
+      icon: Copy,
+      separatorBefore: true,
+      onSelect: () => navigator.clipboard.writeText(mod.mod_id),
+    },
+  ];
 
   const handleAssignPosition = (modId: string, targetPos: number) => {
     const currentIndex = mods.findIndex((m) => m.mod_id === modId);
@@ -1086,6 +1153,26 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
+          {activeProfile && (
+            <button
+              type="button"
+              onClick={() => setShowEveryMod((v) => !v)}
+              aria-pressed={showEveryMod}
+              title={
+                showEveryMod
+                  ? `Show only what the profile ${activeProfile.name} uses`
+                  : 'Show every installed mod, so you can add one to this profile'
+              }
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition ${
+                showEveryMod
+                  ? 'bg-slate-800 text-slate-200 border-slate-700'
+                  : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/70'
+              }`}
+            >
+              {showEveryMod ? 'Showing everything' : `Only ${activeProfile.name}`}
+            </button>
+          )}
+
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
@@ -1255,6 +1342,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       modRowRefs.current[mod.mod_id] = el;
                     }}
                     onClick={() => setSelectedModId(mod.mod_id)}
+                    onContextMenu={(e) => {
+                      setSelectedModId(mod.mod_id);
+                      showContextMenu(e, modRowMenu(mod, originalIndex));
+                    }}
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
                       isOpenedPackage
                         ? 'border-2 border-amber-500/80 bg-amber-950/25 shadow-md shadow-amber-950/30'
@@ -1381,6 +1472,30 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           )}
 
                           <SourceBadge modId={mod.mod_id} entry={catalogById?.get(mod.mod_id)} />
+
+                          {/* Showing everything: say which profiles each mod belongs to. */}
+                          {showEveryMod && activeProfile && (() => {
+                            const usedBy = profilesByMod.get(mod.mod_id) ?? [];
+                            const others = usedBy.filter((name) => name !== activeProfile.name);
+                            if (inActiveProfile.has(mod.mod_id)) {
+                              return (
+                                <span
+                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-emerald-700/60 text-emerald-300 shrink-0"
+                                  title={`In this profile${others.length ? `, and in ${others.join(', ')}` : ''}`}
+                                >
+                                  in {activeProfile.name}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 shrink-0"
+                                title={others.length ? `Used by: ${others.join(', ')}` : 'Not in any profile yet'}
+                              >
+                                {others.length ? `in ${others.join(', ')}` : 'no profile'}
+                              </span>
+                            );
+                          })()}
 
                           {!mod.enabled && (
                             <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">

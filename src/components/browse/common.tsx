@@ -57,10 +57,13 @@ export const ModCard: React.FC<{
   stats?: React.ReactNode;
   summary?: string | null;
   onOpen?: () => void;
-}> = ({ image, title, subtitle, chips, stats, summary, onOpen }) => (
+  /** Right-click menu for this card. */
+  onContextMenu?: (e: React.MouseEvent) => void;
+}> = ({ image, title, subtitle, chips, stats, summary, onOpen, onContextMenu }) => (
   <button
     type="button"
     onClick={onOpen}
+    onContextMenu={onContextMenu}
     disabled={!onOpen}
     className="group text-left flex flex-col rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden hover:border-slate-600 hover:bg-slate-900 transition cursor-pointer disabled:cursor-default"
   >

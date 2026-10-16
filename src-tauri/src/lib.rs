@@ -333,7 +333,24 @@ fn pick_open_file_cmd(
     dialog.pick_file().map(|p| p.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+/// Shows a mod's folder in Explorer. The path comes from the UI, so it is checked against the
+/// folders the user configured first: this opens mods, not anywhere on the disk.
+#[tauri::command(async)]
+fn open_mod_folder_cmd(paths: StudioPaths, folder: String) -> Result<(), String> {
+    let target = std::fs::canonicalize(&folder).map_err(|_| format!("{} is not there any more.", folder))?;
+    let roots: Vec<std::path::PathBuf> = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
+        .iter()
+        .filter(|d| !d.is_empty())
+        .filter_map(|d| std::fs::canonicalize(d).ok())
+        .collect();
+    if !roots.iter().any(|root| target.starts_with(root)) {
+        return Err("That folder is outside your game and Zomboid folders.".to_string());
+    }
+    open::that(&target).map_err(|e| format!("Windows could not open that folder: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 fn open_package_folder_cmd(user_zomboid_dir: String, package_folder_name: String) -> Result<bool, String> {
     let clean_pkg_name = if package_folder_name.starts_with("Z_PZModStudio_") {
         package_folder_name
@@ -539,6 +556,7 @@ pub fn run() {
             export_merged_package_cmd,
             import_merged_package_cmd,
             open_package_folder_cmd,
+            open_mod_folder_cmd,
             open_logs_folder_cmd,
             list_available_log_files_cmd,
             read_log_file_cmd,

@@ -15,6 +15,7 @@ import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
 import { useModHealth } from './hooks/useModHealth';
 import { BrowseModule } from './components/browse/BrowseModule';
+import { ContextMenuProvider } from './components/common/ContextMenu';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
 const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
@@ -27,6 +28,8 @@ export const App: React.FC = () => {
   const rules = DEFAULT_POLYFILL_RULES;
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
+  /** Every saved profile, so the Mod List can say which of them a mod belongs to. */
+  const [profiles, setProfiles] = useState<AppProfile[]>([]);
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
   /** Conflicting file the Merger should open on (set from Mod Health). */
   const [mergerFocusPath, setMergerFocusPath] = useState<string | null>(null);
@@ -63,6 +66,7 @@ export const App: React.FC = () => {
       try {
         const list: AppProfile[] = await TauriService.listInstances(userDir);
         const active = list.find((i) => i.is_active) || null;
+        setProfiles(list);
         setActiveProfile(active);
         return active;
       } catch (err) {
@@ -458,7 +462,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <>
+    <ContextMenuProvider>
       <SplashScreen
         isLoading={isInitializing}
         statusMessage={initStatusMessage}
@@ -521,6 +525,8 @@ export const App: React.FC = () => {
               openedPackageFolder={openedPackageFolder}
               healthIssues={health.report?.issues ?? null}
               catalogById={health.catalogById}
+              profiles={profiles}
+              activeProfileId={activeProfile?.id ?? null}
               onOpenInBrowser={(workshopId) => {
                 setBrowseFocusWorkshopId(workshopId);
                 setActiveTab('BROWSE');
@@ -736,7 +742,7 @@ export const App: React.FC = () => {
       })()}
     </div>
     <BackendErrorToasts />
-    </>
+    </ContextMenuProvider>
   );
 };
 

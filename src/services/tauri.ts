@@ -729,6 +729,15 @@ export const TauriService = {
     }
   },
 
+  /** Shows a mod's folder in Explorer. Throws with the reason. */
+  openModFolder: async (paths: StudioPathsUI, folder: string): Promise<void> => {
+    try {
+      await invoke('open_mod_folder_cmd', { paths, folder });
+    } catch (err) {
+      reportBackendError('Opening the folder', err);
+    }
+  },
+
   openPackageFolder: async (userZomboidDir: string, packageFolderName: string): Promise<boolean> => {
     try {
       return await invoke<boolean>('open_package_folder_cmd', {

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Library, Link2, Loader2, Search, Users, X,
+  AlertTriangle, CheckCircle2, Copy, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Library, Link2, Loader2, Plus, Search, Trash2, Users, X,
 } from 'lucide-react';
 import {
   CatalogModSummary, InstallResult, ModOrigin, NexusCategory, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort,
@@ -11,6 +11,7 @@ import {
   BuildChips, CardGrid, CategoryBar, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
 } from './common';
 import { DetailTarget, ModDetail } from './ModDetail';
+import { useContextMenu } from '../common/ContextMenu';
 
 interface BrowseModuleProps {
   paths: StudioPathsUI;
@@ -116,7 +117,13 @@ const InstallResultBanner: React.FC<{ result: InstallResult; onClose: () => void
 // Steam Workshop
 // ---------------------------------------------------------------------------------------------
 
-const workshopCard = (item: WorkshopItem, installedIds: string[], state: WorkshopInstallState | undefined, onOpen: (t: DetailTarget) => void) => (
+const workshopCard = (
+  item: WorkshopItem,
+  installedIds: string[],
+  state: WorkshopInstallState | undefined,
+  onOpen: (t: DetailTarget) => void,
+  menu?: (e: React.MouseEvent, item: WorkshopItem, installed: boolean) => void
+) => (
   <ModCard
     key={item.workshop_id}
     image={item.preview_url}
@@ -131,6 +138,7 @@ const workshopCard = (item: WorkshopItem, installedIds: string[], state: Worksho
       </>
     )}
     onOpen={item.found ? () => onOpen({ kind: 'workshop', id: item.workshop_id, preview: item }) : undefined}
+    onContextMenu={menu && item.found ? (e) => menu(e, item, installedIds.length > 0) : undefined}
   />
 );
 
@@ -244,7 +252,10 @@ const WorkshopTab: React.FC<{
   installedByItem: Map<string, string[]>;
   stateByItem: Map<string, WorkshopInstallState>;
   onOpen: (t: DetailTarget) => void;
-}> = ({ installedByItem, stateByItem, onOpen }) => {
+  steamReady: boolean;
+  onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
+}> = ({ installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
+  const showContextMenu = useContextMenu();
   const [text, setText] = useState('');
   const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '', days: 7, collections: false });
   const [page, setPage] = useState(1);
@@ -322,6 +333,21 @@ const WorkshopTab: React.FC<{
     setLookup(null);
     setQuery((q) => ({ ...q, ...patch }));
   };
+
+  const cardMenu = (e: React.MouseEvent, item: WorkshopItem, installed: boolean) =>
+    showContextMenu(e, [
+      {
+        label: installed ? 'Unsubscribe' : 'Subscribe',
+        icon: installed ? Trash2 : Plus,
+        onSelect: () => onSubscribe([item.workshop_id], !installed),
+        disabled: !steamReady,
+        disabledReason: 'Steam is not running',
+      },
+      { label: 'Open its Workshop page', icon: ExternalLink, separatorBefore: true,
+        onSelect: () => TauriService.openExternalUrl(item.page_url) },
+      { label: 'Copy the link', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
+      { label: 'Copy the Workshop id', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+    ]);
 
   const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)).length : 0;
   const lookupItems = lookup ? lookup.items.slice((lookupPage - 1) * PAGE_SIZE, lookupPage * PAGE_SIZE) : [];
@@ -408,7 +434,7 @@ const WorkshopTab: React.FC<{
             )}
           </div>
           <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
-          <CardGrid>{lookupItems.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
+          <CardGrid>{lookupItems.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen, cardMenu))}</CardGrid>
           <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
         </>
       ) : (
@@ -427,7 +453,7 @@ const WorkshopTab: React.FC<{
             {items.map((i) =>
               query.collections
                 ? collectionCard(i, installedByItem, onOpen)
-                : workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen)
+                : workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen, cardMenu)
             )}
           </CardGrid>
           <Pagination page={page} pageCount={pages} onPage={(p) => runSearch(query, p)} disabled={searching} />
@@ -568,7 +594,10 @@ const MyModsTab: React.FC<{
   installedByItem: Map<string, string[]>;
   stateByItem: Map<string, WorkshopInstallState>;
   onOpen: (t: DetailTarget) => void;
-}> = ({ catalog, installedByItem, stateByItem, onOpen }) => {
+  steamReady: boolean;
+  onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
+}> = ({ catalog, installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
+  const showContextMenu = useContextMenu();
   const [details, setDetails] = useState<WorkshopItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState('');
@@ -637,6 +666,21 @@ const MyModsTab: React.FC<{
     return list.sort((a, b) => (sort === 'name' ? name(a).localeCompare(name(b)) : time(b) - time(a) || name(a).localeCompare(name(b))));
   }, [rows, text, source, status, category, sort]);
 
+  const mineMenu = (e: React.MouseEvent, item: WorkshopItem) =>
+    showContextMenu(e, [
+      {
+        label: 'Unsubscribe',
+        icon: Trash2,
+        danger: true,
+        onSelect: () => onSubscribe([item.workshop_id], false),
+        disabled: !steamReady,
+        disabledReason: 'Steam is not running',
+      },
+      { label: 'Open its Workshop page', icon: ExternalLink, separatorBefore: true,
+        onSelect: () => TauriService.openExternalUrl(item.page_url) },
+      { label: 'Copy the Workshop id', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+    ]);
+
   useEffect(() => {
     setPage(1);
   }, [text, source, status, category, sort]);
@@ -685,7 +729,8 @@ const MyModsTab: React.FC<{
       <Pagination page={page} pageCount={pageCountOf(filtered.length)} onPage={setPage} />
       <CardGrid>
         {pageRows.map((r) => {
-          if (r.kind === 'workshop') return workshopCard(r.item, [], r.state, onOpen) // every card here is installed;
+          // Every card here is already installed, so the Installed chip would say nothing.
+          if (r.kind === 'workshop') return workshopCard(r.item, [], r.state, onOpen, mineMenu);
           const nexusId = r.mod.origin?.kind === 'nexus' ? r.mod.origin.mod_id : null;
           return (
             <ModCard
@@ -841,13 +886,30 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
         {installer.result && <InstallResultBanner result={installer.result} onClose={installer.clearResult} />}
 
         <div hidden={tab !== 'workshop'}>
-          {visited.has('workshop') && <WorkshopTab installedByItem={installedByItem} stateByItem={stateByItem} onOpen={openDetail} />}
+          {visited.has('workshop') && (
+            <WorkshopTab
+              installedByItem={installedByItem}
+              stateByItem={stateByItem}
+              onOpen={openDetail}
+              steamReady={steamReady}
+              onSubscribe={handleSubscribe}
+            />
+          )}
         </div>
         <div hidden={tab !== 'nexus'}>
           {visited.has('nexus') && <NexusTab installedByNexusId={installedByNexusId} onOpen={openDetail} />}
         </div>
         <div hidden={tab !== 'mine'}>
-          {visited.has('mine') && <MyModsTab catalog={catalog} installedByItem={installedByItem} stateByItem={stateByItem} onOpen={openDetail} />}
+          {visited.has('mine') && (
+            <MyModsTab
+              catalog={catalog}
+              installedByItem={installedByItem}
+              stateByItem={stateByItem}
+              onOpen={openDetail}
+              steamReady={steamReady}
+              onSubscribe={handleSubscribe}
+            />
+          )}
         </div>
       </div>
 

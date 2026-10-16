@@ -78,6 +78,14 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onClearErrorCards,
   onGoToSettings,
 }) => {
+  // The companion bridge is a developer feature; its log filter follows the same switch.
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem('pz_show_advanced') === 'true');
+  useEffect(() => {
+    const onChange = (e: Event) => setShowAdvanced(Boolean((e as CustomEvent).detail));
+    window.addEventListener('pzms-advanced-changed', onChange);
+    return () => window.removeEventListener('pzms-advanced-changed', onChange);
+  }, []);
+
   const [filterSpam, setFilterSpam] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<LogSeverityFilter>('ALL');
@@ -602,6 +610,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               >
                 ☕ Java
               </button>
+              {showAdvanced && (
               <button
                 onClick={() => setSeverityFilter('BRIDGE')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
@@ -612,6 +621,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               >
                 ⚡ Bridge
               </button>
+              )}
             </div>
           </div>
 

@@ -26,6 +26,19 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   onAutoDetect,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'PATHS' | 'POLYFILLS' | 'MCP'>('PATHS');
+  /**
+   * The MCP server, the Claude Agent and the in-game bridge are for people building things on
+   * top of the Studio. A player has no use for them and they only raise questions, so they stay
+   * out of sight until someone turns them on. Remembered on this PC.
+   */
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem('pz_show_advanced') === 'true');
+
+  const toggleAdvanced = (on: boolean) => {
+    setShowAdvanced(on);
+    localStorage.setItem('pz_show_advanced', String(on));
+    window.dispatchEvent(new CustomEvent('pzms-advanced-changed', { detail: on }));
+    if (!on && activeSubTab === 'MCP') setActiveSubTab('PATHS');
+  };
   const [selectedMcpClient, setSelectedMcpClient] = useState<'ANTIGRAVITY' | 'CLAUDE' | 'CURSOR' | 'VSCODE_LOCAL' | 'OPENAI_CODEX'>('ANTIGRAVITY');
   const [copiedMcpConfig, setCopiedMcpConfig] = useState<boolean>(false);
   const [formData, setFormData] = useState<StudioPathsUI>(paths);
@@ -210,6 +223,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               <Wrench className="w-3.5 h-3.5" />
               Build 42 fixes
             </button>
+            {showAdvanced && (
             <button
               onClick={() => setActiveSubTab('MCP')}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer flex items-center gap-1.5 ${
@@ -221,6 +235,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               <Bot className="w-3.5 h-3.5 text-cyan-400" />
               MCP Agent Server
             </button>
+            )}
           </div>
         </div>
 
@@ -537,6 +552,30 @@ The file the game reads to know which mods are on and in what order. Found autom
         )}
 
         {/* SUB-TAB 2: what the Build 42 compatibility shim covers */}
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200">Developer features</div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">
+                Shows the MCP agent server, which lets an AI assistant drive the Studio, and the companion mod that
+                runs commands inside the game. Nothing a player needs; leave it off unless you are building with it.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showAdvanced}
+              aria-label="Developer features"
+              onClick={() => toggleAdvanced(!showAdvanced)}
+              className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
+                showAdvanced ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-full bg-white shadow-md" />
+            </button>
+          </div>
+        )}
+
         {activeSubTab === 'POLYFILLS' && (
           <div className="space-y-4">
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
