@@ -40,7 +40,7 @@ export interface MasterPatchResultUI {
   success: boolean;
   patch_mod_dir: string;
   files_written: number;
-  polyfills_injected: number;
+  polyfill_shim_written: boolean;
 }
 
 export interface MasterPatchStatusInfoUI {
@@ -447,7 +447,6 @@ export const TauriService = {
     user_zomboid_dir: string;
     mod_list_ini_path: string;
     merged_files: { relative_path: string; content: string }[];
-    active_polyfill_ids: string[];
     package_folder_name?: string;
   }): Promise<MasterPatchResultUI> => {
     try {
@@ -467,7 +466,6 @@ export const TauriService = {
     user_zomboid_dir: string;
     mod_list_ini_path: string;
     merged_files?: { relative_path: string; content: string }[];
-    active_polyfill_ids?: string[];
     package_folder_name?: string;
   }): Promise<boolean> => {
     try {
@@ -475,7 +473,6 @@ export const TauriService = {
         req: {
           ...req,
           merged_files: req.merged_files || [],
-          active_polyfill_ids: req.active_polyfill_ids || [],
         },
       });
     } catch (err) {
@@ -563,6 +560,7 @@ export const TauriService = {
     }
   },
 
+
   /**
    * Deletes a merged package directory from disk
    */
@@ -597,24 +595,6 @@ export const TauriService = {
     } catch (err) {
       reportBackendError('Saving the draft', err);
       return false;
-    }
-  },
-
-  getDraftResolutions: async (
-    userZomboidDir: string,
-    packageFolderName: string
-  ): Promise<Record<string, { relative_path: string; resolved_content: string; status: string }>> => {
-    try {
-      return await invoke<Record<string, { relative_path: string; resolved_content: string; status: string }>>(
-        'get_draft_resolutions_cmd',
-        {
-          userZomboidDir,
-          packageFolderName,
-        }
-      );
-    } catch (err) {
-      console.error('Failed to get draft resolutions:', err);
-      return {};
     }
   },
 

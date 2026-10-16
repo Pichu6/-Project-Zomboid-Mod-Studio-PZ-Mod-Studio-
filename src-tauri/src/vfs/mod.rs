@@ -164,7 +164,6 @@ pub fn auto_merge_conflicts(paths: &StudioPaths, rel_paths: &[String]) -> Result
         user_zomboid_dir: paths.user_zomboid_dir.clone(),
         mod_list_ini_path: paths.mod_list_ini_path.clone(),
         merged_files,
-        active_polyfill_ids: Vec::new(),
         package_folder_name: Some(package.clone()),
     })?;
     Ok(AutoMergeResult { package_folder: package, merged, skipped })

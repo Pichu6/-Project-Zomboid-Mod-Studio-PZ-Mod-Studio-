@@ -21,7 +21,7 @@
 
 ## 🌟 Overview
 
-**Project Zomboid Mod Studio** is a lightweight (~11 MB), portable desktop application engineered to eliminate the most common headaches in modded Project Zomboid: **virtual file overwrites**, **broken load orders**, **B41-to-B42 compatibility breaks**, and **unreadable crash logs**.
+**Project Zomboid Mod Studio** is a portable desktop application (~17 MB) engineered to eliminate the most common headaches in modded Project Zomboid: **virtual file overwrites**, **broken load orders**, **B41-to-B42 compatibility breaks**, and **unreadable crash logs**.
 
 Unlike basic file combiners, PZ Mod Studio parses Lua scripts into a true **Abstract Syntax Tree (AST)** using the `full_moon` parser, performing a **3-Way Git-style merge** across Vanilla game files, Steam Workshop mods, and local additions. It packages all resolutions into an isolated synthetic mod (`Z_PZModStudio_MergedPatch`) that loads safely alongside your game.
 
@@ -32,7 +32,7 @@ Unlike basic file combiners, PZ Mod Studio parses Lua scripts into a true **Abst
 | Module | Core Capabilities |
 | :--- | :--- |
 | **📂 Mod Profiles** | Save and switch between unlimited mod configurations (Solo, B42 Vanilla+, Co-op Server) with **1-click activation** directly into `ModListData.ini`. |
-| **📋 Mod List Manager** | Auto-detects all Workshop and local mods. Features **Topological Dependency Sorting** (Kahn's Algorithm), health inspectors for missing/disabled dependencies, and shareable **`.pzpack` presets**. |
+| **📋 Mod List Manager** | Auto-detects all Workshop and local mods. Sorts the load order the way the game reads it, health inspectors for missing/disabled dependencies, and shareable **`.pzpack` presets**. |
 | **🔀 3-Way AST Mod Merger** | Detects Virtual File System (VFS) collisions and performs automated AST merges on Lua code and `.txt` scripts. Includes an integrated **Monaco Diff Editor** (VS Code engine). |
 | **📊 Monitor Center & Diagnostics** | Streams live `console.txt` with noise filtering. Detects Java/Lua exceptions and generates **Crash Diagnostic Cards** with **1-click "Apply Fix" Polyfill rules**. |
 | **🖥️ Dedicated Server Runner** | Launch dedicated servers with configurable RAM and `-nosteam` support. Monitor live connected players (health, coordinates, ping), send broadcast messages, and run live console commands. |
@@ -45,8 +45,8 @@ Unlike basic file combiners, PZ Mod Studio parses Lua scripts into a true **Abst
 No installer or administrative rights required:
 
 1. Download the precompiled binaries directly from the root repository or from [**GitHub Releases**](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases):
-   - **`Project-Zomboid-Mod-Studio.exe`** — The main desktop GUI application (~11 MB).
-   - **`pz-mcp-server.exe`** — The standalone console MCP server for AI Agents (~2 MB).
+   - **`Project-Zomboid-Mod-Studio.exe`** — The main desktop application (~17 MB).
+   - **`pz-mcp-server.exe`** — The standalone console MCP server for AI agents (~3 MB).
 2. Launch **`Project-Zomboid-Mod-Studio.exe`**.
 3. The studio will auto-detect your Project Zomboid, Steam Workshop, and user folders.
 

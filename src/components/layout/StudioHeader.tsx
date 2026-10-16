@@ -8,7 +8,6 @@ interface StudioHeaderProps {
   /** Conflicts already resolved or merged automatically. */
   resolvedConflictCount?: number;
   onNavigateToMerger?: () => void;
-  polyfillCount: number;
   activeProfileName?: string;
   onNavigateToProfiles?: () => void;
   onRunSandbox: (mode: GameLaunchMode) => void;
@@ -65,7 +64,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   conflictCount,
   resolvedConflictCount = 0,
   onNavigateToMerger,
-  polyfillCount,
   activeProfileName,
   onNavigateToProfiles,
   onRunSandbox,
@@ -146,11 +144,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           {resolvedConflictCount > 0 && <span className="font-mono text-slate-500">· {resolvedConflictCount} resolved</span>}
         </button>
 
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800">
-          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span className="text-slate-400 font-mono">Active Polyfills:</span>
-          <span className="font-bold font-mono text-emerald-400">{polyfillCount}</span>
-        </div>
       </div>
 
       {/* Right Actions: Launch Sandbox */}

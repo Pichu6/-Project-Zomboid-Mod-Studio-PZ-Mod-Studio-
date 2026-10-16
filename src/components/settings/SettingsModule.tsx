@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Plus, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
+import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
 import { PolyfillRule } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -13,9 +13,9 @@ export interface StudioPathsUI {
 
 interface SettingsModuleProps {
   paths: StudioPathsUI;
+  /** What the Build 42 shim covers; shown as a list, not as switches. */
   rules: PolyfillRule[];
   onSavePaths: (updatedPaths: StudioPathsUI) => void;
-  onToggleRule: (ruleId: string) => void;
   onAutoDetect: () => void;
 }
 
@@ -23,7 +23,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   paths,
   rules,
   onSavePaths,
-  onToggleRule,
   onAutoDetect,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'PATHS' | 'POLYFILLS' | 'MCP'>('PATHS');
@@ -78,6 +77,17 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     }
+  };
+
+  /** The mod list is a file, so offer a file picker rather than a folder one. */
+  const handlePickModListFile = async () => {
+    const chosen = await TauriService.pickOpenFile('Mod list (default.txt)', 'txt');
+    if (!chosen) return;
+    const updated = { ...formData, mod_list_ini_path: chosen };
+    setFormData(updated);
+    onSavePaths(updated);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const getMcpConfigSnippet = () => {
@@ -172,7 +182,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               App Settings & Compatibility Rules
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Configure local game paths and enable/disable B42+ runtime polyfill rules.
+              Where your game and mods live, which warnings you see, and what the Build 42 shim covers.
             </p>
           </div>
 
@@ -198,7 +208,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               }`}
             >
               <Wrench className="w-3.5 h-3.5" />
-              Polyfill Rules ({rules.filter((r) => r.enabled).length})
+              Build 42 fixes
             </button>
             <button
               onClick={() => setActiveSubTab('MCP')}
@@ -350,10 +360,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             {/* Card 4: ModListData.ini Path */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <label className="text-xs font-bold text-slate-200">
-                Mod Configuration File (ModListData.ini / default.txt)
+                Mod list file (Zomboid/mods/default.txt)
               </label>
               <p className="text-[11px] text-slate-400">
-                File that stores active mods and load order for Project Zomboid. Automatically detected in <span className="font-mono text-slate-300">Zomboid/mods/ModListData.ini</span> or <span className="font-mono text-slate-300">Zomboid/default.txt</span>.
+The file the game reads to know which mods are on and in what order. Found automatically at <span className="font-mono text-slate-300">Zomboid/mods/default.txt</span>.
               </p>
               <div className="flex gap-2">
                 <input
@@ -363,7 +373,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 cursor-not-allowed"
                 />
                 <button
-                  onClick={() => handlePickFolder('mod_list_ini_path', formData.mod_list_ini_path)}
+                  onClick={() => handlePickModListFile()}
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition cursor-pointer"
                 >
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
@@ -526,66 +536,39 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           </div>
         )}
 
-        {/* SUB-TAB 2: Polyfill & Compatibility Rules Matrix */}
+        {/* SUB-TAB 2: what the Build 42 compatibility shim covers */}
         {activeSubTab === 'POLYFILLS' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Build 42+ Polyfill Rules Matrix
-              </span>
-
-              <button
-                onClick={() => alert('Community Rule Importer: Select a poly_rules.json file to import extra rules.')}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded-lg shadow transition cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Import Community Rule (.json)
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {rules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className={`bg-slate-900/80 border rounded-xl p-4 flex flex-col justify-between space-y-3 transition ${
-                    rule.enabled
-                      ? 'border-emerald-500/40 shadow-sm'
-                      : 'border-slate-800 opacity-60'
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-semibold">
-                        {rule.category}
-                      </span>
-                      <button
-                        onClick={() => onToggleRule(rule.id)}
-                        className={`w-10 h-5 rounded-full p-0.5 transition cursor-pointer ${
-                          rule.enabled ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
-                        } flex items-center`}
-                      >
-                        <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
-                      </button>
-                    </div>
-
-                    <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                      <Wrench className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      {rule.name}
-                    </h4>
-
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      {rule.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono text-slate-500">
-                    <span>Rule ID: {rule.id}</span>
-                    <span className={rule.enabled ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
-                      {rule.enabled ? 'Active' : 'Disabled'}
-                    </span>
-                  </div>
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <Wrench className="w-4 h-4 text-emerald-400" aria-hidden="true" />
                 </div>
-              ))}
+                <div className="space-y-1">
+                  <h3 className="text-xs font-bold text-slate-100">Build 42 compatibility shim</h3>
+                  <p className="text-[11px] text-slate-400 leading-relaxed max-w-3xl">
+                    Many Build 41 mods call things Build 42 renamed or removed, and crash. The Studio ships one
+                    shim that patches those calls at runtime, and writes it into every merge package you build.
+                    It is all or nothing: there is nothing to switch on here, and nothing you need to do beyond
+                    having a merge package active.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">What it covers</div>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {rules.map((rule) => (
+                    <li key={rule.id} className="flex items-start gap-2 text-[11px] text-slate-300">
+                      <Check className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+                      <span>
+                        {rule.name}
+                        <span className="block text-[10px] text-slate-500">{rule.description}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
         )}
@@ -720,7 +703,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     <li>Open <b>Claude Desktop</b> and go to <b>File &gt; Settings</b> (or press <kbd className="px-1 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-200">Ctrl + ,</kbd>).</li>
                     <li>Select the <b>Developer</b> tab and click <b>Edit Config</b> to open <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">claude_desktop_config.json</code>.</li>
                     <li>Paste the JSON configuration above inside the file and save it.</li>
-                    <li>Restart Claude Desktop. In new chats, you will see a <b>🔨 Hammer</b> icon with 22 PZ Mod Studio tools!</li>
+                    <li>Restart Claude Desktop. In new chats, you will see a <b>🔨 Hammer</b> icon with the PZ Mod Studio tools.</li>
                   </ol>
                   <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
                     💬 <b>Example Prompt:</b> <i>"Read console.txt to diagnose why Project Zomboid crashed"</i> or <i>"Sort my mod load order"</i>.
@@ -773,7 +756,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
                     <li>Open your Antigravity or Gemini CLI configuration file (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">.gemini/settings.json</code> or user settings).</li>
                     <li>Paste the configuration snippet under the <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">"mcpServers"</code> section.</li>
-                    <li>Antigravity automatically discovers and connects all 22 tools and 8 resources without any manual intervention.</li>
+                    <li>Antigravity automatically discovers and connects every tool and resource without any manual intervention.</li>
                   </ol>
                   <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
                     💬 <b>Example Prompt:</b> <i>"Inspect console.txt and generate a master polyfill patch for missing tables"</i>.
@@ -818,14 +801,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
             </div>
 
-            {/* MCP Tools (22 Tools) & Resources (4 URIs) Overview */}
+            {/* The tool and resource catalogue */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Exposed Tools (Span 2 cols) */}
-              <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-4">
+              <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                   <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                     <Code2 className="w-4 h-4 text-emerald-400" />
-                    MCP Tools Catalog (22 Tools Available)
+                    MCP Tools Catalog (34 tools)
                   </h4>
                   <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
                     tools/call
@@ -867,7 +850,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </div>
 
                   {/* Category 2: Monitor Center & Diagnostics */}
-                  <div className="space-y-1.5 pt-1">
+                  <div className="space-y-1.5">
                     <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
                       🩺 Monitor Center & Crash Diagnostics (4 Tools)
                     </span>
@@ -889,8 +872,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                         <div className="text-[10px] text-slate-400">Reads any specific log file with exception filtering.</div>
                       </div>
                     </div>
+                  </div>
+
                   {/* Category 3: Mods, Paths & Profiles */}
-                  <div className="space-y-1.5 pt-1">
+                  <div className="space-y-1.5">
                     <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
                       📦 Mods, Paths & Profiles (7 Tools)
                     </span>
@@ -927,7 +912,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </div>
 
                   {/* Category 4: AST Merger & Patch Engine */}
-                  <div className="space-y-1.5 pt-1">
+                  <div className="space-y-1.5">
                     <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block">
                       ⚡ AST Merge Engine & Patches (5 Tools)
                     </span>
@@ -955,7 +940,6 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
 
               {/* Exposed Resources (1 col) */}
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">

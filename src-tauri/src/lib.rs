@@ -20,11 +20,10 @@ pub mod vfs;
 pub mod workshop;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
-use diff_engine::pz_scripts::{merge_pz_data_scripts, PzScriptMergeResult};
+
 use instance_manager::{activate_instance, create_instance, delete_instance, list_instances, save_master_load_order, update_instance};
 use load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini, ModListData};
 use load_order::mod_info::{scan_all_installed_mods, ModManifest};
-use load_order::topological_sort::{sort_dependencies_topologically, DependencyAnalysisResult};
 use patch_generator::{generate_master_patch, MasterPatchRequest, MasterPatchResult};
 use preset_manager::{check_missing_preset_mods, export_preset_file, import_preset_file};
 use sandbox::{launch_sandbox_and_watch, SandboxLaunchConfig};
@@ -37,7 +36,7 @@ use server_manager::{
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use vfs::{auto_detect_paths, scan_conflicts, validate_paths, StudioPaths, VfsConflictRaw};
+use vfs::{auto_detect_paths, validate_paths, StudioPaths, VfsConflictRaw};
 
 #[tauri::command(async)]
 fn get_auto_paths() -> StudioPaths {
@@ -62,11 +61,6 @@ fn validate_lua_syntax_cmd(code: String) -> LuaSyntaxCheckResult {
 #[tauri::command(async)]
 fn three_way_merge_lua_cmd(base: String, target_a: String, target_b: String) -> MergeChunkResult {
     three_way_merge_lua(&base, &target_a, &target_b)
-}
-
-#[tauri::command(async)]
-fn merge_pz_data_scripts_cmd(base: String, mod_a: String, mod_b: String) -> PzScriptMergeResult {
-    merge_pz_data_scripts(&base, &mod_a, &mod_b)
 }
 
 #[tauri::command(async)]
@@ -286,11 +280,6 @@ fn sort_load_order_cmd(paths: StudioPaths, order: Vec<String>) -> catalog::SortR
 }
 
 #[tauri::command(async)]
-fn sort_mod_dependencies_cmd(manifests: Vec<ModManifest>) -> DependencyAnalysisResult {
-    sort_dependencies_topologically(&manifests)
-}
-
-#[tauri::command(async)]
 fn launch_sandbox_cmd<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
     config: SandboxLaunchConfig,
@@ -466,14 +455,6 @@ fn save_draft_resolution_cmd(
     )
 }
 
-#[tauri::command(async)]
-fn get_draft_resolutions_cmd(
-    user_zomboid_dir: String,
-    package_folder_name: String,
-) -> std::collections::HashMap<String, patch_generator::DraftResolutionItem> {
-    patch_generator::get_draft_resolutions(&user_zomboid_dir, &package_folder_name)
-}
-
 #[tauri::command]
 fn clear_draft_resolutions_cmd(
     user_zomboid_dir: String,
@@ -520,11 +501,9 @@ pub fn run() {
             scan_conflicts_cmd,
             validate_lua_syntax_cmd,
             three_way_merge_lua_cmd,
-            merge_pz_data_scripts_cmd,
             read_mod_list_ini_cmd,
             write_mod_list_ini_cmd,
             scan_all_installed_mods_cmd,
-            sort_mod_dependencies_cmd,
             get_mod_health_cmd,
             auto_merge_conflicts_cmd,
             sort_load_order_cmd,
@@ -554,7 +533,6 @@ pub fn run() {
             delete_merged_package_cmd,
             toggle_package_in_modlist_cmd,
             save_draft_resolution_cmd,
-            get_draft_resolutions_cmd,
             clear_draft_resolutions_cmd,
             export_merged_package_cmd,
             import_merged_package_cmd,

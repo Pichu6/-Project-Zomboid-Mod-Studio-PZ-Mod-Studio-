@@ -24,7 +24,8 @@ import {
 interface SandboxModuleProps {
   paths: StudioPathsUI;
   errorCards: TranslatedErrorCard[];
-  onApplyFix: (polyfillRuleId: string) => void;
+  /** The Build 42 shim travels inside a merge package, so repairs start in the Merger. */
+  onOpenMerger: () => void;
   onClearErrorCards?: () => void;
   onGoToSettings: () => void;
 }
@@ -73,7 +74,7 @@ export const formatLogDisplayName = (file: LogFileInfoUI): string => {
 export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
   errorCards,
-  onApplyFix,
+  onOpenMerger,
   onClearErrorCards,
   onGoToSettings,
 }) => {
@@ -739,16 +740,17 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
                   {card.polyfill_rule_id_suggestion ? (
                     <button
-                      onClick={() => onApplyFix(card.polyfill_rule_id_suggestion!)}
-                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow transition cursor-pointer"
+                      onClick={onOpenMerger}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+                      title="The Build 42 shim ships inside a merge package: build one in the Mod Merger"
                     >
-                      <Wrench className="w-3.5 h-3.5" />
-                      <span>⚡ 1-Click Repair (Inject Polyfill)</span>
+                      <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>A merge package may fix this — open the Mod Merger</span>
                     </button>
                   ) : (
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Covered by Universal Master Polyfill Shim</span>
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
+                      <span>The Build 42 shim already covers this</span>
                     </div>
                   )}
 

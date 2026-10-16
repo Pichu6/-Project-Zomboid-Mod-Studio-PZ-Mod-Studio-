@@ -65,7 +65,6 @@ pub struct MasterPatchRequest {
     pub user_zomboid_dir: String,
     pub mod_list_ini_path: String,
     pub merged_files: Vec<MergedFilePayload>,
-    pub active_polyfill_ids: Vec<String>,
     pub package_folder_name: Option<String>,
 }
 
@@ -105,7 +104,8 @@ pub struct MasterPatchResult {
     pub success: bool,
     pub patch_mod_dir: String,
     pub files_written: usize,
-    pub polyfills_injected: usize,
+    /// Whether the Build 42 compatibility shim was written into the package.
+    pub polyfill_shim_written: bool,
 }
 
 fn crc32(data: &[u8]) -> u32 {
@@ -265,7 +265,6 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     mod_info_content.push_str("author=PZ Mod Studio\r\n");
 
     let mut files_written = 0;
-    let polyfills_count = req.active_polyfill_ids.len();
 
     let polyfill_lua_content = generate_master_polyfill_lua();
     
@@ -407,7 +406,7 @@ end)
         success: true,
         patch_mod_dir: primary_dir.to_string_lossy().to_string(),
         files_written,
-        polyfills_injected: polyfills_count,
+        polyfill_shim_written: true,
     })
 }
 

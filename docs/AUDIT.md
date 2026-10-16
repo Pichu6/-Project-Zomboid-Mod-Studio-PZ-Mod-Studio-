@@ -21,12 +21,12 @@ engine and the health rules are genuinely solid and should not be regressed.
 | ✅ | **Publishing a merge package silently unpublishes every other one.** Only one package can ever be active, while the UI sells multi-package. | `patch_generator/mod.rs:389-390` |
 | ✅ | **The "visible in mod list" eye scrambles the whole load order**, because the active list is round-tripped through a `HashSet`. Enabling also writes nothing while reporting success. | `patch_generator/mod.rs:996-1019`, `:974-992` |
 | ✅ | **Draft resolutions are shared between packages.** The draft map is keyed by file path only, across every package folder, so opening B can show A's merges and publish them as B's. | `vfs/mod.rs:436-456` |
-| ☐ | **"1-Click Repair" on a crash card replaces the user's active package** with `Z_PZModStudio_MergedPatch`, possibly empty, and rewrites the mod list — without fixing the error. | `App.tsx:440-457`, `patch_generator/mod.rs:231-233,389-391` |
+| ✅ | **"1-Click Repair" on a crash card replaces the user's active package** with `Z_PZModStudio_MergedPatch`, possibly empty, and rewrites the mod list — without fixing the error. | `App.tsx:440-457`, `patch_generator/mod.rs:231-233,389-391` |
 | ✅ | **A mod that runs arbitrary Lua is installed without asking**, on every mod scan. It is not auto-enabled, which is the only thing keeping it safe, and in single player its command queue has no gate at all. | `mod_info.rs:726-733`, `PZModStudio_Bridge.lua:145-169` |
 | ✅ | **Launching rewrites the player's `options.ini`** in every candidate folder, forces `borderless=false`, and keeps no backup. | `sandbox/mod.rs:65-97` |
-| ☐ | **The 13 polyfill switches, their counter and the import button do nothing.** The same 2075-line shim is written whether none or all are ticked, and the setting is not even remembered across restarts. | `patch_generator/mod.rs:268` vs `:270`, `SettingsModule.tsx:534-562` |
+| ✅ | **The 13 polyfill switches, their counter and the import button do nothing.** The same 2075-line shim is written whether none or all are ticked, and the setting is not even remembered across restarts. | `patch_generator/mod.rs:268` vs `:270`, `SettingsModule.tsx:534-562` |
 | ✅ | **Spanish strings in the English UI.** | `ServerModule.tsx:307,308,314` |
-| ☐ | **The MCP tool list is mis-nested** — two group wrappers open one level too deep and a stray `</div>` papers over it, which is why those boxes look uneven. | `SettingsModule.tsx:893,930,1008` |
+| ✅ | **The MCP tool list is mis-nested** — two group wrappers open one level too deep and a stray `</div>` papers over it, which is why those boxes look uneven. | `SettingsModule.tsx:893,930,1008` |
 
 ## Important
 
@@ -47,18 +47,18 @@ engine and the health rules are genuinely solid and should not be regressed.
 | ☐ | A saved Steam key cannot be seen or removed from the UI any more — both commands exist and nothing calls them. | `tauri.ts:327,336` |
 | ☐ | Failures reach the player as raw Rust text, through 30 `alert()` calls and the toast; startup failures are swallowed entirely. | `InstanceModule.tsx:74`, `App.tsx:117-123` |
 | ☐ | Deleting the active profile leaves the header and sidebar showing it until restart. | `instance_manager/mod.rs:202` |
-| ☐ | Two animation conventions are used 20 times and neither exists (no Tailwind config, no plugin), so every modal pops in hard. | `animate-fade-in`, `animate-in` across `src/` |
-| ☐ | `user-select: none` on everything: a player cannot copy an error message or a path to ask for help. | `index.css:24` |
+| ✅ | Two animation conventions are used 20 times and neither exists (no Tailwind config, no plugin), so every modal pops in hard. | `animate-fade-in`, `animate-in` across `src/` |
+| ✅ | `user-select: none` on everything: a player cannot copy an error message or a path to ask for help. | `index.css:24` |
 | ☐ | Hardcoded dependency guesses for popular mods, including "any id containing *tsar* requires Tsarslib", invent missing-dependency errors on other people's libraries. | `mod_info.rs:323-365` |
 | ☐ | Auto-detect never looks in `Documents/Zomboid`, which OneDrive redirection makes common. | `vfs/mod.rs:274` |
 
 ## Polish
 
-- Wrong counts everywhere: "22 Tools" (there are 34) in four places, "~11 MB" (it is 17.8).
-- Three dead components (589 lines), `mock_data.ts` and its props, `topological_sort.rs` and its
-  command, `ensure_master_patch_exists_on_disk`, `clsx`, `tailwind-merge`, `src/App.css` (a
-  light-theme template with a global `outline: none`).
-- "Mod Configuration **File**" opens a folder picker; "Valid Path" is a non-empty-string check;
+- ✅ Wrong counts everywhere: "22 Tools" (there are 34) in four places, "~11 MB" (it is 17.8).
+- ✅ Three dead components (589 lines), `mock_data.ts`, `topological_sort.rs` and its command,
+  `ensure_master_patch_exists_on_disk`, `clsx`, `tailwind-merge`, `src/App.css` (a light-theme
+  template with a global `outline: none`), and two more uncalled commands.
+- ✅ "Mod Configuration **File**" opened a folder picker; "Valid Path" is a non-empty-string check;
   "Settings saved and validated" shows even when validation failed.
 - Three user-visible strings name `ModListData.ini`, which the app never writes.
 - The copied MCP config contains a placeholder path that cannot work, though the app knows its own.

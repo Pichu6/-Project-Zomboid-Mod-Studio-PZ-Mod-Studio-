@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, PolyfillRule, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile } from './types';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile } from './types';
 import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -24,7 +24,7 @@ import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('PROFILES');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
-  const [rules, setRules] = useState<PolyfillRule[]>(DEFAULT_POLYFILL_RULES);
+  const rules = DEFAULT_POLYFILL_RULES;
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export const App: React.FC = () => {
     patch_mod_dir: string;
     total_conflicts: number;
     files_written: number;
-    polyfills_injected: number;
+    polyfill_shim_written: boolean;
   } | null>(null);
 
   // Loading Screen & Startup State
@@ -196,7 +196,6 @@ export const App: React.FC = () => {
     }
 
     try {
-      const activePolyfillIds = rules.filter((r) => r.enabled).map((r) => r.id);
 
       const mergedFiles = conflicts.map((c) => ({
         relative_path: c.relative_path,
@@ -209,7 +208,6 @@ export const App: React.FC = () => {
         user_zomboid_dir: paths.user_zomboid_dir,
         mod_list_ini_path: paths.mod_list_ini_path,
         merged_files: mergedFiles,
-        active_polyfill_ids: activePolyfillIds,
         package_folder_name: packageFolderName || 'Z_PZModStudio_MergedPatch',
       });
       if (!result.success) return false;
@@ -218,7 +216,7 @@ export const App: React.FC = () => {
         patch_mod_dir: result.patch_mod_dir,
         total_conflicts: conflicts.length,
         files_written: result.files_written,
-        polyfills_injected: result.polyfills_injected,
+        polyfill_shim_written: result.polyfill_shim_written,
       });
 
       await handleRefreshMods();
@@ -240,8 +238,6 @@ export const App: React.FC = () => {
         content: c.merged_output || c.base_content,
       }));
 
-      // Respect the polyfill rules the user enabled in Settings.
-      const activePolyfillIds = rules.filter((r) => r.enabled).map((r) => r.id);
 
       let result;
       try {
@@ -251,7 +247,6 @@ export const App: React.FC = () => {
           user_zomboid_dir: paths.user_zomboid_dir,
           mod_list_ini_path: paths.mod_list_ini_path,
           merged_files: mergedFilesPayload,
-          active_polyfill_ids: activePolyfillIds,
           package_folder_name: packageFolderName,
         });
       } catch {
@@ -277,7 +272,7 @@ export const App: React.FC = () => {
         patch_mod_dir: result.patch_mod_dir,
         total_conflicts: totalCount,
         files_written: result.files_written,
-        polyfills_injected: result.polyfills_injected,
+        polyfill_shim_written: result.polyfill_shim_written,
       });
       return true;
     }
@@ -349,11 +344,6 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleToggleRule = (ruleId: string) => {
-    setRules((prev) =>
-      prev.map((r) => (r.id === ruleId ? { ...r, enabled: !r.enabled } : r))
-    );
-  };
 
   const autoPersistProfileChanges = async (updatedMods: ModInfo[]) => {
     const userDir = paths.user_zomboid_dir || '';
@@ -438,27 +428,6 @@ export const App: React.FC = () => {
     refreshActiveProfile();
   };
 
-  const handleApplyFix = async (polyfillRuleId: string) => {
-    const updatedRules = rules.map((r) => (r.id === polyfillRuleId ? { ...r, enabled: true } : r));
-    setRules(updatedRules);
-    setErrorCards((prev) => prev.filter((card) => card.polyfill_rule_id_suggestion !== polyfillRuleId));
-
-    if (paths.is_valid && paths.user_zomboid_dir) {
-      try {
-        await TauriService.generateMasterPatch({
-          workshop_dir: paths.workshop_dir,
-          pz_install_dir: paths.pz_install_dir,
-          user_zomboid_dir: paths.user_zomboid_dir,
-          mod_list_ini_path: paths.mod_list_ini_path,
-          merged_files: conflicts.map((c) => ({ relative_path: c.relative_path, content: c.merged_output || c.base_content })),
-          active_polyfill_ids: updatedRules.filter((r) => r.enabled).map((r) => r.id),
-        });
-      } catch {
-        // Already shown to the user by TauriService.
-      }
-    }
-  };
-
   const handleClearErrorCards = () => {
     setErrorCards([]);
   };
@@ -501,7 +470,6 @@ export const App: React.FC = () => {
         conflictCount={conflicts.filter((c) => c.status !== 'RESOLVED' && c.status !== 'AUTO_MERGED').length}
         resolvedConflictCount={conflicts.filter((c) => c.status === 'RESOLVED' || c.status === 'AUTO_MERGED').length}
         onNavigateToMerger={() => setActiveTab('MERGER')}
-        polyfillCount={rules.filter((r) => r.enabled).length}
         activeProfileName={activeProfile?.name}
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
@@ -617,7 +585,7 @@ export const App: React.FC = () => {
             <SandboxModule
               paths={paths}
               errorCards={errorCards}
-              onApplyFix={handleApplyFix}
+              onOpenMerger={() => setActiveTab('MERGER')}
               onClearErrorCards={handleClearErrorCards}
               onGoToSettings={() => setActiveTab('SETTINGS')}
             />
@@ -629,7 +597,6 @@ export const App: React.FC = () => {
                 paths={paths}
                 rules={rules}
                 onSavePaths={handleSavePaths}
-                onToggleRule={handleToggleRule}
                 onAutoDetect={handleAutoDetect}
               />
             </div>
