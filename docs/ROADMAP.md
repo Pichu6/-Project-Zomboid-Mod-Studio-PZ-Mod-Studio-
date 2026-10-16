@@ -83,7 +83,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | | Item | Notes |
 |---|---|---|
 | ✅ | Detect installed build (`Zomboid/version.txt`) and flag mods the build cannot load | Done in the scanner |
-| ⬜ | "Try on B42" converter: local copy (new ID or `-modfolders mods,steam,workshop`), B42 folder layout, `Type`→`ItemType`, translations `.txt`→JSON, report of what still needs manual work | Never re-uploads others' mods |
+| 🔨 | "Make compatible copy" (Mod Health button): copy to `Zomboid/mods` with the same id, the Studio launches with `-modfolders mods,workshop,steam`, fixes the version range (e.g. `versionMax=42.20.99`, which the game reads as 42.20) and builds the B42 layout for B41 mods, then reports what may still break (old recipes, `Type =`, `.txt` translations, Lua errors). Removable. Next: automatic `Type`→`ItemType` and translation conversion | Never re-uploads others' mods |
 | ⬜ | B41→B42 compatibility polyfill layer grown alongside the converter | From Phase 0 split |
 | ⬜ | Branch awareness (stable / unstable / `legacy41`) and per-profile build | Saves don't cross builds |
 

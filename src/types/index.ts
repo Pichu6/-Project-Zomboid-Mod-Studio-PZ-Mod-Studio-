@@ -260,7 +260,9 @@ export type HealthFix =
   | { action: 'move_before'; mod_id: string; before: string }
   | { action: 'remove_from_list'; entry: string }
   | { action: 'subscribe_workshop'; hint: string }
-  | { action: 'open_workshop_page'; workshop_id: string };
+  | { action: 'open_workshop_page'; workshop_id: string }
+  | { action: 'make_compatible_copy'; mod_id: string }
+  | { action: 'remove_compatible_copy'; folder: string };
 
 export interface HealthIssue {
   severity: HealthSeverity;
@@ -328,7 +330,8 @@ export interface NexusSearchResult {
 
 export type ModOrigin =
   | { kind: 'nexus'; mod_id: number; page_url: string; name: string | null }
-  | { kind: 'manual'; file_name: string | null };
+  | { kind: 'manual'; file_name: string | null }
+  | { kind: 'compat'; workshop_id: string | null; source_dir: string; changes: string[] };
 
 export type CatalogSource =
   | { kind: 'workshop'; workshop_id: string }
@@ -363,6 +366,14 @@ export interface WorkshopSearchResult {
 export interface WorkshopLookup {
   collection: WorkshopItem | null;
   items: WorkshopItem[];
+}
+
+export interface CompatResult {
+  mod_id: string;
+  folder: string;
+  destination: string;
+  changes: string[];
+  warnings: string[];
 }
 
 export interface InstalledMod {

@@ -705,7 +705,6 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
 
     // 2. Auto-install Live Bridge mod if missing, only in the Zomboid folder actually in use
     //    (never create Zomboid trees in candidate locations that do not exist).
-    let user_dirs = get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
     if let Some(user_dir) = get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).first() {
         let user_dir_str = user_dir.to_string_lossy();
         if crate::sandbox::bridge_companion_mod_needs_update(&user_dir_str) {
@@ -715,11 +714,17 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
 
     let active_from_disk = crate::patch_generator::get_active_mod_ids_from_disk(&paths.user_zomboid_dir, &paths.mod_list_ini_path);
 
-    // 3. Scan User Zomboid mods folder across all candidate directories
-    for user_dir in &user_dirs {
+    // 3. Scan Zomboid/mods of the Zomboid folder the game uses. Other candidate folders (e.g.
+    //    Documents/Zomboid) are not read by the game; old Studio versions left stale copies there.
+    let game_user_dirs: Vec<PathBuf> = get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).into_iter().take(1).collect();
+    for user_dir in &game_user_dirs {
         let user_mods_path = user_dir.join("mods");
         if user_mods_path.exists() {
             for entry in WalkDir::new(&user_mods_path).max_depth(8).into_iter().filter_map(|e| e.ok()) {
+                // The game refuses to list its example mod (ZomboidFileSystem.getAllModFoldersAux).
+                if entry.path().components().any(|c| c.as_os_str().eq_ignore_ascii_case("examplemod")) {
+                    continue;
+                }
                 if entry.file_name() == "mod.info" {
                     let Some((_, loadable)) = mod_info_rank(entry.path(), game_version) else {
                         continue;

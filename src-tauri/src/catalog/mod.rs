@@ -3,7 +3,8 @@
 //!
 //! Game rules reproduced (decompiled 42.20.4):
 //! - mod folders are searched Workshop uploads (`Zomboid/Workshop/*/Contents/mods`), then
-//!   subscribed Workshop items, then `Zomboid/mods`; the first copy of an id wins;
+//!   subscribed Workshop items, then `Zomboid/mods` (or `Zomboid/mods` first when the Studio
+//!   launches with `-modfolders mods,workshop,steam` for compatible copies); the first copy of an id wins;
 //! - each mod's mod.info comes from its version folder for the installed build, else `common/`
 //!   (`select_mod_info_for_build`); Build 41 reads the root;
 //! - a mod is unavailable outside versionMin..versionMax or when a required mod (at any depth)
@@ -128,7 +129,14 @@ fn mod_folders_in_game_order(workshop_dir: &str, user_zomboid_dir: &str) -> Vec<
     }
 
     if let Some(user_dir) = &user_dir {
-        folders.push((user_dir.join("mods"), ModSource::Local));
+        let local = (user_dir.join("mods"), ModSource::Local);
+        // With compatible copies the Studio launches the game with "-modfolders mods,workshop,steam":
+        // Zomboid/mods is searched first, so the copies win over the Workshop originals.
+        if crate::compat::local_first(user_dir) {
+            folders.insert(0, local);
+        } else {
+            folders.push(local);
+        }
     }
     folders
 }
@@ -271,6 +279,10 @@ pub enum SuggestedFix {
     SubscribeWorkshop { hint: String },
     /// Open the item's Workshop page in the browser.
     OpenWorkshopPage { workshop_id: String },
+    /// Copy the mod to Zomboid/mods and adapt it to the installed build.
+    MakeCompatibleCopy { mod_id: String },
+    /// Remove a compatible copy (back to the original).
+    RemoveCompatibleCopy { folder: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,7 +311,10 @@ impl IssueList {
                 SuggestedFix::EnableMod { mod_id: m } | SuggestedFix::DisableMod { mod_id: m } => Some(m),
                 SuggestedFix::MoveBefore { mod_id: m, before } => Some(if Some(m.as_str()) == mod_id { before } else { m }),
                 SuggestedFix::SubscribeWorkshop { hint } => Some(hint),
-                SuggestedFix::RemoveFromList { .. } | SuggestedFix::OpenWorkshopPage { .. } => None,
+                SuggestedFix::RemoveFromList { .. }
+                | SuggestedFix::OpenWorkshopPage { .. }
+                | SuggestedFix::MakeCompatibleCopy { .. }
+                | SuggestedFix::RemoveCompatibleCopy { .. } => None,
             };
             if let Some(other) = other.filter(|o| Some(o.as_str()) != mod_id && !related.contains(o)) {
                 related.push(other.clone());
@@ -422,6 +437,8 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             continue;
         };
 
+        // Mods from Workshop folders can get an adapted copy in Zomboid/mods.
+        let compat_fix = (m.source != ModSource::Local).then(|| SuggestedFix::MakeCompatibleCopy { mod_id: m.id.clone() });
         match &m.loadability {
             Loadability::Loadable => {}
             Loadability::NoFolderForBuild { available_folders } => list.push(
@@ -429,19 +446,19 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                 format!("{} has no files for game build {} (it has: {}). The game will not load it.",
                     describe(m), catalog.game_version.as_deref().unwrap_or("?"),
                     if available_folders.is_empty() { "nothing usable".to_string() } else { available_folders.join(", ") }),
-                vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }],
+                compat_fix.clone().into_iter().chain([SuggestedFix::DisableMod { mod_id: m.id.clone() }]).collect(),
             ),
             Loadability::OutsideVersionRange { version_min, version_max } => list.push(
                 Severity::Error, "outside_version_range", Some(id),
                 format!("{} supports game versions {} to {}; you have {}. The game will not load it.",
                     describe(m), version_min.as_deref().unwrap_or("any"), version_max.as_deref().unwrap_or("any"),
                     catalog.game_version.as_deref().unwrap_or("?")),
-                vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }],
+                compat_fix.clone().into_iter().chain([SuggestedFix::DisableMod { mod_id: m.id.clone() }]).collect(),
             ),
             Loadability::InvalidModInfo { reason } => list.push(
                 Severity::Error, "invalid_mod_info", Some(id),
                 format!("{}: {}", describe(m), reason),
-                vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }],
+                compat_fix.into_iter().chain([SuggestedFix::DisableMod { mod_id: m.id.clone() }]).collect(),
             ),
         }
 
@@ -517,6 +534,14 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             if state.updated_since_last_play {
                 updated_since_play.push(describe(m));
             }
+        }
+
+        if let Some(crate::origins::ModOrigin::Compat { changes, .. }) = &m.origin {
+            let folder = std::path::Path::new(&m.root_dir).file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+            list.push(Severity::Info, "compatible_copy", Some(id),
+                format!("{} runs from a compatible copy in Zomboid/mods ({}). It is used when the game is started from PZ Mod Studio; starting it from Steam needs the launch option -modfolders mods,workshop,steam.",
+                    describe(m), changes.join(" ")),
+                vec![SuggestedFix::RemoveCompatibleCopy { folder }]);
         }
 
         for copy in catalog.mods.iter().filter(|c| c.id == m.id && c.shadowed_by.is_some()) {

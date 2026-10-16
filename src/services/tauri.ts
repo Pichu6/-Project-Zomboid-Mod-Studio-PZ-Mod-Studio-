@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort, CompatResult } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -280,6 +280,16 @@ export const TauriService = {
   /** Steam Workshop details for item ids (no key needed). Throws on failure. */
   workshopDetails: async (ids: string[]): Promise<WorkshopItem[]> => {
     return await invoke<WorkshopItem[]>('workshop_details_cmd', { ids });
+  },
+
+  /** Copies a mod the installed build won't load into Zomboid/mods and adapts it. Throws with the reason. */
+  makeCompatibleCopy: async (paths: StudioPathsUI, modId: string, replaceExisting: boolean): Promise<CompatResult> => {
+    return await invoke<CompatResult>('make_compatible_copy_cmd', { paths, modId, replaceExisting });
+  },
+
+  /** Removes a compatible copy (moved to Zomboid/PZModStudio_Backups/mods). */
+  removeCompatibleCopy: async (paths: StudioPathsUI, folder: string): Promise<void> => {
+    await invoke('remove_compatible_copy_cmd', { paths, folder });
   },
 
   /** Whether a Steam Web API key is saved (the key is never returned). */

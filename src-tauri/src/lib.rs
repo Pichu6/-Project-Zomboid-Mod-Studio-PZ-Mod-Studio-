@@ -1,5 +1,6 @@
 pub mod catalog;
 pub mod claude_agent;
+pub mod compat;
 pub mod diff_engine;
 pub mod instance_manager;
 pub mod load_order;
@@ -150,6 +151,29 @@ fn install_mods_cmd(
     origin: Option<origins::ModOrigin>,
 ) -> Result<mod_install::InstallResult, String> {
     mod_install::install_mods(&source, &paths.user_zomboid_dir, &paths.workshop_dir, replace_existing, origin)
+}
+
+/// Copies a mod the installed build will not load into Zomboid/mods and adapts it.
+#[tauri::command(async)]
+fn make_compatible_copy_cmd(paths: StudioPaths, mod_id: String, replace_existing: bool) -> Result<compat::CompatResult, String> {
+    let game = load_order::mod_info::read_installed_game_version(&paths.user_zomboid_dir)
+        .ok_or("The installed game version is unknown: start Project Zomboid once so Zomboid/version.txt exists.")?;
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, Some(game));
+    let original = catalog
+        .mods
+        .iter()
+        .find(|m| m.id == mod_id && m.source != catalog::ModSource::Local)
+        .ok_or_else(|| format!("{} is not installed from the Workshop.", mod_id))?;
+    let workshop_id = match &original.source {
+        catalog::ModSource::Workshop { workshop_id } => Some(workshop_id.clone()),
+        _ => None,
+    };
+    compat::make_compatible_copy(std::path::Path::new(&original.root_dir), &paths.user_zomboid_dir, game, workshop_id, replace_existing)
+}
+
+#[tauri::command(async)]
+fn remove_compatible_copy_cmd(paths: StudioPaths, folder: String) -> Result<(), String> {
+    compat::remove_compatible_copy(&paths.user_zomboid_dir, &folder)
 }
 
 /// Game-exact load-order sort of the whole list (enabled and disabled), keeping the user's order
@@ -402,6 +426,8 @@ pub fn run() {
             sort_mod_dependencies_cmd,
             get_mod_health_cmd,
             sort_load_order_cmd,
+            make_compatible_copy_cmd,
+            remove_compatible_copy_cmd,
             nexus_search_cmd,
             install_mods_cmd,
             workshop_details_cmd,

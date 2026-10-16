@@ -132,6 +132,8 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
         } else {
             cmd.arg("-fullscreen");
         }
+        // Compatible copies in Zomboid/mods must win over their Workshop originals.
+        cmd.args(crate::compat::launch_args(&config.user_zomboid_dir));
 
         cmd.stdin(std::process::Stdio::null());
         cmd.stdout(std::process::Stdio::null());
@@ -414,6 +416,9 @@ pub fn launch_pz_direct(
     }
     for arg in extra_args {
         cmd.arg(arg);
+    }
+    if !extra_args.iter().any(|a| a == "-modfolders") {
+        cmd.args(crate::compat::launch_args(user_zomboid_dir));
     }
 
     cmd.stdin(std::process::Stdio::null());

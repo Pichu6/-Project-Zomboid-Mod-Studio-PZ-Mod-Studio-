@@ -18,6 +18,14 @@ pub enum ModOrigin {
     Nexus { mod_id: u64, page_url: String, name: Option<String> },
     /// Installed from a file or folder the user picked (forum, GitHub, Discord, ...).
     Manual { file_name: Option<String> },
+    /// A copy of another mod adapted by the Studio to run on the installed build.
+    Compat {
+        /// Workshop item the original comes from, when it is one.
+        workshop_id: Option<String>,
+        source_dir: String,
+        /// What was changed, in plain words.
+        changes: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,6 +45,16 @@ pub fn load(zomboid_dir: &Path) -> BTreeMap<String, OriginRecord> {
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
+}
+
+/// Removes the record of a folder (e.g. a compatible copy that was removed).
+pub fn forget(zomboid_dir: &Path, folder: &str) -> Result<(), String> {
+    let mut all = load(zomboid_dir);
+    if all.remove(folder).is_none() {
+        return Ok(());
+    }
+    let text = serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?;
+    fs::write(origins_path(zomboid_dir), text).map_err(|e| e.to_string())
 }
 
 /// Records the origin of freshly installed folders (replacing any older record for them).

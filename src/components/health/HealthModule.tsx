@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
-import { HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
+import { CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService } from '../../services/tauri';
+import { TauriService, reportBackendError } from '../../services/tauri';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -13,6 +13,8 @@ interface HealthModuleProps {
   onRecheck: () => void;
   /** Replaces the whole list (order + enabled flags) and persists it. */
   onApplyModList: (mods: ModInfo[]) => void;
+  /** Mods were added/removed on disk (compatible copies): rescan the list. */
+  onModsChanged: () => void;
 }
 
 /** Fixes the "fix all" button may apply without asking: they only enable or reorder. */
@@ -59,6 +61,10 @@ const fixLabel = (fix: HealthFix): string => {
       return `Search Workshop for "${fix.hint}"`;
     case 'open_workshop_page':
       return 'Open Workshop page';
+    case 'make_compatible_copy':
+      return 'Make compatible copy';
+    case 'remove_compatible_copy':
+      return 'Remove compatible copy';
   }
 };
 
@@ -68,8 +74,52 @@ const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: str
   info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400', label: 'Info' },
 };
 
-export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList }) => {
+export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged }) => {
+  const [compatBusy, setCompatBusy] = useState(false);
+  const [compatResult, setCompatResult] = useState<CompatResult | null>(null);
+
+  const makeCompatibleCopy = async (modId: string) => {
+    setCompatBusy(true);
+    try {
+      let result: CompatResult;
+      try {
+        result = await TauriService.makeCompatibleCopy(paths, modId, false);
+      } catch (err) {
+        if (!String(err).includes('earlier compatible copy')) throw err;
+        if (!confirm(`${modId} already has a compatible copy. Make a fresh one? The current copy is moved to Zomboid/PZModStudio_Backups/mods.`)) return;
+        result = await TauriService.makeCompatibleCopy(paths, modId, true);
+      }
+      setCompatResult(result);
+      onModsChanged();
+      onRecheck(); // same mod id, so the list length may not change: check again explicitly
+    } catch (err) {
+      reportBackendError('Making a compatible copy', err);
+    } finally {
+      setCompatBusy(false);
+    }
+  };
+
+  const removeCompatibleCopy = async (folder: string) => {
+    if (!confirm(`Remove the compatible copy of ${folder}? The game goes back to the original (which your build may not load). The copy is moved to Zomboid/PZModStudio_Backups/mods.`)) return;
+    try {
+      await TauriService.removeCompatibleCopy(paths, folder);
+      setCompatResult(null);
+      onModsChanged();
+      onRecheck();
+    } catch (err) {
+      reportBackendError('Removing the compatible copy', err);
+    }
+  };
+
   const handleFix = (fix: HealthFix) => {
+    if (fix.action === 'make_compatible_copy') {
+      makeCompatibleCopy(fix.mod_id);
+      return;
+    }
+    if (fix.action === 'remove_compatible_copy') {
+      removeCompatibleCopy(fix.folder);
+      return;
+    }
     if (fix.action === 'open_workshop_page') {
       TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${fix.workshop_id}`);
       return;
@@ -163,6 +213,40 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         </div>
       </div>
 
+      {compatBusy && (
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Making a compatible copy...
+        </div>
+      )}
+      {compatResult && (
+        <div className="flex flex-col gap-2 p-4 rounded-xl border border-emerald-800/60 bg-emerald-950/20 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-emerald-200 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              Compatible copy of {compatResult.mod_id} ready in Zomboid/mods/{compatResult.folder}
+            </div>
+            <button type="button" onClick={() => setCompatResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">Close</button>
+          </div>
+          <ul className="list-disc pl-5 text-slate-300 space-y-0.5">
+            {compatResult.changes.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+          {compatResult.warnings.length > 0 ? (
+            <>
+              <div className="text-amber-300 font-bold mt-1">May still break in game:</div>
+              <ul className="list-disc pl-5 text-amber-200/90 space-y-0.5">
+                {compatResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </>
+          ) : (
+            <div className="text-slate-400">No known Build 41 leftovers were found in it.</div>
+          )}
+          <div className="text-slate-400">
+            Start the game from PZ Mod Studio so it uses the copy (from Steam, add the launch option
+            <code className="mx-1">-modfolders mods,workshop,steam</code>). Test it in a new or backed-up save first.
+          </div>
+        </div>
+      )}
+
       {report && report.issues.length === 0 && (
         <div className="flex items-center gap-3 p-5 rounded-xl border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-400" aria-hidden="true" />
@@ -180,7 +264,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
               const style = SEVERITY_STYLE[sev];
               const Icon = style.icon;
               // "Enable X" + "Move X before Y" for the same issue are shown as one button doing both.
-              const applicable = issue.fixes.filter((f) => f.action === 'subscribe_workshop' || f.action === 'open_workshop_page' || applyFix(mods, f) !== null);
+              const applicable = issue.fixes.filter((f) => ['subscribe_workshop', 'open_workshop_page', 'make_compatible_copy', 'remove_compatible_copy'].includes(f.action) || applyFix(mods, f) !== null);
               const enableThenMove = applicable.length === 2 && applicable[0].action === 'enable_mod' && applicable[1].action === 'move_before';
               const fixes = enableThenMove ? [applicable[0]] : applicable;
               return (

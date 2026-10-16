@@ -1059,6 +1059,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <option value="manual">Installed by hand</option>
             <option value="local">Local (other)</option>
             <option value="studio">PZ Mod Studio</option>
+            <option value="compat">Compatible copies</option>
           </select>
 
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">

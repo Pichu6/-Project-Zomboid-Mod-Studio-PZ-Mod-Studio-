@@ -136,7 +136,7 @@ fn extract_zip(archive_path: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
+pub(crate) fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;

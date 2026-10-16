@@ -2,7 +2,7 @@ import React from 'react';
 import { CatalogModSummary } from '../../types';
 import { TauriService } from '../../services/tauri';
 
-type SourceKind = 'steam' | 'nexus' | 'manual' | 'local' | 'upload' | 'studio';
+type SourceKind = 'steam' | 'nexus' | 'manual' | 'local' | 'upload' | 'studio' | 'compat';
 
 const STYLE: Record<SourceKind, { label: string; className: string }> = {
   steam: { label: 'Steam', className: 'border-sky-600/60 text-sky-300 bg-sky-950/40' },
@@ -11,6 +11,7 @@ const STYLE: Record<SourceKind, { label: string; className: string }> = {
   local: { label: 'Local', className: 'border-slate-600 text-slate-300 bg-slate-900' },
   upload: { label: 'My upload', className: 'border-teal-600/60 text-teal-300 bg-teal-950/40' },
   studio: { label: 'Studio', className: 'border-emerald-600/60 text-emerald-300 bg-emerald-950/40' },
+  compat: { label: 'Compat copy', className: 'border-amber-600/60 text-amber-300 bg-amber-950/40' },
 };
 
 export function sourceOf(modId: string, entry: CatalogModSummary | undefined): { kind: SourceKind; title: string; url?: string } {
@@ -29,6 +30,13 @@ export function sourceOf(modId: string, entry: CatalogModSummary | undefined): {
     case 'local':
       if (entry.origin?.kind === 'nexus') {
         return { kind: 'nexus', title: `Downloaded from Nexus Mods (mod ${entry.origin.mod_id})`, url: entry.origin.page_url };
+      }
+      if (entry.origin?.kind === 'compat') {
+        return {
+          kind: 'compat',
+          title: `Compatible copy made by PZ Mod Studio: ${entry.origin.changes.join(' ')}`,
+          url: entry.origin.workshop_id ? `https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.origin.workshop_id}` : undefined,
+        };
       }
       if (entry.origin?.kind === 'manual') {
         return { kind: 'manual', title: `Installed by hand${entry.origin.file_name ? ` from ${entry.origin.file_name}` : ''}` };

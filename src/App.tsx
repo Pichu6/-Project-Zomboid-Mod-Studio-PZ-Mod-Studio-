@@ -564,6 +564,7 @@ export const App: React.FC = () => {
               checking={health.checking}
               onRecheck={health.recheck}
               onApplyModList={handleReorderMods}
+              onModsChanged={handleRefreshMods}
             />
           )}
 
