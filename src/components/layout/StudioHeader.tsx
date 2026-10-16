@@ -3,7 +3,11 @@ import { Shield, Play, Activity, ChevronDown, Layout, Zap, Check, Layers } from 
 import { GameLaunchMode } from '../../types';
 
 interface StudioHeaderProps {
+  /** Conflicts still needing a decision. */
   conflictCount: number;
+  /** Conflicts already resolved or merged automatically. */
+  resolvedConflictCount?: number;
+  onNavigateToMerger?: () => void;
   polyfillCount: number;
   activeProfileName?: string;
   onNavigateToProfiles?: () => void;
@@ -59,6 +63,8 @@ const LAUNCH_MODES: {
 
 export const StudioHeader: React.FC<StudioHeaderProps> = ({
   conflictCount,
+  resolvedConflictCount = 0,
+  onNavigateToMerger,
   polyfillCount,
   activeProfileName,
   onNavigateToProfiles,
@@ -128,11 +134,17 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           </span>
         </button>
 
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-          <span className="text-slate-400 font-mono">Virtual Conflicts:</span>
-          <span className="font-bold font-mono text-amber-400">{conflictCount}</span>
-        </div>
+        <button
+          type="button"
+          onClick={onNavigateToMerger}
+          className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 hover:border-emerald-600/60 transition cursor-pointer"
+          title={`Files several active mods ship at the same path. ${conflictCount} still need a decision, ${resolvedConflictCount} are resolved or merged automatically. Click to open the Mod Merger.`}
+        >
+          <span className={`w-2 h-2 rounded-full ${conflictCount > 0 ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+          <span className="text-slate-400 font-mono">Conflicts:</span>
+          <span className={`font-bold font-mono ${conflictCount > 0 ? 'text-amber-400' : 'text-emerald-300'}`}>{conflictCount} pending</span>
+          {resolvedConflictCount > 0 && <span className="font-mono text-slate-500">· {resolvedConflictCount} resolved</span>}
+        </button>
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800">
           <span className="w-2 h-2 rounded-full bg-emerald-400"></span>

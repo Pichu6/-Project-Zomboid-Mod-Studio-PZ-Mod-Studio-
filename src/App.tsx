@@ -493,7 +493,9 @@ export const App: React.FC = () => {
       <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Studio Header */}
       <StudioHeader
-        conflictCount={conflicts.length}
+        conflictCount={conflicts.filter((c) => c.status !== 'RESOLVED' && c.status !== 'AUTO_MERGED').length}
+        resolvedConflictCount={conflicts.filter((c) => c.status === 'RESOLVED' || c.status === 'AUTO_MERGED').length}
+        onNavigateToMerger={() => setActiveTab('MERGER')}
         polyfillCount={rules.filter((r) => r.enabled).length}
         activeProfileName={activeProfile?.name}
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
