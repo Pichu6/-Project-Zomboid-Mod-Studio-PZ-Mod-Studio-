@@ -98,8 +98,32 @@ fn auto_merge_conflicts_cmd(paths: StudioPaths, relative_paths: Vec<String>) -> 
 
 /// One page of Project Zomboid mods from Nexus Mods (public API, no key).
 #[tauri::command(async)]
-fn nexus_search_cmd(query: Option<String>, sort: nexus::NexusSort, offset: u64, count: u64) -> Result<nexus::NexusSearchResult, String> {
-    nexus::search_mods(query.as_deref(), sort, offset, count)
+fn nexus_search_cmd(
+    query: Option<String>,
+    category: Option<String>,
+    sort: nexus::NexusSort,
+    offset: u64,
+    count: u64,
+) -> Result<nexus::NexusSearchResult, String> {
+    nexus::search_mods(query.as_deref(), category.as_deref(), sort, offset, count)
+}
+
+/// Project Zomboid categories on Nexus with mod counts.
+#[tauri::command(async)]
+fn nexus_categories_cmd() -> Result<Vec<nexus::NexusCategory>, String> {
+    nexus::categories()
+}
+
+/// Description, requirements and files of one Nexus mod.
+#[tauri::command(async)]
+fn nexus_mod_details_cmd(mod_id: u64) -> Result<nexus::NexusModDetails, String> {
+    nexus::mod_details(mod_id)
+}
+
+/// Full description, screenshots and required items of one Workshop item (no key).
+#[tauri::command(async)]
+fn workshop_item_details_cmd(id: String) -> Result<workshop::WorkshopItemDetails, String> {
+    workshop::item_details(&id)
 }
 
 /// Whether a Steam Web API key is saved (the key itself never goes back to the UI).
@@ -115,7 +139,7 @@ fn set_steam_key_cmd(key: String) -> Result<(), String> {
     if key.len() != 32 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("A Steam Web API key is 32 characters, 0-9 and A-F.".to_string());
     }
-    workshop::search(key, None, workshop::WorkshopSort::Trending, None, 1, 1)?;
+    workshop::search(key, None, workshop::WorkshopSort::Trending, None, None, 1, 1)?;
     secrets::set(secrets::STEAM_WEB_API_KEY, key)
 }
 
@@ -130,11 +154,12 @@ fn workshop_search_cmd(
     text: Option<String>,
     sort: workshop::WorkshopSort,
     build: Option<String>,
+    category: Option<String>,
     page: u32,
 ) -> Result<workshop::WorkshopSearchResult, String> {
     let key = secrets::get(secrets::STEAM_WEB_API_KEY)?
         .ok_or("Add your Steam Web API key in Browse Mods > Steam Workshop to search the Workshop here.")?;
-    workshop::search(&key, text.as_deref(), sort, build.as_deref(), page, 24)
+    workshop::search(&key, text.as_deref(), sort, build.as_deref(), category.as_deref(), page, 24)
 }
 
 /// Steam Workshop details for item ids (public Web API, no key).
@@ -437,6 +462,9 @@ pub fn run() {
             make_compatible_copy_cmd,
             remove_compatible_copy_cmd,
             nexus_search_cmd,
+            nexus_categories_cmd,
+            nexus_mod_details_cmd,
+            workshop_item_details_cmd,
             install_mods_cmd,
             workshop_details_cmd,
             workshop_lookup_cmd,

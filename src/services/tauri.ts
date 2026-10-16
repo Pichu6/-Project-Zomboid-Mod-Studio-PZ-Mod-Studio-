@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort, CompatResult, AutoMergeResult } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -267,8 +267,23 @@ export const TauriService = {
   },
 
   /** Project Zomboid mods on Nexus Mods (public API). Throws on failure. */
-  nexusSearch: async (query: string, sort: NexusSort, offset: number, count: number): Promise<NexusSearchResult> => {
-    return await invoke<NexusSearchResult>('nexus_search_cmd', { query: query || null, sort, offset, count });
+  nexusSearch: async (query: string, category: string | null, sort: NexusSort, offset: number, count: number): Promise<NexusSearchResult> => {
+    return await invoke<NexusSearchResult>('nexus_search_cmd', { query: query || null, category: category || null, sort, offset, count });
+  },
+
+  /** Project Zomboid categories on Nexus with mod counts. Throws on failure. */
+  nexusCategories: async (): Promise<NexusCategory[]> => {
+    return await invoke<NexusCategory[]>('nexus_categories_cmd');
+  },
+
+  /** Description, requirements and files of one Nexus mod. Throws on failure. */
+  nexusModDetails: async (modId: number): Promise<NexusModDetails> => {
+    return await invoke<NexusModDetails>('nexus_mod_details_cmd', { modId });
+  },
+
+  /** Full description, screenshots and required items of one Workshop item (no key). Throws on failure. */
+  workshopItemDetails: async (id: string): Promise<WorkshopItemDetails> => {
+    return await invoke<WorkshopItemDetails>('workshop_item_details_cmd', { id });
   },
 
   /**
@@ -315,8 +330,8 @@ export const TauriService = {
   },
 
   /** Workshop search with the saved key. Throws on failure (no key, rejected key, offline). */
-  workshopSearch: async (text: string, sort: WorkshopSort, build: string | null, page: number): Promise<WorkshopSearchResult> => {
-    return await invoke<WorkshopSearchResult>('workshop_search_cmd', { text: text || null, sort, build, page });
+  workshopSearch: async (text: string, sort: WorkshopSort, build: string | null, category: string | null, page: number): Promise<WorkshopSearchResult> => {
+    return await invoke<WorkshopSearchResult>('workshop_search_cmd', { text: text || null, sort, build, category: category || null, page });
   },
 
   /** Looks up pasted Workshop links / ids / a collection link. Throws on failure. */

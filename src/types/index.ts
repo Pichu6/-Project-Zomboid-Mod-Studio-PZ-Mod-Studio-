@@ -357,6 +357,40 @@ export interface NexusMod {
   page_url: string;
   /** '41', '42' or '41+42' when the name/summary says so (Nexus has no build tag). */
   build_hint: string | null;
+  /** Nexus category ("Gameplay", "Items", ...). */
+  category: string | null;
+}
+
+export interface NexusCategory {
+  name: string;
+  count: number;
+}
+
+export interface NexusRequirement {
+  mod_id: number | null;
+  name: string;
+  url: string | null;
+  /** Hosted outside Nexus (often the Steam Workshop). */
+  external: boolean;
+  notes: string | null;
+}
+
+export interface NexusFile {
+  name: string;
+  version: string | null;
+  /** MAIN, UPDATE, OPTIONAL, MISCELLANEOUS. */
+  category: string;
+  size_bytes: number | null;
+  uploaded: number | null;
+  description: string | null;
+}
+
+export interface NexusModDetails {
+  mod: NexusMod;
+  /** BBCode. */
+  description: string;
+  requirements: NexusRequirement[];
+  files: NexusFile[];
 }
 
 export interface NexusSearchResult {
@@ -390,6 +424,23 @@ export interface WorkshopItem {
   is_project_zomboid: boolean;
   banned: boolean;
   page_url: string;
+}
+
+export interface WorkshopRequiredItem {
+  workshop_id: string;
+  title: string;
+}
+
+export interface WorkshopItemDetails {
+  item: WorkshopItem;
+  /** Steam BBCode. */
+  description: string;
+  time_created: number | null;
+  author: string | null;
+  screenshots: string[];
+  /** YouTube video ids. */
+  videos: string[];
+  required_items: WorkshopRequiredItem[];
 }
 
 export type WorkshopSort = 'relevance' | 'trending' | 'most_subscribed' | 'recently_updated' | 'newest' | 'top_rated';

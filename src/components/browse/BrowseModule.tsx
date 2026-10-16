@@ -2,9 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Library, Link2, Loader2, Search, Users, X,
 } from 'lucide-react';
-import { CatalogModSummary, InstallResult, ModOrigin, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort } from '../../types';
+import {
+  CatalogModSummary, InstallResult, ModOrigin, NexusCategory, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort,
+} from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
+import {
+  BuildChips, CardGrid, CategoryBar, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
+} from './common';
+import { DetailTarget, ModDetail } from './ModDetail';
 
 interface BrowseModuleProps {
   paths: StudioPathsUI;
@@ -14,44 +20,27 @@ interface BrowseModuleProps {
   onInstalled: () => void;
 }
 
-type SourceTab = 'workshop' | 'nexus';
+type SourceTab = 'workshop' | 'nexus' | 'mine';
 
 const CONFLICT_PREFIX = 'INSTALL_CONFLICT:';
-const NEXUS_PAGE_SIZE = 24;
 
-const formatCount = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-const formatIsoDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '');
-const formatUnixDate = (secs: number | null) => (secs ? new Date(secs * 1000).toLocaleDateString() : '');
+/** The Workshop's categories for Project Zomboid (same list as workshop::CATEGORIES). */
+const WORKSHOP_CATEGORIES = [
+  'Animals', 'Audio', 'Balance', 'Building', 'Clothing/Armor', 'Farming', 'Food', 'Framework', 'Hardmode', 'Interface', 'Items',
+  'Language/Translation', 'Literature', 'Map', 'Military', 'Misc', 'Models', 'Multiplayer', 'Pop Culture', 'QoL', 'Realistic',
+  'Silly/Fun', 'Skills', 'Textures', 'Traits', 'Vehicles', 'Weapons', 'WIP',
+].map((name) => ({ name }));
 
-const Chip: React.FC<{ className: string; title?: string; children: React.ReactNode }> = ({ className, title, children }) => (
-  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${className}`} title={title}>{children}</span>
-);
+const pageCountOf = (total: number) => Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-const BuildChips: React.FC<{ builds: string[]; source: string }> = ({ builds, source }) =>
-  builds.length === 0 ? (
-    <Chip className="border-slate-700 text-slate-500" title={`${source} does not say which game build it is for`}>build ?</Chip>
-  ) : (
-    <>
-      {builds.map((b) => (
-        <Chip key={b} className={b === '42' ? 'border-emerald-600/60 text-emerald-300' : 'border-amber-600/60 text-amber-300'} title={`Tagged for Build ${b} (${source})`}>
-          B{b}
-        </Chip>
-      ))}
-    </>
-  );
-
-const InstalledChip: React.FC = () => <Chip className="border-emerald-500/60 text-emerald-300 bg-emerald-950/40">Installed</Chip>;
+/** Pasted Workshop links / ids instead of search words. */
+const looksLikeWorkshopLinks = (text: string) => /steamcommunity\.com|CommunityFilePage/i.test(text) || /^[\d\s,;]{4,}$/.test(text.trim());
 
 // ---------------------------------------------------------------------------------------------
-// Install a downloaded mod
+// Installing a downloaded mod
 // ---------------------------------------------------------------------------------------------
 
-const InstallBox: React.FC<{
-  paths: StudioPathsUI;
-  pendingOrigin: (ModOrigin & { kind: 'nexus' }) | null;
-  onClearOrigin: () => void;
-  onInstalled: () => void;
-}> = ({ paths, pendingOrigin, onClearOrigin, onInstalled }) => {
+function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 'nexus' }) | null, onDone: () => void) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<InstallResult | null>(null);
 
@@ -67,15 +56,11 @@ const InstallBox: React.FC<{
         const text = String(err);
         if (!text.startsWith(CONFLICT_PREFIX)) throw err;
         const { existing_folders } = JSON.parse(text.slice(CONFLICT_PREFIX.length)) as { existing_folders: string[] };
-        const ok = confirm(
-          `Already installed in Zomboid/mods: ${existing_folders.join(', ')}.\n\nReplace? The current copy is moved to Zomboid/PZModStudio_Backups/mods first.`
-        );
-        if (!ok) return;
+        if (!confirm(`Already installed in Zomboid/mods: ${existing_folders.join(', ')}.\n\nReplace? The current copy is moved to Zomboid/PZModStudio_Backups/mods first.`)) return;
         res = await TauriService.installMods(source, paths, true, origin);
       }
       setResult(res);
-      onClearOrigin();
-      onInstalled();
+      onDone();
     } catch (err) {
       reportBackendError('Installing the mod', err);
     } finally {
@@ -83,131 +68,66 @@ const InstallBox: React.FC<{
     }
   };
 
-  const pickZip = async () => {
-    const file = await TauriService.pickOpenFile('Mod archive (.zip)', 'zip');
-    if (file) await install(file);
+  return {
+    busy,
+    result,
+    clearResult: () => setResult(null),
+    pickZip: async () => {
+      const file = await TauriService.pickOpenFile('Mod archive (.zip)', 'zip');
+      if (file) await install(file);
+    },
+    pickFolder: async () => {
+      const folder = await TauriService.pickFolder();
+      if (folder) await install(folder);
+    },
   };
-  const pickFolder = async () => {
-    const folder = await TauriService.pickFolder();
-    if (folder) await install(folder);
-  };
+}
 
-  return (
-    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold text-slate-100">Install a mod you downloaded</h2>
-          <p className="text-xs text-slate-400 max-w-2xl">
-            From Nexus, the forums, GitHub or anywhere else. Choose the <code>.zip</code> (or the folder you extracted, for
-            .7z/.rar); the Studio finds the mod inside and puts it in <code>Zomboid/mods</code> with the right structure.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={pickZip} disabled={busy || !paths.is_valid}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FileArchive className="w-3.5 h-3.5" aria-hidden="true" />}
-            Install .zip
-          </button>
-          <button type="button" onClick={pickFolder} disabled={busy || !paths.is_valid}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50">
-            <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
-            Install folder
-          </button>
-        </div>
-      </div>
-      {pendingOrigin && (
-        <div className="flex items-center gap-2 text-[11px] text-orange-200 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-1.5">
-          <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          <span className="flex-1">
-            The next install will be tagged as downloaded from Nexus: <b>{pendingOrigin.name}</b>
+const InstallResultBanner: React.FC<{ result: InstallResult; onClose: () => void }> = ({ result, onClose }) => (
+  <div className="flex items-start gap-3 px-3 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/20 text-xs">
+    <div className="flex-1 flex flex-col gap-1">
+      {result.installed.map((m) => (
+        <div key={m.destination} className="flex items-center gap-2 text-emerald-300">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            {m.replaced ? 'Replaced' : 'Installed'} <b>{m.name || m.folder}</b>
+            {m.mod_id && <span className="font-mono text-emerald-400/70"> ({m.mod_id})</span>}: enable it in the Mod List.
           </span>
-          <button type="button" onClick={onClearOrigin} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label="Do not tag the next install">
-            <X className="w-3.5 h-3.5" />
-          </button>
         </div>
-      )}
-      {result && (
-        <div className="flex flex-col gap-1.5 text-xs">
-          {result.installed.map((m) => (
-            <div key={m.destination} className="flex items-center gap-2 text-emerald-300">
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-              <span>
-                {m.replaced ? 'Replaced' : 'Installed'} <b>{m.name || m.folder}</b>
-                {m.mod_id && <span className="font-mono text-emerald-400/70"> ({m.mod_id})</span>}: enable it in the Mod List.
-              </span>
-            </div>
-          ))}
-          {result.warnings.map((w, i) => (
-            <div key={i} className="flex items-start gap-2 text-amber-300">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-              <span>{w}</span>
-            </div>
-          ))}
+      ))}
+      {result.warnings.map((w, i) => (
+        <div key={i} className="flex items-start gap-2 text-amber-300">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{w}</span>
         </div>
-      )}
+      ))}
     </div>
-  );
-};
+    <button type="button" onClick={onClose} className="p-0.5 rounded hover:bg-emerald-900/50 text-slate-400 cursor-pointer" aria-label="Close">
+      <X className="w-3.5 h-3.5" />
+    </button>
+  </div>
+);
 
 // ---------------------------------------------------------------------------------------------
 // Steam Workshop
 // ---------------------------------------------------------------------------------------------
 
-const UpdateChips: React.FC<{ state: WorkshopInstallState | undefined }> = ({ state }) => (
-  <>
-    {state?.update_pending && (
-      <Chip className="border-amber-500/60 text-amber-300 bg-amber-950/40" title="Steam has a newer version that is not downloaded yet">Update waiting</Chip>
+const workshopCard = (item: WorkshopItem, installedIds: string[], state: WorkshopInstallState | undefined, onOpen: (t: DetailTarget) => void) => (
+  <ModCard
+    key={item.workshop_id}
+    image={item.preview_url}
+    title={item.found ? item.title : `Item ${item.workshop_id}`}
+    subtitle={item.found ? `updated ${formatUnixDate(item.time_updated)}` : 'Not public on Steam (removed, private or wrong id)'}
+    chips={<>{installedIds.length > 0 && <InstalledChip />}<UpdateChips state={state} />{item.found && <BuildChips builds={item.builds} source="The Workshop page" />}</>}
+    summary={item.summary}
+    stats={item.found && (
+      <>
+        <span className="flex items-center gap-1" title="Subscribers"><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
+        <span className="flex items-center gap-1" title="Favorites"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
+      </>
     )}
-    {state?.updated_since_last_play && !state.update_pending && (
-      <Chip className="border-sky-500/60 text-sky-300 bg-sky-950/40" title="This version was published after you last played">New since last play</Chip>
-    )}
-  </>
-);
-
-const WorkshopCard: React.FC<{ item: WorkshopItem; installedIds: string[]; state?: WorkshopInstallState }> = ({ item, installedIds, state }) => (
-  <article className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-    <div className="aspect-video bg-slate-950 overflow-hidden">
-      {item.preview_url ? (
-        <img src={item.preview_url} alt="" loading="lazy" className="w-full h-full object-cover" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">No image</div>
-      )}
-    </div>
-    <div className="flex flex-col gap-1.5 p-3 flex-1">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-xs font-bold text-slate-100 leading-snug">{item.found ? item.title : `Item ${item.workshop_id}`}</h3>
-        <div className="flex flex-wrap justify-end gap-1">
-          {installedIds.length > 0 && <InstalledChip />}
-          <UpdateChips state={state} />
-          {item.found && <BuildChips builds={item.builds} source="The Workshop page" />}
-        </div>
-      </div>
-      {!item.found ? (
-        <p className="text-[11px] text-amber-300">Steam has no public item with this id (removed, private or wrong id).</p>
-      ) : (
-        <>
-          {!item.is_project_zomboid && <p className="text-[11px] text-amber-300">This item is for another game.</p>}
-          {item.banned && <p className="text-[11px] text-red-300">Steam has banned this item.</p>}
-          <div className="text-[10px] text-slate-500">updated {formatUnixDate(item.time_updated)}</div>
-          {installedIds.length > 0 && (
-            <div className="text-[10px] font-mono text-emerald-400/80 truncate" title={installedIds.join(', ')}>mods: {installedIds.join(', ')}</div>
-          )}
-          {item.summary && <p className="text-[11px] text-slate-400 line-clamp-3">{item.summary}</p>}
-          <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 mt-auto pt-1">
-            <span className="flex items-center gap-1" title="Subscribers"><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
-            <span className="flex items-center gap-1" title="Favorites"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
-          </div>
-        </>
-      )}
-      <div className="flex gap-2 pt-1">
-        <button type="button" onClick={() => TauriService.openExternalUrl(item.page_url)}
-          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer"
-          title={installedIds.length > 0 ? 'Opens the Workshop page in your browser' : 'Opens the Workshop page in your browser: press Subscribe there (logged in on steamcommunity.com)'}>
-          <ExternalLink className="w-3 h-3" aria-hidden="true" /> {installedIds.length > 0 ? 'Open page' : 'Open page to subscribe'}
-        </button>
-      </div>
-    </div>
-  </article>
+    onOpen={item.found ? () => onOpen({ kind: 'workshop', id: item.workshop_id, preview: item }) : undefined}
+  />
 );
 
 const WORKSHOP_SORTS: { id: WorkshopSort; label: string }[] = [
@@ -218,35 +138,80 @@ const WORKSHOP_SORTS: { id: WorkshopSort; label: string }[] = [
   { id: 'top_rated', label: 'Top rated' },
 ];
 
-type WorkshopQuery = { text: string; sort: WorkshopSort; build: string };
-
-/** In-app Workshop search; needs the user's own Steam Web API key (kept in Windows Credential Manager). */
-const WorkshopSearch: React.FC<{ installedByItem: Map<string, string[]> }> = ({ installedByItem }) => {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
+/** Asks for the user's own Steam Web API key (kept in Windows Credential Manager). */
+const SteamKeyForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   const [keyInput, setKeyInput] = useState('');
-  const [savingKey, setSavingKey] = useState(false);
-  const [keyError, setKeyError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await TauriService.setSteamKey(keyInput);
+      setKeyInput('');
+      onSaved();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2 px-3 py-2.5 rounded-lg border border-sky-900/60 bg-sky-950/20">
+      <div className="flex items-start gap-2 text-[11px] text-slate-300">
+        <KeyRound className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
+        <span>
+          Steam only lets apps browse and search the Workshop with a personal <b>Steam Web API key</b> (free; any domain name works,
+          for example <code>localhost</code>). It is checked with Steam and kept in Windows Credential Manager on this PC only.
+          Without it you can still paste Workshop links or a collection above.
+        </span>
+      </div>
+      <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
+        <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/dev/apikey')}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
+          <ExternalLink className="w-3 h-3" aria-hidden="true" /> Get a key
+        </button>
+        <input type="password" autoComplete="off" spellCheck={false} value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
+          placeholder="Paste your Steam Web API key" aria-label="Steam Web API key"
+          className="flex-1 min-w-[220px] px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-[11px] text-slate-100 outline-none placeholder:text-slate-600 font-mono" />
+        <button type="submit" disabled={saving || !keyInput.trim()}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
+          {saving && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} Check and save
+        </button>
+      </form>
+      {error && <p className="text-[11px] text-red-300">{error}</p>}
+    </div>
+  );
+};
 
+type WorkshopQuery = { text: string; sort: WorkshopSort; build: string; category: string };
+
+const WorkshopTab: React.FC<{
+  installedByItem: Map<string, string[]>;
+  stateByItem: Map<string, WorkshopInstallState>;
+  onOpen: (t: DetailTarget) => void;
+}> = ({ installedByItem, stateByItem, onOpen }) => {
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [text, setText] = useState('');
-  const [sort, setSort] = useState<WorkshopSort>('trending');
-  const [build, setBuild] = useState('42');
-  const [submitted, setSubmitted] = useState<WorkshopQuery | null>(null);
+  const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '' });
+  const [page, setPage] = useState(1);
   const [items, setItems] = useState<WorkshopItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [searching, setSearching] = useState(false);
+  const [lookup, setLookup] = useState<WorkshopLookup | null>(null);
+  const [lookupPage, setLookupPage] = useState(1);
 
   useEffect(() => {
     TauriService.steamKeyStatus().then(setHasKey).catch(() => setHasKey(false));
   }, []);
 
-  const runSearch = useCallback(async (query: WorkshopQuery, nextPage: number) => {
+  const runSearch = useCallback(async (q: WorkshopQuery, p: number) => {
     setSearching(true);
     try {
-      const r = await TauriService.workshopSearch(query.text, query.sort, query.build || null, nextPage);
+      const r = await TauriService.workshopSearch(q.text, q.sort, q.build || null, q.category || null, p);
       setTotal(r.total);
-      setPage(nextPage);
-      setItems((prev) => (nextPage === 1 ? r.items : [...prev, ...r.items]));
+      setItems(r.items);
+      setPage(p);
     } catch (err) {
       reportBackendError('Searching the Workshop', err);
     } finally {
@@ -254,27 +219,33 @@ const WorkshopSearch: React.FC<{ installedByItem: Map<string, string[]> }> = ({ 
     }
   }, []);
 
-  // Show results as soon as a key is available (trending Build 42 mods).
   useEffect(() => {
-    if (hasKey && !submitted) {
-      const initial: WorkshopQuery = { text: '', sort: 'trending', build: '42' };
-      setSubmitted(initial);
-      runSearch(initial, 1);
-    }
-  }, [hasKey, submitted, runSearch]);
+    if (hasKey && !lookup) runSearch(query, 1);
+    // Re-run when a filter changes; the text only on submit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasKey, query]);
 
-  const saveKey = async () => {
-    setSavingKey(true);
-    setKeyError(null);
-    try {
-      await TauriService.setSteamKey(keyInput);
-      setKeyInput('');
-      setHasKey(true);
-    } catch (err) {
-      setKeyError(String(err));
-    } finally {
-      setSavingKey(false);
+  const submit = async () => {
+    const t = text.trim();
+    if (t && looksLikeWorkshopLinks(t)) {
+      setSearching(true);
+      try {
+        setLookup(await TauriService.workshopLookup(t));
+        setLookupPage(1);
+      } catch (err) {
+        reportBackendError('Looking up the Workshop link', err);
+      } finally {
+        setSearching(false);
+      }
+      return;
     }
+    setLookup(null);
+    setQuery((q) => ({ ...q, text: t }));
+  };
+
+  const setFilter = (patch: Partial<WorkshopQuery>) => {
+    setLookup(null);
+    setQuery((q) => ({ ...q, ...patch }));
   };
 
   const removeKey = async () => {
@@ -283,257 +254,90 @@ const WorkshopSearch: React.FC<{ installedByItem: Map<string, string[]> }> = ({ 
       await TauriService.deleteSteamKey();
       setHasKey(false);
       setItems([]);
-      setSubmitted(null);
+      setTotal(0);
     } catch (err) {
       reportBackendError('Removing the Steam key', err);
     }
   };
 
-  if (hasKey === null) return null;
-
-  if (!hasKey) {
-    return (
-      <div className="p-4 rounded-xl border border-sky-900/60 bg-sky-950/20 flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <KeyRound className="w-5 h-5 text-sky-400 mt-0.5 shrink-0" aria-hidden="true" />
-          <div>
-            <h2 className="text-sm font-bold text-slate-100">Search the Workshop from here</h2>
-            <p className="text-xs text-slate-400 max-w-2xl">
-              Steam only allows Workshop search with a personal Steam Web API key. Create one for free (any domain name works,
-              for example <code>localhost</code>) and paste it below. It is checked with Steam, then saved in Windows Credential
-              Manager on this PC only: never in a file, and never shown again.
-            </p>
-          </div>
-        </div>
-        <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); saveKey(); }}>
-          <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/dev/apikey')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
-            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Get a key
-          </button>
-          <input
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-            placeholder="Paste your Steam Web API key"
-            aria-label="Steam Web API key"
-            className="flex-1 min-w-[260px] px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-xs text-slate-100 outline-none placeholder:text-slate-600 font-mono"
-          />
-          <button type="submit" disabled={savingKey || !keyInput.trim()}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
-            {savingKey && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />} Check and save
-          </button>
-        </form>
-        {keyError && <p className="text-xs text-red-300">{keyError}</p>}
-      </div>
-    );
-  }
-
-  const submit = () => {
-    const query: WorkshopQuery = { text: text.trim(), sort, build };
-    setSubmitted(query);
-    runSearch(query, 1);
-  };
+  const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)).length : 0;
+  const lookupItems = lookup ? lookup.items.slice((lookupPage - 1) * PAGE_SIZE, lookupPage * PAGE_SIZE) : [];
 
   return (
-    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-slate-100">Search the Workshop</h2>
-        <button type="button" onClick={removeKey} className="text-[11px] text-slate-500 hover:text-slate-300 cursor-pointer">Remove saved key</button>
-      </div>
-      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 focus-within:border-sky-700">
-          <Search className="w-4 h-4 text-slate-500" aria-hidden="true" />
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search Workshop mods" aria-label="Search the Workshop"
+    <div className="flex flex-col gap-3">
+      <Toolbar onSubmit={submit}>
+        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-sky-700">
+          <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+          <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Search the Workshop or paste links"
+            placeholder={hasKey ? 'Search the Workshop, or paste Workshop links / a collection link' : 'Paste Workshop links, ids or a collection link'}
             className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
+          {(text || lookup) && (
+            <button type="button" onClick={() => { setText(''); setLookup(null); if (query.text) setFilter({ text: '' }); }} aria-label="Clear"
+              className="text-slate-500 hover:text-slate-300 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+          )}
         </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value as WorkshopSort)} aria-label="Workshop sort" disabled={!!text.trim()}
-          title={text.trim() ? 'Text searches are ordered by relevance' : undefined}
-          className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer disabled:opacity-50">
-          {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-        </select>
-        <select value={build} onChange={(e) => setBuild(e.target.value)} aria-label="Game build"
-          className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer">
-          <option value="42">Build 42 only</option>
-          <option value="41">Build 41 only</option>
-          <option value="">Any build</option>
-        </select>
-        <button type="submit" disabled={searching} className="px-3 py-2 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-60">Search</button>
-      </form>
-      {submitted && (
-        <div className="text-[11px] font-mono text-slate-500">
-          {searching && items.length === 0 ? 'Searching...' : `${total.toLocaleString()} items${submitted.text ? ` for "${submitted.text}"` : ''}`}
-        </div>
-      )}
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-        {items.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} />)}
-      </div>
-      {submitted && items.length < total && (
-        <button type="button" onClick={() => runSearch(submitted, page + 1)} disabled={searching}
-          className="self-center px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60">
-          {searching ? 'Loading...' : 'Load more'}
-        </button>
-      )}
-    </div>
-  );
-};
-
-const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) => {
-  // Workshop id -> mod ids installed from it.
-  const installedByItem = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const m of catalog) {
-      if (m.source.kind === 'workshop' && !m.shadowed_by) {
-        map.set(m.source.workshop_id, [...(map.get(m.source.workshop_id) ?? []), m.id]);
-      }
-    }
-    return map;
-  }, [catalog]);
-  const subscribedIds = useMemo(() => [...installedByItem.keys()].sort(), [installedByItem]);
-  // Workshop id -> what Steam has installed (update waiting / new since last play).
-  const stateByItem = useMemo(() => {
-    const map = new Map<string, WorkshopInstallState>();
-    for (const m of catalog) {
-      if (m.source.kind === 'workshop' && m.workshop_state) map.set(m.source.workshop_id, m.workshop_state);
-    }
-    return map;
-  }, [catalog]);
-  const pendingCount = [...stateByItem.values()].filter((s) => s.update_pending).length;
-  const newSincePlayCount = [...stateByItem.values()].filter((s) => s.updated_since_last_play).length;
-  const [updateFilter, setUpdateFilter] = useState<'all' | 'pending' | 'new'>('all');
-
-  const [subscribed, setSubscribed] = useState<WorkshopItem[]>([]);
-  const [loadingSubs, setLoadingSubs] = useState(false);
-  const [filter, setFilter] = useState('');
-  const [lookupText, setLookupText] = useState('');
-  const [lookup, setLookup] = useState<WorkshopLookup | null>(null);
-  const [lookingUp, setLookingUp] = useState(false);
-
-  const subscribedKey = subscribedIds.join(',');
-  useEffect(() => {
-    if (!subscribedKey) return;
-    let cancelled = false;
-    setLoadingSubs(true);
-    TauriService.workshopDetails(subscribedKey.split(','))
-      .then((items) => !cancelled && setSubscribed(items))
-      .catch((err) => !cancelled && reportBackendError('Loading Workshop details', err))
-      .finally(() => !cancelled && setLoadingSubs(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [subscribedKey]);
-
-  const runLookup = async () => {
-    if (!lookupText.trim()) return;
-    setLookingUp(true);
-    try {
-      setLookup(await TauriService.workshopLookup(lookupText));
-    } catch (err) {
-      reportBackendError('Looking up the Workshop link', err);
-    } finally {
-      setLookingUp(false);
-    }
-  };
-
-  const visibleSubs = useMemo(() => {
-    const q = filter.toLowerCase().trim();
-    let list = q ? subscribed.filter((i) => i.title.toLowerCase().includes(q) || (installedByItem.get(i.workshop_id) ?? []).some((id) => id.toLowerCase().includes(q))) : subscribed;
-    if (updateFilter === 'pending') list = list.filter((i) => stateByItem.get(i.workshop_id)?.update_pending);
-    if (updateFilter === 'new') list = list.filter((i) => stateByItem.get(i.workshop_id)?.updated_since_last_play);
-    return [...list].sort((a, b) => (b.time_updated ?? 0) - (a.time_updated ?? 0));
-  }, [subscribed, filter, installedByItem, updateFilter, stateByItem]);
-
-  const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)) : [];
-
-  return (
-    <div className="flex flex-col gap-4">
-      <WorkshopSearch installedByItem={installedByItem} />
-
-      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-100">Look up links or a collection</h2>
-            <p className="text-xs text-slate-400 max-w-2xl">
-              Paste Workshop links, ids or a <b>collection</b> link to see what they are and what you are missing. Pages open in
-              your browser; subscribe there while logged in on steamcommunity.com.
-            </p>
-          </div>
-          <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer">
-            <Globe className="w-3.5 h-3.5" aria-hidden="true" /> Browse the Workshop
-          </button>
-        </div>
-        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); runLookup(); }}>
-          <input
-            value={lookupText}
-            onChange={(e) => setLookupText(e.target.value)}
-            placeholder="https://steamcommunity.com/sharedfiles/filedetails/?id=..."
-            aria-label="Workshop links, ids or collection link"
-            className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-xs text-slate-100 outline-none placeholder:text-slate-600"
-          />
-          <button type="submit" disabled={lookingUp}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60">
-            {lookingUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Search className="w-3.5 h-3.5" aria-hidden="true" />}
-            Look up
-          </button>
-        </form>
-        {lookup && (
-          <div className="flex flex-col gap-3">
-            <div className="text-[11px] text-slate-300 flex flex-wrap items-center gap-2">
-              {lookup.collection ? (
-                <>
-                  <Library className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
-                  Collection <b>{lookup.collection.title}</b>: {lookup.items.length} items, {lookup.items.length - lookupMissing.length} installed,{' '}
-                  <span className={lookupMissing.length ? 'text-amber-300' : 'text-emerald-300'}>{lookupMissing.length} missing</span>
-                  <button type="button" onClick={() => TauriService.openExternalUrl(lookup.collection!.page_url)}
-                    className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer"
-                    title="Opens the collection page in your browser, where Subscribe to all is">
-                    Open collection page (Subscribe to all)
-                  </button>
-                </>
-              ) : (
-                <>{lookup.items.length} items, {lookupMissing.length} not installed</>
-              )}
-            </div>
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-              {lookup.items.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} />)}
-            </div>
-          </div>
+        {hasKey && (
+          <>
+            <select value={query.text ? 'relevance' : query.sort} onChange={(e) => setFilter({ sort: e.target.value as WorkshopSort })} aria-label="Sort"
+              disabled={!!query.text} title={query.text ? 'Text searches are ordered by relevance' : undefined} className={selectClass}>
+              {query.text && <option value="relevance">Relevance</option>}
+              {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+            <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label="Game build" className={selectClass}>
+              <option value="42">Build 42</option>
+              <option value="41">Build 41</option>
+              <option value="">Any build</option>
+            </select>
+          </>
         )}
-      </div>
+        <button type="submit" disabled={searching} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-60">
+          {hasKey ? 'Search' : 'Look up'}
+        </button>
+        <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')} title="Open the Workshop in your browser"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
+          <Globe className="w-3.5 h-3.5" aria-hidden="true" /> Web
+        </button>
+      </Toolbar>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-slate-100">
-          Your subscriptions <span className="text-slate-500 font-mono text-xs">({subscribedIds.length})</span>
-          {loadingSubs && <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-slate-500" aria-hidden="true" />}
-        </h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <select value={updateFilter} onChange={(e) => setUpdateFilter(e.target.value as 'all' | 'pending' | 'new')} aria-label="Filter by update status"
-            className="px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 cursor-pointer">
-            <option value="all">All subscriptions</option>
-            <option value="new">New since last play ({newSincePlayCount})</option>
-            <option value="pending">Update waiting ({pendingCount})</option>
-          </select>
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter by title or mod id"
-          aria-label="Filter subscriptions"
-          className="w-64 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100 outline-none placeholder:text-slate-600"
-        />
-        </div>
-      </div>
-      {(pendingCount > 0 || newSincePlayCount > 0) && (
-        <p className="text-xs text-slate-400">
-          {pendingCount > 0 && <span className="text-amber-300">{pendingCount} updates are waiting to download in Steam (multiplayer servers reject mismatched versions). </span>}
-          {newSincePlayCount > 0 && <span className="text-sky-300">{newSincePlayCount} items changed since you last played.</span>}
-        </p>
+      {hasKey && <CategoryBar categories={WORKSHOP_CATEGORIES} value={query.category} onChange={(c) => setFilter({ category: c })} accent="border-sky-600 bg-sky-900/50 text-sky-200" />}
+      {hasKey === false && !lookup && <SteamKeyForm onSaved={() => setHasKey(true)} />}
+
+      {lookup ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+            {lookup.collection ? (
+              <>
+                <Library className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
+                Collection <b>{lookup.collection.title}</b>: {lookup.items.length} items,{' '}
+                <span className={lookupMissing ? 'text-amber-300' : 'text-emerald-300'}>{lookupMissing} not installed</span>
+                <button type="button" onClick={() => TauriService.openExternalUrl(lookup.collection!.page_url)}
+                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer" title="Opens the collection page in your browser, where Subscribe to all is">
+                  Open collection (Subscribe to all)
+                </button>
+              </>
+            ) : (
+              <>{lookup.items.length} items, {lookupMissing} not installed</>
+            )}
+          </div>
+          <CardGrid>{lookupItems.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
+          <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
+        </>
+      ) : (
+        hasKey && (
+          <>
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
+              <span>
+                {searching && items.length === 0 ? 'Searching...' : `${total.toLocaleString()} items${query.text ? ` for "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}`}
+                {searching && items.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
+              </span>
+              <span>page {page} of {pageCountOf(total).toLocaleString()}</span>
+            </div>
+            <CardGrid>{items.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
+            <Pagination page={page} pageCount={pageCountOf(total)} onPage={(p) => runSearch(query, p)} disabled={searching} />
+            <button type="button" onClick={removeKey} className="self-end text-[10px] text-slate-600 hover:text-slate-400 cursor-pointer">Remove saved Steam key</button>
+          </>
+        )
       )}
-      {subscribedIds.length === 0 && <p className="text-xs text-slate-500">No subscribed Workshop items found in your Workshop folder.</p>}
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-        {visibleSubs.map((i) => <WorkshopCard key={i.workshop_id} item={i} installedIds={installedByItem.get(i.workshop_id) ?? []} state={stateByItem.get(i.workshop_id)} />)}
-      </div>
     </div>
   );
 };
@@ -542,122 +346,259 @@ const WorkshopPanel: React.FC<{ catalog: CatalogModSummary[] }> = ({ catalog }) 
 // Nexus Mods
 // ---------------------------------------------------------------------------------------------
 
-const SORTS: { id: NexusSort; label: string }[] = [
+const NEXUS_SORTS: { id: NexusSort; label: string }[] = [
   { id: 'updated', label: 'Recently updated' },
   { id: 'downloads', label: 'Most downloaded' },
   { id: 'endorsements', label: 'Most endorsed' },
   { id: 'newest', label: 'Newest' },
 ];
 
-const NexusPanel: React.FC<{ catalog: CatalogModSummary[]; onDownload: (m: NexusMod) => void }> = ({ catalog, onDownload }) => {
-  const [query, setQuery] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState('');
-  const [sort, setSort] = useState<NexusSort>('updated');
+const nexusCard = (m: NexusMod, installed: boolean, onOpen: (t: DetailTarget) => void) => (
+  <ModCard
+    key={m.mod_id}
+    image={m.thumbnail_url}
+    title={m.name}
+    subtitle={`by ${m.author || m.uploader || 'unknown'}${m.version ? ` · v${m.version}` : ''} · ${formatIsoDate(m.updated_at)}`}
+    chips={<>{installed && <InstalledChip />}<BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source="The Nexus name/summary" />{m.category && <Chip className="border-orange-700/60 text-orange-300">{m.category}</Chip>}</>}
+    summary={m.summary}
+    stats={
+      <>
+        <span className="flex items-center gap-1" title="Downloads"><Download className="w-3 h-3" aria-hidden="true" />{formatCount(m.downloads)}</span>
+        <span className="flex items-center gap-1" title="Endorsements"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(m.endorsements)}</span>
+      </>
+    }
+    onOpen={() => onOpen({ kind: 'nexus', modId: m.mod_id, preview: m })}
+  />
+);
+
+const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t: DetailTarget) => void }> = ({ installedByNexusId, onOpen }) => {
+  const [text, setText] = useState('');
+  const [query, setQuery] = useState({ text: '', category: '', sort: 'updated' as NexusSort });
   const [showAdult, setShowAdult] = useState(false);
+  const [categories, setCategories] = useState<NexusCategory[]>([]);
   const [mods, setMods] = useState<NexusMod[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Nexus mod id -> installed mod ids (recorded when installed through the Studio).
-  const installedByNexusId = useMemo(() => {
-    const map = new Map<number, string[]>();
-    for (const m of catalog) {
-      if (m.origin?.kind === 'nexus' && !m.shadowed_by) map.set(m.origin.mod_id, [...(map.get(m.origin.mod_id) ?? []), m.id]);
-    }
-    return map;
-  }, [catalog]);
+  useEffect(() => {
+    TauriService.nexusCategories().then(setCategories).catch(() => setCategories([]));
+  }, []);
 
-  const load = useCallback(async (offset: number) => {
+  const load = useCallback(async (p: number) => {
     setLoading(true);
     try {
-      const page = await TauriService.nexusSearch(submittedQuery, sort, offset, NEXUS_PAGE_SIZE);
-      setTotal(page.total);
-      setMods((prev) => (offset === 0 ? page.mods : [...prev, ...page.mods]));
+      const r = await TauriService.nexusSearch(query.text, query.category || null, query.sort, (p - 1) * PAGE_SIZE, PAGE_SIZE);
+      setTotal(r.total);
+      setMods(r.mods);
+      setPage(p);
     } catch (err) {
       reportBackendError('Searching Nexus Mods', err);
     } finally {
       setLoading(false);
     }
-  }, [submittedQuery, sort]);
+  }, [query]);
 
   useEffect(() => {
-    load(0);
+    load(1);
   }, [load]);
 
   const visible = showAdult ? mods : mods.filter((m) => !m.adult_content);
   const hiddenAdult = mods.length - visible.length;
 
   return (
-    <div className="flex flex-col gap-4">
-      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); setSubmittedQuery(query.trim()); }}>
-        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-orange-700">
-          <Search className="w-4 h-4 text-slate-500" aria-hidden="true" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Nexus Mods (words in the mod name)" aria-label="Search Nexus Mods"
+    <div className="flex flex-col gap-3">
+      <Toolbar onSubmit={() => setQuery((q) => ({ ...q, text: text.trim() }))}>
+        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-orange-700">
+          <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search Nexus Mods (words in the mod name)" aria-label="Search Nexus Mods"
             className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
+          {text && (
+            <button type="button" onClick={() => { setText(''); setQuery((q) => ({ ...q, text: '' })); }} aria-label="Clear" className="text-slate-500 hover:text-slate-300 cursor-pointer">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value as NexusSort)} aria-label="Sort"
-          className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 cursor-pointer">
-          {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        <select value={query.sort} onChange={(e) => setQuery((q) => ({ ...q, sort: e.target.value as NexusSort }))} aria-label="Sort" className={selectClass}>
+          {NEXUS_SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        <button type="submit" className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">Search</button>
+        <button type="submit" className="px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-700 hover:bg-orange-600 text-white cursor-pointer">Search</button>
         <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
           <input type="checkbox" checked={showAdult} onChange={(e) => setShowAdult(e.target.checked)} className="w-3.5 h-3.5" />
-          Show adult content
+          Adult content
         </label>
-      </form>
-
-      <div className="text-[11px] font-mono text-slate-500">
-        {loading && mods.length === 0 ? 'Loading...' : `${total} mods${submittedQuery ? ` matching "${submittedQuery}"` : ''}${hiddenAdult ? ` (${hiddenAdult} adult hidden)` : ''}`}
+        <button type="button" onClick={() => TauriService.openExternalUrl('https://www.nexusmods.com/games/projectzomboid/mods')} title="Open Nexus Mods in your browser"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
+          <Globe className="w-3.5 h-3.5" aria-hidden="true" /> Web
+        </button>
+      </Toolbar>
+      {categories.length > 0 && (
+        <CategoryBar categories={categories} value={query.category} onChange={(c) => setQuery((q) => ({ ...q, category: c }))} accent="border-orange-600 bg-orange-900/50 text-orange-200" />
+      )}
+      <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
+        <span>
+          {loading && mods.length === 0 ? 'Loading...' : `${total} mods${query.text ? ` matching "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}${hiddenAdult ? ` (${hiddenAdult} adult hidden on this page)` : ''}`}
+          {loading && mods.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
+        </span>
+        <span>page {page} of {pageCountOf(total)}</span>
       </div>
+      <CardGrid>{visible.map((m) => nexusCard(m, installedByNexusId.has(m.mod_id), onOpen))}</CardGrid>
+      <Pagination page={page} pageCount={pageCountOf(total)} onPage={load} disabled={loading} />
+    </div>
+  );
+};
 
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
-        {visible.map((m) => {
-          const installed = installedByNexusId.get(m.mod_id) ?? [];
+// ---------------------------------------------------------------------------------------------
+// My mods
+// ---------------------------------------------------------------------------------------------
+
+type MineRow =
+  | { key: string; kind: 'workshop'; item: WorkshopItem; modIds: string[]; state?: WorkshopInstallState }
+  | { key: string; kind: 'local'; mod: CatalogModSummary };
+
+type MineSource = 'all' | 'workshop' | 'nexus' | 'local';
+type MineStatus = 'all' | 'new' | 'pending';
+
+const localLabel = (m: CatalogModSummary) =>
+  m.origin?.kind === 'nexus' ? 'Nexus' : m.origin?.kind === 'compat' ? 'Compatible copy' : m.source.kind === 'workshop_upload' ? 'Your Workshop upload' : 'Local';
+
+const MyModsTab: React.FC<{
+  catalog: CatalogModSummary[];
+  installedByItem: Map<string, string[]>;
+  stateByItem: Map<string, WorkshopInstallState>;
+  onOpen: (t: DetailTarget) => void;
+}> = ({ catalog, installedByItem, stateByItem, onOpen }) => {
+  const [details, setDetails] = useState<WorkshopItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState('');
+  const [source, setSource] = useState<MineSource>('all');
+  const [status, setStatus] = useState<MineStatus>('all');
+  const [category, setCategory] = useState('');
+  const [sort, setSort] = useState<'updated' | 'name'>('updated');
+  const [page, setPage] = useState(1);
+
+  const subscribedKey = useMemo(() => [...installedByItem.keys()].sort().join(','), [installedByItem]);
+  useEffect(() => {
+    if (!subscribedKey) return;
+    let cancelled = false;
+    setLoading(true);
+    TauriService.workshopDetails(subscribedKey.split(','))
+      .then((items) => !cancelled && setDetails(items))
+      .catch((err) => !cancelled && reportBackendError('Loading Workshop details', err))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [subscribedKey]);
+
+  const rows = useMemo<MineRow[]>(() => {
+    const byId = new Map(details.map((d) => [d.workshop_id, d]));
+    const out: MineRow[] = [];
+    for (const [id, modIds] of installedByItem) {
+      const item = byId.get(id) ?? ({ workshop_id: id, found: true, title: modIds.join(', '), summary: '', preview_url: null, time_updated: null, subscriptions: 0, favorited: 0, file_size: 0, tags: [], builds: [], is_project_zomboid: true, banned: false, page_url: '' } as WorkshopItem);
+      out.push({ key: `w${id}`, kind: 'workshop', item, modIds, state: stateByItem.get(id) });
+    }
+    for (const m of catalog) {
+      if (m.source.kind !== 'workshop' && !m.shadowed_by && !m.id.startsWith('Z_PZModStudio_')) out.push({ key: `l${m.id}`, kind: 'local', mod: m });
+    }
+    return out;
+  }, [details, installedByItem, stateByItem, catalog]);
+
+  const counts = useMemo(() => ({
+    workshop: rows.filter((r) => r.kind === 'workshop').length,
+    nexus: rows.filter((r) => r.kind === 'local' && r.mod.origin?.kind === 'nexus').length,
+    local: rows.filter((r) => r.kind === 'local' && r.mod.origin?.kind !== 'nexus').length,
+    newSincePlay: rows.filter((r) => r.kind === 'workshop' && r.state?.updated_since_last_play).length,
+    pending: rows.filter((r) => r.kind === 'workshop' && r.state?.update_pending).length,
+  }), [rows]);
+
+  const categories = useMemo(() => {
+    const tally = new Map<string, number>();
+    for (const r of rows) if (r.kind === 'workshop') for (const t of r.item.tags) if (!/^Build \d+$/.test(t)) tally.set(t, (tally.get(t) ?? 0) + 1);
+    return [...tally].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    const q = text.toLowerCase().trim();
+    const list = rows.filter((r) => {
+      if (source === 'workshop' && r.kind !== 'workshop') return false;
+      if (source === 'nexus' && !(r.kind === 'local' && r.mod.origin?.kind === 'nexus')) return false;
+      if (source === 'local' && !(r.kind === 'local' && r.mod.origin?.kind !== 'nexus')) return false;
+      if (status === 'new' && !(r.kind === 'workshop' && r.state?.updated_since_last_play)) return false;
+      if (status === 'pending' && !(r.kind === 'workshop' && r.state?.update_pending)) return false;
+      if (category && !(r.kind === 'workshop' && r.item.tags.includes(category))) return false;
+      if (!q) return true;
+      const hay = r.kind === 'workshop' ? `${r.item.title} ${r.modIds.join(' ')} ${r.item.workshop_id}` : `${r.mod.name} ${r.mod.id}`;
+      return hay.toLowerCase().includes(q);
+    });
+    const name = (r: MineRow) => (r.kind === 'workshop' ? r.item.title : r.mod.name).toLowerCase();
+    const time = (r: MineRow) => (r.kind === 'workshop' ? r.item.time_updated ?? 0 : 0);
+    return list.sort((a, b) => (sort === 'name' ? name(a).localeCompare(name(b)) : time(b) - time(a) || name(a).localeCompare(name(b))));
+  }, [rows, text, source, status, category, sort]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [text, source, status, category, sort]);
+  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const statusChip = (value: MineStatus, label: string, n: number, cls: string) =>
+    n > 0 && (
+      <button type="button" onClick={() => setStatus(status === value ? 'all' : value)} aria-pressed={status === value}
+        className={`px-2 py-0.5 rounded-full text-[11px] border cursor-pointer ${status === value ? cls : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200'}`}>
+        {label} <span className="font-mono">{n}</span>
+      </button>
+    );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Toolbar onSubmit={() => undefined}>
+        <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-emerald-700">
+          <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Filter by name, mod id or Workshop id" aria-label="Filter your mods"
+            className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
+        </div>
+        <select value={source} onChange={(e) => setSource(e.target.value as MineSource)} aria-label="Source" className={selectClass}>
+          <option value="all">All sources ({rows.length})</option>
+          <option value="workshop">Steam Workshop ({counts.workshop})</option>
+          <option value="nexus">Nexus ({counts.nexus})</option>
+          <option value="local">Local / other ({counts.local})</option>
+        </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value as 'updated' | 'name')} aria-label="Sort" className={selectClass}>
+          <option value="updated">Recently updated</option>
+          <option value="name">Name</option>
+        </select>
+        {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" aria-label="Loading" />}
+      </Toolbar>
+      {(counts.newSincePlay > 0 || counts.pending > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {statusChip('new', 'New since last play', counts.newSincePlay, 'border-sky-600 bg-sky-900/50 text-sky-200')}
+          {statusChip('pending', 'Update waiting in Steam', counts.pending, 'border-amber-600 bg-amber-900/50 text-amber-200')}
+        </div>
+      )}
+      {categories.length > 0 && <CategoryBar categories={categories} value={category} onChange={setCategory} accent="border-emerald-600 bg-emerald-900/50 text-emerald-200" />}
+      <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
+        <span>{filtered.length} of {rows.length} mods</span>
+        <span>page {page} of {pageCountOf(filtered.length)}</span>
+      </div>
+      {rows.length === 0 && !loading && <p className="text-xs text-slate-500">No installed mods found. Check your folders in App Settings.</p>}
+      <CardGrid>
+        {pageRows.map((r) => {
+          if (r.kind === 'workshop') return workshopCard(r.item, [], r.state, onOpen) // every card here is installed;
+          const nexusId = r.mod.origin?.kind === 'nexus' ? r.mod.origin.mod_id : null;
           return (
-            <article key={m.mod_id} className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-              <div className="aspect-video bg-slate-950 overflow-hidden">
-                {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">No image</div>}
-              </div>
-              <div className="flex flex-col gap-1.5 p-3 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-xs font-bold text-slate-100 leading-snug">{m.name}</h3>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    {installed.length > 0 && <InstalledChip />}
-                    <BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source="The Nexus name/summary" />
-                  </div>
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  by {m.author || m.uploader || 'unknown'}{m.version && <> · v{m.version}</>} · updated {formatIsoDate(m.updated_at)}
-                </div>
-                {m.summary && <p className="text-[11px] text-slate-400 line-clamp-3">{m.summary}</p>}
-                <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 mt-auto pt-1">
-                  <span className="flex items-center gap-1" title="Downloads"><Download className="w-3 h-3" aria-hidden="true" />{formatCount(m.downloads)}</span>
-                  <span className="flex items-center gap-1" title="Endorsements"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(m.endorsements)}</span>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => TauriService.openExternalUrl(m.page_url)}
-                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
-                    <ExternalLink className="w-3 h-3" aria-hidden="true" /> Page
-                  </button>
-                  <button type="button" onClick={() => onDownload(m)}
-                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[11px] font-bold bg-orange-700 hover:bg-orange-600 text-white cursor-pointer"
-                    title="Opens the Files tab on Nexus: download there, then use Install .zip above">
-                    <Download className="w-3 h-3" aria-hidden="true" /> Download
-                  </button>
-                </div>
-              </div>
-            </article>
+            <ModCard
+              key={r.key}
+              image={null}
+              title={r.mod.name}
+              subtitle={<span className="font-mono">{r.mod.id}</span>}
+              chips={<Chip className={nexusId !== null ? 'border-orange-700/60 text-orange-300' : 'border-slate-600 text-slate-300'}>{localLabel(r.mod)}</Chip>}
+              summary={r.mod.loadability.status !== 'loadable' ? 'Your game build does not load this mod as it is (see Mod Health).' : null}
+              onOpen={nexusId !== null ? () => onOpen({ kind: 'nexus', modId: nexusId }) : undefined}
+            />
           );
         })}
-      </div>
-
-      {mods.length < total && (
-        <button type="button" onClick={() => load(mods.length)} disabled={loading}
-          className="self-center px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60">
-          {loading ? 'Loading...' : `Load more (${total - mods.length} left)`}
-        </button>
-      )}
+      </CardGrid>
+      <Pagination page={page} pageCount={pageCountOf(filtered.length)} onPage={setPage} />
     </div>
   );
 };
@@ -667,11 +608,46 @@ const NexusPanel: React.FC<{ catalog: CatalogModSummary[]; onDownload: (m: Nexus
 const TABS: { id: SourceTab; label: string; active: string }[] = [
   { id: 'workshop', label: 'Steam Workshop', active: 'bg-sky-950/80 text-sky-200 border-sky-700' },
   { id: 'nexus', label: 'Nexus Mods', active: 'bg-orange-950/80 text-orange-200 border-orange-700' },
+  { id: 'mine', label: 'My mods', active: 'bg-emerald-950/80 text-emerald-200 border-emerald-700' },
 ];
 
 export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled }) => {
   const [tab, setTab] = useState<SourceTab>('workshop');
+  // Tabs stay mounted once visited, so switching keeps their page and filters.
+  const [visited, setVisited] = useState<Set<SourceTab>>(() => new Set(['workshop']));
   const [pendingOrigin, setPendingOrigin] = useState<(ModOrigin & { kind: 'nexus' }) | null>(null);
+  const [detailStack, setDetailStack] = useState<DetailTarget[]>([]);
+  const installer = useInstaller(paths, pendingOrigin, () => {
+    setPendingOrigin(null);
+    onInstalled();
+  });
+
+  const installedByItem = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const m of catalog) {
+      if (m.source.kind === 'workshop' && !m.shadowed_by) map.set(m.source.workshop_id, [...(map.get(m.source.workshop_id) ?? []), m.id]);
+    }
+    return map;
+  }, [catalog]);
+  const stateByItem = useMemo(() => {
+    const map = new Map<string, WorkshopInstallState>();
+    for (const m of catalog) if (m.source.kind === 'workshop' && m.workshop_state) map.set(m.source.workshop_id, m.workshop_state);
+    return map;
+  }, [catalog]);
+  const installedByNexusId = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const m of catalog) if (m.origin?.kind === 'nexus' && !m.shadowed_by) map.set(m.origin.mod_id, [...(map.get(m.origin.mod_id) ?? []), m.id]);
+    return map;
+  }, [catalog]);
+  const myCount = useMemo(() => installedByItem.size + catalog.filter((m) => m.source.kind !== 'workshop' && !m.shadowed_by && !m.id.startsWith('Z_PZModStudio_')).length, [catalog, installedByItem]);
+
+  const openTab = (t: SourceTab) => {
+    setTab(t);
+    setVisited((v) => new Set(v).add(t));
+    scrollBrowseToTop();
+  };
+  const openDetail = useCallback((t: DetailTarget) => setDetailStack((s) => [...s, t]), []);
+  const closeDetail = useCallback(() => setDetailStack([]), []);
 
   const handleNexusDownload = (m: NexusMod) => {
     setPendingOrigin({ kind: 'nexus', mod_id: m.mod_id, page_url: m.page_url, name: m.name });
@@ -679,30 +655,75 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 gap-4 font-sans">
-      <div className="flex items-start gap-3 p-5 rounded-xl border border-slate-800 bg-slate-900/60">
-        <Globe className="w-6 h-6 text-emerald-400 mt-0.5" aria-hidden="true" />
-        <div>
-          <h1 className="text-lg font-bold text-slate-100">Browse Mods</h1>
-          <p className="text-xs text-slate-400 max-w-3xl">
-            Find Project Zomboid mods on the Steam Workshop and Nexus Mods. Every mod in your Mod List shows a tag saying where it
-            comes from.
-          </p>
+    <div id={SCROLL_ID} className="flex-1 flex flex-col min-h-0 overflow-y-auto font-sans">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 px-6 py-3 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
+        <div className="flex items-center gap-2 mr-2">
+          <Globe className="w-5 h-5 text-emerald-400" aria-hidden="true" />
+          <h1 className="text-sm font-bold text-slate-100">Browse Mods</h1>
+        </div>
+        <div role="tablist" aria-label="Mod source" className="flex gap-1.5">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => openTab(t.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${tab === t.id ? t.active : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'}`}>
+              {t.label}
+              {t.id === 'mine' && <span className="ml-1.5 font-mono text-[10px] opacity-70">{myCount}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1.5" title="Install a mod you downloaded (Nexus, forums, GitHub...): the Studio finds the mod inside and puts it in Zomboid/mods">
+          <button type="button" onClick={installer.pickZip} disabled={installer.busy || !paths.is_valid}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
+            {installer.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FileArchive className="w-3.5 h-3.5" aria-hidden="true" />}
+            Install .zip
+          </button>
+          <button type="button" onClick={installer.pickFolder} disabled={installer.busy || !paths.is_valid}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
+            title="For .7z / .rar: extract it first, then choose the folder">
+            <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
+            Folder
+          </button>
         </div>
       </div>
 
-      <div role="tablist" aria-label="Mod source" className="flex gap-2">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-xs font-bold border cursor-pointer transition ${tab === t.id ? t.active : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'}`}>
-            {t.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-3 px-6 py-4">
+        {pendingOrigin && (
+          <div className="flex items-center gap-2 text-[11px] text-orange-200 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-1.5">
+            <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span className="flex-1">
+              Downloading <b>{pendingOrigin.name}</b> from Nexus: when it finishes, press <b>Install .zip</b> and it will be tagged as a Nexus mod.
+            </span>
+            <button type="button" onClick={() => setPendingOrigin(null)} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label="Do not tag the next install">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        {installer.result && <InstallResultBanner result={installer.result} onClose={installer.clearResult} />}
+
+        <div hidden={tab !== 'workshop'}>
+          {visited.has('workshop') && <WorkshopTab installedByItem={installedByItem} stateByItem={stateByItem} onOpen={openDetail} />}
+        </div>
+        <div hidden={tab !== 'nexus'}>
+          {visited.has('nexus') && <NexusTab installedByNexusId={installedByNexusId} onOpen={openDetail} />}
+        </div>
+        <div hidden={tab !== 'mine'}>
+          {visited.has('mine') && <MyModsTab catalog={catalog} installedByItem={installedByItem} stateByItem={stateByItem} onOpen={openDetail} />}
+        </div>
       </div>
 
-      <InstallBox paths={paths} pendingOrigin={pendingOrigin} onClearOrigin={() => setPendingOrigin(null)} onInstalled={onInstalled} />
-
-      {tab === 'workshop' ? <WorkshopPanel catalog={catalog} /> : <NexusPanel catalog={catalog} onDownload={handleNexusDownload} />}
+      {detailStack.length > 0 && (
+        <ModDetail
+          target={detailStack[detailStack.length - 1]}
+          canGoBack={detailStack.length > 1}
+          onBack={() => setDetailStack((s) => s.slice(0, -1))}
+          onClose={closeDetail}
+          onOpen={openDetail}
+          installedByItem={installedByItem}
+          stateByItem={stateByItem}
+          installedByNexusId={installedByNexusId}
+          onNexusDownload={handleNexusDownload}
+        />
+      )}
     </div>
   );
 };

@@ -268,8 +268,16 @@ pub struct WorkshopSearchResult {
 }
 
 /// Searches Project Zomboid Workshop items with the user's own Steam Web API key.
-/// `build` ("41" / "42") keeps only items tagged "Build NN".
-pub fn search(key: &str, text: Option<&str>, sort: WorkshopSort, build: Option<&str>, page: u32, per_page: u32) -> Result<WorkshopSearchResult, String> {
+/// `build` ("41" / "42") keeps only items tagged "Build NN"; `category` one of [`CATEGORIES`].
+pub fn search(
+    key: &str,
+    text: Option<&str>,
+    sort: WorkshopSort,
+    build: Option<&str>,
+    category: Option<&str>,
+    page: u32,
+    per_page: u32,
+) -> Result<WorkshopSearchResult, String> {
     let text = text.map(str::trim).filter(|t| !t.is_empty());
     // Text search only works with the relevance ranking; without text, relevance means trending.
     let sort = match (text.is_some(), sort) {
@@ -296,8 +304,18 @@ pub fn search(key: &str, text: Option<&str>, sort: WorkshopSort, build: Option<&
     if let Some(t) = text {
         req = req.query("search_text", t);
     }
+    let mut tags: Vec<String> = Vec::new();
     if let Some(b) = build.filter(|b| !b.is_empty() && b.chars().all(|c| c.is_ascii_digit())) {
-        req = req.query("requiredtags[0]", format!("Build {}", b)).query("match_all_tags", "true");
+        tags.push(format!("Build {}", b));
+    }
+    if let Some(c) = category.and_then(|c| CATEGORIES.iter().find(|k| k.eq_ignore_ascii_case(c))) {
+        tags.push(c.to_string());
+    }
+    for (i, t) in tags.iter().enumerate() {
+        req = req.query(format!("requiredtags[{}]", i), t);
+    }
+    if !tags.is_empty() {
+        req = req.query("match_all_tags", "true");
     }
     let response = req.call().map_err(|e| match e {
         ureq::Error::StatusCode(401) | ureq::Error::StatusCode(403) => {
@@ -316,6 +334,124 @@ pub fn search(key: &str, text: Option<&str>, sort: WorkshopSort, build: Option<&
             .and_then(|a| a.as_array())
             .map(|a| a.iter().filter_map(parse_item).collect())
             .unwrap_or_default(),
+    })
+}
+
+/// The Workshop's own categories for Project Zomboid (tags shown on the Workshop browse page).
+pub const CATEGORIES: &[&str] = &[
+    "Animals", "Audio", "Balance", "Building", "Clothing/Armor", "Farming", "Food", "Framework", "Hardmode",
+    "Interface", "Items", "Language/Translation", "Literature", "Map", "Military", "Misc", "Models",
+    "Multiplayer", "Pop Culture", "QoL", "Realistic", "Silly/Fun", "Skills", "Textures", "Traits", "Vehicles",
+    "Weapons", "WIP",
+];
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RequiredItem {
+    pub workshop_id: String,
+    pub title: String,
+}
+
+/// Everything the detail page shows for one Workshop item.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkshopItemDetails {
+    pub item: WorkshopItem,
+    /// The full description as the author wrote it (Steam BBCode).
+    pub description: String,
+    pub time_created: Option<u64>,
+    /// Author's Steam name (from the public page; None when it could not be read).
+    pub author: Option<String>,
+    /// Full-size screenshot URLs (public page).
+    pub screenshots: Vec<String>,
+    /// YouTube video ids (public page).
+    pub videos: Vec<String>,
+    /// "Required items" the author listed (public page).
+    pub required_items: Vec<RequiredItem>,
+}
+
+/// What the item's public page adds to the Web API data (no key needed).
+#[derive(Debug, Clone, Default, PartialEq)]
+struct PageExtras {
+    author: Option<String>,
+    screenshots: Vec<String>,
+    videos: Vec<String>,
+    required_items: Vec<RequiredItem>,
+}
+
+fn decode_entities(s: &str) -> String {
+    s.replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+}
+
+/// Reads author, screenshots, videos and required items from the item's public Workshop page.
+fn parse_item_page(html: &str) -> PageExtras {
+    let mut out = PageExtras::default();
+    if let Some(i) = html.find("class=\"friendBlockContent\">") {
+        let rest = &html[i + 27..];
+        let name = decode_entities(rest[..rest.find('<').unwrap_or(0)].trim());
+        if !name.is_empty() {
+            out.author = Some(name);
+        }
+    }
+    for (i, _) in html.match_indices("highlight_strip_screenshot") {
+        let rest = &html[i..];
+        let Some(src) = rest.find("<img src=\"") else { continue };
+        let url = &rest[src + 10..];
+        let url = &url[..url.find('"').unwrap_or(0)];
+        // Strip the thumbnail sizing to get the full image.
+        let full = url.split('?').next().unwrap_or("").to_string();
+        if full.starts_with("https://") && !out.screenshots.contains(&full) {
+            out.screenshots.push(full);
+        }
+    }
+    for (i, m) in html.match_indices("img.youtube.com/vi/") {
+        let id: String = html[i + m.len()..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
+        if id.len() >= 6 && !out.videos.contains(&id) {
+            out.videos.push(id);
+        }
+    }
+    if let Some(start) = html.find("id=\"RequiredItems\">") {
+        let mut rest = &html[start + 19..];
+        const LINK: &str = "<a href=\"https://steamcommunity.com/workshop/filedetails/?id=";
+        loop {
+            let trimmed = rest.trim_start();
+            let Some(after) = trimmed.strip_prefix(LINK) else { break };
+            let id: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+            let Some(t) = after.find("class=\"requiredItem\">") else { break };
+            let text = &after[t + 21..];
+            let title = decode_entities(text[..text.find("</div>").unwrap_or(0)].trim());
+            if !id.is_empty() {
+                out.required_items.push(RequiredItem { workshop_id: id, title });
+            }
+            let Some(end) = after.find("</a>") else { break };
+            rest = &after[end + 4..];
+        }
+    }
+    out
+}
+
+/// Full details for one item: the Web API (description, stats, tags) plus its public page
+/// (screenshots, videos, required items). The page part is best effort.
+pub fn item_details(id: &str) -> Result<WorkshopItemDetails, String> {
+    let v = post_form(DETAILS_URL, form("publishedfileids", "itemcount", &[id.to_string()]))?;
+    let raw = v.pointer("/response/publishedfiledetails/0").cloned().ok_or("Unexpected answer from Steam (no item)")?;
+    let item = parse_item(&raw).ok_or("Unexpected answer from Steam (no item id)")?;
+    if !item.found {
+        return Err("Steam has no public item with this id (removed, private or wrong id).".to_string());
+    }
+    let extras = agent()
+        .get(&page_url(id))
+        .call()
+        .ok()
+        .and_then(|r| r.into_body().with_config().limit(8 * 1024 * 1024).read_to_string().ok())
+        .map(|html| parse_item_page(&html))
+        .unwrap_or_default();
+    Ok(WorkshopItemDetails {
+        description: raw.get("description").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+        time_created: raw.get("time_created").and_then(|x| x.as_u64()),
+        author: extras.author,
+        screenshots: extras.screenshots,
+        videos: extras.videos,
+        required_items: extras.required_items,
+        item,
     })
 }
 
@@ -403,9 +539,48 @@ mod tests {
     #[test]
     #[ignore]
     fn workshop_live_search_rejects_bad_key() {
-        let err = search("00000000000000000000000000000000", Some("horror"), WorkshopSort::Relevance, Some("42"), 1, 5).unwrap_err();
+        let err = search("00000000000000000000000000000000", Some("horror"), WorkshopSort::Relevance, Some("42"), Some("Map"), 1, 5).unwrap_err();
         println!("{}", err);
         assert!(err.contains("rejected the Web API key"), "{}", err);
+    }
+
+    #[test]
+    fn reads_the_public_item_page() {
+        let html = r#"<div class="friendBlockContent">Some &amp; Author<br><span>Offline</span></div>
+            <div class="highlight_strip_item highlight_strip_movie"><img src="https://img.youtube.com/vi/aSo4f_GBvV8/default.jpg"></div>
+            <div role="button" class="highlight_strip_item highlight_strip_screenshot" id="thumb_screenshot_1" >
+                <img src="https://images.steamusercontent.com/ugc/1/AB/?imw=116&imh=65&ima=fit"></div>
+            <div class="requiredItemsContainer" id="RequiredItems">
+                <a href="https://steamcommunity.com/workshop/filedetails/?id=2447729538" target="_blank" data-subscribed="0">
+                    <div class="requiredItem">
+                        Fluffy Hair [B41/B42]                </div>
+                </a>
+                <a href="https://steamcommunity.com/workshop/filedetails/?id=3041733782" target="_blank">
+                    <div class="requiredItem">Spongie&#39;s Unlocker</div>
+                </a>
+            </div>
+            <a href="https://steamcommunity.com/workshop/filedetails/?id=999"><div class="requiredItem">Not required</div></a>"#;
+        let p = parse_item_page(html);
+        assert_eq!(p.author.as_deref(), Some("Some & Author"));
+        assert_eq!(p.screenshots, vec!["https://images.steamusercontent.com/ugc/1/AB/"]);
+        assert_eq!(p.videos, vec!["aSo4f_GBvV8"]);
+        assert_eq!(
+            p.required_items,
+            vec![
+                RequiredItem { workshop_id: "2447729538".into(), title: "Fluffy Hair [B41/B42]".into() },
+                RequiredItem { workshop_id: "3041733782".into(), title: "Spongie's Unlocker".into() },
+            ]
+        );
+    }
+
+    /// Live Steam call. cargo test workshop_live_details -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn workshop_live_details() {
+        let d = item_details("2463184726").unwrap();
+        println!("{} by {:?}: {} screenshots, {} videos, required {:?}", d.item.title, d.author, d.screenshots.len(), d.videos.len(), d.required_items);
+        assert!(!d.description.is_empty());
+        assert!(!d.required_items.is_empty());
     }
 
     /// Live Steam call. cargo test workshop_live -- --ignored --nocapture
