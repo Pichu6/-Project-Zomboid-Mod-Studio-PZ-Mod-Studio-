@@ -34,8 +34,6 @@ use server_manager::{
     save_server_quick_settings, send_server_command, stop_dedicated_server,
     sync_client_to_server,
 };
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use vfs::{auto_detect_paths, validate_paths, StudioPaths, VfsConflictRaw};
 
 #[tauri::command(async)]
@@ -284,8 +282,7 @@ fn launch_sandbox_cmd<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
     config: SandboxLaunchConfig,
 ) -> Result<u32, String> {
-    let stop_signal = Arc::new(AtomicBool::new(false));
-    launch_sandbox_and_watch(app_handle, config, stop_signal)
+    launch_sandbox_and_watch(app_handle, config)
 }
 
 #[tauri::command(async)]
@@ -495,6 +492,11 @@ fn toggle_package_in_modlist_cmd(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // Follow console.txt from the start: the game is often launched from Steam.
+            sandbox::watch_console_log(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_auto_paths,
             set_and_validate_paths,

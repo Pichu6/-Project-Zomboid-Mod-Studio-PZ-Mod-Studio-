@@ -320,59 +320,39 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
 }
 
 
+/// A few popular mods need another mod but do not say so in their own `mod.info`, which leaves
+/// the player with a crash and no clue. Those are listed here by Workshop id or exact mod id.
+///
+/// Matching on *part* of a name is deliberately not done: a rule like "any id containing tsar
+/// needs Tsarslib" invents requirements for unrelated mods and fills Mod Health with errors that
+/// are not real. If a mod is not listed here, its own `mod.info` is taken at its word.
 pub fn apply_known_dependency_heuristics(manifest: &mut ModManifest) {
     let lower_id = manifest.id.to_lowercase();
-    let w_id = manifest.workshop_id.as_deref().unwrap_or("");
+    let w_id = manifest.workshop_id.clone().unwrap_or_default();
 
-    // 1. Brita's Weapon Pack (id: Brita, workshop: 2200148440)
+    fn needs(manifest: &mut ModManifest, dependency: &str) {
+        if !manifest.require.iter().any(|r| r.eq_ignore_ascii_case(dependency)) {
+            manifest.require.push(dependency.to_string());
+        }
+    }
+
+    // Brita's Weapon Pack
     if lower_id == "brita" || w_id == "2200148440" {
-        if !manifest.require.iter().any(|r| r.to_lowercase().contains("gunfighter")) {
-            manifest.require.push("Arsenal(26)GunFighter[MAIN MOD 2.0]".to_string());
-        }
-        if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
-            manifest.require.push("modoptions".to_string());
-        }
+        needs(manifest, "Arsenal(26)GunFighter[MAIN MOD 2.0]");
+        needs(manifest, "modoptions");
     }
-
-    // 2. Arsenal(26) GunFighter (id: Arsenal(26)GunFighter[MAIN MOD 2.0], workshop: 2297098490)
-    if lower_id.contains("gunfighter") || w_id == "2297098490" {
-        if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
-            manifest.require.push("modoptions".to_string());
-        }
-        if lower_id.contains("2.0") || lower_id.contains("main") {
-            if !manifest.incompatible.iter().any(|i| i.to_lowercase() == "arsenal(26)gunfighter") {
-                manifest.incompatible.push("Arsenal(26)GunFighter".to_string());
-            }
-        } else {
-            if !manifest.incompatible.iter().any(|i| i.to_lowercase().contains("main mod 2.0")) {
-                manifest.incompatible.push("Arsenal(26)GunFighter[MAIN MOD 2.0]".to_string());
-            }
-        }
+    // Arsenal(26) GunFighter
+    if w_id == "2297098490" {
+        needs(manifest, "modoptions");
     }
-
-    // 3. Brita's Armor Pack (id: Brita_Armor, workshop: 2460154811)
+    // Brita's Armor Pack
     if lower_id == "brita_armor" || w_id == "2460154811" {
-        if !manifest.require.iter().any(|r| r.to_lowercase().contains("modoptions")) {
-            manifest.require.push("modoptions".to_string());
-        }
+        needs(manifest, "modoptions");
     }
 
-    // 4. Tsar / Autotsar vehicle & trailer mods
-    if lower_id.contains("autotsar") || lower_id.contains("aquatsar") || lower_id.contains("tsar") {
-        if lower_id != "tsarslib" && !manifest.require.iter().any(|r| r.to_lowercase() == "tsarslib") {
-            manifest.require.push("Tsarslib".to_string());
-        }
-    }
-
-    // 5. Vehicle Scene Customization
-    if lower_id.contains("vehiclescenecustomization") {
-        if !manifest.require.iter().any(|r| r.to_lowercase() == "tsarslib") {
-            manifest.require.push("Tsarslib".to_string());
-        }
-    }
-
-    // Recalculate is_library
-    manifest.is_library = manifest.require.is_empty() || lower_id.contains("lib") || lower_id.contains("manager") || lower_id.contains("framework");
+    // A mod with no requirements of its own is usually a library other mods build on.
+    manifest.is_library = manifest.require.is_empty()
+        && (lower_id.ends_with("lib") || lower_id.contains("library") || lower_id.contains("framework"));
 }
 
 pub fn get_all_user_zomboid_dirs(user_zomboid_dir: &str) -> Vec<std::path::PathBuf> {

@@ -253,8 +253,24 @@ const WorkshopTab: React.FC<{
   const [total, setTotal] = useState(0);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [hasSavedKey, setHasSavedKey] = useState(false);
   const [lookup, setLookup] = useState<WorkshopLookup | null>(null);
   const [lookupPage, setLookupPage] = useState(1);
+
+  useEffect(() => {
+    TauriService.steamKeyStatus().then(setHasSavedKey).catch(() => setHasSavedKey(false));
+  }, []);
+
+  /** Takes the saved key out of Windows Credential Manager. */
+  const removeKey = async () => {
+    if (!confirm('Remove the saved Steam Web API key from this PC?')) return;
+    try {
+      await TauriService.deleteSteamKey();
+      setHasSavedKey(false);
+    } catch (err) {
+      reportBackendError('Removing the Steam key', err);
+    }
+  };
 
   const runSearch = useCallback(async (q: WorkshopQuery, p: number) => {
     setSearching(true);
@@ -265,6 +281,7 @@ const WorkshopTab: React.FC<{
       setItems(r.items);
       setPage(r.page || p);
       setSearchError(null);
+      TauriService.steamKeyStatus().then(setHasSavedKey).catch(() => undefined);
       // The next page is usually where the user goes: fetch it while they read this one.
       const next = { ...toBrowseQuery(q, p + 1) };
       if (p + 1 <= r.pages) TauriService.prefetch(TauriService.workshopSearchKey(next), () => TauriService.workshopSearch(next));
@@ -365,6 +382,13 @@ const WorkshopTab: React.FC<{
         )}
       </div>
       {searchError && !lookup && <SteamKeyForm reason={searchError} onSaved={() => runSearch(query, 1)} />}
+      {hasSavedKey && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+          <KeyRound className="w-3 h-3" aria-hidden="true" />
+          <span>A Steam Web API key is saved on this PC. Browsing does not need it; it is only a fallback.</span>
+          <button type="button" onClick={removeKey} className="underline hover:text-slate-300 cursor-pointer">Remove it</button>
+        </div>
+      )}
 
       {lookup ? (
         <>

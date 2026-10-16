@@ -1179,6 +1179,17 @@ pub fn clear_draft_resolutions(
     for u_dir in user_dirs {
         let draft_file = u_dir.join("mods").join(&clean_pkg_name).join("draft_resolutions.json");
         if draft_file.exists() {
+            // These are hand-written merges: keep a copy before throwing them away, the way the
+            // mod list does.
+            if let Ok(text) = fs::read_to_string(&draft_file) {
+                let backups = u_dir.join("PZModStudio_Backups");
+                let _ = fs::create_dir_all(&backups);
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = fs::write(backups.join(format!("{}.merges.{}.json", clean_pkg_name, stamp)), text);
+            }
             let _ = fs::remove_file(draft_file);
         }
     }

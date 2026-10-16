@@ -303,7 +303,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   const handleUnmergeAll = async () => {
-    if (confirm(`Unmerge all resolutions in this package? The original base code of each mod will be restored.`)) {
+    if (
+      confirm(
+        'Throw away every merge saved in this package?\n\n' +
+          'A copy is kept in Zomboid/PZModStudio_Backups, and the files already published stay until you publish again.'
+      )
+    ) {
       if (paths.user_zomboid_dir && selectedPackageFolder) {
         await TauriService.clearDraftResolutions(paths.user_zomboid_dir, selectedPackageFolder);
       }
@@ -703,6 +708,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const totalFileLines = currentConflict?.total_file_lines ?? currentConflict?.base_content.split('\n').length ?? 1;
 
   const handleSelectConflict = (c: VfsConflict) => {
+    if (isManuallyEdited && !confirm('You have edits here that are not saved. Leave them behind?')) return;
     setSelectedConflictId(c.id);
     setEditorContent(c.merged_output || c.base_content);
     setIsManuallyEdited(false);

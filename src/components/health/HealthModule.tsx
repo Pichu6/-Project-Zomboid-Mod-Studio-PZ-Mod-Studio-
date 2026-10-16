@@ -40,6 +40,10 @@ export function applyFix(mods: ModInfo[], fix: HealthFix): ModInfo[] | null {
       if (!target || target.enabled === enable || (enable && isStudioDraftPackage(target))) return null;
       return mods.map((m) => (m.mod_id === fix.mod_id ? { ...m, enabled: enable } : m));
     }
+    case 'remove_from_list': {
+      const next = mods.filter((m) => m.mod_id !== fix.entry);
+      return next.length === mods.length ? null : next;
+    }
     case 'move_before': {
       const from = mods.findIndex((m) => m.mod_id === fix.mod_id);
       const anchor = mods.findIndex((m) => m.mod_id === fix.before);
@@ -63,7 +67,7 @@ const fixLabel = (fix: HealthFix): string => {
     case 'move_before':
       return `Move ${fix.mod_id} before ${fix.before}`;
     case 'remove_from_list':
-      return `Remove ${fix.entry}`;
+      return `Remove ${fix.entry} from the list`;
     case 'subscribe_workshop':
       return `Search Workshop for "${fix.hint}"`;
     case 'open_workshop_page':
@@ -166,6 +170,10 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       );
       return;
     }
+    if (fix.action === 'disable_mod') {
+      const name = mods.find((m) => m.mod_id === fix.mod_id)?.name ?? fix.mod_id;
+      if (!confirm(`Switch off ${name}?\n\nIt stays installed, and you can switch it back on in the Mod List.`)) return;
+    }
     const next = applyFix(mods, fix);
     if (next) onApplyModList(next);
   };
@@ -181,7 +189,16 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     return report.issues.flatMap((i) => i.fixes.filter((f) => SAFE_FIX_ACTIONS.has(f.action)));
   }, [report]);
 
-  const handleFixAllSafe = () => handleFixes(safeFixes);
+  const handleFixAllSafe = () => {
+    const enabling = safeFixes.filter((f) => f.action === 'enable_mod').length;
+    const moving = safeFixes.filter((f) => f.action === 'move_before').length;
+    const parts = [
+      enabling > 0 && `switch on ${enabling} ${enabling === 1 ? 'mod' : 'mods'} that others need`,
+      moving > 0 && `move ${moving} ${moving === 1 ? 'mod' : 'mods'} earlier in the load order`,
+    ].filter(Boolean);
+    if (!confirm(`This will ${parts.join(' and ')}.\n\nNothing is switched off, and the Mod List can undo it.`)) return;
+    handleFixes(safeFixes);
+  };
 
   // Kept apart from the list fixes: merging rewrites the mod list on its own (enables the package).
   const mergeablePaths = useMemo(() => {

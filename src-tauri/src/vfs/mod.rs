@@ -270,9 +270,15 @@ pub fn steam_library_dirs() -> Vec<PathBuf> {
 
 /// Auto-detects the Project Zomboid install and the user's Zomboid folder.
 pub fn auto_detect_paths() -> StudioPaths {
-    let user_home = dirs_next::home_dir().unwrap_or_else(|| PathBuf::from("C:\\"));
-    let user_zomboid = user_home.join("Zomboid");
-    let mod_list_ini = user_zomboid.join("mods").join("ModListData.ini");
+    // Zomboid sits in the home folder, or under Documents when that is where Windows (or
+    // OneDrive) puts the user's documents. Take the first one that is actually there.
+    let user_zomboid = crate::load_order::mod_info::get_all_user_zomboid_dirs("")
+        .into_iter()
+        .find(|d| d.is_dir())
+        .unwrap_or_else(|| {
+            dirs_next::home_dir().unwrap_or_else(|| PathBuf::from("C:\\")).join("Zomboid")
+        });
+    let mod_list_ini = user_zomboid.join("mods").join("default.txt");
 
     let mut pz_install_dir = String::new();
     let mut workshop_dir = String::new();

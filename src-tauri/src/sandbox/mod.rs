@@ -4,7 +4,6 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tauri::Emitter;
@@ -102,7 +101,6 @@ pub fn configure_options_ini(user_zomboid_dir: &str, is_windowed: bool) {
 pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
     config: SandboxLaunchConfig,
-    stop_signal: Arc<AtomicBool>,
 ) -> Result<u32, String> {
     let install_dir = Path::new(&config.pz_install_dir);
     let exe_path = install_dir.join("ProjectZomboid64.exe");
@@ -169,59 +167,95 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
         });
     }
 
-    // Spawn background thread to stream console.txt lines and detect crashes
-    let console_txt_path = Path::new(&config.user_zomboid_dir).join("console.txt");
-
-    thread::spawn(move || {
-        let mut file_offset = if let Ok(metadata) = std::fs::metadata(&console_txt_path) {
-            metadata.len()
-        } else {
-            0u64
-        };
-        let mut error_counter = 1;
-
-        while !stop_signal.load(Ordering::Relaxed) {
-            if console_txt_path.exists() {
-                if let Ok(file) = File::open(&console_txt_path) {
-                    if let Ok(metadata) = file.metadata() {
-                        let current_len = metadata.len();
-                        if current_len < file_offset {
-                            // File was truncated or recreated by new PZ session: reset offset to start!
-                            file_offset = 0;
-                        }
-                    }
-
-                    let mut reader = BufReader::new(file);
-                    if reader.seek(SeekFrom::Start(file_offset)).is_ok() {
-                        let mut line_buf = String::new();
-                        while reader.read_line(&mut line_buf).unwrap_or(0) > 0 {
-                            let trimmed = line_buf.trim_end().to_string();
-                            let is_error = trimmed.contains("ERROR") || trimmed.contains("Exception") || trimmed.contains("KahluaThreadException");
-
-                            let _ = app.emit("sandbox-log", LogLinePayload {
-                                line: trimmed.clone(),
-                                is_error,
-                            });
-
-                            // Translate known error patterns
-                            if let Some(card) = translate_log_error(&trimmed, error_counter) {
-                                let _ = app.emit("sandbox-error-card", card);
-                                error_counter += 1;
-                            }
-
-                            line_buf.clear();
-                        }
-                        if let Ok(pos) = reader.stream_position() {
-                            file_offset = pos;
-                        }
-                    }
-                }
-            }
-            thread::sleep(Duration::from_millis(200));
-        }
-    });
+    watch_console_log(app);
 
     Ok(pid)
+}
+
+/// Only one thread ever tails `console.txt`, however many times the game is launched: a second
+/// one would double every line and every crash card.
+static LOG_WATCHER_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Follows the game's `console.txt` and sends each new line to the Monitor Center, whether the
+/// game was launched from the Studio or from Steam. When the file is not there yet — a player who
+/// has never run the game has no log — it waits, and says so instead of sitting silent.
+pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    if LOG_WATCHER_STARTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    thread::spawn(move || {
+        let mut file_offset: Option<u64> = None;
+        let mut error_counter = 1;
+        let mut announced_wait = false;
+        let mut watching: Option<std::path::PathBuf> = None;
+
+        loop {
+            // The folder can be set or corrected while the Studio is open, so look again each time.
+            let found = crate::load_order::mod_info::get_all_user_zomboid_dirs("")
+                .into_iter()
+                .map(|d| d.join("console.txt"))
+                .find(|p| p.is_file());
+
+            let Some(console_txt_path) = found else {
+                if !announced_wait {
+                    announced_wait = true;
+                    let _ = app.emit(
+                        "sandbox-log",
+                        LogLinePayload {
+                            line: "[PZ Monitor Center] No console.txt yet. Start Project Zomboid once and its log appears here.".to_string(),
+                            is_error: false,
+                        },
+                    );
+                }
+                thread::sleep(Duration::from_millis(1000));
+                continue;
+            };
+
+            if watching.as_deref() != Some(console_txt_path.as_path()) {
+                let _ = app.emit(
+                    "sandbox-log",
+                    LogLinePayload {
+                        line: format!("[PZ Monitor Center] Following {}", console_txt_path.display()),
+                        is_error: false,
+                    },
+                );
+                watching = Some(console_txt_path.clone());
+                announced_wait = false;
+                // Start at the end: the Studio reports what happens from now on.
+                file_offset = std::fs::metadata(&console_txt_path).map(|m| m.len()).ok();
+            }
+
+            if let Ok(file) = File::open(&console_txt_path) {
+                let mut offset = file_offset.unwrap_or(0);
+                if let Ok(metadata) = file.metadata() {
+                    if metadata.len() < offset {
+                        // A new session truncated the file: read it from the top.
+                        offset = 0;
+                    }
+                }
+                let mut reader = BufReader::new(file);
+                if reader.seek(SeekFrom::Start(offset)).is_ok() {
+                    let mut line_buf = String::new();
+                    while reader.read_line(&mut line_buf).unwrap_or(0) > 0 {
+                        let trimmed = line_buf.trim_end().to_string();
+                        let is_error = trimmed.contains("ERROR")
+                            || trimmed.contains("Exception")
+                            || trimmed.contains("KahluaThreadException");
+
+                        let _ = app.emit("sandbox-log", LogLinePayload { line: trimmed.clone(), is_error });
+
+                        if let Some(card) = translate_log_error(&trimmed, error_counter) {
+                            let _ = app.emit("sandbox-error-card", card);
+                            error_counter += 1;
+                        }
+                        line_buf.clear();
+                    }
+                    file_offset = reader.stream_position().ok();
+                }
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+    });
 }
 
 /// Translates raw Java stacktraces & Lua errors into actionable cards.
@@ -242,7 +276,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             id: format!("err_{}", counter),
             raw_error: line.to_string(),
             source_file: Some("media/lua/shared/BWORoomPrograms.lua".to_string()),
-            line_number: Some(1005),
+            line_number: None,
             title: "Bandits Week One Dining Room Safety (B42)".to_string(),
             explanation: "Bandits Week One room program attempted to query getName() on an outdoor/unzoned tile where getRoom() is nil, generating error floods on each AI tick.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_BANDITS_ROOM_SAFETY".to_string(),
@@ -253,7 +287,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             id: format!("err_{}", counter),
             raw_error: line.to_string(),
             source_file: Some("media/lua/client/dSAG/dSAG_Window.lua".to_string()),
-            line_number: Some(1121),
+            line_number: None,
             title: "Daily Report Journal Callback Protection".to_string(),
             explanation: "Daily Report Journal rollover or player death event executed callbacks on an uninitialized UI window.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_DAILY_REPORT_SAFETY".to_string(),
@@ -319,7 +353,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             id: format!("err_{}", counter),
             raw_error: line.to_string(),
             source_file: Some("media/lua/client/aFancyHandwork.lua".to_string()),
-            line_number: Some(336),
+            line_number: None,
             title: "Fancy Handwork Multiplayer Hand Sync Safety".to_string(),
             explanation: "Fancy Handwork fancyMP loop threw an uncaught error when evaluating local/remote player hand objects on tick.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to guard FancyHandwork callbacks safely.".to_string(),
