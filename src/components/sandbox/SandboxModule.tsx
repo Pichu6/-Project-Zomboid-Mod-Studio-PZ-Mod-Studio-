@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { TranslatedErrorCard, LogFileInfoUI } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService } from '../../services/tauri';
+import { TauriService, explainError } from '../../services/tauri';
 import {
   AlertCircle,
   Wrench,
@@ -286,7 +286,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       const files = await TauriService.listAvailableLogFiles(paths.user_zomboid_dir);
       setAvailableLogs(files);
     } catch (err: any) {
-      alert(`Error saving log snapshot: ${err}`);
+      alert(`Error saving log snapshot: ${explainError(err)}`);
     }
   };
 

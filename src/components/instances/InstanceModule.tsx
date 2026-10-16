@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw, Edit3, X, Save } from 'lucide-react';
 import { ModInfo, StudioPathsUI, AppInstance } from '../../types';
-import { TauriService } from '../../services/tauri';
+import { TauriService, explainError } from '../../services/tauri';
 
 interface InstanceModuleProps {
   paths: StudioPathsUI;
   mods: ModInfo[];
   onApplyInstanceLoadOrder: (loadOrder: string[], activeIds: string[]) => void;
   onProfileActivated?: (inst: AppInstance) => void;
+  /** The active profile was deleted, so nothing is active any more. */
+  onProfileDeleted?: () => void;
 }
 
 export const InstanceModule: React.FC<InstanceModuleProps> = ({
@@ -15,6 +17,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
   mods,
   onApplyInstanceLoadOrder,
   onProfileActivated,
+  onProfileDeleted,
 }) => {
   const [instances, setInstances] = useState<AppInstance[]>([]);
   const [newInstanceName, setNewInstanceName] = useState('');
@@ -83,7 +86,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       await handleActivateInstance(created);
       setStatusMessage(`Profile '${created.name}' created and activated.`);
     } catch (err: any) {
-      alert(`Error creating profile: ${err}`);
+      alert(`Error creating profile: ${explainError(err)}`);
     }
   };
 
@@ -108,7 +111,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       setEditingInstance(null);
       await loadInstances();
     } catch (err: any) {
-      alert(`Error updating profile: ${err}`);
+      alert(`Error updating profile: ${explainError(err)}`);
     }
   };
 
@@ -122,7 +125,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       setStatusMessage(`⚡ Profile '${inst.name}' activated successfully. Mods applied to the game!`);
       await loadInstances();
     } catch (err: any) {
-      alert(`Error activating profile: ${err}`);
+      alert(`Error activating profile: ${explainError(err)}`);
     }
   };
 
@@ -132,8 +135,10 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       await TauriService.deleteInstance(paths.user_zomboid_dir, inst.id);
       setStatusMessage(`Profile '${inst.name}' deleted.`);
       await loadInstances();
+      // The header and the sidebar were still showing it as active until a restart.
+      if (inst.is_active) onProfileDeleted?.();
     } catch (err: any) {
-      alert(`Error deleting profile: ${err}`);
+      alert(`Error deleting profile: ${explainError(err)}`);
     }
   };
 

@@ -28,7 +28,7 @@ import {
   ConnectedPlayer,
   ServerQuickSettings,
 } from '../../types';
-import { TauriService } from '../../services/tauri';
+import { TauriService, explainError } from '../../services/tauri';
 
 interface ServerModuleProps {
   paths: StudioPathsUI;
@@ -50,16 +50,18 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
   const [selectedRam, setSelectedRam] = useState<number>(4);
   const [isNoSteam, setIsNoSteam] = useState<boolean>(false);
   const [isLaunching, setIsLaunching] = useState<boolean>(false);
-  const [adminPassword, setAdminPassword] = useState<string>(() => {
-    return localStorage.getItem('pz_server_admin_password') || '';
-  });
+  // Not kept between sessions on purpose: a server password does not belong in the browser
+  // storage this window runs on. It is typed when the server is started.
+  const [adminPassword, setAdminPassword] = useState<string>('');
   const [showAdminPassword, setShowAdminPassword] = useState<boolean>(false);
   const [showServerPassword, setShowServerPassword] = useState<boolean>(false);
 
-  const handleAdminPasswordChange = (val: string) => {
-    setAdminPassword(val);
-    localStorage.setItem('pz_server_admin_password', val);
-  };
+  const handleAdminPasswordChange = (val: string) => setAdminPassword(val);
+
+  useEffect(() => {
+    // An older build stored this here; clear it out.
+    localStorage.removeItem('pz_server_admin_password');
+  }, []);
 
   // Live Players & Moderation State
   const [players, setPlayers] = useState<ConnectedPlayer[]>([]);
@@ -160,7 +162,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       setSelectedServer(created);
       await loadQuickSettings(created.file_path);
     } catch (err: any) {
-      alert(`Error creating server: ${err}`);
+      alert(`Error creating server: ${explainError(err)}`);
     }
   };
 
@@ -178,7 +180,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
         setSelectedServer(list.length > 0 ? list[0] : null);
       }
     } catch (err: any) {
-      alert(`Error deleting server: ${err}`);
+      alert(`Error deleting server: ${explainError(err)}`);
     }
   };
 
@@ -192,7 +194,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       );
       await loadServerConfigs();
     } catch (err: any) {
-      alert(`Error synchronizing: ${err}`);
+      alert(`Error synchronizing: ${explainError(err)}`);
     }
   };
 
@@ -215,7 +217,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       setStatusMessage(`🎮 Dedicated server started successfully in interactive console! PID: ${pid}`);
       await refreshServerStatusAndPlayers();
     } catch (err: any) {
-      alert(`Error starting dedicated server: ${err}`);
+      alert(`Error starting dedicated server: ${explainError(err)}`);
     } finally {
       setIsLaunching(false);
     }
@@ -228,7 +230,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       setStatusMessage(`⏹️ Shutdown signal sent to dedicated server.`);
       await refreshServerStatusAndPlayers();
     } catch (err: any) {
-      alert(`Error stopping server: ${err}`);
+      alert(`Error stopping server: ${explainError(err)}`);
     }
   };
 
@@ -247,7 +249,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       await TauriService.saveServerQuickSettings(selectedServer.file_path, quickSettings);
       setStatusMessage(`💾 Settings saved successfully to '${selectedServer.name}.ini'.`);
     } catch (err: any) {
-      alert(`Error saving settings: ${err}`);
+      alert(`Error saving settings: ${explainError(err)}`);
     } finally {
       setIsSavingSettings(false);
     }
@@ -440,7 +442,7 @@ Invite made with Project Zomboid Mod Studio`;
                       await loadServerConfigs(false);
                       setSelectedServer(created);
                     } catch (err: any) {
-                      alert(`Error: ${err}`);
+                      alert(`Error: ${explainError(err)}`);
                     }
                   }}
                   className="px-3 py-1.5 bg-purple-900/60 hover:bg-purple-800/80 border border-purple-600/50 text-purple-200 text-xs font-semibold rounded-lg transition cursor-pointer"

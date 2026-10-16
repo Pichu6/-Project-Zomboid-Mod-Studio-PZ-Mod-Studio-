@@ -496,6 +496,10 @@ export const App: React.FC = () => {
                 paths={paths}
                 mods={mods}
                 onApplyInstanceLoadOrder={handleApplyPresetLoadOrder}
+                onProfileDeleted={() => {
+                  setActiveProfile(null);
+                  setActiveTab('PROFILES');
+                }}
                 onProfileActivated={(inst) => {
                   setActiveProfile(inst);
                   setActiveTab('MOD_LIST');

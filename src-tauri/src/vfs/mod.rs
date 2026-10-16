@@ -128,6 +128,8 @@ pub struct AutoMergeResult {
 /// Merges the requested files automatically (only those that need no decision) into the active
 /// PZ Mod Studio package (or Z_PZModStudio_MergedPatch), keeping its other resolved files, and
 /// publishes it (active, loading last).
+/// `package_folder` is the package the user is working in; without one the active package is
+/// used, and only if there is none is a new `Z_PZModStudio_MergedPatch` made.
 pub fn auto_merge_conflicts(paths: &StudioPaths, rel_paths: &[String]) -> Result<AutoMergeResult, String> {
     let active: Vec<String> = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
         .map(|d| d.active_mods)

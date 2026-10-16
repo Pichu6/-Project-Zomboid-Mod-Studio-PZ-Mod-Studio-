@@ -360,6 +360,9 @@ end)
             // patch has to be to win.
             mod_list.active_mods.retain(|id| id != &clean_pkg_name);
             mod_list.active_mods.push(clean_pkg_name.clone());
+            // The Mod List reads the saved order, not default.txt, so put the package there too:
+            // without this it comes back as disabled and the next toggle drops it again.
+            remember_package_in_saved_order(&req.user_zomboid_dir, &clean_pkg_name, &mod_list.active_mods);
             let _ = write_mod_list_ini(&req.mod_list_ini_path, &mod_list.active_mods);
 
             // Write patch_metadata.json for the newly active published package
@@ -1460,4 +1463,37 @@ mod tests {
         }
         let _ = fs::remove_dir_all(&root);
     }
+}
+
+/// Adds a freshly published package to the saved load order and to the active profile, last,
+/// so the Mod List agrees with `default.txt` instead of showing it as disabled.
+fn remember_package_in_saved_order(user_zomboid_dir: &str, package: &str, active_mods: &[String]) {
+    let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(user_zomboid_dir)
+        .into_iter()
+        .next()
+    else {
+        return;
+    };
+    let master = z_dir.join("PZModStudio_MasterLoadOrder.json");
+    let mut load_order: Vec<String> = fs::read_to_string(&master)
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| {
+            v.get("load_order").and_then(|a| a.as_array()).map(|a| {
+                a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()
+            })
+        })
+        .unwrap_or_default();
+    if load_order.is_empty() {
+        // Nothing saved yet: the list the game reads is the best order we have.
+        load_order = active_mods.to_vec();
+    } else {
+        load_order.retain(|id| id != package);
+        load_order.push(package.to_string());
+    }
+    let _ = crate::instance_manager::save_master_load_order(
+        user_zomboid_dir.to_string(),
+        load_order,
+        active_mods.to_vec(),
+    );
 }

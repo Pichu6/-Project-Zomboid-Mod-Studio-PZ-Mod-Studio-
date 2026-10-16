@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { VfsConflict, ChangeRegion, ModChangeSummary } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI } from '../../services/tauri';
+import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
 import {
   GitCompare,
   CheckCircle2,
@@ -486,7 +486,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         showToast(`✨ Package successfully saved at: ${filePath}`);
       }
     } catch (err: any) {
-      alert(`Error exporting package: ${err}`);
+      alert(`Error exporting package: ${explainError(err)}`);
     }
   };
 
@@ -508,7 +508,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         }
       }
     } catch (err: any) {
-      alert(`Error importing package: ${err}`);
+      alert(`Error importing package: ${explainError(err)}`);
     }
   };
 

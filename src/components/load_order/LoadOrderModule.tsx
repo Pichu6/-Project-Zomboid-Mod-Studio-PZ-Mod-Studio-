@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { ModInfo, ModPreset, MissingModsReport, HealthIssue, CatalogModSummary } from '../../types';
 import { SourceBadge, sourceOf } from '../common/SourceBadge';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService } from '../../services/tauri';
+import { TauriService, explainError } from '../../services/tauri';
 import {
   BookOpen,
   ListOrdered,
@@ -341,7 +341,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         setTimeout(() => setSaveToast(null), 4000);
       }
     } catch (err: any) {
-      alert(`Error exporting preset: ${err}`);
+      alert(`Error exporting preset: ${explainError(err)}`);
     } finally {
       setIsExportingPreset(false);
     }
@@ -364,7 +364,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         setIsPresetDropdownOpen(false);
       }
     } catch (err: any) {
-      alert(`Error importing .pzpack file: ${err}`);
+      alert(`Error importing .pzpack file: ${explainError(err)}`);
     }
   };
 

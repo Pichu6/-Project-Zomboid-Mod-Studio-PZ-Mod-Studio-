@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { BACKEND_ERROR_EVENT, BackendErrorDetail } from '../../services/tauri';
+import { BACKEND_ERROR_EVENT, BackendErrorDetail, explainError } from '../../services/tauri';
 
 interface ToastItem extends BackendErrorDetail {
   id: number;
@@ -42,7 +42,7 @@ export const BackendErrorToasts: React.FC = () => {
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" aria-hidden="true" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-bold">{t.action} failed</div>
-            <div className="text-[11px] text-red-200/90 break-words">{t.message}</div>
+            <div className="text-[11px] text-red-200/90 break-words">{explainError(t.message)}</div>
           </div>
           <button
             type="button"

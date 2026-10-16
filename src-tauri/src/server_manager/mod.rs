@@ -1122,6 +1122,10 @@ pub fn save_server_quick_settings(file_path: String, settings: ServerQuickSettin
     if !keys_found.contains("PVP") { new_lines.push(format!("PVP={}", settings.pvp)); }
     if !keys_found.contains("PauseEmpty") { new_lines.push(format!("PauseEmpty={}", settings.pause_empty)); }
     if !keys_found.contains("Open") { new_lines.push(format!("Open={}", settings.open)); }
+    if !keys_found.contains("DefaultPort") { new_lines.push(format!("DefaultPort={}", settings.port)); }
+    if !keys_found.contains("RCONPort") { new_lines.push(format!("RCONPort={}", settings.rcon_port)); }
+    if !keys_found.contains("RCONPassword") { new_lines.push(format!("RCONPassword={}", settings.rcon_password)); }
+    if !keys_found.contains("Map") && !settings.map_names.is_empty() { new_lines.push(format!("Map={}", settings.map_names)); }
 
     fs::write(path, new_lines.join("\r\n")).map_err(|e| e.to_string())?;
 
