@@ -2,6 +2,7 @@ pub mod catalog;
 pub mod claude_agent;
 pub mod compat;
 pub mod diff_engine;
+pub mod error_report;
 pub mod images;
 pub mod instance_manager;
 pub mod load_order;
@@ -333,6 +334,19 @@ fn pick_open_file_cmd(
     dialog.pick_file().map(|p| p.to_string_lossy().to_string())
 }
 
+/// Builds one Markdown file describing an error: what broke, on which build, in which mod, with
+/// the code. Meant to be handed to a person or an AI agent that was not at the machine.
+#[tauri::command(async)]
+fn error_report_cmd(paths: StudioPaths, request: error_report::ErrorReportRequest) -> Result<String, String> {
+    error_report::build(&paths, &request)
+}
+
+/// Writes that report where the user chose.
+#[tauri::command(async)]
+fn save_text_file_cmd(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| format!("The file could not be saved: {}", e))
+}
+
 /// Where the Studio's own MCP server sits, so the config the user copies is one that works.
 #[tauri::command(async)]
 fn mcp_server_path_cmd() -> Result<String, String> {
@@ -568,6 +582,8 @@ pub fn run() {
             open_package_folder_cmd,
             open_mod_folder_cmd,
             mcp_server_path_cmd,
+            error_report_cmd,
+            save_text_file_cmd,
             open_logs_folder_cmd,
             list_available_log_files_cmd,
             read_log_file_cmd,

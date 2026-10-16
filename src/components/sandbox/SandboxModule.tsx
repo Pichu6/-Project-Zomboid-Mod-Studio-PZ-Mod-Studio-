@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { TranslatedErrorCard, LogFileInfoUI } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, explainError } from '../../services/tauri';
+import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import {
   AlertCircle,
   Wrench,
@@ -15,6 +15,7 @@ import {
   X,
   Search,
   Copy,
+  Download,
   Check,
   FileText,
   ChevronDown,
@@ -98,6 +99,53 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   const [availableLogs, setAvailableLogs] = useState<LogFileInfoUI[]>([]);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Gathers everything about one error into a file. The log the Monitor already holds goes in as
+   * context, so whoever reads it can see what led up to the error.
+   */
+  const buildReportFor = async (card: TranslatedErrorCard): Promise<string | null> => {
+    const lines = (tabs.find((t) => t.isLive) ?? tabs[0])?.lines ?? [];
+    const at = lines.findIndex((l) => l === card.raw_error);
+    const from = at >= 0 ? Math.max(0, at - 15) : Math.max(0, lines.length - 20);
+    const to = at >= 0 ? Math.min(lines.length, at + 10) : lines.length;
+    try {
+      return await TauriService.buildErrorReport(paths, {
+        rawError: card.raw_error,
+        title: card.title,
+        explanation: card.explanation,
+        modName: card.mod_name ?? null,
+        sourceFile: card.source_file ?? null,
+        logContext: lines.slice(from, to),
+      });
+    } catch (err) {
+      reportBackendError('Writing the error report', err);
+      return null;
+    }
+  };
+
+  const handleSaveReport = async (card: TranslatedErrorCard) => {
+    const report = await buildReportFor(card);
+    if (!report) return;
+    const slug = (card.mod_name ?? 'error').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const path = await TauriService.pickSaveFile(`pz-error-${slug || 'report'}.md`, 'Markdown (.md)', 'md');
+    if (!path) return;
+    try {
+      await TauriService.saveTextFile(path, report);
+      setSaveStatus(`Saved to ${path}`);
+      setTimeout(() => setSaveStatus(null), 4000);
+    } catch (err) {
+      reportBackendError('Saving the error report', err);
+    }
+  };
+
+  const handleCopyReport = async (card: TranslatedErrorCard) => {
+    const report = await buildReportFor(card);
+    if (!report) return;
+    await navigator.clipboard.writeText(report);
+    setSaveStatus('Report copied to the clipboard');
+    setTimeout(() => setSaveStatus(null), 4000);
+  };
 
   const handleInspectInConsole = (card: TranslatedErrorCard) => {
     let term = '';
@@ -792,7 +840,26 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <button
+                      onClick={() => handleSaveReport(card)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
+                      title="Writes a file with the error, your game build, the mod and the code, ready to hand to someone or to an AI assistant"
+                    >
+                      <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Save report</span>
+                    </button>
+                    <button
+                      onClick={() => handleCopyReport(card)}
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
+                      title="Copies the same report to the clipboard"
+                    >
+                      <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Copy report</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
                     <button
                       onClick={() => handleInspectInConsole(card)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
@@ -814,7 +881,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                       ) : (
                         <>
                           <Copy className="w-3 h-3 text-slate-400" />
-                          <span>Copy</span>
+                          <span>Copy the line</span>
                         </>
                       )}
                     </button>

@@ -729,6 +729,29 @@ export const TauriService = {
     }
   },
 
+  /**
+   * One Markdown file describing an error — the log line, the build, the mod, the code — so it
+   * can be handed to someone, or to an AI agent, away from this machine. Throws with the reason.
+   */
+  buildErrorReport: async (
+    paths: StudioPathsUI,
+    request: {
+      rawError: string;
+      title: string;
+      explanation: string;
+      modName?: string | null;
+      sourceFile?: string | null;
+      logContext: string[];
+    }
+  ): Promise<string> => {
+    return await invoke<string>('error_report_cmd', { paths, request });
+  },
+
+  /** Writes text where the user chose. Throws with the reason. */
+  saveTextFile: async (path: string, contents: string): Promise<void> => {
+    await invoke('save_text_file_cmd', { path, contents });
+  },
+
   /** Where this Studio's MCP server is, for the config snippet. */
   mcpServerPath: async (): Promise<string> => {
     try {
