@@ -596,6 +596,21 @@ export const App: React.FC = () => {
               paths={paths}
               errorCards={errorCards}
               onOpenMerger={() => setActiveTab('MERGER')}
+              onSwitchOffMod={(modName) => {
+                // The log gives a display name, which is what the Mod List shows too.
+                const target = mods.find((m) => m.name === modName || m.mod_id === modName);
+                if (!target) {
+                  alert(`${modName} is not in your mod list any more.`);
+                  return;
+                }
+                if (!target.enabled) {
+                  alert(`${target.name} is already switched off.`);
+                  return;
+                }
+                if (!confirm(`Switch off ${target.name}?\n\nIt stays installed; switch it back on in the Mod List whenever you like.`)) return;
+                handleToggleMod(target.mod_id);
+                setActiveTab('MOD_LIST');
+              }}
               onClearErrorCards={handleClearErrorCards}
               onGoToSettings={() => setActiveTab('SETTINGS')}
             />

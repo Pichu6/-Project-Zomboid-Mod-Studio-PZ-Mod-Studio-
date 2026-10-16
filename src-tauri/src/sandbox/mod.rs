@@ -25,6 +25,8 @@ pub struct TranslatedErrorPayload {
     pub explanation: String,
     pub recommended_action: String,
     pub polyfill_rule_id_suggestion: Option<String>,
+    /// The mod the game blamed, when the line says so.
+    pub mod_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,6 +190,10 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         let mut error_counter = 1;
         let mut announced_wait = false;
         let mut watching: Option<std::path::PathBuf> = None;
+        let mut blame = ModBlame::default();
+        // One card per mod and complaint: a mod that fails on every tick would otherwise bury
+        // everything else.
+        let mut already_reported: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         loop {
             // The folder can be set or corrected while the Studio is open, so look again each time.
@@ -244,9 +250,22 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
 
                         let _ = app.emit("sandbox-log", LogLinePayload { line: trimmed.clone(), is_error });
 
-                        if let Some(card) = translate_log_error(&trimmed, error_counter) {
+                        blame.observe(&trimmed);
+                        let culprit = blame.of(&trimmed);
+
+                        if let Some(mut card) = translate_log_error(&trimmed, error_counter) {
+                            card.mod_name = culprit.clone();
                             let _ = app.emit("sandbox-error-card", card);
                             error_counter += 1;
+                        } else if let Some(name) = culprit {
+                            // Not a pattern the Studio knows, but the game named the mod, which is
+                            // the question a player actually has: which one of my mods did this?
+                            let complaining = is_error || trimmed.starts_with("WARN");
+                            let key = format!("{}|{}", name, trimmed.chars().take(80).collect::<String>());
+                            if complaining && already_reported.insert(key) {
+                                let _ = app.emit("sandbox-error-card", blame_card(&trimmed, &name, error_counter));
+                                error_counter += 1;
+                            }
                         }
                         line_buf.clear();
                     }
@@ -256,6 +275,75 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             thread::sleep(Duration::from_millis(250));
         }
     });
+}
+
+/// Which mod a log line belongs to.
+///
+/// The game is explicit about this in two ways, so no guessing is needed:
+///   `WARN : Lua f:0 at Lua((MOD:Nature's Call)).NC_Main.lua> require(...) failed`
+///   `LOG  : Mod f:0> mod "CleanUI" overrides media/lua/client/isui/isinventorypane.lua`
+/// The first names the mod on the line itself; the second builds a map from a file path to
+/// whichever mod replaced it, which covers lines that only mention a path.
+#[derive(Debug, Clone, Default)]
+pub struct ModBlame {
+    /// media path (lowercased) -> the mod that overrides it, last one winning as the game loads.
+    overrides: std::collections::HashMap<String, String>,
+}
+
+impl ModBlame {
+    /// Reads `mod "X" overrides <path>` lines as they go by.
+    pub fn observe(&mut self, line: &str) {
+        let Some(rest) = line.split("> mod \"").nth(1) else { return };
+        let Some((mod_name, tail)) = rest.split_once("\" overrides ") else { return };
+        self.overrides.insert(tail.trim().to_lowercase(), mod_name.to_string());
+    }
+
+    /// The mod this line is about, if the game said.
+    pub fn of(&self, line: &str) -> Option<String> {
+        if let Some(rest) = line.split("(MOD:").nth(1) {
+            if let Some((name, _)) = rest.split_once(')') {
+                let name = name.trim();
+                if !name.is_empty() {
+                    return Some(name.to_string());
+                }
+            }
+        }
+        // Otherwise: a media path in the line, if some mod replaced that file.
+        let lower = line.to_lowercase();
+        let start = lower.find("media/").or_else(|| lower.find("media\\"))?;
+        let path: String = lower[start..]
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '"' && *c != ')' && *c != '\'')
+            .collect();
+        let path = path.replace('\\', "/");
+        self.overrides.get(path.trim_end_matches(|c| c == ',' || c == '.')).cloned()
+    }
+}
+
+/// A line worth showing even though it matches no known pattern, because the game named a mod.
+fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayload {
+    // "WARN : Lua f:0 at Lua((MOD:X)).File.lua> require("Y") failed" -> the part after ">"
+    let detail = line.split_once('>').map(|(_, rest)| rest.trim()).unwrap_or(line).to_string();
+    let source_file = line
+        .split("))." )
+        .nth(1)
+        .and_then(|rest| rest.split('>').next())
+        .map(|f| f.trim().to_string())
+        .filter(|f| f.ends_with(".lua"));
+    TranslatedErrorPayload {
+        id: format!("err_{}", counter),
+        raw_error: line.to_string(),
+        source_file,
+        line_number: None,
+        title: format!("{} reported a problem", mod_name),
+        explanation: if detail.is_empty() { line.to_string() } else { detail },
+        recommended_action: format!(
+            "The game named {} on this line. If something is misbehaving in game, switching that mod off is the quickest way to tell whether it is the cause.",
+            mod_name
+        ),
+        polyfill_rule_id_suggestion: None,
+        mod_name: Some(mod_name.to_string()),
+    }
 }
 
 /// Translates raw Java stacktraces & Lua errors into actionable cards.
@@ -269,6 +357,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "B42 IsoDoor / IsoWindow NPC Null Pointer Interop".to_string(),
             explanation: "A non-player entity (zombie or NPC) interacted with a door or window, triggering a Build 42 JVM check for local players on a null character object.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_OBJECT_INTERACT_SAFETY".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("B42_OBJECT_INTERACT_SAFETY".to_string()),
         })
     } else if line.contains("BWORoomPrograms") || (line.contains("restaurant") && line.contains("getName")) {
@@ -280,6 +369,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Bandits Week One Dining Room Safety (B42)".to_string(),
             explanation: "Bandits Week One room program attempted to query getName() on an outdoor/unzoned tile where getRoom() is nil, generating error floods on each AI tick.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_BANDITS_ROOM_SAFETY".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("B42_BANDITS_ROOM_SAFETY".to_string()),
         })
     } else if line.contains("dSAG") || line.contains("onNewDay") || line.contains("ReportWindow") {
@@ -291,6 +381,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Daily Report Journal Callback Protection".to_string(),
             explanation: "Daily Report Journal rollover or player death event executed callbacks on an uninitialized UI window.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_DAILY_REPORT_SAFETY".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("B42_DAILY_REPORT_SAFETY".to_string()),
         })
     } else if line.contains("UnknownFormatConversionException") {
@@ -302,6 +393,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Translator Format Exception (% character)".to_string(),
             explanation: "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to collapse.".to_string(),
             recommended_action: "Apply Polyfill Rule: SANITIZE_TRANSLATOR_FORMAT".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("SANITIZE_TRANSLATOR_FORMAT".to_string()),
         })
     } else if line.contains("attempted index of non-table") || line.contains("attempted index: getName of non-table") {
@@ -313,6 +405,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Uninitialized Global Table Access".to_string(),
             explanation: "Mod code attempted to access properties of a nil/uninitialized table before PZ Build 42 instantiated it.".to_string(),
             recommended_action: "Apply Polyfill Rule: SAFE_GLOBAL_TABLE_ACCESS".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("NullPointerException") {
@@ -324,6 +417,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Java Interop Null Pointer Exception".to_string(),
             explanation: "A Java method returned null or received a null parameter from a legacy Lua mod call.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to handle null Java interop arguments safely.".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("B42_OBJECT_INTERACT_SAFETY".to_string()),
         })
     } else if line.contains("KahluaThreadException") || line.contains("se.krka.kahlua.vm.KahluaException") {
@@ -335,6 +429,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Lua Runtime Execution Crash (Kahlua)".to_string(),
             explanation: "An unhandled Lua runtime exception was thrown inside the PZ Kahlua VM.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to protect game loops and callframe stacktraces.".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("IndexOutOfBoundsException") || line.contains("Index 0 out of bounds") {
@@ -346,6 +441,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Multiplayer Java ArrayList Out of Bounds (B42)".to_string(),
             explanation: "A mod accessed IsoPlayer.getPlayers() or getOnlinePlayers() index 0 while the Java player collection was empty during a render/tick loop in Multiplayer.".to_string(),
             recommended_action: "Apply Universal Master Polyfills (Safe ArrayList Proxy & getOnlinePlayers shield).".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("B42_DAILY_REPORT_SAFETY".to_string()),
         })
     } else if line.contains("FancyHandwork") || line.contains("fancyMP") || line.contains("aFancyHandwork") {
@@ -357,6 +453,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Fancy Handwork Multiplayer Hand Sync Safety".to_string(),
             explanation: "Fancy Handwork fancyMP loop threw an uncaught error when evaluating local/remote player hand objects on tick.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to guard FancyHandwork callbacks safely.".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("SaucedCarts") || line.contains("Pushable Carts") {
@@ -368,6 +465,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "SaucedCarts Pushable Carts Multiplayer Sync".to_string(),
             explanation: "Pushable Carts vehicle/entity interaction threw a null pointer exception during multiplayer state updates.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to guard SaucedCarts interop.".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("duplicate recipe") || line.contains("duplicate item") {
@@ -379,6 +477,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             title: "Duplicate Item/Recipe ID Collision".to_string(),
             explanation: "Multiple active mods registered the same script ID or recipe name, causing overwrite conflicts.".to_string(),
             recommended_action: "Use Merger Module to merge script definitions into Master Patch.".to_string(),
+            mod_name: None,
             polyfill_rule_id_suggestion: None,
         })
     } else {
@@ -724,5 +823,66 @@ mod tests {
         assert!(!server_copy.exists());
         assert!(!bridge_companion_mod_needs_update(&dir_str));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod blame_tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_mod_the_game_names() {
+        let mut blame = ModBlame::default();
+        let warn = "WARN : Lua          f:0 at Lua((MOD:Filibuster Rhymes' Certified Used Cars!)).FR_VehicleMechanics.lua> require(\"ISUI/ISVehicleMechanics\") failed";
+        assert_eq!(blame.of(warn).as_deref(), Some("Filibuster Rhymes' Certified Used Cars!"));
+
+        // The game also says who replaced each file; that covers lines with only a path.
+        blame.observe("LOG  : Mod          f:0> mod \"CleanUI\" overrides media/lua/client/isui/isinventorypane.lua");
+        assert_eq!(
+            blame.of("ERROR: General  f:0> something broke in media/lua/client/ISUI/ISInventoryPane.lua").as_deref(),
+            Some("CleanUI")
+        );
+        assert_eq!(blame.of("ERROR: General  f:0> media/lua/client/Untouched.lua").as_deref(), None);
+        assert_eq!(blame.of("LOG  : General  f:0> nothing to do with mods"), None);
+    }
+
+
+    /// Runs the blame over a real log. PZMS_CONSOLE=C:\\Users\\you\\Zomboid\\console.txt
+    /// cargo test blame_on_a_real_log -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn blame_on_a_real_log() {
+        let path = std::env::var("PZMS_CONSOLE").expect("Set PZMS_CONSOLE to a console.txt");
+        let text = std::fs::read_to_string(&path).expect("could not read it");
+        let mut blame = ModBlame::default();
+        let mut cards: Vec<(String, String)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for line in text.lines() {
+            blame.observe(line);
+            let complaining = line.starts_with("ERROR") || line.starts_with("WARN");
+            if let Some(name) = blame.of(line) {
+                if complaining && seen.insert(format!("{}|{}", name, line.chars().take(80).collect::<String>())) {
+                    let card = blame_card(line, &name, cards.len() + 1);
+                    cards.push((card.mod_name.unwrap_or_default(), card.explanation));
+                }
+            }
+        }
+        println!("{} file overrides learned from the log", blame.overrides.len());
+        println!("{} complaints attributed to a mod:", cards.len());
+        for (name, what) in &cards {
+            println!("  {name}: {}", what.chars().take(90).collect::<String>());
+        }
+        assert!(!blame.overrides.is_empty(), "the game logs which mod overrides each file");
+    }
+
+    #[test]
+    fn a_named_mod_becomes_a_card() {
+        let line = "WARN : Lua          f:0 at Lua((MOD:Nature's Call)).NC_Main.lua> require(\"NCUtils\") failed";
+        let card = blame_card(line, "Nature's Call", 3);
+        assert_eq!(card.mod_name.as_deref(), Some("Nature's Call"));
+        assert_eq!(card.source_file.as_deref(), Some("NC_Main.lua"));
+        assert!(card.title.contains("Nature's Call"));
+        assert_eq!(card.explanation, "require(\"NCUtils\") failed");
+        assert!(card.line_number.is_none(), "no line number is invented");
     }
 }

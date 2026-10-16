@@ -170,6 +170,8 @@ export interface TranslatedErrorCard {
   explanation: string;
   recommended_action: string;
   polyfill_rule_id_suggestion?: string;
+  /** The mod the game named on the line, when it named one. */
+  mod_name?: string;
 }
 
 export interface SandboxSession {

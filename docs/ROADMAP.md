@@ -45,7 +45,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | ⬜ | Load-order rules: user rules + community rules database (GitHub, versioned, PR-based) on top of `require`/`loadModAfter`/`loadModBefore` | LOOT masterlist, RimSort rules DB |
 | 🔨 | Undo / history for every load-order change | Auto-sort is now game-exact (moves only what rules force) and can be undone; full history next |
 | ⬜ | Filters and search (enabled, broken, maps, libraries, not for this build, updated recently), drag and drop | Every manager |
-| ⬜ | Profiles with share codes and `.pzpack` export (exists) including sandbox settings | r2modman, Modrinth `.mrpack` |
+| 🔨 | Profiles export and import as `.pzpack`, with every mod's Workshop id so the other player can subscribe (done). Next: sandbox settings in the same file | r2modman, Modrinth `.mrpack` |
 | ⬜ | Per-file conflict view: which mod's file the game actually uses, plus script-level conflicts (same item/recipe defined twice) | MO2 conflict pane |
 | ⬜ | Server tools: build `WorkshopItems=` / `Mods=` / `Map=` from a profile using real IDs from `mod.info`; detect client/server mismatches | Top server-admin pain point |
 
@@ -70,7 +70,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | ✅ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview): Browse Mods > Steam Workshop shows your subscriptions with live details | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
 | 🔨 | Import a Workshop collection (URL) into a profile. Done: paste a collection link to see its items, which are installed and which are missing, and open it in Steam to subscribe. Next: turn it into a profile | `GetCollectionDetails`, no key |
 | ✅ | In-app Workshop search (text, trending, most subscribed, updated, newest, top rated; Build 41/42 filter) with the user's own Steam Web API key, verified and kept in Windows Credential Manager |
-| ⬜ | Subscribe / unsubscribe / download | ISteamUGC through the running Steam client (steamworks-rs); SteamCMD fallback for dedicated servers |
+| ✅ | Subscribe / unsubscribe, for a mod or every mod a collection is missing | ISteamUGC through the game's own `steam_api64.dll` and the running Steam client. No API key, no login, nothing bundled |
 | ✅ | **Nexus Mods** browse and search (Browse Mods tab: search, sort, build hint, open page / Files tab) | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |
 | ⬜ | Nexus downloads | v1 `download_link.json`. Premium users directly; free users through the website's "Mod Manager Download" button (`nxm://` link handled by the Studio, like Vortex/MO2) |
 | ⬜ | Nexus app registration and SSO login | Required by Nexus before a public release (email support@nexusmods.com with a test build). Personal API keys only for development. No rehosting of Nexus data; 20k requests/day, then 500/hour per user |
@@ -91,7 +91,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | Crash/error → mod attribution from `console.txt` stack traces | Partly exists in Monitor |
+| ✅ | Crash/error → mod attribution: the Monitor names the mod the game blamed and offers to switch it off | The game writes it itself: `Lua((MOD:X)).File.lua>` on the line, and `mod "X" overrides <path>` at startup, which maps any file back to its owner |
 | ⬜ | Bisect mode: halve the active list, launch, repeat until the culprit is found | What players do by hand today |
 | ⬜ | Load-time and Lua-error statistics per mod | Find the slow ones |
 | ⬜ | MP-safety lint: flag mods doing client-side inventory/world changes that B42 MP makes server-authoritative | Before putting a mod on a server |

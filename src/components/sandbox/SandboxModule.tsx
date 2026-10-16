@@ -26,6 +26,8 @@ interface SandboxModuleProps {
   errorCards: TranslatedErrorCard[];
   /** The Build 42 shim travels inside a merge package, so repairs start in the Merger. */
   onOpenMerger: () => void;
+  /** Switches a mod off by name, for when the game blames it for an error. */
+  onSwitchOffMod?: (modName: string) => void;
   onClearErrorCards?: () => void;
   onGoToSettings: () => void;
 }
@@ -75,6 +77,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
   errorCards,
   onOpenMerger,
+  onSwitchOffMod,
   onClearErrorCards,
   onGoToSettings,
 }) => {
@@ -737,6 +740,26 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                     <div>
                       <h4 className="text-xs font-bold text-slate-100">{card.title}</h4>
+                      {card.mod_name && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-300"
+                            title="The game named this mod on the log line"
+                          >
+                            {card.mod_name}
+                          </span>
+                          {onSwitchOffMod && (
+                            <button
+                              type="button"
+                              onClick={() => onSwitchOffMod(card.mod_name!)}
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                              title={`Switch ${card.mod_name} off in the Mod List, to see whether it is the cause`}
+                            >
+                              Switch it off
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                         {card.explanation}
                       </p>
@@ -757,6 +780,11 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                       <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>A merge package may fix this — open the Mod Merger</span>
                     </button>
+                  ) : card.mod_name ? (
+                    /* The game named a mod: say what to do about that, not what the shim covers. */
+                    <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
+                      {card.recommended_action}
+                    </div>
                   ) : (
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
