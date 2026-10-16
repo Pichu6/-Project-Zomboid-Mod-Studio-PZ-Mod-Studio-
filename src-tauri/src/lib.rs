@@ -13,6 +13,7 @@ pub mod patch_generator;
 pub mod preset_manager;
 pub mod sandbox;
 pub mod secrets;
+pub mod steam_client;
 pub mod server_manager;
 pub mod vdf;
 pub mod vfs;
@@ -170,13 +171,21 @@ fn workshop_search_cmd(query: workshop::BrowseQuery) -> Result<workshop::Worksho
     }
 }
 
-/// Subscribes or unsubscribes the Steam account the saved Web API key belongs to.
-/// Steam's own client downloads or removes the files afterwards.
+/// Subscribes or unsubscribes through the Steam client that is already signed in. No key.
+/// Steam downloads or removes the files itself afterwards.
 #[tauri::command(async)]
-fn workshop_subscribe_cmd(id: String, subscribe: bool) -> Result<(), String> {
-    let key = secrets::get(secrets::STEAM_WEB_API_KEY)?
-        .ok_or("Add your Steam Web API key in Browse Mods to subscribe from here.")?;
-    if subscribe { workshop::subscribe(&key, &id) } else { workshop::unsubscribe(&key, &id) }.map(|_| ())
+fn workshop_subscribe_cmd(
+    paths: StudioPaths,
+    ids: Vec<String>,
+    subscribe: bool,
+) -> Result<steam_client::SubscribeOutcome, String> {
+    steam_client::set_subscriptions(&paths.pz_install_dir, &ids, subscribe)
+}
+
+/// Whether subscribing from here is possible right now (Steam running and signed in).
+#[tauri::command(async)]
+fn steam_client_ready_cmd(paths: StudioPaths) -> Result<bool, String> {
+    Ok(steam_client::check(&paths.pz_install_dir).is_ok())
 }
 
 /// A mod's own poster/icon as a data URL, so the webview can show a file on disk.
@@ -497,6 +506,7 @@ pub fn run() {
             workshop_search_cmd,
             read_mod_image_cmd,
             workshop_subscribe_cmd,
+            steam_client_ready_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,

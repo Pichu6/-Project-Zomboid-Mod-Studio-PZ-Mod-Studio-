@@ -471,6 +471,13 @@ export interface WorkshopSearchResult {
   items: WorkshopItem[];
 }
 
+/** What Steam accepted when subscribing or unsubscribing. */
+export interface SubscribeOutcome {
+  done: string[];
+  /** [workshop id, reason]. */
+  failed: [string, string][];
+}
+
 export interface WorkshopLookup {
   collection: WorkshopItem | null;
   items: WorkshopItem[];

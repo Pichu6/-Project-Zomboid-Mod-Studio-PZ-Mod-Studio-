@@ -722,6 +722,37 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
   };
   const openDetail = useCallback((t: DetailTarget) => setDetailStack((s) => [...s, t]), []);
 
+  // Subscribing needs the Steam client, not a key: ask it once whether it is there.
+  const [steamReady, setSteamReady] = useState(false);
+  useEffect(() => {
+    if (!paths.is_valid) return;
+    let cancelled = false;
+    TauriService.steamClientReady(paths).then((ready) => !cancelled && setSteamReady(ready));
+    return () => {
+      cancelled = true;
+    };
+  }, [paths]);
+
+  const handleSubscribe = useCallback(
+    async (ids: string[], subscribe: boolean) => {
+      try {
+        const outcome = await TauriService.workshopSubscribe(paths, ids, subscribe);
+        if (outcome.failed.length > 0) {
+          reportBackendError(
+            subscribe ? 'Subscribing' : 'Unsubscribing',
+            `${outcome.failed.length} of ${ids.length} did not go through: ${outcome.failed[0][1]}`
+          );
+        }
+        // Steam downloads in the background; pick up whatever has landed.
+        onInstalled();
+      } catch (err) {
+        reportBackendError(subscribe ? 'Subscribing' : 'Unsubscribing', err);
+        throw err;
+      }
+    },
+    [paths, onInstalled]
+  );
+
   // The Mod List asked for one item: show it on its own, not stacked on whatever was open.
   useEffect(() => {
     if (!focusWorkshopId) return;
@@ -794,6 +825,9 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
 
       {detailStack.length > 0 && (
         <ModDetail
+          paths={paths}
+          steamReady={steamReady}
+          onSubscribe={handleSubscribe}
           target={detailStack[detailStack.length - 1]}
           canGoBack={detailStack.length > 1}
           onBack={() => setDetailStack((s) => s.slice(0, -1))}

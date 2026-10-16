@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Download, ExternalLink, FileArchive, Heart, Loader2, Play, Users, X } from 'lucide-react';
+import { ArrowLeft, Check, Download, ExternalLink, FileArchive, Heart, Loader2, Play, Plus, Trash2, Users, X } from 'lucide-react';
 import { NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, WorkshopItemDetails, WorkshopLookup } from '../../types';
 import { TauriService, reportBackendError } from '../../services/tauri';
+import { StudioPathsUI } from '../settings/SettingsModule';
 import { BBCode } from './BBCode';
 import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
 
@@ -12,6 +13,11 @@ export type DetailTarget =
 
 interface ModDetailProps {
   target: DetailTarget;
+  paths: StudioPathsUI;
+  /** True when the Steam client can take subscriptions right now. */
+  steamReady: boolean;
+  /** Subscribes or unsubscribes through Steam; resolves once Steam has taken it. */
+  onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
   canGoBack: boolean;
   onBack: () => void;
   onClose: () => void;
@@ -80,6 +86,60 @@ const ActionButton: React.FC<{ onClick: () => void; className: string; title?: s
   </button>
 );
 
+/**
+ * Subscribe / Unsubscribe through Steam. Only shown when the Steam client answered: without it
+ * the Workshop page stays the way to subscribe.
+ */
+const SubscribeButton: React.FC<{
+  ids: string[];
+  installed: boolean;
+  steamReady: boolean;
+  onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
+  /** Wording for a collection ("Subscribe to all 67"). */
+  allLabel?: string;
+}> = ({ ids, installed, steamReady, onSubscribe, allLabel }) => {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<'subscribed' | 'unsubscribed' | null>(null);
+  if (!steamReady || ids.length === 0) return null;
+
+  const subscribing = !installed && done !== 'subscribed';
+  const run = async () => {
+    setBusy(true);
+    try {
+      await onSubscribe(ids, subscribing);
+      setDone(subscribing ? 'subscribed' : 'unsubscribed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const label = subscribing
+    ? allLabel ?? 'Subscribe'
+    : allLabel
+      ? 'Unsubscribe from all'
+      : 'Unsubscribe';
+  return (
+    <div className="flex flex-col gap-1">
+      <ActionButton
+        onClick={run}
+        className={subscribing ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}
+        title={subscribing ? 'Subscribes with your Steam account; Steam downloads the files' : 'Unsubscribes; Steam removes the files'}
+      >
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+          : subscribing ? <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+          : <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />}
+        {busy ? 'Asking Steam...' : label}
+      </ActionButton>
+      {done && (
+        <span className="flex items-center gap-1 text-[10px] text-emerald-300">
+          <Check className="w-3 h-3" aria-hidden="true" />
+          {done === 'subscribed' ? 'Steam is downloading it; it shows up in your Mod List once it finishes.' : 'Steam will remove it.'}
+        </span>
+      )}
+    </div>
+  );
+};
+
 function useDetails<T>(load: () => Promise<T>, key: string, what: string) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,7 +159,7 @@ function useDetails<T>(load: () => Promise<T>, key: string, what: string) {
   return { data, loading };
 }
 
-const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen }) => {
+const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
   const { data, loading } = useDetails<WorkshopItemDetails>(() => TauriService.workshopItemDetails(target.id), target.id, 'Loading the Workshop item');
   const item = data?.item ?? target.preview;
   const installed = installedByItem.get(target.id) ?? [];
@@ -122,10 +182,11 @@ const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } &
       side={
         <>
           <div className="flex flex-col gap-2">
+            <SubscribeButton ids={[target.id]} installed={installed.length > 0} steamReady={steamReady} onSubscribe={onSubscribe} />
             <ActionButton onClick={() => TauriService.openExternalUrl(item?.page_url ?? `https://steamcommunity.com/sharedfiles/filedetails/?id=${target.id}`)}
               className="bg-sky-700 hover:bg-sky-600 text-white"
-              title="Opens the Workshop page in your browser; press Subscribe there (logged in on steamcommunity.com)">
-              <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {installed.length > 0 ? 'Open Workshop page' : 'Open page to subscribe'}
+              title="Opens the Workshop page in your browser">
+              <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {steamReady || installed.length > 0 ? 'Open Workshop page' : 'Open page to subscribe'}
             </ActionButton>
             {installed.length > 0 && <div className="text-[10px] font-mono text-emerald-400/80 break-all">Installed as: {installed.join(', ')}</div>}
           </div>
@@ -267,7 +328,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
 };
 
 /** A Workshop collection: what it holds and what you are missing. */
-const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen }) => {
+const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
   // The browse list already told us which mods the collection holds, so ask Steam once.
   const known = target.preview?.children ?? [];
   const { data, loading } = useDetails<WorkshopLookup>(
@@ -325,12 +386,19 @@ const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection'
       }
       side={
         <>
+          {missing.length > 0 && (
+            <SubscribeButton ids={missing.map((i) => i.workshop_id)} installed={false} steamReady={steamReady} onSubscribe={onSubscribe}
+              allLabel={`Subscribe to the ${missing.length} missing`} />
+          )}
+          {items.length > 0 && missing.length === 0 && (
+            <SubscribeButton ids={items.map((i) => i.workshop_id)} installed steamReady={steamReady} onSubscribe={onSubscribe} allLabel="all" />
+          )}
           <ActionButton onClick={() => TauriService.openExternalUrl(pageUrl)} className="bg-sky-700 hover:bg-sky-600 text-white"
             title="Opens the collection page in your browser, where Subscribe to all is">
             <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Open page (Subscribe to all)
           </ActionButton>
           <p className="text-[10px] text-slate-500">
-            Steam subscribes you to every mod in the collection; they show up here after the next refresh.
+            Steam downloads what you subscribe to; the mods show up here after the next refresh.
           </p>
           {info && (
             <Section title="Info">

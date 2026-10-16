@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -349,6 +349,25 @@ export const TauriService = {
   /** The cache key for a search, so a page can be warmed before the user asks for it. */
   workshopSearchKey: (q: WorkshopBrowseQuery): string =>
     `workshop:search:${q.collections ? 'c' : 'm'}:${q.sort ?? ''}:${q.days ?? ''}:${q.build ?? ''}:${q.category ?? ''}:${q.page}:${q.text ?? ''}`,
+
+  /**
+   * Subscribes or unsubscribes through the Steam client that is already signed in (no API key).
+   * Steam downloads or removes the files itself. Throws with the reason.
+   */
+  workshopSubscribe: async (paths: StudioPathsUI, ids: string[], subscribe: boolean): Promise<SubscribeOutcome> => {
+    const outcome = await invoke<SubscribeOutcome>('workshop_subscribe_cmd', { paths, ids, subscribe });
+    clearRemoteCache('workshop:');
+    return outcome;
+  },
+
+  /** Whether subscribing from here works right now (Steam running and signed in). */
+  steamClientReady: async (paths: StudioPathsUI): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('steam_client_ready_cmd', { paths });
+    } catch {
+      return false;
+    }
+  },
 
   /** A mod's own poster/icon on disk, as a data URL the webview can show. Throws with the reason. */
   readModImage: async (paths: StudioPathsUI, path: string): Promise<string> => {

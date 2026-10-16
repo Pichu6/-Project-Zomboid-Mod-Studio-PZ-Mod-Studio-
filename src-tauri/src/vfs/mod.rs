@@ -586,7 +586,6 @@ mod tests {
         println!("zomboid:  {}", paths.user_zomboid_dir);
         assert!(paths.is_valid, "the game should be found on this PC");
     }
-    use super::*;
 
     /// Read-only timing on the real install.
     /// PZMS_PZ_DIR=... PZMS_WORKSHOP_DIR=... PZMS_ZOMBOID_DIR=... cargo test --release scan_timing -- --ignored --nocapture
