@@ -563,20 +563,6 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
   const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // Step 3: Toggle Choose Single Mod exclusively vs Reverting
-  const handleToggleUseSingleMod = (modContent: string, modName: string) => {
-    if (editorContent === modContent) {
-      // Revert to vanilla base content
-      setEditorContent(currentConflict?.base_content || '');
-      setIsManuallyEdited(false);
-      showToast(`↩️ Exclusive selection of "${modName}" undone. Base code restored.`);
-    } else {
-      setEditorContent(modContent);
-      setIsManuallyEdited(true);
-      showToast(`Code from "${modName}" loaded in the editor exclusively.`);
-    }
-  };
-
   // Step 3b: Toggle Append vs Remove Mod block in editor content
   const handleToggleAddMod = (modContent: string, modUid: string) => {
     const blockStart = `-- === MOD: [${modUid}] ===`;
@@ -605,6 +591,58 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   // Step 4: Reset to Automatic AST Merge
+  /**
+   * What this file will contain. The editor is still there for anything else, but the four
+   * answers people actually want are one click each, and the active one is obvious.
+   */
+  type Choice = { key: string; label: string; help: string; content: string };
+
+  const fileChoices = useMemo<Choice[]>(() => {
+    if (!currentConflict) return [];
+    const vanillaMissing =
+      currentConflict.base_content.startsWith('-- vanilla file not present') ||
+      currentConflict.base_content.startsWith('-- vanilla file unreadable');
+    const merged = currentConflict.auto_ast_output || currentConflict.merged_output || '';
+    const choices: Choice[] = [];
+    if (merged) {
+      choices.push({
+        key: 'merged',
+        label: 'Keep both',
+        help: 'Each mod\u2019s changes applied together. Where two change the same lines, the one that loads last wins and the other is kept in a comment.',
+        content: merged,
+      });
+    }
+    for (const mod of currentConflict.competing_mods) {
+      choices.push({
+        key: `mod:${mod.mod_id}`,
+        label: `Only ${mod.mod_name}`,
+        help: `Use ${mod.mod_name}\u2019s file as it is. The other mods\u2019 changes to this file are dropped.`,
+        content: mod.content,
+      });
+    }
+    if (!vanillaMissing) {
+      choices.push({
+        key: 'vanilla',
+        label: 'Vanilla',
+        help: 'Use the game\u2019s own file, as if neither mod had touched it.',
+        content: currentConflict.base_content,
+      });
+    }
+    return choices;
+  }, [currentConflict]);
+
+  /** Which of them the editor is showing right now, if any. */
+  const activeChoice = useMemo(() => {
+    const same = (a: string, b: string) => a.replace(/\r\n/g, '\n').trim() === b.replace(/\r\n/g, '\n').trim();
+    return fileChoices.find((c) => same(c.content, editorContent))?.key ?? 'custom';
+  }, [fileChoices, editorContent]);
+
+  const chooseForFile = (choice: Choice) => {
+    setEditorContent(choice.content);
+    setIsManuallyEdited(true);
+    showToast(`${choice.label}: press Save to keep it for ${currentConflict?.relative_path}.`);
+  };
+
   const handleResetToAutoMerge = () => {
     if (!currentConflict) return;
     const targetAst = currentConflict.auto_ast_output || currentConflict.merged_output || currentConflict.base_content || '';
@@ -1481,51 +1519,23 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                                     : isModExclusive
                                     ? 'This mod is already loaded exclusively in the editor'
                                     : isModAdded
-                                    ? `Remove code block of ${mod.mod_name} from editor`
-                                    : `Add code of ${mod.mod_name} to editor`
+                                    ? `Take ${mod.mod_name}'s appended block back out`
+                                    : `Append ${mod.mod_name}'s version below what is in the editor`
                                 }
                               >
                                 {isModAdded ? (
                                   <>
                                     <Minus className="w-3 h-3 text-rose-400" />
-                                    <span>Remove Mod</span>
+                                    <span>Remove</span>
                                   </>
                                 ) : (
                                   <>
                                     <Plus className="w-3 h-3 text-cyan-400" />
-                                    <span>Add Mod</span>
+                                    <span>Append</span>
                                   </>
                                 )}
                               </button>
 
-                              {/* Toggle Usar Solo Este Mod / Deshacer */}
-                              <button
-                                onClick={() => !isCurrentlyPackaged && handleToggleUseSingleMod(mod.content, mod.mod_name)}
-                                disabled={isCurrentlyPackaged}
-                                className={`px-2 py-1 text-[10px] font-semibold rounded border transition shadow-sm flex items-center gap-1 ${
-                                  isCurrentlyPackaged
-                                    ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
-                                    : isModExclusive
-                                    ? 'bg-amber-950/90 text-amber-300 border-amber-700 hover:bg-amber-900 hover:text-white cursor-pointer'
-                                    : 'bg-emerald-950 text-emerald-300 border-emerald-800 hover:bg-emerald-700 hover:text-white cursor-pointer'
-                                }`}
-                                title={
-                                  isCurrentlyPackaged
-                                    ? 'The package is packaged (read-only). Unpack to modify.'
-                                    : isModExclusive
-                                    ? `Undo exclusive selection and return to base code`
-                                    : `Replace all editor content with exclusive code of ${mod.mod_name}`
-                                }
-                              >
-                                {isModExclusive ? (
-                                  <>
-                                    <Undo2 className="w-3 h-3 text-amber-400" />
-                                    <span>Remove Only This</span>
-                                  </>
-                                ) : (
-                                  <span>Use Only This Mod</span>
-                                )}
-                              </button>
                             </div>
                           </div>
                           {(() => {
@@ -1564,6 +1574,35 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   style={{ height: `${100 - topHeightPercent}%` }}
                   className="flex flex-col bg-slate-950 p-3 min-h-0 overflow-hidden"
                 >
+                  {!isCurrentlyPackaged && fileChoices.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-2 mb-2 shrink-0">
+                      <span className="text-[11px] text-slate-400 mr-1">What should the game read?</span>
+                      {fileChoices.map((choice) => {
+                        const active = activeChoice === choice.key;
+                        return (
+                          <button
+                            key={choice.key}
+                            type="button"
+                            onClick={() => chooseForFile(choice)}
+                            aria-pressed={active}
+                            title={choice.help}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                              active
+                                ? 'bg-emerald-900/60 text-emerald-200 border-emerald-700'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                            }`}
+                          >
+                            {choice.label}
+                          </button>
+                        );
+                      })}
+                      {activeChoice === 'custom' && (
+                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-amber-950/60 text-amber-300 border-amber-800">
+                          Your own edit
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mb-2 shrink-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">

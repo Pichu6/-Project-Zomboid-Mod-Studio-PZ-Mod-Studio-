@@ -101,7 +101,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | | Item | Notes |
 |---|---|---|
 | ✅ | Mod Health finds file conflicts by itself (pending / changed since merge / merged); safe ones merge in one click, the rest open in the Merger on that file | You only go to the Merger when two mods change the same lines |
-| ⬜ | Per-conflict buttons: use A · use B · both in order · edit | Today: A active, B kept in a comment |
+| ✅ | Per-conflict choice: keep both · only this mod · vanilla · your own edit, as one row above the editor that shows which is active | Replaces the per-mod toggles, which were hidden and meant two different things |
 | ⬜ | Fix the script merger (items/recipes/`craftRecipe`, nested blocks) | Current one truncates nested blocks |
 | ⬜ | Translation merge (JSON) | B42.15+ format |
 
