@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
 import { PolyfillRule } from '../../types';
 import { TauriService } from '../../services/tauri';
@@ -103,8 +103,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
+  /** The real path on this PC, so the snippet can be pasted as it is. */
+  const [mcpBinaryPath, setMcpBinaryPath] = useState<string>('pz-mcp-server.exe');
+  useEffect(() => {
+    TauriService.mcpServerPath().then(setMcpBinaryPath).catch(() => undefined);
+  }, []);
+
   const getMcpConfigSnippet = () => {
-    const binaryPath = 'C:\\Path\\To\\PZ-Mod-Studio-Portable\\pz-mcp-server.exe';
+    const binaryPath = mcpBinaryPath;
     if (selectedMcpClient === 'CLAUDE') {
       return JSON.stringify(
         {
@@ -185,14 +191,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-y-auto p-6">
-      <div className="max-w-5xl w-full mx-auto space-y-6">
+    <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-y-auto p-6 font-sans">
+      <div className="max-w-6xl w-full space-y-6">
         {/* Settings Header & Sub-Tab Navigation */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
               <HardDrive className="w-5 h-5 text-emerald-400" />
-              App Settings & Compatibility Rules
+              Settings
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               Where your game and mods live, which warnings you see, and what the Build 42 shim covers.
@@ -242,7 +248,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
         {savedSuccess && (
           <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
-            Settings saved and validated successfully!
+            Saved.
           </div>
         )}
 
@@ -251,7 +257,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                System Directory Paths
+                Folders
               </span>
 
               <div className="flex items-center gap-2">
@@ -271,13 +277,18 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                 <label className="text-xs font-bold text-slate-200">
                   Project Zomboid Installation Directory
                 </label>
-                {formData.pz_install_dir ? (
+                {/* The backend is what knows whether the folder is really a game install. */}
+                {!formData.pz_install_dir ? (
+                  <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" aria-hidden="true" /> Not set
+                  </span>
+                ) : paths.is_valid ? (
                   <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Valid Path
+                    <CheckCircle className="w-3 h-3" aria-hidden="true" /> Found the game
                   </span>
                 ) : (
                   <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Path Not Found
+                    <AlertTriangle className="w-3 h-3" aria-hidden="true" /> The Studio cannot find the game here
                   </span>
                 )}
               </div>
@@ -409,7 +420,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Configure the display of warnings, security confirmations and application popups.
+                Choose which warnings the Studio shows you.
               </p>
 
               <div className="space-y-3">
@@ -421,7 +432,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                       <span>Warning when launching game without active merge package</span>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Shows a preventive warning before running the game if you have no active merge patch to resolve collisions between mods.
+                      Warn me before launching when no merge package is active to resolve collisions between mods.
                     </p>
                   </div>
 
@@ -492,7 +503,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Select which module you want to open automatically when starting PZ Mod Studio:
+                What should open when the Studio starts?
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
@@ -509,12 +520,12 @@ The file the game reads to know which mods are on and in what order. Found autom
                     name="startupBehavior"
                     checked={startupBehavior === 'SHOW_STARTUP_SCREEN'}
                     onChange={() => handleSetStartupBehavior('SHOW_STARTUP_SCREEN')}
-                    className="mt-1 text-emerald-500 focus:ring-0 cursor-pointer"
+                    className="mt-1 text-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-2 cursor-pointer"
                   />
                   <div className="space-y-1 text-left">
                     <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <span>Profiles Screen (Start)</span>
-                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.2 rounded font-mono">Recommended</span>
+                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.5 rounded font-mono">Recommended</span>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
                       Shows the profile manager so you can choose or activate the combination you are going to work with.
@@ -535,7 +546,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                     name="startupBehavior"
                     checked={startupBehavior === 'OPEN_LAST_PROFILE'}
                     onChange={() => handleSetStartupBehavior('OPEN_LAST_PROFILE')}
-                    className="mt-1 text-emerald-500 focus:ring-0 cursor-pointer"
+                    className="mt-1 text-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-2 cursor-pointer"
                   />
                   <div className="space-y-1 text-left">
                     <div className="text-xs font-bold text-slate-200">
@@ -627,12 +638,12 @@ The file the game reads to know which mods are on and in what order. Found autom
                       Model Context Protocol (MCP) Server
                       <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full flex items-center gap-1">
                         <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
-                        Stdio Ready
+                        Ready to connect
                       </span>
                     </h3>
                   </div>
                   <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-                    Connect autonomous AI agents (Antigravity, Claude Desktop, Cursor, VS Code with Roo Code/Cline, or local models via Ollama/LM Studio) directly to PZ Mod Studio. The MCP server provides real-time access to console logs, crash diagnostics, VFS collision detection, Lua AST validation and live game control.
+                    Connect autonomous AI agents (Antigravity, Claude Desktop, Cursor, VS Code with Roo Code/Cline, or local models via Ollama/LM Studio) directly to PZ Mod Studio. The MCP server gives them the console log, crash reports, the files two mods both replace, a Lua syntax check and control of the running game.
                   </p>
                 </div>
               </div>
@@ -759,7 +770,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                   <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
                     <li>Open <b>Cursor Settings</b> (Gear icon) &gt; <b>Features</b> &gt; <b>MCP</b>.</li>
                     <li>Click <b>+ Add New MCP Server</b>.</li>
-                    <li>Set <b>Type</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">command</code>, <b>Name</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">pz-mod-studio</code>, and <b>Command</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">C:\Path\To\PZ-Mod-Studio-Portable\pz-mcp-server.exe</code>.</li>
+                    <li>Set <b>Type</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">command</code>, <b>Name</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">pz-mod-studio</code>, and <b>Command</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">{mcpBinaryPath}</code>.</li>
                     <li>The status dot will turn green (Enabled), exposing Lua AST and live diagnostics to the Agent.</li>
                   </ol>
                   <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
@@ -778,7 +789,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                     <li>Install the <b>Roo Code</b> or <b>Cline</b> extension from the VS Code Marketplace.</li>
                     <li>Click the extension icon on the sidebar, click the <b>MCP Servers (Plugs)</b> tab at the top and choose <b>Configure MCP</b>.</li>
                     <li>Paste the JSON snippet above into <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">cline_mcp_settings.json</code> / <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">roo_mcp_settings.json</code>.</li>
-                    <li>You can use Cloud models (Claude 3.7 / GPT-4o) or 100% Offline with <b>Ollama / LM Studio</b> (e.g. <i>Qwen 2.5 Coder</i>).</li>
+                    <li>You can use Cloud models or 100% Offline with <b>Ollama / LM Studio</b> (e.g. <i>Qwen 2.5 Coder</i>).</li>
                   </ol>
                   <div className="p-2 rounded bg-emerald-950/30 border border-emerald-900/60 text-[11px] text-emerald-200">
                     🔒 <b>100% Offline Modding:</b> Local models can query PZ Mod Studio VFS collision tools and parse Lua without needing any internet connection.
@@ -929,7 +940,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                       </div>
                       <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
                         <div className="font-mono text-emerald-300 font-bold text-[11px]">sort_mod_load_order</div>
-                        <div className="text-[10px] text-slate-400">Topological sorting of dependencies and cycle detection.</div>
+                        <div className="text-[10px] text-slate-400">Puts mods in an order that satisfies what they require.</div>
                       </div>
                       <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-0.5">
                         <div className="font-mono text-emerald-300 font-bold text-[11px]">scan_mod_conflicts</div>

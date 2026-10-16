@@ -81,17 +81,17 @@ export const App: React.FC = () => {
   useEffect(() => {
     const initPaths = async () => {
       try {
-        setInitStatusMessage('[VFS] Verifying Project Zomboid and Steam Workshop paths...');
+        setInitStatusMessage('Checking Project Zomboid and Steam Workshop paths...');
         setInitProgress(25);
         const savedProfile = await TauriService.loadSavedPathsProfile();
         setPaths(savedProfile);
 
         if (savedProfile.is_valid) {
-          setInitStatusMessage('[Profiles] Reading ModListData.ini and active profiles...');
+          setInitStatusMessage('Reading your mod list and profiles...');
           setInitProgress(50);
           const active = await refreshActiveProfile(savedProfile.user_zomboid_dir);
 
-          setInitStatusMessage('[Workshop] Scanning mod directories on disk...');
+          setInitStatusMessage('Looking for your mods...');
           setInitProgress(75);
           // Scan all subscribed Workshop & local mods on disk (preserving saved absolute order)
           const allSubscribedMods = await TauriService.scanAllInstalledMods(savedProfile);
@@ -112,11 +112,11 @@ export const App: React.FC = () => {
             setActiveTab('PROFILES');
           }
         } else {
-          setInitStatusMessage('[Setup] Configuring initial workspace...');
+          setInitStatusMessage('Setting things up...');
           setInitProgress(85);
         }
 
-        setInitStatusMessage('[Engine] Initialization complete! Opening environment...');
+        setInitStatusMessage('Ready.');
         setInitProgress(100);
       } catch (e) {
         console.error('Initialization error:', e);
@@ -231,7 +231,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Explicit Packaging: Generates Master Patch mod on Disk and Publishes to ModListData.ini
+  // Writes the merge package to disk and puts it in the mod list the game reads.
   const handleOptimizeAndResolve = async (packageFolderName?: string): Promise<boolean> => {
     const totalCount = conflicts.length;
 
@@ -602,7 +602,8 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'SETTINGS' && (
-            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 font-sans">
+            // Settings pads and scrolls itself, like every other screen.
+            <div className="flex-1 flex flex-col min-h-0 font-sans">
               <SettingsModule
                 paths={paths}
                 rules={rules}

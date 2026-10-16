@@ -333,6 +333,16 @@ fn pick_open_file_cmd(
     dialog.pick_file().map(|p| p.to_string_lossy().to_string())
 }
 
+/// Where the Studio's own MCP server sits, so the config the user copies is one that works.
+#[tauri::command(async)]
+fn mcp_server_path_cmd() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let beside = exe.with_file_name("pz-mcp-server.exe");
+    // In a portable copy the console server sits next to the app; falling back to the app itself
+    // is still right, because it serves MCP with --mcp.
+    Ok(if beside.is_file() { beside } else { exe }.to_string_lossy().to_string())
+}
+
 /// Shows a mod's folder in Explorer. The path comes from the UI, so it is checked against the
 /// folders the user configured first: this opens mods, not anywhere on the disk.
 #[tauri::command(async)]
@@ -557,6 +567,7 @@ pub fn run() {
             import_merged_package_cmd,
             open_package_folder_cmd,
             open_mod_folder_cmd,
+            mcp_server_path_cmd,
             open_logs_folder_cmd,
             list_available_log_files_cmd,
             read_log_file_cmd,

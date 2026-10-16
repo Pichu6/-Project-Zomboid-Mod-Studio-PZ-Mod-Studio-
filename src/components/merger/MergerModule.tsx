@@ -806,7 +806,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               <div>
                 <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <span>Merge Packages</span>
-                  <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
                     {packages.length} {packages.length === 1 ? 'Package' : 'Packages'}
                   </span>
                 </h2>
@@ -1074,17 +1074,17 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               </div>
 
               {currentPackage?.is_companion_bridge && (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
                   COMPANION BRIDGE
                 </span>
               )}
 
               {isCurrentlyPackaged ? (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title="Compiled and ready as a mod for Project Zomboid">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title="Compiled and ready as a mod for Project Zomboid">
                   🟢 PACKAGED
                 </span>
               ) : (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title="Package in editing mode (draft), deactivated for gameplay">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title="Package in editing mode (draft), deactivated for gameplay">
                   🟡 OPEN (Draft)
                 </span>
               )}
@@ -1409,7 +1409,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-2">
                           <span className="text-xs font-bold text-slate-300">Vanilla Base Game</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-mono text-slate-400 px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800">
+                            <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
                               {totalFileLines} lines
                             </span>
                             <button
@@ -1418,7 +1418,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                                 setIsManuallyEdited(false);
                                 showToast(`Vanilla base code restored in editor.`);
                               }}
-                              className={`px-2 py-0.8 text-[10px] font-semibold rounded border transition cursor-pointer shadow-sm ${
+                              className={`px-2 py-1 text-[10px] font-semibold rounded border transition cursor-pointer shadow-sm ${
                                 editorContent === currentConflict.base_content && !isManuallyEdited
                                   ? 'bg-slate-800 text-emerald-300 border-emerald-700/80 font-bold'
                                   : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
@@ -1571,11 +1571,11 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         <span>Merge Result (Master Patch)</span>
                       </span>
                       {isCurrentlyPackaged ? (
-                        <span className="px-2 py-0.5 text-[9px] rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80 font-mono font-bold">
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80 font-mono font-bold">
                           🔒 Published (Read Only)
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-[9px] rounded bg-amber-950 text-amber-300 border border-amber-800/80 font-mono">
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-amber-950 text-amber-300 border border-amber-800/80 font-mono">
                           {isManuallyEdited ? '✏️ Manually Edited' : 'Draft (Editable)'}
                         </span>
                       )}

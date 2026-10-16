@@ -57,7 +57,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     // Phrase 3 shown (7.6s -> 10.5s), then allow auto-transition
     const t3 = setTimeout(() => {
       setMinTimeElapsed(true);
-    }, 10200);
+    }, 2600);
 
     return () => {
       clearTimeout(t1);
@@ -175,11 +175,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           <div className="flex items-center justify-between text-[10px] font-mono text-neutral-500 pt-0.5">
             <span className="flex items-center gap-1">
               <Cpu className="w-3 h-3 text-neutral-600" />
-              <span>Kahlua AST Engine</span>
+              <span>Lua checker</span>
             </span>
             <span className="flex items-center gap-1">
               <ShieldAlert className="w-3 h-3 text-neutral-600" />
-              <span>VFS Conflict Scanner</span>
+              <span>Conflict scanner</span>
             </span>
             <span className="flex items-center gap-1 text-emerald-500/80">
               <CheckCircle2 className="w-3 h-3 text-emerald-500" />

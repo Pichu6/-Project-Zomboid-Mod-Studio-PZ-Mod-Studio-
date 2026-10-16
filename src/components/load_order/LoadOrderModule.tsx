@@ -888,9 +888,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <FolderX className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Setup Required: ModListData.ini</h3>
+            <h3 className="text-base font-bold text-slate-100">Point the Studio at your game first</h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              ModListData.ini path must be configured in App Settings to load and sort your active Project Zomboid mods.
+              Set your Project Zomboid folder and your Zomboid folder in App Settings, and your mods appear here.
             </p>
           </div>
           <button
@@ -915,7 +915,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div>
             <h3 className="text-lg font-bold text-slate-100">No Active Mods Found</h3>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Your <code className="text-emerald-400 font-mono">ModListData.ini</code> currently has zero active mods listed. Activate mods in-game or refresh subscribed mods.
+              No mods were found in your Workshop folder or in <code className="text-emerald-400 font-mono">Zomboid/mods</code>.
+              Subscribe to some on the Workshop, or install one from Browse Mods, then press Refresh.
             </p>
           </div>
 
@@ -942,7 +943,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <ListOrdered className="w-5 h-5 text-emerald-400" />
-            Mod List & Load Order Manager (<code className="text-emerald-400">ModListData.ini</code>)
+            Mod List &amp; Load Order (<code className="text-emerald-400">Zomboid/mods/default.txt</code>)
           </h2>
           <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
             <span>Steam Subscriptions: <b className="text-cyan-400">{uniqueWorkshopIds} items</b></span>
@@ -963,7 +964,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
                   <span>Dependencies missing</span>
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.2 rounded border border-red-700/50 ml-0.5">
+                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.5 rounded border border-red-700/50 ml-0.5">
                     {missingUninstalledCycleIdx + 1}/{missingUninstalledModIds.length} ⚙️
                   </span>
                 </button>
@@ -982,7 +983,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
                   <span>Dependencies off</span>
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.2 rounded border border-red-700/50 ml-0.5">
+                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.5 rounded border border-red-700/50 ml-0.5">
                     {missingDepCycleIdx + 1}/{missingDepModIds.length} ⚙️
                   </span>
                 </button>
@@ -1001,7 +1002,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span>Incompatibility</span>
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.2 rounded border border-amber-700/50 ml-0.5">
+                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/50 ml-0.5">
                     {conflictCycleIdx + 1}/{conflictModIds.length} ⚙️
                   </span>
                 </button>
@@ -1020,7 +1021,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span>List Order</span>
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.2 rounded border border-amber-700/50 ml-0.5">
+                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/50 ml-0.5">
                     {orderViolationCycleIdx + 1}/{orderViolationModIds.length} ⚙️
                   </span>
                 </button>
@@ -1293,7 +1294,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
             <span className="flex items-center gap-1.5 font-bold">
               <ArrowUpCircle className="w-3.5 h-3.5" />
-              LOAD FIRST (Lowest Overriding Priority / Base Libraries)
+              LOADS FIRST — libraries other mods build on
             </span>
             <span className="text-[10px] text-emerald-500/80">Position #1</span>
           </div>
@@ -1480,7 +1481,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             if (inActiveProfile.has(mod.mod_id)) {
                               return (
                                 <span
-                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-emerald-700/60 text-emerald-300 shrink-0"
+                                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-700/60 text-emerald-300 shrink-0"
                                   title={`In this profile${others.length ? `, and in ${others.join(', ')}` : ''}`}
                                 >
                                   in {activeProfile.name}
@@ -1489,7 +1490,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             }
                             return (
                               <span
-                                className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 shrink-0"
+                                className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 shrink-0"
                                 title={others.length ? `Used by: ${others.join(', ')}` : 'Not in any profile yet'}
                               >
                                 {others.length ? `in ${others.join(', ')}` : 'no profile'}
@@ -1498,14 +1499,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           })()}
 
                           {!mod.enabled && (
-                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
                               OFF
                             </span>
                           )}
 
                           {mod.loadable_on_installed_build === false && (
                             <span
-                              className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
+                              className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
                               title="This mod has no mod.info the installed game build reads (B41-only, or only folders for newer builds). The game will not load it."
                             >
                               NOT FOR THIS BUILD
@@ -1576,7 +1577,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </button>
                           )}
                         </div>
-                        <div className={`text-[9px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
+                        <div className={`text-[10px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
                           ID: {mod.mod_id}
                         </div>
                       </div>
@@ -1661,7 +1662,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div className="bg-amber-950/40 border-t border-amber-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-amber-400">
             <span className="flex items-center gap-1.5 font-bold">
               <ArrowDownCircle className="w-3.5 h-3.5" />
-              LOAD LAST (Highest Overriding Priority / Master Patches & Maps)
+              LOADS LAST — wins any file two mods share
             </span>
             <span className="text-[10px] text-amber-500/80">Position #{mods.length}</span>
           </div>
@@ -1840,7 +1841,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         <span className="text-[11px] font-bold text-slate-200 line-clamp-1 max-w-[150px]">
                           {selectedMod.name}
                         </span>
-                        <div className="text-[9px] text-slate-400 font-mono">
+                        <div className="text-[10px] text-slate-400 font-mono">
                           <span>{selectedMod.is_map_mod ? 'Map Tile' : selectedMod.is_library ? 'Framework' : 'Script Mod'}</span>
                         </div>
                       </div>
@@ -2033,7 +2034,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   type="checkbox"
                   checked={dontShowNoticeChecked}
                   onChange={(e) => setDontShowNoticeChecked(e.target.checked)}
-                  className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-0 w-4 h-4 cursor-pointer"
+                  className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-2 w-4 h-4 cursor-pointer"
                 />
                 <span>Do not show this message again</span>
               </label>
@@ -2075,7 +2076,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <h3 className="text-base font-bold text-slate-100">Save Current List as Preset</h3>
               </div>
               <button onClick={() => setIsSavePresetModalOpen(false)} className="text-slate-500 hover:text-slate-300 p-1">
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -2141,7 +2142,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 </div>
               </div>
               <button onClick={() => { setIsPresetModalOpen(false); setImportedPreset(null); setMissingReport(null); }} className="text-slate-500 hover:text-slate-300 p-1">
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 

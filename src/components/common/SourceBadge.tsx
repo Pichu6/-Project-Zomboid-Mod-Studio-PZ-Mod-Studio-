@@ -49,7 +49,7 @@ export function sourceOf(modId: string, entry: CatalogModSummary | undefined): {
 export const SourceBadge: React.FC<{ modId: string; entry: CatalogModSummary | undefined }> = ({ modId, entry }) => {
   const src = sourceOf(modId, entry);
   const style = STYLE[src.kind];
-  const className = `text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${style.className}`;
+  const className = `text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${style.className}`;
   if (!src.url) {
     return <span className={className} title={src.title}>{style.label}</span>;
   }

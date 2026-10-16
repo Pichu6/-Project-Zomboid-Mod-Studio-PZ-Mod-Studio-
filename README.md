@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="111.png" alt="Project Zomboid Mod Studio Logo" width="160" />
+<img src="assets/package-poster.png" alt="Project Zomboid Mod Studio Logo" width="160" />
 
 # 🧟 Project Zomboid Mod Studio (PZ Mod Studio)
 

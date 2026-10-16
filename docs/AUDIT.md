@@ -54,22 +54,27 @@ engine and the health rules are genuinely solid and should not be regressed.
 
 ## Polish
 
-- ✅ Wrong counts everywhere: "22 Tools" (there are 34) in four places, "~11 MB" (it is 17.8).
-- ✅ Three dead components (589 lines), `mock_data.ts`, `topological_sort.rs` and its command,
-  `ensure_master_patch_exists_on_disk`, `clsx`, `tailwind-merge`, `src/App.css` (a light-theme
-  template with a global `outline: none`), and two more uncalled commands.
-- ✅ "Mod Configuration **File**" opened a folder picker; "Valid Path" is a non-empty-string check;
-  "Settings saved and validated" shows even when validation failed.
-- Three user-visible strings name `ModListData.ini`, which the app never writes.
-- The copied MCP config contains a placeholder path that cannot work, though the app knows its own.
-- `py-0.2` (15 places) resolves to 0.05 rem; `text-[9px]` is used for real information; Settings is
-  double-padded and double-scrolled; 11 card backgrounds and 6 radii for the same roles.
-- Icon-only buttons with no accessible name; `focus:ring-0` on the only focusable controls in
-  Settings; jargon (VFS, AST, polyfill, topological, matrix) in player-facing copy.
-- A forced ten-second splash on every start.
-- Every generated mod's poster comes from a file called `111.png`, read relative to the working
-  directory, and carries the Studio's repo URL in its `mod.info`.
+All done. For the record, what it covered:
 
-Everything above the Polish list is done. What is left there is cosmetic: the spacing and
-colour drift, the 9px text, the icon-only buttons without names, the forced splash, and the
-jargon in player-facing copy.
+- ✅ Wrong counts: "22 Tools" where there are 34, "~11 MB" where it is 17.5.
+- ✅ Three dead components, `mock_data.ts`, `topological_sort.rs` and three uncalled commands,
+  `ensure_master_patch_exists_on_disk`, `clsx`, `tailwind-merge`, and `src/App.css` — a leftover
+  light-theme template carrying a global `outline: none`.
+- ✅ "Mod Configuration File" opened a folder picker; "Valid Path" was a non-empty-string check;
+  "Settings saved and validated" appeared even when validation had failed.
+- ✅ Three user-visible strings named `ModListData.ini`, a file the app never writes.
+- ✅ The copied MCP config had a placeholder path; it now carries this Studio's own.
+- ✅ `py-0.2` in 15 places (Tailwind reads it as 0.05rem), `py-0.8`, and `text-[9px]` on mod ids
+  and statuses — 21 of them, now 10px.
+- ✅ Settings was padded and scrolled twice, and capped narrower than every other screen.
+- ✅ Icon-only buttons with no accessible name, and `focus:ring-0` on the only focusable controls
+  in Settings, which now have a visible focus ring.
+- ✅ Jargon in player-facing copy: VFS, AST, Kahlua, topological, matrix, and the bracketed
+  subsystem tags on the splash.
+- ✅ The ten-second splash, now under three.
+- ✅ Every generated mod's poster came from `111.png`, read from the working directory, so a
+  stray file of that name became the poster. It is `assets/package-poster.png`, compiled in.
+
+Still true and deliberate: generated packages carry the Studio's repo URL in their `mod.info`,
+and the card background and radius drift (11 shades, 6 radii) is cosmetic and widespread enough
+that it wants one pass with a shared set of classes rather than scattered edits.

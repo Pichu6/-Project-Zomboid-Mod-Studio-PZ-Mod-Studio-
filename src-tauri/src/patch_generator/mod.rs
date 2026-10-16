@@ -208,12 +208,12 @@ pub fn generate_256x256_png_bytes() -> Vec<u8> {
     png
 }
 
-static EMBEDDED_PREVIEW_PNG: &[u8] = include_bytes!("../../../111.png");
+/// The picture every generated package shows in the game's mod list. Compiled in, so it does not
+/// depend on where the Studio was started from: it used to be read from the working directory,
+/// which meant a stray file of that name next to the exe became the poster.
+static EMBEDDED_PREVIEW_PNG: &[u8] = include_bytes!("../../../assets/package-poster.png");
 
 pub fn get_preview_png_bytes() -> Vec<u8> {
-    if let Ok(bytes) = fs::read("111.png") {
-        return bytes;
-    }
     EMBEDDED_PREVIEW_PNG.to_vec()
 }
 

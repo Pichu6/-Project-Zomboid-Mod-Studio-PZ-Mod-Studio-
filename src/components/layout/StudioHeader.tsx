@@ -223,7 +223,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <span className="text-xs font-bold text-slate-200 truncate">{mode.title}</span>
-                        <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border shrink-0 ${mode.badgeColor}`}>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${mode.badgeColor}`}>
                           {mode.badge}
                         </span>
                       </div>
@@ -267,7 +267,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <span className="text-xs font-bold text-slate-200 truncate">{mode.title}</span>
-                        <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border shrink-0 ${mode.badgeColor}`}>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${mode.badgeColor}`}>
                           {mode.badge}
                         </span>
                       </div>

@@ -729,6 +729,15 @@ export const TauriService = {
     }
   },
 
+  /** Where this Studio's MCP server is, for the config snippet. */
+  mcpServerPath: async (): Promise<string> => {
+    try {
+      return await invoke<string>('mcp_server_path_cmd');
+    } catch {
+      return 'pz-mcp-server.exe';
+    }
+  },
+
   /** Shows a mod's folder in Explorer. Throws with the reason. */
   openModFolder: async (paths: StudioPathsUI, folder: string): Promise<void> => {
     try {

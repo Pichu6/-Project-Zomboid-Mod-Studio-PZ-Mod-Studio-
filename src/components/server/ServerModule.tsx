@@ -408,7 +408,7 @@ Invite made with Project Zomboid Mod Studio`;
                       {isRunning && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-[9px] font-bold text-emerald-400 uppercase">Running</span>
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase">Running</span>
                         </div>
                       )}
                     </div>
@@ -495,7 +495,7 @@ Invite made with Project Zomboid Mod Studio`;
                   >
                     <Users className="w-3.5 h-3.5" />
                     <span>Players</span>
-                    <span className="text-[10px] bg-slate-800 text-purple-300 px-1.5 py-0.2 rounded-full font-mono">
+                    <span className="text-[10px] bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded-full font-mono">
                       {players.length}
                     </span>
                   </button>
@@ -720,16 +720,16 @@ Invite made with Project Zomboid Mod Studio`;
                                 <div className="flex items-center gap-2 font-bold text-slate-200">
                                   <span>{p.username}</span>
                                   {p.role.toLowerCase() === 'admin' ? (
-                                    <span className="text-[9px] bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.2 rounded font-mono font-bold">
+                                    <span className="text-[10px] bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.5 rounded font-mono font-bold">
                                       ADMIN
                                     </span>
                                   ) : (
-                                    <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded font-mono">
+                                    <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
                                       PLAYER
                                     </span>
                                   )}
                                   {p.is_godmode && (
-                                    <span className="text-[9px] bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.2 rounded font-mono font-bold">
+                                    <span className="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.5 rounded font-mono font-bold">
                                       GOD
                                     </span>
                                   )}

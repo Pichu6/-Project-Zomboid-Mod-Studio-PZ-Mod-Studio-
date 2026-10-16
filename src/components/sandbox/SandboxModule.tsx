@@ -688,7 +688,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
                 <span>CRASH DIAGNOSTICS ({errorCards.length})</span>
                 {errorCards.length > 0 && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono">
                     Action Required
                   </span>
                 )}
@@ -744,7 +744,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                   </div>
 
                   <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-slate-800 select-text">
-                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Log Snippet</div>
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Log Snippet</div>
                     <div className="truncate">{card.raw_error}</div>
                   </div>
 
