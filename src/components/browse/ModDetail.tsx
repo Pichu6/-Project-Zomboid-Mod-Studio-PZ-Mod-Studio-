@@ -268,7 +268,16 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
 
 /** A Workshop collection: what it holds and what you are missing. */
 const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen }) => {
-  const { data, loading } = useDetails<WorkshopLookup>(() => TauriService.workshopLookup(target.id), target.id, 'Loading the collection');
+  // The browse list already told us which mods the collection holds, so ask Steam once.
+  const known = target.preview?.children ?? [];
+  const { data, loading } = useDetails<WorkshopLookup>(
+    async () =>
+      known.length > 0
+        ? { collection: target.preview ?? null, items: await TauriService.workshopDetails(known) }
+        : TauriService.workshopLookup(target.id),
+    target.id,
+    'Loading the collection'
+  );
   const info = data?.collection ?? target.preview;
   const items = data?.items ?? [];
   const missing = items.filter((i) => !installedByItem.has(i.workshop_id));

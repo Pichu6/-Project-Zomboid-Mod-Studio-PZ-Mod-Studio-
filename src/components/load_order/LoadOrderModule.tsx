@@ -216,6 +216,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [imageError, setImageError] = useState<boolean>(false);
   /** The selected mod's poster, read from disk as a data URL (the webview cannot open files). */
   const [posterSrc, setPosterSrc] = useState<string | null>(null);
+  /** Workshop id -> the picture on its Workshop page, for the mods that ship none. */
+  const [workshopPreviews, setWorkshopPreviews] = useState<Map<string, string>>(new Map());
 
   // Preset & Profile Management State
   const [savedPresets, setSavedPresets] = useState<ModPreset[]>(() => {
@@ -395,21 +397,49 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
 
-  // Load the selected mod's poster from disk (the webview is only handed the bytes).
+  // Most mods ship no picture of their own, so ask Steam once for all of them instead of
+  // waiting for a request every time the user picks a different mod.
+  const workshopIdsKey = useMemo(
+    () => [...new Set(mods.map((m) => m.workshop_id).filter((id): id is string => !!id))].sort().join(','),
+    [mods]
+  );
+  useEffect(() => {
+    if (!workshopIdsKey) return;
+    let cancelled = false;
+    TauriService.workshopDetails(workshopIdsKey.split(','))
+      .then((items) => {
+        if (cancelled) return;
+        setWorkshopPreviews(new Map(items.filter((i) => i.preview_url).map((i) => [i.workshop_id, i.preview_url!])));
+      })
+      .catch(() => undefined); // offline: the mods that ship a poster still show one
+    return () => {
+      cancelled = true;
+    };
+  }, [workshopIdsKey]);
+
+  // The selected mod's picture: its own poster read from disk, else the Workshop one.
   useEffect(() => {
     setImageError(false);
     setPosterSrc(null);
     const file = selectedMod?.poster_url;
-    if (!file || !paths.is_valid) return;
+    const workshopId = selectedMod?.workshop_id;
+    if (!selectedMod || !paths.is_valid) return;
     let cancelled = false;
-    TauriService.readModImage(paths, file)
-      .then((url) => !cancelled && setPosterSrc(url))
+
+    const fromWorkshop = async () => {
+      const url = workshopId ? workshopPreviews.get(workshopId) : undefined;
+      if (!url) throw new Error('no picture for this mod');
+      return url;
+    };
+
+    (file ? TauriService.readModImage(paths, file).catch(fromWorkshop) : fromWorkshop())
+      .then((src) => !cancelled && setPosterSrc(src))
       .catch(() => !cancelled && setImageError(true));
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModId, selectedMod?.poster_url, paths.is_valid]);
+  }, [selectedModId, selectedMod?.poster_url, selectedMod?.workshop_id, paths.is_valid, workshopPreviews]);
 
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};

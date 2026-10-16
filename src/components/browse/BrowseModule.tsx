@@ -63,6 +63,7 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
         res = await TauriService.installMods(source, paths, true, origin);
       }
       setResult(res);
+      TauriService.clearRemoteCache('workshop:');
       onDone();
     } catch (err) {
       reportBackendError('Installing the mod', err);
@@ -228,6 +229,17 @@ const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSav
 
 type WorkshopQuery = { text: string; sort: WorkshopSort; build: string; category: string; days: number; collections: boolean };
 
+/** The filters as the backend wants them (collections are not filtered by build or category). */
+const toBrowseQuery = (q: WorkshopQuery, page: number) => ({
+  text: q.text,
+  sort: q.sort,
+  build: q.collections ? null : q.build,
+  category: q.collections ? null : q.category,
+  days: q.days,
+  collections: q.collections,
+  page,
+});
+
 const WorkshopTab: React.FC<{
   installedByItem: Map<string, string[]>;
   stateByItem: Map<string, WorkshopInstallState>;
@@ -247,20 +259,15 @@ const WorkshopTab: React.FC<{
   const runSearch = useCallback(async (q: WorkshopQuery, p: number) => {
     setSearching(true);
     try {
-      const r = await TauriService.workshopSearch({
-        text: q.text,
-        sort: q.sort,
-        build: q.collections ? null : q.build,
-        category: q.collections ? null : q.category,
-        days: q.days,
-        collections: q.collections,
-        page: p,
-      });
+      const r = await TauriService.workshopSearch(toBrowseQuery(q, p));
       setTotal(r.total);
       setPages(r.pages);
       setItems(r.items);
       setPage(r.page || p);
       setSearchError(null);
+      // The next page is usually where the user goes: fetch it while they read this one.
+      const next = { ...toBrowseQuery(q, p + 1) };
+      if (p + 1 <= r.pages) TauriService.prefetch(TauriService.workshopSearchKey(next), () => TauriService.workshopSearch(next));
     } catch (err) {
       setSearchError(String(err));
       setItems([]);
@@ -454,6 +461,11 @@ const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t
       setTotal(r.total);
       setMods(r.mods);
       setPage(p);
+      if (p * PAGE_SIZE < r.total) {
+        TauriService.prefetch(`nexus:search:${query.sort}:${query.category}:${p * PAGE_SIZE}:${PAGE_SIZE}:${query.text}`, () =>
+          TauriService.nexusSearch(query.text, query.category || null, query.sort, p * PAGE_SIZE, PAGE_SIZE)
+        );
+      }
     } catch (err) {
       reportBackendError('Searching Nexus Mods', err);
     } finally {

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
@@ -268,22 +269,24 @@ export const TauriService = {
 
   /** Project Zomboid mods on Nexus Mods (public API). Throws on failure. */
   nexusSearch: async (query: string, category: string | null, sort: NexusSort, offset: number, count: number): Promise<NexusSearchResult> => {
-    return await invoke<NexusSearchResult>('nexus_search_cmd', { query: query || null, category: category || null, sort, offset, count });
+    return await cached(`nexus:search:${sort}:${category ?? ''}:${offset}:${count}:${query}`, () =>
+      invoke<NexusSearchResult>('nexus_search_cmd', { query: query || null, category: category || null, sort, offset, count })
+    );
   },
 
   /** Project Zomboid categories on Nexus with mod counts. Throws on failure. */
   nexusCategories: async (): Promise<NexusCategory[]> => {
-    return await invoke<NexusCategory[]>('nexus_categories_cmd');
+    return await cached('nexus:categories', () => invoke<NexusCategory[]>('nexus_categories_cmd'));
   },
 
   /** Description, requirements and files of one Nexus mod. Throws on failure. */
   nexusModDetails: async (modId: number): Promise<NexusModDetails> => {
-    return await invoke<NexusModDetails>('nexus_mod_details_cmd', { modId });
+    return await cached(`nexus:mod:${modId}`, () => invoke<NexusModDetails>('nexus_mod_details_cmd', { modId }));
   },
 
   /** Full description, screenshots and required items of one Workshop item (no key). Throws on failure. */
   workshopItemDetails: async (id: string): Promise<WorkshopItemDetails> => {
-    return await invoke<WorkshopItemDetails>('workshop_item_details_cmd', { id });
+    return await cached(`workshop:item:${id}`, () => invoke<WorkshopItemDetails>('workshop_item_details_cmd', { id }));
   },
 
   /**
@@ -291,13 +294,18 @@ export const TauriService = {
    * Rejects with a message starting with INSTALL_CONFLICT: (JSON {existing_folders}) when
    * folders already exist and replaceExisting is false.
    */
+  /** Forgets cached Workshop/Nexus answers (after installing, or on a manual refresh). */
+  clearRemoteCache,
+  /** Warms a cache key in the background. */
+  prefetch,
+
   installMods: async (source: string, paths: StudioPathsUI, replaceExisting: boolean, origin?: ModOrigin): Promise<InstallResult> => {
     return await invoke<InstallResult>('install_mods_cmd', { source, paths, replaceExisting, origin: origin ?? null });
   },
 
   /** Steam Workshop details for item ids (no key needed). Throws on failure. */
   workshopDetails: async (ids: string[]): Promise<WorkshopItem[]> => {
-    return await invoke<WorkshopItem[]>('workshop_details_cmd', { ids });
+    return await cached(`workshop:details:${[...ids].sort().join(',')}`, () => invoke<WorkshopItem[]>('workshop_details_cmd', { ids }));
   },
 
   /** Copies a mod the installed build won't load into Zomboid/mods and adapts it. Throws with the reason. */
@@ -331,10 +339,16 @@ export const TauriService = {
 
   /** Workshop search with the saved key. Throws on failure (no key, rejected key, offline). */
   workshopSearch: async (query: WorkshopBrowseQuery): Promise<WorkshopSearchResult> => {
-    return await invoke<WorkshopSearchResult>('workshop_search_cmd', {
-      query: { perPage: 30, ...query, text: query.text || null, category: query.category || null, build: query.build || null },
-    });
+    return await cached(TauriService.workshopSearchKey(query), () =>
+      invoke<WorkshopSearchResult>('workshop_search_cmd', {
+        query: { perPage: 30, ...query, text: query.text || null, category: query.category || null, build: query.build || null },
+      })
+    );
   },
+
+  /** The cache key for a search, so a page can be warmed before the user asks for it. */
+  workshopSearchKey: (q: WorkshopBrowseQuery): string =>
+    `workshop:search:${q.collections ? 'c' : 'm'}:${q.sort ?? ''}:${q.days ?? ''}:${q.build ?? ''}:${q.category ?? ''}:${q.page}:${q.text ?? ''}`,
 
   /** A mod's own poster/icon on disk, as a data URL the webview can show. Throws with the reason. */
   readModImage: async (paths: StudioPathsUI, path: string): Promise<string> => {
@@ -343,6 +357,7 @@ export const TauriService = {
 
   /** Looks up pasted Workshop links / ids / a collection link. Throws on failure. */
   workshopLookup: async (input: string): Promise<WorkshopLookup> => {
+    // Pasted text is looked up fresh; only the two helpers below are cached.
     return await invoke<WorkshopLookup>('workshop_lookup_cmd', { input });
   },
 
