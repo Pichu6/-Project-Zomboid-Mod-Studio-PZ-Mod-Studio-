@@ -596,6 +596,51 @@ pub fn item_details(id: &str) -> Result<WorkshopItemDetails, String> {
     })
 }
 
+/// Subscribing and unsubscribing go through `IPublishedFileService`, which Valve has never
+/// documented. The methods are real (a wrong key is refused with 403, a made-up method answers
+/// 404) and they take a plain Web API key, which belongs to one Steam account, so they act on the
+/// account whose key it is. Nothing else the Studio does depends on them.
+const SUBSCRIPTION_URL: &str = "https://api.steampowered.com/IPublishedFileService";
+
+fn subscription_call(method: &str, key: &str, id: &str) -> Result<Value, String> {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+        return Err(format!("{} is not a Workshop id.", id));
+    }
+    let response = agent()
+        .post(format!("{}/{}/v1/", SUBSCRIPTION_URL, method))
+        .send_form([
+            ("key", key),
+            ("publishedfileid", id),
+            ("appid", &PZ_APP_ID.to_string()),
+            // 1 = the ordinary "subscribed items" list, the one the game reads.
+            ("list_type", "1"),
+            ("notify_client", "true"),
+        ])
+        .map_err(|e| match e {
+            ureq::Error::StatusCode(401) | ureq::Error::StatusCode(403) => {
+                "Steam refused the Web API key for this. Personal keys may not be allowed to subscribe; \
+                 subscribe on the item's Workshop page instead."
+                    .to_string()
+            }
+            ureq::Error::StatusCode(429) => "Steam is rate-limiting; try again in a minute.".to_string(),
+            other => format!("Steam could not be reached: {}", other),
+        })?;
+    response
+        .into_body()
+        .read_json::<Value>()
+        .map_err(|e| format!("Unexpected answer from Steam: {}", e))
+}
+
+/// Subscribes the account the key belongs to. Steam's client downloads the files afterwards.
+pub fn subscribe(key: &str, id: &str) -> Result<Value, String> {
+    subscription_call("Subscribe", key, id)
+}
+
+/// Unsubscribes the account the key belongs to; Steam removes the files on its next run.
+pub fn unsubscribe(key: &str, id: &str) -> Result<Value, String> {
+    subscription_call("Unsubscribe", key, id)
+}
+
 /// Looks up whatever the user pasted: item links/ids, or one collection link (expanded).
 pub fn lookup(input: &str) -> Result<WorkshopLookup, String> {
     let ids = parse_ids(input);
@@ -774,6 +819,50 @@ mod tests {
         println!("{} by {:?}: {} screenshots, {} videos, required {:?}", d.item.title, d.author, d.screenshots.len(), d.videos.len(), d.required_items);
         assert!(!d.description.is_empty());
         assert!(!d.required_items.is_empty());
+    }
+
+    #[test]
+    fn a_workshop_id_is_all_digits() {
+        for bad in ["", "abc", "123x", "../x", "26998 28474"] {
+            assert!(subscription_call("Subscribe", "k", bad).unwrap_err().contains("not a Workshop id"));
+        }
+    }
+
+    /// Does a personal Steam Web API key let you subscribe? Nobody has it documented, so this
+    /// asks Steam. It uses YOUR key, which never leaves your PC and is never printed:
+    ///
+    ///   PZMS_STEAM_KEY=yourkey cargo test --manifest-path src-tauri/Cargo.toml workshop_live_subscribe -- --ignored --nocapture
+    ///
+    /// It subscribes to one small mod you do not have, says what Steam answered, and unsubscribes
+    /// again, so nothing is left behind. PZMS_TEST_ITEM picks a different item,
+    /// PZMS_WORKSHOP_DIR lets it refuse an item you are already subscribed to.
+    #[test]
+    #[ignore]
+    fn workshop_live_subscribe() {
+        let Ok(key) = std::env::var("PZMS_STEAM_KEY") else {
+            panic!("Set PZMS_STEAM_KEY to your own Steam Web API key to run this check.");
+        };
+        // Spongie's Hairstyle Unlocker: small, harmless, and not one of the usual subscriptions.
+        let item = std::env::var("PZMS_TEST_ITEM").unwrap_or_else(|_| "3041733782".to_string());
+        if let Ok(dir) = std::env::var("PZMS_WORKSHOP_DIR") {
+            assert!(
+                !std::path::Path::new(&dir).join(&item).exists(),
+                "You are already subscribed to {item}; set PZMS_TEST_ITEM to something you are not subscribed to."
+            );
+        }
+        println!("Subscribing to {item}...");
+        match subscribe(&key, &item) {
+            Ok(answer) => {
+                println!("  Steam said: {answer}");
+                println!("Unsubscribing again...");
+                match unsubscribe(&key, &item) {
+                    Ok(answer) => println!("  Steam said: {answer}"),
+                    Err(e) => println!("  Unsubscribe FAILED: {e}\n  Remove it yourself on its Workshop page."),
+                }
+                println!("\nIt works: a personal key can subscribe.");
+            }
+            Err(e) => println!("Subscribe did not work: {e}\n\nSo the Workshop page stays the way to subscribe."),
+        }
     }
 
     /// Live Steam call. cargo test workshop_live -- --ignored --nocapture

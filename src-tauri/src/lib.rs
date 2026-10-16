@@ -170,6 +170,15 @@ fn workshop_search_cmd(query: workshop::BrowseQuery) -> Result<workshop::Worksho
     }
 }
 
+/// Subscribes or unsubscribes the Steam account the saved Web API key belongs to.
+/// Steam's own client downloads or removes the files afterwards.
+#[tauri::command(async)]
+fn workshop_subscribe_cmd(id: String, subscribe: bool) -> Result<(), String> {
+    let key = secrets::get(secrets::STEAM_WEB_API_KEY)?
+        .ok_or("Add your Steam Web API key in Browse Mods to subscribe from here.")?;
+    if subscribe { workshop::subscribe(&key, &id) } else { workshop::unsubscribe(&key, &id) }.map(|_| ())
+}
+
 /// A mod's own poster/icon as a data URL, so the webview can show a file on disk.
 #[tauri::command(async)]
 fn read_mod_image_cmd(paths: StudioPaths, path: String) -> Result<String, String> {
@@ -487,6 +496,7 @@ pub fn run() {
             delete_steam_key_cmd,
             workshop_search_cmd,
             read_mod_image_cmd,
+            workshop_subscribe_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,
