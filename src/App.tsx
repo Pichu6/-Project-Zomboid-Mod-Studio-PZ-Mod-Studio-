@@ -28,6 +28,8 @@ export const App: React.FC = () => {
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
+  /** Conflicting file the Merger should open on (set from Mod Health). */
+  const [mergerFocusPath, setMergerFocusPath] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
@@ -567,6 +569,10 @@ export const App: React.FC = () => {
               onRecheck={health.recheck}
               onApplyModList={handleReorderMods}
               onModsChanged={handleRefreshMods}
+              onOpenMerger={(relativePath) => {
+                setMergerFocusPath(relativePath);
+                setActiveTab('MERGER');
+              }}
             />
           )}
 
@@ -586,6 +592,8 @@ export const App: React.FC = () => {
               onRefreshMods={handleRefreshMods}
               onPackageOpened={(folder) => setOpenedPackageFolder(folder)}
               onPackageClosed={() => setOpenedPackageFolder(null)}
+              focusRelativePath={mergerFocusPath}
+              onFocusHandled={() => setMergerFocusPath(null)}
             />
             </Suspense>
           )}

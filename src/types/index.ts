@@ -290,7 +290,16 @@ export type HealthFix =
   | { action: 'subscribe_workshop'; hint: string }
   | { action: 'open_workshop_page'; workshop_id: string }
   | { action: 'make_compatible_copy'; mod_id: string }
-  | { action: 'remove_compatible_copy'; folder: string };
+  | { action: 'remove_compatible_copy'; folder: string }
+  | { action: 'merge_files'; relative_paths: string[] }
+  | { action: 'open_in_merger'; relative_path: string };
+
+/** Result of merging file conflicts automatically into the active patch package. */
+export interface AutoMergeResult {
+  package_folder: string;
+  merged: string[];
+  skipped: string[];
+}
 
 export interface HealthIssue {
   severity: HealthSeverity;

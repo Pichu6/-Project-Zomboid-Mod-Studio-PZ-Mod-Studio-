@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
-import { CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
+import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 
@@ -13,9 +13,16 @@ interface HealthModuleProps {
   onRecheck: () => void;
   /** Replaces the whole list (order + enabled flags) and persists it. */
   onApplyModList: (mods: ModInfo[]) => void;
-  /** Mods were added/removed on disk (compatible copies): rescan the list. */
+  /** Mods were added/removed on disk (compatible copies, patch packages): rescan the list. */
   onModsChanged: () => void;
+  /** Opens the Mod Merger on this conflicting file. */
+  onOpenMerger: (relativePath: string) => void;
 }
+
+/** Fixes handled here (not by rewriting the mod list). */
+const ACTION_FIXES = new Set<HealthFix['action']>([
+  'subscribe_workshop', 'open_workshop_page', 'make_compatible_copy', 'remove_compatible_copy', 'merge_files', 'open_in_merger',
+]);
 
 /** Fixes the "fix all" button may apply without asking: they only enable or reorder. */
 const SAFE_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'move_before']);
@@ -65,6 +72,10 @@ const fixLabel = (fix: HealthFix): string => {
       return 'Make compatible copy';
     case 'remove_compatible_copy':
       return 'Remove compatible copy';
+    case 'merge_files':
+      return 'Merge automatically';
+    case 'open_in_merger':
+      return 'Open in Merger';
   }
 };
 
@@ -74,9 +85,26 @@ const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: str
   info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400', label: 'Info' },
 };
 
-export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged }) => {
+export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged, onOpenMerger }) => {
   const [compatBusy, setCompatBusy] = useState(false);
   const [compatResult, setCompatResult] = useState<CompatResult | null>(null);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeResult, setMergeResult] = useState<AutoMergeResult | null>(null);
+
+  const mergeFiles = async (relativePaths: string[]) => {
+    if (relativePaths.length === 0) return;
+    setMergeBusy(true);
+    try {
+      const result = await TauriService.autoMergeConflicts(paths, relativePaths);
+      setMergeResult(result);
+      onModsChanged(); // the package may be new or re-enabled
+      onRecheck();
+    } catch (err) {
+      reportBackendError('Merging conflicting files', err);
+    } finally {
+      setMergeBusy(false);
+    }
+  };
 
   const makeCompatibleCopy = async (modId: string) => {
     setCompatBusy(true);
@@ -112,6 +140,14 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   };
 
   const handleFix = (fix: HealthFix) => {
+    if (fix.action === 'merge_files') {
+      mergeFiles(fix.relative_paths);
+      return;
+    }
+    if (fix.action === 'open_in_merger') {
+      onOpenMerger(fix.relative_path);
+      return;
+    }
     if (fix.action === 'make_compatible_copy') {
       makeCompatibleCopy(fix.mod_id);
       return;
@@ -146,6 +182,13 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   }, [report]);
 
   const handleFixAllSafe = () => handleFixes(safeFixes);
+
+  // Kept apart from the list fixes: merging rewrites the mod list on its own (enables the package).
+  const mergeablePaths = useMemo(() => {
+    if (!report) return [] as string[];
+    const all = report.issues.flatMap((i) => i.fixes.flatMap((f) => (f.action === 'merge_files' ? f.relative_paths : [])));
+    return Array.from(new Set(all));
+  }, [report]);
   const safeIssueCount = report?.issues.filter((i) => i.fixes.some((f) => SAFE_FIX_ACTIONS.has(f.action))).length ?? 0;
 
   const grouped = useMemo(() => {
@@ -190,6 +233,18 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
+          {mergeablePaths.length > 1 && (
+            <button
+              type="button"
+              onClick={() => mergeFiles(mergeablePaths)}
+              disabled={mergeBusy}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer disabled:opacity-60"
+              title="Merges every conflicting file that has no overlapping changes into your patch package"
+            >
+              <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
+              Merge {mergeablePaths.length} files automatically
+            </button>
+          )}
           {safeFixes.length > 0 && (
             <button
               type="button"
@@ -216,6 +271,43 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       {compatBusy && (
         <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
           <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Making a compatible copy...
+        </div>
+      )}
+      {mergeBusy && (
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Merging conflicting files...
+        </div>
+      )}
+      {mergeResult && (
+        <div className="flex flex-col gap-2 p-4 rounded-xl border border-indigo-800/60 bg-indigo-950/20 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-indigo-200 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-indigo-300" aria-hidden="true" />
+              {mergeResult.merged.length} {mergeResult.merged.length === 1 ? 'file' : 'files'} merged into {mergeResult.package_folder}
+            </div>
+            <button type="button" onClick={() => setMergeResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">Close</button>
+          </div>
+          {mergeResult.merged.length > 0 && (
+            <ul className="list-disc pl-5 text-slate-300 space-y-0.5 font-mono">
+              {mergeResult.merged.map((p) => <li key={p}>{p}</li>)}
+            </ul>
+          )}
+          {mergeResult.skipped.length > 0 && (
+            <>
+              <div className="text-amber-300 font-bold mt-1">These need your decision (two mods change the same lines):</div>
+              <ul className="list-disc pl-5 text-amber-200/90 space-y-0.5 font-mono">
+                {mergeResult.skipped.map((p) => (
+                  <li key={p}>
+                    {p}{' '}
+                    <button type="button" onClick={() => onOpenMerger(p)} className="underline text-amber-100 cursor-pointer">Open in Merger</button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="text-slate-400">
+            The package is enabled at the end of your load order, so its merged files win. Check again after you add or update mods.
+          </div>
         </div>
       )}
       {compatResult && (
@@ -264,7 +356,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
               const style = SEVERITY_STYLE[sev];
               const Icon = style.icon;
               // "Enable X" + "Move X before Y" for the same issue are shown as one button doing both.
-              const applicable = issue.fixes.filter((f) => ['subscribe_workshop', 'open_workshop_page', 'make_compatible_copy', 'remove_compatible_copy'].includes(f.action) || applyFix(mods, f) !== null);
+              const applicable = issue.fixes.filter((f) => ACTION_FIXES.has(f.action) || applyFix(mods, f) !== null);
               const enableThenMove = applicable.length === 2 && applicable[0].action === 'enable_mod' && applicable[1].action === 'move_before';
               const fixes = enableThenMove ? [applicable[0]] : applicable;
               return (
@@ -281,6 +373,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                           key={i}
                           type="button"
                           onClick={() => (enableThenMove ? handleFixes(applicable) : handleFix(fix))}
+                          disabled={fix.action === 'merge_files' && mergeBusy}
                           className="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 cursor-pointer"
                         >
                           {fixLabel(fix)}

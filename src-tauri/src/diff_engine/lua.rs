@@ -424,6 +424,26 @@ pub fn summarize_changes(base: &str, files: &[crate::vfs::CompetingModFileRaw]) 
     (summaries, collisions)
 }
 
+/// True when the automatic merge needs no decision: identical copies, edits to different lines
+/// of a vanilla file, or a file vanilla lacks whose versions can all take effect.
+pub fn can_auto_merge(rel_path: &str, base: &str, files: &[crate::vfs::CompetingModFileRaw], collisions: usize) -> bool {
+    if files.len() < 2 {
+        return true;
+    }
+    let first = files[0].content.trim();
+    if files[1..].iter().all(|f| f.content.trim() == first) {
+        return true;
+    }
+    let has_base = !base.starts_with("-- vanilla file not present") && !base.starts_with("-- vanilla file unreadable");
+    if has_base {
+        return collisions == 0;
+    }
+    match comment_style_for(rel_path) {
+        CommentStyle::Lua => files.iter().all(|f| lua_runs_standalone(&f.content)),
+        CommentStyle::Block => true,
+    }
+}
+
 /// One sentence saying how the merged output was built, for the UI.
 pub fn describe_merge_strategy(rel_path: &str, base: &str, files: &[crate::vfs::CompetingModFileRaw], collisions: usize) -> String {
     let Some(winner) = files.last() else { return String::new() };

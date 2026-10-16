@@ -718,7 +718,7 @@ fn handle_get_mod_health(args: Value) -> ToolCallResult {
         Some(list) => list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
         None => crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path).map(|d| d.active_mods).unwrap_or_default(),
     };
-    let health = crate::catalog::mod_health(&paths.workshop_dir, &paths.user_zomboid_dir, &active);
+    let health = crate::catalog::mod_health_full(&paths, &active);
     let body = if args.get("include_catalog").and_then(|v| v.as_bool()).unwrap_or(false) {
         serde_json::to_value(&health)
     } else {

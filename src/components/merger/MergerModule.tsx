@@ -53,6 +53,9 @@ interface MergerModuleProps {
   onRefreshMods?: () => Promise<void> | void;
   onPackageOpened?: (folderName: string) => void;
   onPackageClosed?: () => void;
+  /** Open a package and select this conflicting file (from Mod Health). */
+  focusRelativePath?: string | null;
+  onFocusHandled?: () => void;
 }
 
 /** Lines shown around the point of interest; big vanilla files have tens of thousands. */
@@ -196,6 +199,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   onRefreshMods,
   onPackageOpened,
   onPackageClosed,
+  focusRelativePath,
+  onFocusHandled,
 }) => {
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(false);
@@ -208,6 +213,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   // Multi-Package State
   const packageSwitchIdRef = useRef(0);
   const [packages, setPackages] = useState<MergedPackageInfoUI[]>([]);
+  const [packagesLoaded, setPackagesLoaded] = useState(false);
   const [selectedPackageFolder, setSelectedPackageFolder] = useState<string>('Z_PZModStudio_MergedPatch');
   const [isPackageOpened, setIsPackageOpened] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -227,6 +233,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const fetchPackages = useCallback(async () => {
     const list = await TauriService.listMergedPackages(paths.user_zomboid_dir || '', paths.mod_list_ini_path || '');
     setPackages(list);
+    setPackagesLoaded(true);
     if (list.length > 0 && !list.some((p) => p.folder_name === selectedPackageFolder)) {
       setSelectedPackageFolder(list[0].folder_name);
     }
@@ -699,6 +706,43 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     setEditorContent(c.merged_output || c.base_content);
     setIsManuallyEdited(false);
   };
+
+  // Opened from Mod Health on one file: open the package the game uses (or the default one),
+  // scan, then select that conflict.
+  const focusStartedRef = useRef<string | null>(null);
+  const [focusScanDone, setFocusScanDone] = useState(false);
+  useEffect(() => {
+    if (!focusRelativePath) {
+      focusStartedRef.current = null;
+      return;
+    }
+    const hit = conflicts.find((c) => c.relative_path === focusRelativePath);
+    if (hit && isPackageOpened) {
+      handleSelectConflict(hit);
+      setFocusScanDone(false);
+      onFocusHandled?.();
+      return;
+    }
+    if (focusStartedRef.current === focusRelativePath) {
+      if (focusScanDone) {
+        showToast(`${focusRelativePath} is no longer a conflict.`);
+        setFocusScanDone(false);
+        onFocusHandled?.();
+      }
+      return;
+    }
+    if (!packagesLoaded) return; // pick the right package once the list is in
+    focusStartedRef.current = focusRelativePath;
+    const target =
+      packages.find((p) => !p.is_companion_bridge && p.is_active_in_modlist && p.is_packaged) ??
+      packages.find((p) => !p.is_companion_bridge);
+    (async () => {
+      if (!isPackageOpened) await handleOpenPackage(target?.folder_name ?? 'Z_PZModStudio_MergedPatch');
+      else await onRescan();
+      setFocusScanDone(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRelativePath, conflicts, isPackageOpened, focusScanDone, packagesLoaded]);
 
   if (!paths.is_valid) {
     return (

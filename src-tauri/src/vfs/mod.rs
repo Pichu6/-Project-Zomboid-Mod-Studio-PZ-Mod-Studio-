@@ -46,6 +46,128 @@ pub struct VfsConflictRaw {
     /// How the merged output was built, in plain words.
     #[serde(default)]
     pub strategy: String,
+    /// The automatic merge needs no decision (see `can_auto_merge`).
+    #[serde(default)]
+    pub auto_mergeable: bool,
+}
+
+/// Where a shared file stands for the active list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileConflictState {
+    pub relative_path: String,
+    /// Mod names in load order (the last one is the copy the game uses without a merge).
+    pub mods: Vec<String>,
+    pub mod_ids: Vec<String>,
+    /// "pending": not merged; "stale": merged, but a mod changed since; "merged": covered by the
+    /// active PZ Mod Studio package.
+    pub state: String,
+    pub auto_mergeable: bool,
+    pub strategy: String,
+    pub collisions: usize,
+}
+
+/// The active, packaged PZ Mod Studio merge package (it loads last, so its files win).
+fn active_package_dir(catalog: &crate::catalog::ModCatalog, active: &[String]) -> Option<(String, PathBuf)> {
+    active.iter().rev().find_map(|entry| {
+        let m = catalog.resolve(entry.trim())?;
+        let is_package = m.id.starts_with("Z_PZModStudio_") && m.id != "Z_PZModStudio_Bridge" && !m.id.contains("Carrier");
+        let root = PathBuf::from(&m.root_dir);
+        let packaged = fs::read_to_string(root.join("patch_metadata.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| v["is_packaged"].as_bool())
+            .unwrap_or(false);
+        (is_package && packaged).then(|| (m.id.clone(), root))
+    })
+}
+
+fn modified(path: &Path) -> Option<std::time::SystemTime> {
+    fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
+/// Every real file conflict of `active` and whether the active Studio package already covers it.
+pub fn file_conflict_states(paths: &StudioPaths, catalog: &crate::catalog::ModCatalog, active: &[String]) -> Vec<FileConflictState> {
+    let package = active_package_dir(catalog, active);
+    scan_conflicts_with(paths, catalog, active)
+        .into_iter()
+        .filter(|c| !c.is_identical_noise)
+        .map(|c| {
+            let in_package = package.as_ref().and_then(|(_, root)| {
+                [root.join("42").join(&c.relative_path), root.join(&c.relative_path)].into_iter().find(|p| p.is_file())
+            });
+            let state = match in_package {
+                None => "pending",
+                Some(merged) => {
+                    let merged_at = modified(&merged);
+                    let newer = c.competing_files.iter().any(|f| matches!((modified(Path::new(&f.absolute_path)), merged_at), (Some(a), Some(b)) if a > b));
+                    if newer { "stale" } else { "merged" }
+                }
+            };
+            FileConflictState {
+                mods: c.competing_files.iter().map(|f| f.mod_name.clone()).collect(),
+                mod_ids: c.competing_files.iter().map(|f| f.mod_id.clone()).collect(),
+                state: state.to_string(),
+                auto_mergeable: c.auto_mergeable,
+                strategy: c.strategy.clone(),
+                collisions: c.collisions.len(),
+                relative_path: c.relative_path,
+            }
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoMergeResult {
+    pub package_folder: String,
+    /// Files merged automatically in this run.
+    pub merged: Vec<String>,
+    /// Requested files that need a manual decision (left out).
+    pub skipped: Vec<String>,
+}
+
+/// Merges the requested files automatically (only those that need no decision) into the active
+/// PZ Mod Studio package (or Z_PZModStudio_MergedPatch), keeping its other resolved files, and
+/// publishes it (active, loading last).
+pub fn auto_merge_conflicts(paths: &StudioPaths, rel_paths: &[String]) -> Result<AutoMergeResult, String> {
+    let active: Vec<String> = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
+        .map(|d| d.active_mods)
+        .unwrap_or_default();
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let package = active_package_dir(&catalog, &active)
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| "Z_PZModStudio_MergedPatch".to_string());
+    let drafts = crate::patch_generator::get_draft_resolutions(&paths.user_zomboid_dir, &package);
+
+    let mut merged_files = Vec::new();
+    let (mut merged, mut skipped) = (Vec::new(), Vec::new());
+    for c in scan_conflicts_with(paths, &catalog, &active) {
+        let requested = rel_paths.contains(&c.relative_path);
+        if requested && c.auto_mergeable {
+            merged_files.push(crate::patch_generator::MergedFilePayload { relative_path: c.relative_path.clone(), content: c.auto_ast_output.clone() });
+            merged.push(c.relative_path);
+        } else {
+            if requested {
+                skipped.push(c.relative_path.clone());
+            }
+            // Keep what the package already resolves.
+            if let Some(d) = drafts.get(&c.relative_path).filter(|d| d.status == "RESOLVED") {
+                merged_files.push(crate::patch_generator::MergedFilePayload { relative_path: c.relative_path.clone(), content: d.resolved_content.clone() });
+            }
+        }
+    }
+    if merged.is_empty() {
+        return Ok(AutoMergeResult { package_folder: package, merged, skipped });
+    }
+    crate::patch_generator::generate_master_patch(crate::patch_generator::MasterPatchRequest {
+        workshop_dir: Some(paths.workshop_dir.clone()),
+        pz_install_dir: Some(paths.pz_install_dir.clone()),
+        user_zomboid_dir: paths.user_zomboid_dir.clone(),
+        mod_list_ini_path: paths.mod_list_ini_path.clone(),
+        merged_files,
+        active_polyfill_ids: Vec::new(),
+        package_folder_name: Some(package.clone()),
+    })?;
+    Ok(AutoMergeResult { package_folder: package, merged, skipped })
 }
 
 /// Auto-detects default Project Zomboid installation and user data paths across drives.
@@ -159,11 +281,18 @@ pub fn is_loaded_from_every_mod(rel_path: &str) -> bool {
 pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     let active: Vec<String> = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
         .map(|d| d.active_mods)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|s| !s.starts_with("Z_PZModStudio_") && s != "PZModStudioCarrier")
-        .collect();
+        .unwrap_or_default();
     let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    scan_conflicts_with(paths, &catalog, &active)
+}
+
+/// `scan_conflicts` for a given catalog and active list (mod ids in load order).
+pub fn scan_conflicts_with(paths: &StudioPaths, catalog: &crate::catalog::ModCatalog, active: &[String]) -> Vec<VfsConflictRaw> {
+    let active: Vec<String> = active
+        .iter()
+        .filter(|s| !s.starts_with("Z_PZModStudio_") && s.as_str() != "PZModStudioCarrier")
+        .cloned()
+        .collect();
     let game = catalog.game_version_int();
 
     // "media/..." path -> (load position, mod id, mod name, file on disk), in load order.
@@ -290,6 +419,7 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                     (Vec::new(), Vec::new())
                 };
                 let strategy = crate::diff_engine::lua::describe_merge_strategy(&rel_path, &base_content, &unique_mods, collisions.len());
+                let auto_mergeable = crate::diff_engine::lua::can_auto_merge(&rel_path, &base_content, &unique_mods, collisions.len());
                 let (merged_output, status) = if let Some((saved_content, saved_status)) = draft_map.get(&rel_path) {
                     (saved_content.clone(), Some(saved_status.clone()))
                 } else {
@@ -313,6 +443,7 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
                     mod_changes,
                     collisions,
                     strategy,
+                    auto_mergeable,
                 });
 
                 id_counter += 1;

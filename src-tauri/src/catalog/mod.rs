@@ -264,6 +264,47 @@ pub fn mod_health(workshop_dir: &str, user_zomboid_dir: &str, active: &[String])
     ModHealth { catalog, report }
 }
 
+/// `mod_health` plus shared-file conflicts (needs the game folder for the vanilla files).
+pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> ModHealth {
+    let catalog = build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let mut report = health_report(&catalog, active);
+    let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
+    add_file_conflict_issues(&mut report, &conflicts);
+    ModHealth { catalog, report }
+}
+
+/// Shared files the game would load from only one mod: "pending" (not merged) and "stale"
+/// (merged, but a mod changed since) become warnings; "merged" ones are fine.
+pub fn add_file_conflict_issues(report: &mut HealthReport, conflicts: &[crate::vfs::FileConflictState]) {
+    let mut list = IssueList(Vec::new());
+    for c in conflicts.iter().filter(|c| c.state != "merged") {
+        let winner = c.mods.last().cloned().unwrap_or_default();
+        let others: Vec<&str> = c.mods[..c.mods.len().saturating_sub(1)].iter().map(String::as_str).collect();
+        let message = if c.state == "stale" {
+            format!("{} was merged, but {} changed since. Merge it again so the package matches the current versions.", c.relative_path, c.mods.join(" / "))
+        } else {
+            format!(
+                "{} and {} both ship {}. Without a merge the game only uses {}'s copy, so {}'s version is ignored. {}",
+                others.join(", "), winner, c.relative_path, winner, others.join(", "),
+                if c.auto_mergeable { "It can be merged automatically." } else { "They change the same lines differently: choose in the Mod Merger." }
+            )
+        };
+        let mut fixes = Vec::new();
+        if c.auto_mergeable {
+            fixes.push(SuggestedFix::MergeFiles { relative_paths: vec![c.relative_path.clone()] });
+        }
+        fixes.push(SuggestedFix::OpenInMerger { relative_path: c.relative_path.clone() });
+        let code = if c.state == "stale" { "file_conflict_stale" } else { "file_conflict" };
+        list.push(Severity::Warning, code, c.mod_ids.last().map(String::as_str), message, fixes);
+        if let Some(last) = list.0.last_mut() {
+            last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
+        }
+    }
+    report.issues.extend(list.0);
+    report.issues.sort_by(|a, b| a.severity.cmp(&b.severity));
+    report.warnings = report.issues.iter().filter(|i| i.severity == Severity::Warning).count();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Health report
 // ---------------------------------------------------------------------------------------------
@@ -293,6 +334,10 @@ pub enum SuggestedFix {
     MakeCompatibleCopy { mod_id: String },
     /// Remove a compatible copy (back to the original).
     RemoveCompatibleCopy { folder: String },
+    /// Merge these shared files automatically into the Studio package and publish it.
+    MergeFiles { relative_paths: Vec<String> },
+    /// Open this shared file in the Mod Merger to decide by hand.
+    OpenInMerger { relative_path: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -324,7 +369,9 @@ impl IssueList {
                 SuggestedFix::RemoveFromList { .. }
                 | SuggestedFix::OpenWorkshopPage { .. }
                 | SuggestedFix::MakeCompatibleCopy { .. }
-                | SuggestedFix::RemoveCompatibleCopy { .. } => None,
+                | SuggestedFix::RemoveCompatibleCopy { .. }
+                | SuggestedFix::MergeFiles { .. }
+                | SuggestedFix::OpenInMerger { .. } => None,
             };
             if let Some(other) = other.filter(|o| Some(o.as_str()) != mod_id && !related.contains(o)) {
                 related.push(other.clone());
@@ -830,5 +877,32 @@ mod tests {
         }
         let sorted = sort_load_order(&cat, &active);
         println!("sort: {} moved, {} in cycles: {:?}", sorted.moved.len(), sorted.cycle.len(), sorted.moved);
+    }
+
+    #[test]
+    fn file_conflicts_become_health_issues() {
+        let state = |rel: &str, state: &str, auto: bool| crate::vfs::FileConflictState {
+            relative_path: rel.into(),
+            mods: vec!["Mod A".into(), "Mod B".into()],
+            mod_ids: vec!["A".into(), "B".into()],
+            state: state.into(),
+            auto_mergeable: auto,
+            strategy: String::new(),
+            collisions: if auto { 0 } else { 1 },
+        };
+        let mut report = HealthReport { game_version: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        add_file_conflict_issues(
+            &mut report,
+            &[state("a.lua", "pending", true), state("b.lua", "pending", false), state("c.lua", "merged", true), state("d.lua", "stale", true)],
+        );
+        assert_eq!(report.warnings, 3, "merged files are not reported");
+        let a = report.issues.iter().find(|i| i.message.contains("a.lua")).unwrap();
+        assert_eq!(a.code, "file_conflict");
+        assert_eq!(a.mod_id.as_deref(), Some("B"));
+        assert_eq!(a.related, vec!["A".to_string()]);
+        assert!(matches!(&a.fixes[0], SuggestedFix::MergeFiles { relative_paths } if relative_paths == &vec!["a.lua".to_string()]));
+        let b = report.issues.iter().find(|i| i.message.contains("b.lua")).unwrap();
+        assert_eq!(b.fixes, vec![SuggestedFix::OpenInMerger { relative_path: "b.lua".into() }]);
+        assert!(report.issues.iter().any(|i| i.code == "file_conflict_stale"));
     }
 }

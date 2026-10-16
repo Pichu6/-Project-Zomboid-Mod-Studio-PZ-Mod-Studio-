@@ -86,7 +86,14 @@ fn scan_all_installed_mods_cmd(paths: StudioPaths) -> Vec<ModManifest> {
 /// following the game's own rules. Returns the catalog too, so the UI can show details.
 #[tauri::command(async)]
 fn get_mod_health_cmd(paths: StudioPaths, active: Vec<String>) -> catalog::ModHealth {
-    catalog::mod_health(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
+    catalog::mod_health_full(&paths, &active)
+}
+
+/// Merges the given shared files automatically (only those needing no decision) and publishes
+/// the Studio package.
+#[tauri::command(async)]
+fn auto_merge_conflicts_cmd(paths: StudioPaths, relative_paths: Vec<String>) -> Result<vfs::AutoMergeResult, String> {
+    vfs::auto_merge_conflicts(&paths, &relative_paths)
 }
 
 /// One page of Project Zomboid mods from Nexus Mods (public API, no key).
@@ -425,6 +432,7 @@ pub fn run() {
             scan_all_installed_mods_cmd,
             sort_mod_dependencies_cmd,
             get_mod_health_cmd,
+            auto_merge_conflicts_cmd,
             sort_load_order_cmd,
             make_compatible_copy_cmd,
             remove_compatible_copy_cmd,

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort, CompatResult } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort, CompatResult, AutoMergeResult } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -288,6 +288,11 @@ export const TauriService = {
   /** Copies a mod the installed build won't load into Zomboid/mods and adapts it. Throws with the reason. */
   makeCompatibleCopy: async (paths: StudioPathsUI, modId: string, replaceExisting: boolean): Promise<CompatResult> => {
     return await invoke<CompatResult>('make_compatible_copy_cmd', { paths, modId, replaceExisting });
+  },
+
+  /** Merges the given conflicting files into the active patch package (safe cases only). Throws with the reason. */
+  autoMergeConflicts: async (paths: StudioPathsUI, relativePaths: string[]): Promise<AutoMergeResult> => {
+    return await invoke<AutoMergeResult>('auto_merge_conflicts_cmd', { paths, relativePaths });
   },
 
   /** Removes a compatible copy (moved to Zomboid/PZModStudio_Backups/mods). */
