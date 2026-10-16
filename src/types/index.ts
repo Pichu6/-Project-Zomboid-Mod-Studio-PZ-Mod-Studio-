@@ -424,6 +424,24 @@ export interface WorkshopItem {
   is_project_zomboid: boolean;
   banned: boolean;
   page_url: string;
+  /** A collection's items, in the author's order (empty for a normal mod). */
+  children: string[];
+  is_collection: boolean;
+}
+
+/** What to list on the Workshop browse page. */
+export interface WorkshopBrowseQuery {
+  text?: string | null;
+  sort?: WorkshopSort | null;
+  /** '41' / '42'. */
+  build?: string | null;
+  category?: string | null;
+  /** How far back "most popular" looks: 1, 7, 90 or 365 days. */
+  days?: number | null;
+  /** List collections instead of single mods. */
+  collections?: boolean;
+  page: number;
+  perPage?: number;
 }
 
 export interface WorkshopRequiredItem {

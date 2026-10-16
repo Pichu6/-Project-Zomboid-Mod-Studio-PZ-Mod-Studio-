@@ -14,6 +14,9 @@ import { DetailTarget, ModDetail } from './ModDetail';
 
 interface BrowseModuleProps {
   paths: StudioPathsUI;
+  /** Workshop item to open the detail view on (set when the Mod List sends the user here). */
+  focusWorkshopId?: string | null;
+  onFocusHandled?: () => void;
   /** Installed mods as the game sees them (from useModHealth). */
   catalog: CatalogModSummary[];
   /** Called after mods were installed, so the mod list is rescanned. */
@@ -130,12 +133,51 @@ const workshopCard = (item: WorkshopItem, installedIds: string[], state: Worksho
   />
 );
 
+// The same four the Workshop's own Browse menu offers, in its wording.
+/** A collection: its picture, how many of its mods you already have, and a way in. */
+const collectionCard = (item: WorkshopItem, installedByItem: Map<string, string[]>, onOpen: (t: DetailTarget) => void) => {
+  const missing = item.children.filter((id) => !installedByItem.has(id)).length;
+  return (
+    <ModCard
+      key={item.workshop_id}
+      image={item.preview_url}
+      title={item.title}
+      subtitle={`${item.children.length} mods · updated ${formatUnixDate(item.time_updated)}`}
+      chips={
+        <>
+          <Chip className="border-violet-600/60 text-violet-300">Collection</Chip>
+          {item.children.length > 0 && (
+            missing === 0
+              ? <Chip className="border-emerald-500/60 text-emerald-300">All installed</Chip>
+              : <Chip className="border-amber-500/60 text-amber-300">{missing} missing</Chip>
+          )}
+        </>
+      }
+      summary={item.summary}
+      stats={
+        <>
+          <span className="flex items-center gap-1" title="Subscribers"><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
+          <span className="flex items-center gap-1" title="Favorites"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
+        </>
+      }
+      onOpen={() => onOpen({ kind: 'collection', id: item.workshop_id, preview: item })}
+    />
+  );
+};
+
 const WORKSHOP_SORTS: { id: WorkshopSort; label: string }[] = [
-  { id: 'trending', label: 'Trending (7 days)' },
-  { id: 'most_subscribed', label: 'Most subscribed' },
-  { id: 'recently_updated', label: 'Recently updated' },
-  { id: 'newest', label: 'Newest' },
-  { id: 'top_rated', label: 'Top rated' },
+  { id: 'trending', label: 'Most Popular' },
+  { id: 'top_rated', label: 'Top Rated All Time' },
+  { id: 'newest', label: 'Most Recent' },
+  { id: 'recently_updated', label: 'Last Updated' },
+];
+
+/** The time window the Workshop offers next to "Most Popular". */
+const POPULAR_DAYS: { id: number; label: string }[] = [
+  { id: 1, label: 'Today' },
+  { id: 7, label: 'One Week' },
+  { id: 90, label: 'Three Months' },
+  { id: 365, label: 'One Year' },
 ];
 
 /** Fallback when the public Workshop page cannot be read: the user's own Steam Web API key. */
@@ -184,7 +226,7 @@ const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSav
   );
 };
 
-type WorkshopQuery = { text: string; sort: WorkshopSort; build: string; category: string };
+type WorkshopQuery = { text: string; sort: WorkshopSort; build: string; category: string; days: number; collections: boolean };
 
 const WorkshopTab: React.FC<{
   installedByItem: Map<string, string[]>;
@@ -192,7 +234,7 @@ const WorkshopTab: React.FC<{
   onOpen: (t: DetailTarget) => void;
 }> = ({ installedByItem, stateByItem, onOpen }) => {
   const [text, setText] = useState('');
-  const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '' });
+  const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '', days: 7, collections: false });
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [items, setItems] = useState<WorkshopItem[]>([]);
@@ -205,7 +247,15 @@ const WorkshopTab: React.FC<{
   const runSearch = useCallback(async (q: WorkshopQuery, p: number) => {
     setSearching(true);
     try {
-      const r = await TauriService.workshopSearch(q.text, q.sort, q.build || null, q.category || null, p);
+      const r = await TauriService.workshopSearch({
+        text: q.text,
+        sort: q.sort,
+        build: q.collections ? null : q.build,
+        category: q.collections ? null : q.category,
+        days: q.days,
+        collections: q.collections,
+        page: p,
+      });
       setTotal(r.total);
       setPages(r.pages);
       setItems(r.items);
@@ -270,11 +320,18 @@ const WorkshopTab: React.FC<{
           {query.text && <option value="relevance">Relevance</option>}
           {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
-        <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label="Game build" className={selectClass}>
-          <option value="42">Build 42</option>
-          <option value="41">Build 41</option>
-          <option value="">Any build</option>
-        </select>
+        {query.sort === 'trending' && !query.text && (
+          <select value={query.days} onChange={(e) => setFilter({ days: Number(e.target.value) })} aria-label="Most popular over" className={selectClass}>
+            {POPULAR_DAYS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        )}
+        {!query.collections && (
+          <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label="Game build" className={selectClass}>
+            <option value="42">Build 42</option>
+            <option value="41">Build 41</option>
+            <option value="">Any build</option>
+          </select>
+        )}
         <button type="submit" disabled={searching} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-60">
           Search
         </button>
@@ -284,7 +341,22 @@ const WorkshopTab: React.FC<{
         </button>
       </Toolbar>
 
-      <CategoryBar categories={WORKSHOP_CATEGORIES} value={query.category} onChange={(c) => setFilter({ category: c })} accent="border-sky-600 bg-sky-900/50 text-sky-200" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800" role="group" aria-label="What to list">
+          {[
+            { id: false, label: 'Mods' },
+            { id: true, label: 'Collections' },
+          ].map((o) => (
+            <button key={String(o.id)} type="button" onClick={() => setFilter({ collections: o.id })} aria-pressed={query.collections === o.id}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${query.collections === o.id ? 'bg-sky-800/80 text-sky-100' : 'text-slate-400 hover:text-slate-200'}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {!query.collections && (
+          <CategoryBar categories={WORKSHOP_CATEGORIES} value={query.category} onChange={(c) => setFilter({ category: c })} accent="border-sky-600 bg-sky-900/50 text-sky-200" />
+        )}
+      </div>
       {searchError && !lookup && <SteamKeyForm reason={searchError} onSaved={() => runSearch(query, 1)} />}
 
       {lookup ? (
@@ -311,12 +383,20 @@ const WorkshopTab: React.FC<{
         <>
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
             <span>
-              {searching && items.length === 0 ? 'Searching...' : `${total.toLocaleString()} items${query.text ? ` for "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}`}
+              {searching && items.length === 0
+                ? 'Searching...'
+                : `${total.toLocaleString()} ${query.collections ? 'collections' : 'mods'}${query.text ? ` for "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}`}
               {searching && items.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
             </span>
             <span>page {page} of {pages.toLocaleString()}</span>
           </div>
-          <CardGrid>{items.map((i) => workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen))}</CardGrid>
+          <CardGrid>
+            {items.map((i) =>
+              query.collections
+                ? collectionCard(i, installedByItem, onOpen)
+                : workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen)
+            )}
+          </CardGrid>
           <Pagination page={page} pageCount={pages} onPage={(p) => runSearch(query, p)} disabled={searching} />
         </>
       )}
@@ -477,7 +557,7 @@ const MyModsTab: React.FC<{
     const byId = new Map(details.map((d) => [d.workshop_id, d]));
     const out: MineRow[] = [];
     for (const [id, modIds] of installedByItem) {
-      const item = byId.get(id) ?? ({ workshop_id: id, found: true, title: modIds.join(', '), summary: '', preview_url: null, time_updated: null, subscriptions: 0, favorited: 0, file_size: 0, tags: [], builds: [], is_project_zomboid: true, banned: false, page_url: '' } as WorkshopItem);
+      const item = byId.get(id) ?? ({ workshop_id: id, found: true, title: modIds.join(', '), summary: '', preview_url: null, time_updated: null, subscriptions: 0, favorited: 0, file_size: 0, tags: [], builds: [], is_project_zomboid: true, banned: false, page_url: '', children: [], is_collection: false } as WorkshopItem);
       out.push({ key: `w${id}`, kind: 'workshop', item, modIds, state: stateByItem.get(id) });
     }
     for (const m of catalog) {
@@ -593,7 +673,7 @@ const TABS: { id: SourceTab; label: string; active: string }[] = [
   { id: 'mine', label: 'My mods', active: 'bg-emerald-950/80 text-emerald-200 border-emerald-700' },
 ];
 
-export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled }) => {
+export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled }) => {
   const [tab, setTab] = useState<SourceTab>('workshop');
   // Tabs stay mounted once visited, so switching keeps their page and filters.
   const [visited, setVisited] = useState<Set<SourceTab>>(() => new Set(['workshop']));
@@ -629,6 +709,13 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
     scrollBrowseToTop();
   };
   const openDetail = useCallback((t: DetailTarget) => setDetailStack((s) => [...s, t]), []);
+
+  // The Mod List asked for one item: show it on its own, not stacked on whatever was open.
+  useEffect(() => {
+    if (!focusWorkshopId) return;
+    setDetailStack([{ kind: 'workshop', id: focusWorkshopId }]);
+    onFocusHandled?.();
+  }, [focusWorkshopId, onFocusHandled]);
   const closeDetail = useCallback(() => setDetailStack([]), []);
 
   const handleNexusDownload = (m: NexusMod) => {

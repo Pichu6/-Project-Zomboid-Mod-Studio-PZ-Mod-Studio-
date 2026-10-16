@@ -2,6 +2,7 @@ pub mod catalog;
 pub mod claude_agent;
 pub mod compat;
 pub mod diff_engine;
+pub mod images;
 pub mod instance_manager;
 pub mod load_order;
 pub mod mcp;
@@ -150,20 +151,29 @@ fn delete_steam_key_cmd() -> Result<(), String> {
 
 /// Searches the Project Zomboid Workshop with the saved key.
 #[tauri::command(async)]
-fn workshop_search_cmd(
-    text: Option<String>,
-    sort: workshop::WorkshopSort,
-    build: Option<String>,
-    category: Option<String>,
-    page: u32,
-) -> Result<workshop::WorkshopSearchResult, String> {
+fn workshop_search_cmd(query: workshop::BrowseQuery) -> Result<workshop::WorkshopSearchResult, String> {
     // The public browse page needs no key; the Web API is the fallback when Steam changes it.
-    let public = workshop::search_public(text.as_deref(), sort, build.as_deref(), category.as_deref(), page, 30);
+    let public = workshop::search_public(&query);
     let Err(err) = public else { return public };
     match secrets::get(secrets::STEAM_WEB_API_KEY)? {
-        Some(key) => workshop::search(&key, text.as_deref(), sort, build.as_deref(), category.as_deref(), page, 30),
-        None => Err(err),
+        // The Web API cannot list collections, so the key only helps with mods.
+        Some(key) if !query.collections => workshop::search(
+            &key,
+            query.text.as_deref(),
+            query.sort.unwrap_or(workshop::WorkshopSort::Trending),
+            query.build.as_deref(),
+            query.category.as_deref(),
+            query.page,
+            30,
+        ),
+        _ => Err(err),
     }
+}
+
+/// A mod's own poster/icon as a data URL, so the webview can show a file on disk.
+#[tauri::command(async)]
+fn read_mod_image_cmd(paths: StudioPaths, path: String) -> Result<String, String> {
+    images::read_as_data_url(&paths, &path)
 }
 
 /// Steam Workshop details for item ids (public Web API, no key).
@@ -476,6 +486,7 @@ pub fn run() {
             set_steam_key_cmd,
             delete_steam_key_cmd,
             workshop_search_cmd,
+            read_mod_image_cmd,
             launch_sandbox_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,

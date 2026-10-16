@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Download, ExternalLink, FileArchive, Heart, Loader2, Play, Users, X } from 'lucide-react';
-import { NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, WorkshopItemDetails } from '../../types';
+import { NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, WorkshopItemDetails, WorkshopLookup } from '../../types';
 import { TauriService, reportBackendError } from '../../services/tauri';
 import { BBCode } from './BBCode';
-import { BuildChips, Chip, InstalledChip, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
+import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
 
 export type DetailTarget =
   | { kind: 'workshop'; id: string; preview?: WorkshopItem }
+  | { kind: 'collection'; id: string; preview?: WorkshopItem }
   | { kind: 'nexus'; modId: number; preview?: NexusMod };
 
 interface ModDetailProps {
@@ -265,6 +266,91 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
   );
 };
 
+/** A Workshop collection: what it holds and what you are missing. */
+const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen }) => {
+  const { data, loading } = useDetails<WorkshopLookup>(() => TauriService.workshopLookup(target.id), target.id, 'Loading the collection');
+  const info = data?.collection ?? target.preview;
+  const items = data?.items ?? [];
+  const missing = items.filter((i) => !installedByItem.has(i.workshop_id));
+  const pageUrl = info?.page_url ?? `https://steamcommunity.com/sharedfiles/filedetails/?id=${target.id}`;
+
+  return (
+    <DetailLayout
+      title={info?.title ?? `Collection ${target.id}`}
+      subtitle={items.length > 0 ? `${items.length} mods · ${items.length - missing.length} installed` : undefined}
+      chips={
+        <>
+          <Chip className="border-violet-600/60 text-violet-300">Collection</Chip>
+          {items.length > 0 && (missing.length === 0
+            ? <Chip className="border-emerald-500/60 text-emerald-300">All installed</Chip>
+            : <Chip className="border-amber-500/60 text-amber-300">{missing.length} missing</Chip>)}
+        </>
+      }
+      loading={loading}
+      main={
+        <>
+          {info?.summary && <p className="text-xs text-slate-400">{info.summary}</p>}
+          {items.length === 0 && !loading && <p className="text-xs text-slate-500">This collection has no items.</p>}
+          <CardGrid>
+            {items.map((i) => (
+              <ModCard
+                key={i.workshop_id}
+                image={i.preview_url}
+                title={i.found ? i.title : `Item ${i.workshop_id}`}
+                subtitle={`updated ${formatUnixDate(i.time_updated)}`}
+                chips={
+                  <>
+                    {installedByItem.has(i.workshop_id)
+                      ? <InstalledChip />
+                      : <Chip className="border-amber-500/60 text-amber-300">Missing</Chip>}
+                    <UpdateChips state={stateByItem.get(i.workshop_id)} />
+                    <BuildChips builds={i.builds} source="The Workshop page" />
+                  </>
+                }
+                summary={i.summary}
+                onOpen={() => onOpen({ kind: 'workshop', id: i.workshop_id, preview: i })}
+              />
+            ))}
+          </CardGrid>
+        </>
+      }
+      side={
+        <>
+          <ActionButton onClick={() => TauriService.openExternalUrl(pageUrl)} className="bg-sky-700 hover:bg-sky-600 text-white"
+            title="Opens the collection page in your browser, where Subscribe to all is">
+            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Open page (Subscribe to all)
+          </ActionButton>
+          <p className="text-[10px] text-slate-500">
+            Steam subscribes you to every mod in the collection; they show up here after the next refresh.
+          </p>
+          {info && (
+            <Section title="Info">
+              <InfoRow label="Mods" value={items.length || info.children.length} />
+              <InfoRow label="Missing" value={missing.length || undefined} />
+              <InfoRow label="Subscribers" value={<span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{formatCount(info.subscriptions)}</span>} />
+              <InfoRow label="Favorites" value={<span className="inline-flex items-center gap-1"><Heart className="w-3 h-3" />{formatCount(info.favorited)}</span>} />
+              <InfoRow label="Updated" value={formatUnixDate(info.time_updated)} />
+              <InfoRow label="Workshop id" value={<span className="font-mono">{target.id}</span>} />
+            </Section>
+          )}
+          {missing.length > 0 && (
+            <Section title={`Missing (${missing.length})`}>
+              <div className="flex flex-col gap-1">
+                {missing.map((i) => (
+                  <button key={i.workshop_id} type="button" onClick={() => onOpen({ kind: 'workshop', id: i.workshop_id, preview: i })}
+                    className="px-2 py-1.5 rounded border border-slate-800 bg-slate-950/60 hover:border-slate-600 text-left text-[11px] text-slate-200 cursor-pointer line-clamp-2">
+                    {i.found ? i.title : i.workshop_id}
+                  </button>
+                ))}
+              </div>
+            </Section>
+          )}
+        </>
+      }
+    />
+  );
+};
+
 const DetailLayout: React.FC<{
   title: string;
   subtitle?: string;
@@ -317,8 +403,8 @@ export const ModDetail: React.FC<ModDetailProps> = (props) => {
                 <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> Back
               </button>
             )}
-            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${target.kind === 'workshop' ? 'border-sky-700 text-sky-300' : 'border-orange-700 text-orange-300'}`}>
-              {target.kind === 'workshop' ? 'STEAM WORKSHOP' : 'NEXUS MODS'}
+            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${target.kind === 'nexus' ? 'border-orange-700 text-orange-300' : 'border-sky-700 text-sky-300'}`}>
+              {target.kind === 'nexus' ? 'NEXUS MODS' : target.kind === 'collection' ? 'STEAM COLLECTION' : 'STEAM WORKSHOP'}
             </span>
           </div>
           <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer" aria-label="Close">
@@ -326,7 +412,9 @@ export const ModDetail: React.FC<ModDetailProps> = (props) => {
           </button>
         </div>
         <div ref={scrollRef} className="overflow-y-auto p-5">
-          {target.kind === 'workshop' ? <WorkshopDetail {...props} target={target} /> : <NexusDetail {...props} target={target} />}
+          {target.kind === 'workshop' && <WorkshopDetail {...props} target={target} />}
+          {target.kind === 'collection' && <CollectionDetail {...props} target={target} />}
+          {target.kind === 'nexus' && <NexusDetail {...props} target={target} />}
         </div>
       </div>
     </div>

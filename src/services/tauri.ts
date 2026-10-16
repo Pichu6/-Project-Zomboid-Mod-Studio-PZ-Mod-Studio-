@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, WorkshopSort, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -330,8 +330,15 @@ export const TauriService = {
   },
 
   /** Workshop search with the saved key. Throws on failure (no key, rejected key, offline). */
-  workshopSearch: async (text: string, sort: WorkshopSort, build: string | null, category: string | null, page: number): Promise<WorkshopSearchResult> => {
-    return await invoke<WorkshopSearchResult>('workshop_search_cmd', { text: text || null, sort, build, category: category || null, page });
+  workshopSearch: async (query: WorkshopBrowseQuery): Promise<WorkshopSearchResult> => {
+    return await invoke<WorkshopSearchResult>('workshop_search_cmd', {
+      query: { perPage: 30, ...query, text: query.text || null, category: query.category || null, build: query.build || null },
+    });
+  },
+
+  /** A mod's own poster/icon on disk, as a data URL the webview can show. Throws with the reason. */
+  readModImage: async (paths: StudioPathsUI, path: string): Promise<string> => {
+    return await invoke<string>('read_mod_image_cmd', { paths, path });
   },
 
   /** Looks up pasted Workshop links / ids / a collection link. Throws on failure. */

@@ -34,6 +34,10 @@ pub struct WorkshopItem {
     pub banned: bool,
     /// The item's Workshop page (subscribe there when logged in on steamcommunity.com).
     pub page_url: String,
+    /// A collection's items, in the order the author put them (empty for a normal mod).
+    pub children: Vec<String>,
+    /// True when this is a collection rather than a single mod.
+    pub is_collection: bool,
 }
 
 /// What Steam has installed for one subscribed item (from appworkshop_108600.acf, offline).
@@ -184,6 +188,13 @@ fn parse_item(v: &Value) -> Option<WorkshopItem> {
         is_project_zomboid: num("consumer_app_id").or_else(|| num("consumer_appid")) == Some(PZ_APP_ID),
         banned: num("banned").unwrap_or(0) != 0,
         page_url: page_url(&id),
+        // A collection browse result carries its items; GetPublishedFileDetails does not.
+        children: v
+            .get("children")
+            .and_then(|c| c.as_array())
+            .map(|a| a.iter().filter_map(|c| c.get("publishedfileid").and_then(|x| x.as_str()).map(str::to_string)).collect())
+            .unwrap_or_default(),
+        is_collection: num("file_type") == Some(2) || v.get("num_children").and_then(|c| c.as_u64()).unwrap_or(0) > 0,
         tags,
         builds,
         workshop_id: id,
@@ -320,30 +331,45 @@ fn find_results(value: &Value, depth: u32) -> Option<Value> {
     }
 }
 
+/// What to list on the Workshop browse page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BrowseQuery {
+    pub text: Option<String>,
+    pub sort: Option<WorkshopSort>,
+    /// "41" / "42": keeps items tagged "Build NN".
+    pub build: Option<String>,
+    /// One of [`CATEGORIES`].
+    pub category: Option<String>,
+    /// How far back "most popular" looks: 1, 7, 90 or 365 days (Steam's own choices).
+    pub days: Option<u32>,
+    /// List collections instead of single mods.
+    pub collections: bool,
+    pub page: u32,
+    pub per_page: u32,
+}
+
 /// Searches the Workshop through its public browse page, which embeds the same item data the
 /// Web API returns. No Steam Web API key needed.
-/// `build` ("41" / "42") and `category` (one of [`CATEGORIES`]) become Workshop tags.
-pub fn search_public(
-    text: Option<&str>,
-    sort: WorkshopSort,
-    build: Option<&str>,
-    category: Option<&str>,
-    page: u32,
-    per_page: u32,
-) -> Result<WorkshopSearchResult, String> {
-    let page = page.max(1);
-    let per_page = per_page.clamp(1, 30);
+pub fn search_public(q: &BrowseQuery) -> Result<WorkshopSearchResult, String> {
+    let sort = q.sort.unwrap_or(WorkshopSort::Trending);
+    let page = q.page.max(1);
+    let per_page = if q.per_page == 0 { 30 } else { q.per_page.clamp(1, 30) };
     let mut req = agent()
         .get("https://steamcommunity.com/workshop/browse/")
         .query("appid", PZ_APP_ID.to_string())
-        .query("section", "readytouseitems")
+        .query("section", if q.collections { "collections" } else { "readytouseitems" })
         .query("browsesort", sort.browse_sort())
         .query("numperpage", per_page.to_string())
         .query("p", page.to_string());
-    if let Some(t) = text.map(str::trim).filter(|t| !t.is_empty()) {
+    if sort == WorkshopSort::Trending {
+        // Steam offers today, a week, three months and a year; anything else it ignores.
+        req = req.query("days", q.days.filter(|d| [1, 7, 90, 365].contains(d)).unwrap_or(7).to_string());
+    }
+    if let Some(t) = q.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         req = req.query("searchtext", t);
     }
-    for tag in tag_filters(build, category) {
+    for tag in tag_filters(q.build.as_deref(), q.category.as_deref()) {
         req = req.query("requiredtags[]", tag);
     }
     let html = req
@@ -712,18 +738,32 @@ mod tests {
     #[test]
     #[ignore]
     fn workshop_live_public_search() {
-        let trending = search_public(None, WorkshopSort::Trending, Some("42"), None, 1, 30).unwrap();
+        let b42 = |page: u32| BrowseQuery { build: Some("42".into()), page, per_page: 30, ..Default::default() };
+        let trending = search_public(&b42(1)).unwrap();
         println!("trending: {} items of {} ({} pages)", trending.items.len(), trending.total, trending.pages);
         assert!(trending.total > 1000 && trending.items.len() == 30);
         assert!(trending.items.iter().all(|i| i.builds.contains(&"42".to_string())));
-        let page3 = search_public(None, WorkshopSort::Trending, Some("42"), None, 3, 30).unwrap();
+        let page3 = search_public(&b42(3)).unwrap();
         assert_eq!(page3.page, 3);
         assert!(page3.items[0].workshop_id != trending.items[0].workshop_id);
-        let maps = search_public(Some("car"), WorkshopSort::Relevance, Some("42"), Some("Vehicles"), 1, 30).unwrap();
-        println!("car/Vehicles: {} of {}: {:?}", maps.items.len(), maps.total, maps.items.iter().take(3).map(|i| &i.title).collect::<Vec<_>>());
-        assert!(maps.total > 0 && maps.total < trending.total);
-        let none = search_public(Some("zzzzqqqxxnotamod"), WorkshopSort::Relevance, None, None, 1, 30).unwrap();
+        let today = search_public(&BrowseQuery { days: Some(1), ..b42(1) }).unwrap();
+        assert!(today.items[0].workshop_id != trending.items[0].workshop_id, "the time window changes the ranking");
+        let cars = search_public(&BrowseQuery { text: Some("car".into()), category: Some("Vehicles".into()), ..b42(1) }).unwrap();
+        println!("car/Vehicles: {} of {}: {:?}", cars.items.len(), cars.total, cars.items.iter().take(3).map(|i| &i.title).collect::<Vec<_>>());
+        assert!(cars.total > 0 && cars.total < trending.total);
+        let none = search_public(&BrowseQuery { text: Some("zzzzqqqxxnotamod".into()), ..b42(1) }).unwrap();
         assert!(none.items.is_empty());
+    }
+
+    /// Live Steam call, no key. cargo test workshop_live_collections -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn workshop_live_collections() {
+        let page = search_public(&BrowseQuery { collections: true, page: 1, per_page: 30, ..Default::default() }).unwrap();
+        let first = &page.items[0];
+        println!("{} collections; first: {:?} with {} items", page.total, first.title, first.children.len());
+        assert!(page.items.iter().all(|i| i.is_collection));
+        assert!(!first.children.is_empty(), "a collection browse result carries its items");
     }
 
     /// Live Steam call. cargo test workshop_live_details -- --ignored --nocapture

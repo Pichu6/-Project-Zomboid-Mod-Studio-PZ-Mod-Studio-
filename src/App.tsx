@@ -30,6 +30,8 @@ export const App: React.FC = () => {
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
   /** Conflicting file the Merger should open on (set from Mod Health). */
   const [mergerFocusPath, setMergerFocusPath] = useState<string | null>(null);
+  /** Workshop item Browse Mods should open on (set from the Mod List). */
+  const [browseFocusWorkshopId, setBrowseFocusWorkshopId] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
@@ -546,6 +548,10 @@ export const App: React.FC = () => {
               openedPackageFolder={openedPackageFolder}
               healthIssues={health.report?.issues ?? null}
               catalogById={health.catalogById}
+              onOpenInBrowser={(workshopId) => {
+                setBrowseFocusWorkshopId(workshopId);
+                setActiveTab('BROWSE');
+              }}
             />
           )}
 
@@ -558,7 +564,15 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'BROWSE' && <BrowseModule paths={paths} catalog={health.catalog} onInstalled={handleRefreshMods} />}
+          {activeTab === 'BROWSE' && (
+            <BrowseModule
+              paths={paths}
+              catalog={health.catalog}
+              onInstalled={handleRefreshMods}
+              focusWorkshopId={browseFocusWorkshopId}
+              onFocusHandled={() => setBrowseFocusWorkshopId(null)}
+            />
+          )}
 
           {activeTab === 'HEALTH' && (
             <HealthModule

@@ -3,8 +3,8 @@ import { ModInfo, ModPreset, MissingModsReport, HealthIssue, CatalogModSummary }
 import { SourceBadge, sourceOf } from '../common/SourceBadge';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import {
+  BookOpen,
   ListOrdered,
   RefreshCw,
   Search,
@@ -53,6 +53,8 @@ interface LoadOrderModuleProps {
   healthIssues?: HealthIssue[] | null;
   /** Installed mods as the game sees them (source, origin), from useModHealth. */
   catalogById?: Map<string, CatalogModSummary>;
+  /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
+  onOpenInBrowser?: (workshopId: string) => void;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -200,6 +202,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   openedPackageFolder,
   healthIssues = null,
   catalogById,
+  onOpenInBrowser,
 }) => {
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
@@ -211,6 +214,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
   const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
+  /** The selected mod's poster, read from disk as a data URL (the webview cannot open files). */
+  const [posterSrc, setPosterSrc] = useState<string | null>(null);
 
   // Preset & Profile Management State
   const [savedPresets, setSavedPresets] = useState<ModPreset[]>(() => {
@@ -390,10 +395,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
 
-  // Reset image error state whenever selected mod changes
+  // Load the selected mod's poster from disk (the webview is only handed the bytes).
   useEffect(() => {
     setImageError(false);
-  }, [selectedModId]);
+    setPosterSrc(null);
+    const file = selectedMod?.poster_url;
+    if (!file || !paths.is_valid) return;
+    let cancelled = false;
+    TauriService.readModImage(paths, file)
+      .then((url) => !cancelled && setPosterSrc(url))
+      .catch(() => !cancelled && setImageError(true));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedModId, selectedMod?.poster_url, paths.is_valid]);
 
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1007,16 +1023,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             )}
           </div>
 
-          {/* Steam Workshop Button */}
-          <button
-            onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-cyan-500/60 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 group"
-            title="Open Steam Workshop de Project Zomboid"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
-            <span>Workshop</span>
-          </button>
-
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -1530,13 +1536,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     )}
                   </div>
 
-                  {selectedMod.workshop_id && (
+                  {selectedMod.workshop_id && onOpenInBrowser && (
                     <button
-                      onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedMod.workshop_id}`)}
+                      onClick={() => onOpenInBrowser(selectedMod.workshop_id!)}
                       className="flex items-center gap-1 text-[10px] text-cyan-400 hover:underline font-mono bg-transparent border-0 cursor-pointer"
+                      title="Opens this mod in Browse Mods: description, images and the Workshop page"
                     >
-                      <span>Steam Workshop (#{selectedMod.workshop_id})</span>
-                      <ExternalLink className="w-3 h-3" />
+                      <span>Open in Mod Browser (#{selectedMod.workshop_id})</span>
+                      <BookOpen className="w-3 h-3" />
                     </button>
                   )}
                 </div>
@@ -1663,9 +1670,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     Mod Poster
                   </label>
                   <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
-                    {selectedMod.poster_url && !imageError ? (
+                    {posterSrc && !imageError ? (
                       <img
-                        src={convertFileSrc(selectedMod.poster_url)}
+                        src={posterSrc}
                         alt={selectedMod.name}
                         className="w-full h-full object-cover rounded-xl"
                         onError={() => setImageError(true)}
@@ -2009,7 +2016,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           <span className="text-slate-200 truncate max-w-[240px]">{m.name}</span>
                           {m.workshop_id ? (
                             <button
-                              onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshop_id}`)}
+                              onClick={() => (onOpenInBrowser ? onOpenInBrowser(m.workshop_id!) : TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshop_id}`))}
                               className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
                             >
                               <span>Steam (#{m.workshop_id})</span>
