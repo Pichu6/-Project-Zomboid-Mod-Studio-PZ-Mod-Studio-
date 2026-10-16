@@ -1385,9 +1385,11 @@ fn find_recipe_start(text: &str) -> Option<usize> {
 mod tests {
     use super::*;
 
+    /// Reads a real Workshop folder when one is given: PZMS_WORKSHOP_DIR=... cargo test
     #[test]
     fn test_subscribed_workshop_ids_filtering() {
-        let workshop_dir = Path::new("G:/Juegos/steamapps/workshop/content/108600");
+        let Ok(dir) = std::env::var("PZMS_WORKSHOP_DIR") else { return };
+        let workshop_dir = Path::new(&dir);
         if workshop_dir.exists() {
             let subs = get_subscribed_workshop_ids(workshop_dir);
             assert!(subs.is_some());

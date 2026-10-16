@@ -13,6 +13,7 @@ Talks to the Z_ClaudeAgent mod through <user>/Zomboid/Lua/claude_cmd.lua and cla
 import ctypes
 import ctypes.wintypes as wt
 import os
+import re
 import sys
 import time
 
@@ -174,7 +175,40 @@ def enter_game(timeout=300):
     return f"not in game after {timeout}s ({clicks} clicks)"
 
 
-PZ_DIR = r"D:\Apps\Steam\steamapps\common\ProjectZomboid"
+def find_pz_dir():
+    """The game folder: $PZ_DIR, else wherever Steam says it installed the game."""
+    if os.environ.get("PZ_DIR"):
+        return os.environ["PZ_DIR"]
+    roots = []
+    try:
+        import winreg
+
+        for hive, key, name in [
+            (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, key) as k:
+                    roots.append(winreg.QueryValueEx(k, name)[0])
+            except OSError:
+                pass
+    except ImportError:
+        pass
+    # Other drives: Steam lists every library it uses.
+    for root in list(roots):
+        try:
+            with open(os.path.join(root, "steamapps", "libraryfolders.vdf"), encoding="utf-8") as f:
+                roots += re.findall(r'"path"\s+"([^"]+)"', f.read())
+        except OSError:
+            pass
+    for root in roots:
+        pz = os.path.join(root.replace("\\\\", "\\"), "steamapps", "common", "ProjectZomboid")
+        if os.path.isdir(pz):
+            return pz
+    return ""
+
+
+PZ_DIR = find_pz_dir()
 
 
 def launch(extra=(), w=1280, h=720):
@@ -183,7 +217,9 @@ def launch(extra=(), w=1280, h=720):
     if find_window():
         return "already running"
     prev = user32.GetForegroundWindow()
-    exe = os.path.join(os.environ.get("PZ_DIR", PZ_DIR), "ProjectZomboid64.exe")
+    if not PZ_DIR:
+        return "Project Zomboid not found; set PZ_DIR to the game folder"
+    exe = os.path.join(PZ_DIR, "ProjectZomboid64.exe")
     subprocess.Popen([exe, "-windowed", *extra], cwd=os.path.dirname(exe),
                      creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | NEW_PROCESS_GROUP
     hwnd = None

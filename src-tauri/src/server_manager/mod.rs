@@ -773,7 +773,7 @@ pub fn get_connected_players(user_zomboid_dir: String) -> Result<Vec<ConnectedPl
                             let mut y = 0;
                             let mut z = 0;
 
-                            // Pattern: [25-08-26 01:39:14.144] 76561198078149251 "pichu" fully connected (11902,6894,0).
+                            // Pattern: [25-08-26 01:39:14.144] 76561190000000000 "player" fully connected (11902,6894,0).
                             let quote_parts: Vec<&str> = line.split('"').collect();
                             if quote_parts.len() >= 3 {
                                 username = quote_parts[1].trim().to_string();

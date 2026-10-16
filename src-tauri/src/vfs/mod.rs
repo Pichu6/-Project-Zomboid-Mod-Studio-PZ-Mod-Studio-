@@ -170,7 +170,106 @@ pub fn auto_merge_conflicts(paths: &StudioPaths, rel_paths: &[String]) -> Result
     Ok(AutoMergeResult { package_folder: package, merged, skipped })
 }
 
-/// Auto-detects default Project Zomboid installation and user data paths across drives.
+/// A string value under HKEY_CURRENT_USER or HKEY_LOCAL_MACHINE, or None when it is not there.
+#[cfg(windows)]
+fn registry_string(under_current_user: bool, subkey: &str, value: &str) -> Option<String> {
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ,
+    };
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (key, name) = (wide(subkey), wide(value));
+    let hive = if under_current_user { HKEY_CURRENT_USER } else { HKEY_LOCAL_MACHINE };
+    let mut bytes: u32 = 0;
+    unsafe {
+        let probe = RegGetValueW(hive, key.as_ptr(), name.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), std::ptr::null_mut(), &mut bytes);
+        if probe != 0 || bytes == 0 || bytes > 64 * 1024 {
+            return None;
+        }
+        let mut buf = vec![0u16; bytes as usize / 2 + 1];
+        let read = RegGetValueW(hive, key.as_ptr(), name.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), buf.as_mut_ptr().cast(), &mut bytes);
+        if read != 0 {
+            return None;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]))
+    }
+}
+
+#[cfg(not(windows))]
+fn registry_string(_under_current_user: bool, _subkey: &str, _value: &str) -> Option<String> {
+    None
+}
+
+/// The library paths Steam lists in `steamapps/libraryfolders.vdf` (games can live on any drive).
+fn steam_libraries(steam_root: &Path) -> Vec<PathBuf> {
+    let Ok(text) = fs::read_to_string(steam_root.join("steamapps").join("libraryfolders.vdf")) else {
+        return Vec::new();
+    };
+    crate::vdf::parse(&text)
+        .get("libraryfolders")
+        .and_then(|b| b.block())
+        .map(|entries| entries.values().filter_map(|e| e.str("path")).map(PathBuf::from).collect())
+        .unwrap_or_default()
+}
+
+/// Steam writes its path in whatever shape it likes ("d:/apps/steam"): make it "D:\\Apps\\Steam"
+/// so the paths the Studio stores and compares all look the same.
+fn windows_style(p: PathBuf) -> PathBuf {
+    let mut text = p.to_string_lossy().replace('/', "\\");
+    if text.len() > 3 {
+        text = text.trim_end_matches('\\').to_string();
+    }
+    if text.as_bytes().get(1) == Some(&b':') {
+        text[..1].make_ascii_uppercase();
+    }
+    PathBuf::from(text)
+}
+
+/// Every Steam library on this PC: the install Steam recorded in the registry and the libraries it
+/// lists, then common install folders as a fallback when the registry says nothing.
+pub fn steam_library_dirs() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    fn push(roots: &mut Vec<PathBuf>, p: PathBuf) {
+        let p = windows_style(p);
+        let seen = roots.iter().any(|r| r.as_os_str().eq_ignore_ascii_case(p.as_os_str()));
+        if !seen && p.is_dir() {
+            roots.push(p);
+        }
+    }
+    for installed in [
+        registry_string(true, "Software\\Valve\\Steam", "SteamPath"),
+        registry_string(false, "SOFTWARE\\WOW6432Node\\Valve\\Steam", "InstallPath"),
+        registry_string(false, "SOFTWARE\\Valve\\Steam", "InstallPath"),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        push(&mut roots, PathBuf::from(installed));
+    }
+    for library in roots.clone().iter().flat_map(|r| steam_libraries(r)) {
+        push(&mut roots, library);
+    }
+    // Steam not in the registry (portable install, another OS): look where it usually is.
+    for drive in ["C", "D", "E", "F", "G", "H", "I", "J", "K", "Z"] {
+        for folder in [
+            "Program Files (x86)\\Steam",
+            "Program Files\\Steam",
+            "Steam",
+            "SteamLibrary",
+            "Games\\Steam",
+            "Games",
+            "Apps\\Steam",
+            "Apps",
+            "Juegos\\Steam",
+            "Juegos",
+        ] {
+            push(&mut roots, PathBuf::from(format!("{}:\\{}", drive, folder)));
+        }
+    }
+    roots
+}
+
+/// Auto-detects the Project Zomboid install and the user's Zomboid folder.
 pub fn auto_detect_paths() -> StudioPaths {
     let user_home = dirs_next::home_dir().unwrap_or_else(|| PathBuf::from("C:\\"));
     let user_zomboid = user_home.join("Zomboid");
@@ -179,35 +278,17 @@ pub fn auto_detect_paths() -> StudioPaths {
     let mut pz_install_dir = String::new();
     let mut workshop_dir = String::new();
 
-    let drives = vec!["C", "D", "E", "F", "G", "H", "I", "J", "K", "Z"];
-
-    for drive in drives {
-        let base_roots = vec![
-            format!("{}:\\Program Files (x86)\\Steam", drive),
-            format!("{}:\\Program Files\\Steam", drive),
-            format!("{}:\\Steam", drive),
-            format!("{}:\\SteamLibrary", drive),
-            format!("{}:\\Apps\\Steam", drive),
-            format!("{}:\\Apps", drive),
-            format!("{}:\\Juegos", drive),
-            format!("{}:\\Juegos\\Steam", drive),
-            format!("{}:\\Games", drive),
-            format!("{}:\\Games\\Steam", drive),
-        ];
-
-        for root in &base_roots {
-            let root_path = Path::new(root);
-            if root_path.exists() {
-                let workshop_p = root_path.join("steamapps").join("workshop").join("content").join("108600");
-                if workshop_p.exists() && workshop_dir.is_empty() {
-                    workshop_dir = workshop_p.to_string_lossy().to_string();
-                }
-
-                let pz_p = root_path.join("steamapps").join("common").join("ProjectZomboid");
-                if pz_p.exists() && pz_install_dir.is_empty() {
-                    pz_install_dir = pz_p.to_string_lossy().to_string();
-                }
-            }
+    for root in steam_library_dirs() {
+        let workshop_p = root.join("steamapps").join("workshop").join("content").join("108600");
+        if workshop_dir.is_empty() && workshop_p.is_dir() {
+            workshop_dir = workshop_p.to_string_lossy().to_string();
+        }
+        let pz_p = root.join("steamapps").join("common").join("ProjectZomboid");
+        if pz_install_dir.is_empty() && pz_p.is_dir() {
+            pz_install_dir = pz_p.to_string_lossy().to_string();
+        }
+        if !workshop_dir.is_empty() && !pz_install_dir.is_empty() {
+            break;
         }
     }
 
@@ -479,6 +560,32 @@ fn find_first_differing_line(base: &str, files: &[CompetingModFileRaw]) -> usize
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn steam_paths_are_normalised() {
+        let norm = |s: &str| windows_style(PathBuf::from(s)).to_string_lossy().to_string();
+        assert_eq!(norm("d:/apps/steam"), "D:\\apps\\steam");
+        assert_eq!(norm("D:\\Apps\\Steam\\"), "D:\\Apps\\Steam");
+        assert_eq!(norm("C:\\"), "C:\\", "a drive root keeps its slash");
+    }
+
+    /// What this PC really has. cargo test steam_detection -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn steam_detection_on_this_pc() {
+        println!("registry SteamPath: {:?}", registry_string(true, "Software\\Valve\\Steam", "SteamPath"));
+        let libs = steam_library_dirs();
+        for l in &libs {
+            println!("library: {}", l.display());
+        }
+        assert!(libs.iter().all(|l| !l.to_string_lossy().contains('/')), "paths are normalised");
+        let paths = auto_detect_paths();
+        println!("game:     {}", paths.pz_install_dir);
+        println!("workshop: {}", paths.workshop_dir);
+        println!("zomboid:  {}", paths.user_zomboid_dir);
+        assert!(paths.is_valid, "the game should be found on this PC");
+    }
     use super::*;
 
     /// Read-only timing on the real install.
