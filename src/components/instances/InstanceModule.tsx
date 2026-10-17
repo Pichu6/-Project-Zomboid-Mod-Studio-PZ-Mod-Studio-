@@ -10,7 +10,12 @@ interface InstanceModuleProps {
   onProfileActivated?: (inst: AppInstance) => void;
   /** The active profile was deleted, so nothing is active any more. */
   onProfileDeleted?: () => void;
+  /** Takes the user to Browse Mods, for a profile that starts with nothing in it. */
+  onGoToBrowse?: () => void;
 }
+
+/** What a new profile starts with. */
+type NewProfileMods = 'current' | 'all' | 'none' | 'pick';
 
 export const InstanceModule: React.FC<InstanceModuleProps> = ({
   paths,
@@ -18,9 +23,18 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
   onApplyInstanceLoadOrder,
   onProfileActivated,
   onProfileDeleted,
+  onGoToBrowse,
 }) => {
   const [instances, setInstances] = useState<AppInstance[]>([]);
   const [newInstanceName, setNewInstanceName] = useState('');
+  /**
+   * A profile is a mod list, so making one asks which mods. The old form took whatever happened
+   * to be switched on, which is right often enough to stay the default and wrong whenever the
+   * point of the new profile is to be different from the one you are in.
+   */
+  const [newProfileMods, setNewProfileMods] = useState<NewProfileMods>('current');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [pickSearch, setPickSearch] = useState('');
   const [newInstanceDesc, setNewInstanceDesc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -66,8 +80,29 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       return;
     }
 
+    const chosen: string[] =
+      newProfileMods === 'all'
+        ? mods.map((m) => m.mod_id)
+        : newProfileMods === 'none'
+        ? []
+        : newProfileMods === 'pick'
+        ? mods.filter((m) => picked.has(m.mod_id)).map((m) => m.mod_id)
+        : activeMods.map((m) => m.mod_id);
+
+    if (newProfileMods === 'pick' && chosen.length === 0) {
+      alert('Nothing is ticked, so this profile would switch every mod off. Tick the mods you want, or choose "Nothing yet".');
+      return;
+    }
+    if (newProfileMods === 'none' && !confirm(
+      'Create an empty profile?\n\nSwitching to it turns every mod off, which is what you want ' +
+        'before subscribing to a new set. Your other profiles keep their mods.'
+    )) {
+      return;
+    }
+
     try {
-      const activeModIds = activeMods.map((m) => m.mod_id);
+      const activeModIds = chosen;
+      // The order the list already has, so a profile does not reshuffle what you sorted.
       const loadOrder = mods.map((m) => m.mod_id);
 
       const created: AppInstance = await TauriService.createInstance(
@@ -80,6 +115,8 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
       setNewInstanceName('');
       setNewInstanceDesc('');
+      setPicked(new Set());
+      setPickSearch('');
       await loadInstances();
 
       // Activate it so the rest of the app unlocks, and only then say so.
@@ -168,10 +205,40 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
   };
 
   const handleDeleteInstance = async (inst: AppInstance) => {
+    // A patch package is made for the mods of the profile it was built in: its merges are about
+    // those versions of those files. Left behind, it goes on loading last for every other
+    // profile, which is how a merge for mods you no longer use ends up in a list that never
+    // asked for it.
+    const itsPackages = inst.active_mod_ids.filter(
+      (id) => id.startsWith('Z_PZModStudio_') && id !== 'Z_PZModStudio_Bridge'
+    );
     if (!confirm(`Delete profile '${inst.name}'?`)) return;
+    let alsoPackages = false;
+    if (itsPackages.length > 0) {
+      alsoPackages = confirm(
+        `Delete the ${itsPackages.length} patch package${itsPackages.length === 1 ? '' : 's'} this profile uses as well?\n\n` +
+          `${itsPackages.join(', ')}\n\n` +
+          `They hold merges made for this profile's mods. If you pick the same mods again later, ` +
+          `the Studio works the compatibility out again from what is installed then.\n\n` +
+          `Cancel keeps them.`
+      );
+    }
     try {
       await TauriService.deleteInstance(paths.user_zomboid_dir, inst.id);
-      setStatusMessage(`Profile '${inst.name}' deleted.`);
+      if (alsoPackages) {
+        for (const folder of itsPackages) {
+          try {
+            await TauriService.deleteMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folder);
+          } catch (err) {
+            alert(`${folder} could not be deleted: ${explainError(err)}`);
+          }
+        }
+      }
+      setStatusMessage(
+        alsoPackages
+          ? `Profile '${inst.name}' and its ${itsPackages.length} patch package(s) deleted.`
+          : `Profile '${inst.name}' deleted.`
+      );
       await loadInstances();
       // The header and the sidebar were still showing it as active until a restart.
       if (inst.is_active) onProfileDeleted?.();
@@ -250,6 +317,102 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                 onChange={(e) => setNewInstanceDesc(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
               />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Which mods
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  { id: 'current', label: 'What is on now', count: activeMods.length },
+                  { id: 'all', label: 'Everything installed', count: mods.length },
+                  { id: 'pick', label: 'Pick them', count: picked.size },
+                  { id: 'none', label: 'Nothing yet', count: 0 },
+                ] as { id: NewProfileMods; label: string; count: number }[]).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setNewProfileMods(option.id)}
+                    aria-pressed={newProfileMods === option.id}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer text-left ${
+                      newProfileMods === option.id
+                        ? 'bg-emerald-950/70 text-emerald-200 border-emerald-700'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {option.label}
+                    <span className="block text-[10px] font-mono opacity-70">
+                      {option.id === 'none' ? 'start empty' : `${option.count} mods`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {newProfileMods === 'pick' && (
+                <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+                  <div className="flex items-center gap-2 p-2 border-b border-slate-800">
+                    <input
+                      type="text"
+                      value={pickSearch}
+                      onChange={(e) => setPickSearch(e.target.value)}
+                      placeholder="Search your mods..."
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPicked(new Set(mods.map((m) => m.mod_id)))}
+                      className="text-[10px] px-1.5 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPicked(new Set())}
+                      className="text-[10px] px-1.5 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                    >
+                      None
+                    </button>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-900">
+                    {mods
+                      .filter((m) => {
+                        const q = pickSearch.trim().toLowerCase();
+                        return !q || m.name.toLowerCase().includes(q) || m.mod_id.toLowerCase().includes(q);
+                      })
+                      .map((m) => (
+                        <label
+                          key={m.mod_id}
+                          className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-900/80 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={picked.has(m.mod_id)}
+                            onChange={(e) => {
+                              const next = new Set(picked);
+                              if (e.target.checked) next.add(m.mod_id);
+                              else next.delete(m.mod_id);
+                              setPicked(next);
+                            }}
+                            className="accent-emerald-500"
+                          />
+                          <span className="truncate">{m.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {newProfileMods === 'none' && onGoToBrowse && (
+                <button
+                  type="button"
+                  onClick={onGoToBrowse}
+                  className="mt-2 w-full py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 cursor-pointer"
+                  title="Subscribe to what you want, then come back and make the profile"
+                >
+                  Find mods in Browse Mods
+                </button>
+              )}
             </div>
 
             <button
