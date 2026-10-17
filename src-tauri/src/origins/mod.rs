@@ -18,6 +18,15 @@ pub enum ModOrigin {
     Nexus { mod_id: u64, page_url: String, name: Option<String> },
     /// Installed from a file or folder the user picked (forum, GitHub, Discord, ...).
     Manual { file_name: Option<String> },
+    /// Downloaded from a link the user pasted (a direct zip, or a GitHub release).
+    Url {
+        /// The file that was downloaded.
+        url: String,
+        /// A page a person can open to see what it is, when the link gave one.
+        page_url: Option<String>,
+        /// Where it came from, in words: "the latest release of owner/repo (v1.2.0)".
+        source: String,
+    },
     /// A copy of another mod adapted by the Studio to run on the installed build.
     Compat {
         /// Workshop item the original comes from, when it is one.

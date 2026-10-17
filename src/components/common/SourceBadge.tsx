@@ -38,6 +38,13 @@ export function sourceOf(modId: string, entry: CatalogModSummary | undefined): {
           url: entry.origin.workshop_id ? `https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.origin.workshop_id}` : undefined,
         };
       }
+      if (entry.origin?.kind === 'url') {
+        return {
+          kind: 'manual',
+          title: `Downloaded from ${entry.origin.source}`,
+          url: entry.origin.page_url ?? entry.origin.url,
+        };
+      }
       if (entry.origin?.kind === 'manual') {
         return { kind: 'manual', title: `Installed by hand${entry.origin.file_name ? ` from ${entry.origin.file_name}` : ''}` };
       }

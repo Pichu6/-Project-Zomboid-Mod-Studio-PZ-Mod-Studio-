@@ -400,7 +400,18 @@ export interface NexusSearchResult {
 export type ModOrigin =
   | { kind: 'nexus'; mod_id: number; page_url: string; name: string | null }
   | { kind: 'manual'; file_name: string | null }
+  | { kind: 'url'; url: string; page_url: string | null; source: string }
   | { kind: 'compat'; workshop_id: string | null; source_dir: string; changes: string[] };
+
+/** What a link turns out to offer, before anything is downloaded. */
+export interface UrlInstallPlan {
+  download_url: string;
+  file_name: string;
+  size: number | null;
+  /** In words: "the latest release of owner/repo (v1.2.0)". */
+  source: string;
+  page_url: string | null;
+}
 
 export type CatalogSource =
   | { kind: 'workshop'; workshop_id: string }

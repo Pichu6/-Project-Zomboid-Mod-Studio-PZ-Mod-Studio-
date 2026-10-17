@@ -87,6 +87,40 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
       const folder = await TauriService.pickFolder();
       if (folder) await install(folder);
     },
+    /**
+     * From a link: a direct .zip, or a GitHub repository or release. What it will download is
+     * worked out and shown first, because a link does not say what is behind it.
+     */
+    fromUrl: async (url: string): Promise<boolean> => {
+      setBusy(true);
+      setResult(null);
+      try {
+        const plan = await TauriService.resolveUrlInstall(url);
+        const size = plan.size ? ` (${(plan.size / (1024 * 1024)).toFixed(1)} MB)` : '';
+        if (!confirm(`Download ${plan.file_name}${size} from ${plan.source}?\n\n${plan.download_url}`)) {
+          return false;
+        }
+        let res: InstallResult;
+        try {
+          res = await TauriService.installFromUrl(paths, url, false);
+        } catch (err) {
+          const text = String(err);
+          if (!text.startsWith(CONFLICT_PREFIX)) throw err;
+          const { existing_folders } = JSON.parse(text.slice(CONFLICT_PREFIX.length)) as { existing_folders: string[] };
+          if (!confirm(`Already installed in Zomboid/mods: ${existing_folders.join(', ')}.\n\nReplace? The current copy is moved to Zomboid/PZModStudio_Backups/mods first.`)) return false;
+          res = await TauriService.installFromUrl(paths, url, true);
+        }
+        setResult(res);
+        TauriService.clearRemoteCache('workshop:');
+        onDone();
+        return true;
+      } catch (err) {
+        reportBackendError('Installing from that link', err);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
   };
 }
 
@@ -869,6 +903,21 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
             title="For .7z / .rar: extract it first, then choose the folder">
             <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
             Folder
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const url = window.prompt(
+                'Paste a link to the mod: a direct .zip, or a GitHub repository or release page.'
+              );
+              if (url && url.trim()) await installer.fromUrl(url.trim());
+            }}
+            disabled={installer.busy || !paths.is_valid}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
+            title="Downloads a mod from a link (a direct .zip, or a GitHub repository or release) and installs it"
+          >
+            <Link2 className="w-3.5 h-3.5" aria-hidden="true" />
+            From a link
           </button>
         </div>
       </div>

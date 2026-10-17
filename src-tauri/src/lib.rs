@@ -299,6 +299,27 @@ fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog:
 
 /// Every earlier version of the mod list the Studio kept, newest first.
 /// What the Build 42 shim covers, read from the shim that ships inside merge packages.
+/// What a link offers, worked out without downloading it.
+#[tauri::command(async)]
+fn resolve_url_install_cmd(url: String) -> Result<mod_install::from_url::UrlInstallPlan, String> {
+    mod_install::from_url::resolve(&url)
+}
+
+/// Downloads a link and installs the mod(s) in it, recording where they came from.
+#[tauri::command(async)]
+fn install_from_url_cmd(
+    paths: StudioPaths,
+    url: String,
+    replace_existing: bool,
+) -> Result<mod_install::InstallResult, String> {
+    mod_install::from_url::install_from_url(
+        &url,
+        &paths.user_zomboid_dir,
+        &paths.workshop_dir,
+        replace_existing,
+    )
+}
+
 #[tauri::command(async)]
 fn polyfill_sections_cmd() -> Vec<patch_generator::PolyfillSection> {
     patch_generator::polyfill_sections()
@@ -635,6 +656,8 @@ pub fn run() {
             steam_client_ready_cmd,
             launch_sandbox_cmd,
             script_conflicts_cmd,
+            resolve_url_install_cmd,
+            install_from_url_cmd,
             polyfill_sections_cmd,
             mod_list_history_cmd,
             restore_mod_list_version_cmd,

@@ -8,6 +8,8 @@
 
 use crate::catalog::modinfo::parse_game_mod_info;
 use crate::load_order::mod_info::{get_existing_user_zomboid_dirs, select_mod_info_for_build, version_dir_int};
+pub mod from_url;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;

@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -679,6 +679,16 @@ export const TauriService = {
       // Nothing is broken if this cannot be read; the rest of the health check stands on its own.
       return [];
     }
+  },
+
+  /** What a link offers, without downloading it. Throws with the reason it cannot be used. */
+  resolveUrlInstall: async (url: string): Promise<UrlInstallPlan> => {
+    return await invoke<UrlInstallPlan>('resolve_url_install_cmd', { url });
+  },
+
+  /** Downloads a link and installs the mod(s) in it. Throws (CONFLICT_PREFIX when folders exist). */
+  installFromUrl: async (paths: StudioPathsUI, url: string, replaceExisting: boolean): Promise<InstallResult> => {
+    return await invoke<InstallResult>('install_from_url_cmd', { paths, url, replaceExisting });
   },
 
   /** What the Build 42 shim covers, read from the shim that ships. */
