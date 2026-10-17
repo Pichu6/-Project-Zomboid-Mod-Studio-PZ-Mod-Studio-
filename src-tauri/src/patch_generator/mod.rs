@@ -1674,6 +1674,47 @@ mod live_mod_fix {
         println!("files written: {}", result.files_written);
         println!("shim: {}", result.polyfill_shim_written);
     }
+
+    /// Puts one corrected mod file into a package the user already has, beside their merges:
+    /// every resolved draft the package holds is published again, plus the fix, exactly what
+    /// the Merger's publish sends. Nothing the package held is dropped.
+    /// PZMS_ZOMBOID_DIR=... PZMS_PACKAGE=Z_PZModStudio_MergedPatch PZMS_FIX_FILE=<the corrected file> PZMS_FIX_PATH=media/...
+    /// cargo test --release adds_a_fixed_mod_file_to_an_existing_package -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn adds_a_fixed_mod_file_to_an_existing_package() {
+        let (Ok(zomboid), Ok(package), Ok(file), Ok(rel)) = (
+            std::env::var("PZMS_ZOMBOID_DIR"),
+            std::env::var("PZMS_PACKAGE"),
+            std::env::var("PZMS_FIX_FILE"),
+            std::env::var("PZMS_FIX_PATH"),
+        ) else {
+            return;
+        };
+        let content = std::fs::read_to_string(&file).expect("the corrected file");
+        let mut merged_files: Vec<super::MergedFilePayload> =
+            super::get_draft_resolutions(&zomboid, &package)
+                .into_values()
+                .filter(|d| d.status == "RESOLVED" && d.relative_path != rel)
+                .map(|d| super::MergedFilePayload {
+                    relative_path: d.relative_path,
+                    content: d.resolved_content,
+                })
+                .collect();
+        println!("{} already holds {} resolved files", package, merged_files.len());
+        merged_files.push(super::MergedFilePayload { relative_path: rel.clone(), content });
+        let result = super::generate_master_patch(super::MasterPatchRequest {
+            workshop_dir: std::env::var("PZMS_WORKSHOP_DIR").ok(),
+            pz_install_dir: std::env::var("PZMS_PZ_DIR").ok(),
+            user_zomboid_dir: zomboid.clone(),
+            mod_list_ini_path: format!("{}/mods/default.txt", zomboid),
+            merged_files,
+            package_folder_name: Some(package),
+        })
+        .expect("the package is written");
+        println!("package: {}", result.patch_mod_dir);
+        println!("files written: {}", result.files_written);
+    }
 }
 
 #[cfg(test)]
