@@ -5,6 +5,10 @@ import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import { liveConsoleLines, startLiveConsole, subscribeLiveConsole } from '../../services/liveConsole';
 import { applyRequireFix, packageForPatch } from '../../utils/requireFix';
+import { errorShape } from '../../utils/errorShape';
+
+/** The game names a Studio package when it read the package's patched copy of a mod's file. */
+const STUDIO_PACKAGE_PREFIX = 'PZ Mod Studio Patch: ';
 
 const LIVE_CONSOLE_HEADER = [
   '[PZ Monitor Center] Realtime client session monitor ready.',
@@ -91,18 +95,6 @@ export const formatLogDisplayName = (file: LogFileInfoUI): string => {
   }
   return file.file_name;
 };
-
-/**
- * An error with its line number, frame and other numbers blurred, so the same thing happening
- * six hundred times collapses to one shape. The game writes the same failure once per frame,
- * which is why a log of a thousand error lines is usually a handful of problems.
- */
-const errorShape = (line: string): string =>
-  line
-    .replace(/^(ERROR|WARN)\s*:\s*\w+\s*f:\d+\s*(at [\w.]+\s*)?>?\s*/, '')
-    .replace(/\d+/g, 'N')
-    .trim()
-    .slice(0, 90);
 
 export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
@@ -1048,7 +1040,18 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                           >
                             {card.mod_name ?? modFromStack(card)}
                           </span>
-                          {onPatchMod && modIdNamed(card.mod_name ?? modFromStack(card)) && (
+                          {(card.mod_name ?? '').startsWith(STUDIO_PACKAGE_PREFIX) ? (
+                            /* The package's patched copy of a mod file: the Merger is where it lives. */
+                            <button
+                              type="button"
+                              onClick={onOpenMerger}
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1"
+                              title="This line comes from the package's copy of the file. Open the Merger to change the patch or unmerge it."
+                            >
+                              <Wrench className="w-3 h-3" aria-hidden="true" />
+                              Open in the Merger
+                            </button>
+                          ) : onPatchMod && modIdNamed(card.mod_name ?? modFromStack(card)) && (
                             <button
                               type="button"
                               onClick={() => {
@@ -1083,7 +1086,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                               {fixNotes[card.id]}
                             </div>
                           )}
-                          {onSwitchOffMod && (
+                          {onSwitchOffMod && !(card.mod_name ?? '').startsWith(STUDIO_PACKAGE_PREFIX) && (
                             <button
                               type="button"
                               onClick={() => onSwitchOffMod((card.mod_name ?? modFromStack(card))!)}

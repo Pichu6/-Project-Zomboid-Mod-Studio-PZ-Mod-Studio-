@@ -7,6 +7,7 @@ import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
 import { TauriService, reportBackendError } from './services/tauri';
 import { startLiveConsole } from './services/liveConsole';
+import { errorShape } from './utils/errorShape';
 
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
@@ -143,8 +144,14 @@ export const App: React.FC = () => {
 
     TauriService.listenSandboxErrorCards((card) => {
       setErrorCards((prev) => {
-        // Deduplicate cards by title or rule suggestion so 32 identical cards never stack.
-        const isDuplicate = prev.some((c) => c.title === card.title || (c.polyfill_rule_id_suggestion && c.polyfill_rule_id_suggestion === card.polyfill_rule_id_suggestion));
+        // One card per problem: the same shape of line again is the same problem. The title
+        // alone used to decide, which folded three different lines of one mod into one card.
+        const shape = errorShape(card.raw_error);
+        const isDuplicate = prev.some(
+          (c) =>
+            (c.title === card.title && errorShape(c.raw_error) === shape) ||
+            (c.polyfill_rule_id_suggestion && c.polyfill_rule_id_suggestion === card.polyfill_rule_id_suggestion)
+        );
         if (isDuplicate) return prev;
 
         return [card, ...prev];
@@ -153,8 +160,15 @@ export const App: React.FC = () => {
       unlistenErrorCards = unlisten;
     });
 
+    // A relaunch writes a fresh console.txt: the cards are this session's, so the last one's go.
+    let unlistenSession: (() => void) | undefined;
+    TauriService.listenSandboxSessionStarted(() => setErrorCards([])).then((unlisten) => {
+      unlistenSession = unlisten;
+    });
+
     return () => {
       if (unlistenErrorCards) unlistenErrorCards();
+      if (unlistenSession) unlistenSession();
     };
   }, []);
 

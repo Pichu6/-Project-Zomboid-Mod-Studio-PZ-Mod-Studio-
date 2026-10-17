@@ -798,6 +798,11 @@ export const TauriService = {
   /**
    * Listens to translated crash error cards from Rust log watcher
    */
+  /** The game wrote a fresh console.txt: a new session started, and the last one's cards are stale. */
+  listenSandboxSessionStarted: async (callback: () => void): Promise<UnlistenFn> => {
+    return await listen('sandbox-session-started', () => callback());
+  },
+
   listenSandboxErrorCards: async (callback: (card: TranslatedErrorCard) => void): Promise<UnlistenFn> => {
     return await listen<TranslatedErrorCard>('sandbox-error-card', (event) => {
       callback(event.payload);

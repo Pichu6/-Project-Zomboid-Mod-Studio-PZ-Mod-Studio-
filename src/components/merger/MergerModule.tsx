@@ -720,6 +720,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const handleSaveSingleConflict = async () => {
     if (!currentConflict) return;
     if (isPatchTarget(currentConflict)) {
+      // An unchanged copy fixes nothing and freezes the file at today's version of the mod; the
+      // game would also blame the package for every line the mod's own copy already produced.
+      const modsOwn = currentConflict.competing_mods[0]?.content;
+      if (modsOwn !== undefined && editorContent === modsOwn) {
+        showToast(`Nothing changed in "${currentConflict.relative_path}": an identical copy would only freeze the file. Edit it first.`);
+        return;
+      }
       try {
         const published = await savePatchTarget(currentConflict.id, currentConflict.relative_path, editorContent);
         setIsManuallyEdited(false);

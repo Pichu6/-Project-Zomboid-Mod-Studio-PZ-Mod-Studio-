@@ -263,8 +263,15 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                 let mut offset = file_offset.unwrap_or(0);
                 if let Ok(metadata) = file.metadata() {
                     if metadata.len() < offset {
-                        // A new session truncated the file: read it from the top.
+                        // A new session truncated the file: read it from the top, and forget the
+                        // last session -- what it blamed, and which lines were already reported.
+                        // Without this a relaunch reported nothing it had reported before, so a
+                        // mod's warning that survived a fix never came back as a card, and the
+                        // Monitor said two warnings over a log that held six.
                         offset = 0;
+                        already_reported.clear();
+                        blame = ModBlame::default();
+                        let _ = app.emit("sandbox-session-started", ());
                     }
                 }
                 let mut reader = BufReader::new(file);
@@ -386,6 +393,9 @@ impl ModBlame {
     }
 }
 
+/// The display name every Studio package gets in `generate_master_patch`: `name=PZ Mod Studio Patch: <x>`.
+pub const STUDIO_PACKAGE_PREFIX: &str = "PZ Mod Studio Patch: ";
+
 /// A line worth showing even though it matches no known pattern, because the game named a mod.
 fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayload {
     let severity = Severity::of_line(line);
@@ -397,6 +407,27 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
         .and_then(|rest| rest.split('>').next())
         .map(|f| f.trim().to_string())
         .filter(|f| f.ends_with(".lua"));
+    // The game names a Studio package when it read the package's copy of a file -- a mod's own
+    // file, patched. Blaming "PZ Mod Studio Patch: MergedPatch" is true and useless: the line
+    // is the mod's, and the copy either changed it or did not.
+    if let Some(package) = mod_name.strip_prefix(STUDIO_PACKAGE_PREFIX) {
+        let file = source_file.clone().unwrap_or_else(|| "a file".to_string());
+        return TranslatedErrorPayload {
+            id: format!("err_{}", counter),
+            raw_error: line.to_string(),
+            source_file,
+            line_number: None,
+            title: format!("{}, the patched copy in {}, reported a problem", file, package),
+            explanation: if detail.is_empty() { line.to_string() } else { detail },
+            recommended_action: format!(
+                "The game read {}'s copy of this file, not the mod's. If the patch did not touch this line, the mod's own copy says the same thing, and a copy that changes nothing only freezes the file at today's version: unmerge it in the Merger. If it did, this is the line to look at there.",
+                package
+            ),
+            polyfill_rule_id_suggestion: None,
+            mod_name: Some(mod_name.to_string()),
+            severity,
+        };
+    }
     TranslatedErrorPayload {
         id: format!("err_{}", counter),
         raw_error: line.to_string(),
@@ -1095,6 +1126,19 @@ mod blame_window_tests {
         }
         assert_eq!(blamed[1].as_deref(), Some("Fancy Handwork B42.20"));
         assert_eq!(blamed[2].as_deref(), Some("Fancy Handwork B42.20"));
+    }
+
+    /// A package's copy of a mod file is named as such, not as a mod of its own.
+    #[test]
+    fn a_packages_copy_is_a_patched_copy_not_a_mod() {
+        let card = super::blame_card(
+            "WARN : Lua          f:0 at Lua((MOD:PZ Mod Studio Patch: MergedPatch)).MoodlesIn.lua> require(\"LSMoodleManager\") failed",
+            "PZ Mod Studio Patch: MergedPatch",
+            1,
+        );
+        assert_eq!(card.title, "MoodlesIn.lua, the patched copy in MergedPatch, reported a problem");
+        assert!(card.recommended_action.contains("unmerge"));
+        assert_eq!(card.severity, super::Severity::Warning);
     }
 
     #[test]
