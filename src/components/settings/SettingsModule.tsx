@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
-import { PolyfillSection } from '../../types';
+import { PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
 
 export interface StudioPathsUI {
@@ -26,6 +26,25 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   /** What the shim covers, as the shim heads its own parts. */
   const [shimSections, setShimSections] = useState<PolyfillSection[]>([]);
   const shimLines = shimSections.reduce((n, s) => n + s.lines, 0);
+  /** The per-mod patches of part 7, each with its switch. */
+  const [shimPatches, setShimPatches] = useState<ShimPatch[]>([]);
+  const [patchNote, setPatchNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!paths.user_zomboid_dir) return;
+    void (async () => setShimPatches(await TauriService.shimPatches(paths.user_zomboid_dir)))();
+  }, [paths.user_zomboid_dir]);
+  const togglePatch = async (patch: ShimPatch) => {
+    try {
+      const written = await TauriService.setShimPatch(paths.user_zomboid_dir, patch.name, !patch.enabled);
+      setShimPatches((list) => list.map((p) => (p.name === patch.name ? { ...p, enabled: !patch.enabled } : p)));
+      setPatchNote(
+        `${patch.label} is ${patch.enabled ? 'off' : 'on'}. Written into ${written} package${written === 1 ? '' : 's'}; the game reads it on its next launch.`
+      );
+      setTimeout(() => setPatchNote(null), 6000);
+    } catch {
+      // Already shown by TauriService.
+    }
+  };
 
   useEffect(() => {
     void (async () => setShimSections(await TauriService.polyfillSections()))();
@@ -604,8 +623,9 @@ The file the game reads to know which mods are on and in what order. Found autom
                   <p className="text-[11px] text-slate-400 leading-relaxed max-w-3xl">
                     Many Build 41 mods call things Build 42 renamed or removed, and crash. The Studio ships one
                     shim that patches those calls at runtime, and writes it into every merge package you build.
-                    It is all or nothing: there is nothing to switch on here, and nothing you need to do beyond
-                    having a merge package active.
+                    Parts 1 to 6 are all or nothing: they guard the game's own code and need nothing from you
+                    beyond a merge package being active. Part 7 patches particular mods, and each of those
+                    has a switch below.
                   </p>
                 </div>
               </div>
@@ -634,6 +654,52 @@ The file the game reads to know which mods are on and in what order. Found autom
                   <p className="text-[11px] text-slate-500">The shim could not be read from this build of the Studio.</p>
                 )}
               </div>
+
+              {/* Part 7, one switch per mod: off means the shim leaves that mod alone. */}
+              {shimPatches.length > 0 && (
+                <div className="pt-3 border-t border-slate-800">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Per-mod patches (part 7)</div>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      each runs only while its mod is active; off = the shim leaves that mod alone
+                    </div>
+                  </div>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+                    {shimPatches.map((patch) => (
+                      <li key={patch.name} className="flex items-center justify-between gap-3 text-[11px] text-slate-300">
+                        <span>
+                          {patch.label}
+                          <span className="block text-[10px] text-slate-500 font-mono">{patch.name}</span>
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={patch.enabled}
+                          onClick={() => void togglePatch(patch)}
+                          className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-bold border cursor-pointer transition ${
+                            patch.enabled
+                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70 hover:bg-emerald-900/80'
+                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
+                          }`}
+                          title={
+                            patch.enabled
+                              ? 'On: the shim patches this mod while it is active. Click to switch it off.'
+                              : 'Off: the shim leaves this mod alone. Click to switch it on.'
+                          }
+                        >
+                          {patch.enabled ? 'ON' : 'OFF'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {patchNote && <p className="text-[11px] text-emerald-300 mt-2">{patchNote}</p>}
+                  <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                    A switch is written into every Studio package on disk at once, as{' '}
+                    <code className="font-mono">Z_PZModStudio_Patches.lua</code>; no publish needed, the game reads it
+                    when it next starts.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}

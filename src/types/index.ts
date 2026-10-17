@@ -74,6 +74,13 @@ export interface CollisionRegion {
 // ==========================================
 
 /** One numbered part of the Build 42 shim, as the shim itself heads it. */
+/** One per-mod patch of the shim's part 7, with its switch. */
+export interface ShimPatch {
+  name: string;
+  label: string;
+  enabled: boolean;
+}
+
 export interface PolyfillSection {
   number: string;
   title: string;

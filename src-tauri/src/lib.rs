@@ -404,6 +404,18 @@ fn polyfill_sections_cmd() -> Vec<patch_generator::PolyfillSection> {
     patch_generator::polyfill_sections()
 }
 
+/// The shim's per-mod patches with their switches.
+#[tauri::command(async)]
+fn shim_patches_cmd(user_zomboid_dir: String) -> Vec<patch_generator::ShimPatch> {
+    patch_generator::shim_patches(&user_zomboid_dir)
+}
+
+/// Switches one per-mod patch and writes the switches into every Studio package on disk.
+#[tauri::command(async)]
+fn set_shim_patch_cmd(user_zomboid_dir: String, name: String, enabled: bool) -> Result<usize, String> {
+    patch_generator::set_patch_switch(&user_zomboid_dir, &name, enabled)
+}
+
 #[tauri::command(async)]
 fn mod_list_history_cmd(paths: StudioPaths) -> Vec<load_order::ini_parser::ModListVersion> {
     load_order::ini_parser::list_mod_list_history(&paths.mod_list_ini_path, &paths.user_zomboid_dir)
@@ -764,6 +776,8 @@ pub fn run() {
             resolve_url_install_cmd,
             install_from_url_cmd,
             polyfill_sections_cmd,
+            shim_patches_cmd,
+            set_shim_patch_cmd,
             mod_list_history_cmd,
             restore_mod_list_version_cmd,
             bisect_state_cmd,

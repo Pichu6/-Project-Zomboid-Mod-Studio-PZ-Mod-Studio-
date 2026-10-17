@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -721,6 +721,25 @@ export const TauriService = {
       return await invoke<PolyfillSection[]>('polyfill_sections_cmd');
     } catch {
       return [];
+    }
+  },
+
+  /** The shim's per-mod patches with their switches. */
+  shimPatches: async (userZomboidDir: string): Promise<ShimPatch[]> => {
+    try {
+      return await invoke<ShimPatch[]>('shim_patches_cmd', { userZomboidDir });
+    } catch {
+      return [];
+    }
+  },
+
+  /** Switches one per-mod patch; returns how many Studio packages on disk got the switches. */
+  setShimPatch: async (userZomboidDir: string, name: string, enabled: boolean): Promise<number> => {
+    try {
+      return await invoke<number>('set_shim_patch_cmd', { userZomboidDir, name, enabled });
+    } catch (err) {
+      reportBackendError('Switching a shim patch', err);
+      throw err;
     }
   },
 

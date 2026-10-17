@@ -275,6 +275,123 @@ pub fn polyfill_sections() -> Vec<PolyfillSection> {
     sections
 }
 
+/// One per-mod patch of the shim's part 7, as `Poly.patchDefaults` lists it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShimPatch {
+    /// `fancy_handwork`: the key the shim switches on.
+    pub name: String,
+    /// The comment beside it in the shim: "Fancy Handwork multiplayer bounds".
+    pub label: String,
+    pub enabled: bool,
+}
+
+/// The file the switches live in, beside the mod list's backups.
+const PATCH_SWITCHES_FILE: &str = "PZModStudio_Patches.json";
+/// The Lua every package carries so the shim reads the switches: `Z_PZModStudio_Patches.lua`
+/// sorts before `Z_PZModStudio_Polyfills.lua`, and the shim reads `PZMS_PATCHES` at boot anyway.
+const PATCH_SWITCHES_LUA: &str = "Z_PZModStudio_Patches.lua";
+
+/// The per-mod patches, read out of the shim that ships: the `name = true, -- label` lines of
+/// `Poly.patchDefaults`. Reading the file cannot drift from the file.
+pub fn shim_patch_names() -> Vec<(String, String)> {
+    let mut names = Vec::new();
+    let mut inside = false;
+    for line in MASTER_POLYFILL_LUA.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Poly.patchDefaults = {") {
+            inside = true;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        if trimmed.starts_with('}') {
+            break;
+        }
+        let Some((name, rest)) = trimmed.split_once('=') else { continue };
+        let label = rest.split_once("--").map(|(_, l)| l.trim()).unwrap_or("").to_string();
+        names.push((name.trim().to_string(), label));
+    }
+    names
+}
+
+/// The switches as the player left them; a patch not in the file is on.
+pub fn read_patch_switches(user_zomboid_dir: &str) -> std::collections::BTreeMap<String, bool> {
+    crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir)
+        .first()
+        .and_then(|dir| fs::read_to_string(dir.join(PATCH_SWITCHES_FILE)).ok())
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Every per-mod patch with its current state.
+pub fn shim_patches(user_zomboid_dir: &str) -> Vec<ShimPatch> {
+    let switches = read_patch_switches(user_zomboid_dir);
+    shim_patch_names()
+        .into_iter()
+        .map(|(name, label)| ShimPatch { enabled: switches.get(&name).copied().unwrap_or(true), name, label })
+        .collect()
+}
+
+/// The Lua that hands the switches to the shim. Only what is off is written: on is the default.
+pub fn patch_switches_lua(switches: &std::collections::BTreeMap<String, bool>) -> String {
+    let mut lua = String::from(
+        "-- Written by PZ Mod Studio (Settings > Build 42 shim). Which of the shim's per-mod patches are off.\n",
+    );
+    lua.push_str("PZMS_PATCHES = {\n");
+    for (name, on) in switches {
+        if !on && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            lua.push_str(&format!("    {} = false,\n", name));
+        }
+    }
+    lua.push_str("}\n");
+    lua
+}
+
+/// Writes the switches file into one package, in both layouts the package keeps.
+fn write_patch_switches_into(package_dir: &Path, lua: &str) {
+    for root in [package_dir.join("media"), package_dir.join("42").join("media")] {
+        let dir = root.join("lua").join("shared");
+        if dir.is_dir() {
+            let _ = fs::write(dir.join(PATCH_SWITCHES_LUA), lua);
+        }
+    }
+}
+
+/// Switches one patch and puts the switches into every Studio package on disk, so the game reads
+/// them on its next launch without a publish. Returns how many packages were written.
+pub fn set_patch_switch(user_zomboid_dir: &str, name: &str, enabled: bool) -> Result<usize, String> {
+    if !shim_patch_names().iter().any(|(n, _)| n == name) {
+        return Err(format!("The shim has no patch called {}.", name));
+    }
+    let dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
+    let Some(user_dir) = dirs.first() else {
+        return Err("No valid Zomboid user directories found.".to_string());
+    };
+    let mut switches = read_patch_switches(user_zomboid_dir);
+    switches.insert(name.to_string(), enabled);
+    let json = serde_json::to_string_pretty(&switches).map_err(|e| e.to_string())?;
+    fs::write(user_dir.join(PATCH_SWITCHES_FILE), json).map_err(|e| e.to_string())?;
+
+    let lua = patch_switches_lua(&switches);
+    let mut written = 0;
+    if let Ok(entries) = fs::read_dir(user_dir.join("mods")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_studio = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("Z_PZModStudio_"))
+                .unwrap_or(false);
+            if is_studio && path.is_dir() {
+                write_patch_switches_into(&path, &lua);
+                written += 1;
+            }
+        }
+    }
+    Ok(written)
+}
+
 /// `media/...` as the package stores it, so the same file written two ways compares equal.
 fn normalise_media_path(path: &str) -> String {
     let p = path.replace('\\', "/");
@@ -415,6 +532,9 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
         let polyfill_42_dir = media_42_dir.join("lua").join("shared");
         let _ = fs::create_dir_all(&polyfill_42_dir);
         let _ = fs::write(polyfill_42_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfill_lua_content);
+
+        // The shim's per-mod switches, as Settings left them, so a fresh package honours them.
+        write_patch_switches_into(patch_mod_dir, &patch_switches_lua(&read_patch_switches(&req.user_zomboid_dir)));
 
         // Nothing else is written: a package carries merged files and the shim, and leaves the
         // game's own screens alone. It used to replace the in-game mod-order screen's "Auto"
@@ -1731,6 +1851,33 @@ mod shim_listing {
         }
         let switched = super::MASTER_POLYFILL_LUA.matches("Poly.patchOn(").count();
         assert!(switched >= 13, "{} per-mod blocks are switched", switched);
+    }
+
+    /// The per-mod patches Settings lists come from the shim's own switch table.
+    #[test]
+    fn the_shims_per_mod_patches_are_read_from_its_switch_table() {
+        let names = super::shim_patch_names();
+        assert!(names.len() >= 9, "{:?}", names);
+        let (name, label) = names.iter().find(|(n, _)| n == "fancy_handwork").expect("fancy_handwork");
+        assert_eq!(name, "fancy_handwork");
+        assert!(label.contains("Fancy Handwork"), "{}", label);
+        for (n, _) in &names {
+            assert!(super::MASTER_POLYFILL_LUA.contains(&format!("Poly.patchOn(\"{}\"", n)), "{} is switched in part 7", n);
+        }
+    }
+
+    /// Only what is off goes into the Lua: on is the shim's default.
+    #[test]
+    fn the_switches_lua_names_only_what_is_off() {
+        let mut switches = std::collections::BTreeMap::new();
+        switches.insert("fancy_handwork".to_string(), false);
+        switches.insert("sauced_carts".to_string(), true);
+        switches.insert("bad name; os.exit()".to_string(), false);
+        let lua = super::patch_switches_lua(&switches);
+        assert!(lua.contains("    fancy_handwork = false,"));
+        assert!(!lua.contains("sauced_carts"));
+        assert!(!lua.contains("os.exit"));
+        assert!(crate::diff_engine::lua::validate_lua_syntax(&lua).is_valid);
     }
 
     /// Prints the list the Settings card now shows.
