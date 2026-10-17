@@ -521,7 +521,7 @@ export const App: React.FC = () => {
           setActiveTab={setActiveTab}
           hasActiveProfile={!!activeProfile}
           conflictCount={conflicts.length}
-          errorCardCount={errorCards.length}
+          errorCardCount={errorCards.filter((c) => c.severity !== 'WARNING').length}
           healthErrorCount={health.report?.errors ?? 0}
         />
 

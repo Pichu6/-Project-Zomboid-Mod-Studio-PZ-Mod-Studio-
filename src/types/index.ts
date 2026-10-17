@@ -150,6 +150,11 @@ export interface TranslatedErrorCard {
   polyfill_rule_id_suggestion?: string;
   /** The mod the game named on the line, when it named one. */
   mod_name?: string;
+  /**
+   * The level the game wrote the line at: EXCEPTION for ERROR lines and stack traces (something
+   * threw), WARNING for WARN lines (the game noticed and carried on).
+   */
+  severity: 'EXCEPTION' | 'WARNING';
 }
 
 export interface SandboxSession {

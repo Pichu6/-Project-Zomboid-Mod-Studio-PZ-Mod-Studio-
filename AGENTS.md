@@ -111,7 +111,7 @@ Connected MCP clients can invoke the following tools via `tools/call`:
 | `get_monitor_logs` | `max_lines` (int, default 100)<br>`errors_only` (bool)<br>`user_zomboid_dir` (string optional) | Reads and filters recent lines from the active log file `console.txt`. |
 | `list_available_logs` | `user_zomboid_dir` (optional) | Lists all session log files on disk (`console.txt` and `Zomboid/Logs/`). |
 | `read_log_file` | `file_path` (string required)<br>`max_lines` (int)<br>`errors_only` (bool) | Reads a specific log file with exception filtering. |
-| `get_crash_diagnostics` | `user_zomboid_dir` (string optional) | Parses Java/Lua exceptions and generates Build 41 & 42 diagnostic cards with recommended fixes and polyfills. |
+| `get_crash_diagnostics` | `user_zomboid_dir` (string optional) | Parses Java/Lua exceptions and generates Build 41 & 42 diagnostic cards with recommended fixes and polyfills. Each card carries `severity`: `EXCEPTION` (an `ERROR` line or a stack trace — something threw) or `WARNING` (a `WARN` line — the game noticed and carried on). |
 | `get_error_report` | `index` (int, default 0)<br>`raw_error` (string optional)<br>path parameters | Everything needed to fix **one** error from the player's last session, as Markdown: the log line, the lines around it, the installed build, the mod the game blamed (id, version, Workshop link, folder, requirements) and the source of the Lua file that failed, with a note when another active mod ships the same path. Read-only. With no arguments it reports the most recent error the game attributed to a mod and lists the others with their indices; `index` walks back through them, `raw_error` picks one by its log line. |
 
 ### Claude Agent (menus + in-game control, window, screenshots)

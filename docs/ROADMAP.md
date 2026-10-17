@@ -93,6 +93,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 |---|---|---|
 | ✅ | Crash/error → mod attribution: the Monitor names the mod the game blamed and offers to switch it off | The game writes it itself: `Lua((MOD:X)).File.lua>` on the line, and `mod "X" overrides <path>` at startup, which maps any file back to its owner |
 | ✅ | Bisect mode (Monitor > "Find the mod that does it"): halves the suspects, launches, and halves whichever half still does it, then confirms the last one alone. Requirements stay on in every trial, the hunt survives closing the Studio (`PZModStudio_Bisect.json`) and the player's list is always put back | What players do by hand today |
+| ✅ | The Monitor tells exceptions from warnings by the level the game wrote: `ERROR` and stack traces are exceptions (red, "Action Required", the sidebar badge); `WARN` lines that name a mod — `require` with a moved path, a `%` in a translation — are warnings (amber, "the game carried on"). ERROR lines that match no rule and name no mod are counted in the header, not carded | Seven `require` warnings under a red "Crash Diagnostics · Action Required" made a list that played fine look broken |
 | ⬜ | Load-time and Lua-error statistics per mod | Find the slow ones |
 | ⬜ | MP-safety lint: flag mods doing client-side inventory/world changes that B42 MP makes server-authoritative | Before putting a mod on a server |
 

@@ -5,6 +5,7 @@ import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import {
   AlertCircle,
+  AlertTriangle,
   Wrench,
   CheckCircle,
   FolderX,
@@ -388,6 +389,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   }, [activeTab?.lines]);
 
   const timesSeen = (card: TranslatedErrorCard) => errorCounts.counts.get(errorShape(card.raw_error)) ?? 0;
+
+  /**
+   * What threw and what merely complained, kept apart: seven `require` warnings under a red
+   * "Action Required" made a list that played fine look broken. The level the game wrote the
+   * line at is the measure, and the cards that threw come first.
+   */
+  const isWarning = (card: TranslatedErrorCard) => card.severity === 'WARNING';
+  const exceptionCards = useMemo(() => errorCards.filter((c) => !isWarning(c)), [errorCards]);
+  const warningCards = useMemo(() => errorCards.filter(isWarning), [errorCards]);
+  const orderedCards = useMemo(() => [...exceptionCards, ...warningCards], [exceptionCards, warningCards]);
 
   /**
    * `require("X") failed` is the commonest complaint in a Build 42 log and says nothing you can
@@ -827,22 +838,50 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
           <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
             <div>
               <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                <span>CRASH DIAGNOSTICS ({errorCards.length})</span>
-                {errorCards.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono">
-                    Action Required
+                <span>DIAGNOSTICS</span>
+                {exceptionCards.length > 0 && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono"
+                    title="Something threw: the game wrote these at ERROR level or as a stack trace"
+                  >
+                    {exceptionCards.length} {exceptionCards.length === 1 ? 'exception' : 'exceptions'} · Action Required
+                  </span>
+                )}
+                {warningCards.length > 0 && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono"
+                    title="The game noticed and carried on: WARN lines that name a mod"
+                  >
+                    {warningCards.length} {warningCards.length === 1 ? 'warning' : 'warnings'}
                   </span>
                 )}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {errorCounts.total > 0 ? (
+                {exceptionCards.length > 0 ? (
                   <>
                     {errorCounts.total.toLocaleString()} error lines in this log are{' '}
                     {errorCounts.distinct} different problems: the game writes the same failure
                     again every time it happens.
                   </>
+                ) : warningCards.length > 0 ? (
+                  <>
+                    Nothing threw in this log: the game carried on past every line below.
+                    {errorCounts.total > 0 && (
+                      <>
+                        {' '}It also wrote {errorCounts.total.toLocaleString()} ERROR lines of{' '}
+                        {errorCounts.distinct} {errorCounts.distinct === 1 ? 'shape' : 'shapes'} that
+                        name no mod and match no rule here; the Errors filter on the left shows them.
+                      </>
+                    )}
+                  </>
+                ) : errorCounts.total > 0 ? (
+                  <>
+                    {errorCounts.total.toLocaleString()} ERROR lines of {errorCounts.distinct}{' '}
+                    {errorCounts.distinct === 1 ? 'shape' : 'shapes'}, none naming a mod or matching a
+                    rule here; the Errors filter on the left shows them.
+                  </>
                 ) : (
-                  <>Fatal Java/Lua exceptions detected with automatic patch.</>
+                  <>Exceptions the game throws and warnings it names a mod on, as they happen.</>
                 )}
               </p>
             </div>
@@ -858,7 +897,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               </button>
             ) : (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-                <CheckCircle className="w-3.5 h-3.5" /> 0 Fatal Errors
+                <CheckCircle className="w-3.5 h-3.5" /> Nothing threw
               </span>
             )}
           </div>
@@ -873,23 +912,42 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                   <CheckCircle className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-300">No Fatal Errors Detected</p>
+                  <p className="text-xs font-bold text-slate-300">Nothing to report</p>
                   <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
-                    Crash Diagnostics filters out thousands of harmless console warnings and only alerts you when a real exception breaks the game or blocks actions.
+                    A card appears when the game throws, or when it writes a warning and names the
+                    mod. Everything else in the console stays on the left.
                   </p>
                 </div>
               </div>
             ) : (
-              errorCards.map((card) => (
+              orderedCards.map((card) => (
                 <div
                   key={card.id}
-                  className="bg-slate-950 border border-red-500/40 rounded-xl p-4 space-y-3 shadow-md hover:border-red-500/70 transition"
+                  className={
+                    isWarning(card)
+                      ? 'bg-slate-950 border border-amber-500/30 rounded-xl p-4 space-y-3 shadow-md hover:border-amber-500/60 transition'
+                      : 'bg-slate-950 border border-red-500/40 rounded-xl p-4 space-y-3 shadow-md hover:border-red-500/70 transition'
+                  }
                 >
                   <div className="flex items-start gap-2.5">
-                    <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    {isWarning(card) ? (
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    )}
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="text-xs font-bold text-slate-100">{card.title}</h4>
+                        <h4 className="text-xs font-bold text-slate-100">
+                          {card.title}
+                          {isWarning(card) && (
+                            <span
+                              className="ml-2 align-middle text-[10px] font-mono font-normal px-1.5 py-0.5 rounded border border-amber-700/60 bg-amber-950/40 text-amber-300"
+                              title="The game wrote this at WARN level: it noticed and carried on"
+                            >
+                              warning · the game carried on
+                            </span>
+                          )}
+                        </h4>
                         {timesSeen(card) > 1 && (
                           <span
                             className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded border border-red-800/70 bg-red-950/50 text-red-300"

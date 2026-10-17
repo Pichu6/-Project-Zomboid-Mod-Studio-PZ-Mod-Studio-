@@ -29,6 +29,32 @@ pub struct TranslatedErrorPayload {
     pub polyfill_rule_id_suggestion: Option<String>,
     /// The mod the game blamed, when the line says so.
     pub mod_name: Option<String>,
+    /// Whether the game threw (ERROR, or a stack trace) or complained and carried on (WARN).
+    pub severity: Severity,
+}
+
+/// What the game itself said about the line a card came from.
+///
+/// The level the game wrote is the only honest measure: `WARN` means it noticed and went on
+/// (`require("X") failed`, a translation with a stray `%`, even "Exception thrown" when the game
+/// caught it and reported it as a warning), `ERROR` and the bare lines of a stack trace mean
+/// something threw. A warning dressed as a crash made a working list look broken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Severity {
+    Exception,
+    Warning,
+}
+
+impl Severity {
+    pub fn of_line(line: &str) -> Severity {
+        let line = line.trim_start();
+        if line.starts_with("WARN") || line.starts_with("LOG") || line.starts_with("DEBUG") {
+            Severity::Warning
+        } else {
+            Severity::Exception
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -362,6 +388,7 @@ impl ModBlame {
 
 /// A line worth showing even though it matches no known pattern, because the game named a mod.
 fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayload {
+    let severity = Severity::of_line(line);
     // "WARN : Lua f:0 at Lua((MOD:X)).File.lua> require("Y") failed" -> the part after ">"
     let detail = line.split_once('>').map(|(_, rest)| rest.trim()).unwrap_or(line).to_string();
     let source_file = line
@@ -377,17 +404,30 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
         line_number: None,
         title: format!("{} reported a problem", mod_name),
         explanation: if detail.is_empty() { line.to_string() } else { detail },
-        recommended_action: format!(
-            "The game named {} on this line. If something is misbehaving in game, switching that mod off is the quickest way to tell whether it is the cause.",
-            mod_name
-        ),
+        recommended_action: match severity {
+            Severity::Exception => format!(
+                "The game named {} on this line. If something is misbehaving in game, switching that mod off is the quickest way to tell whether it is the cause.",
+                mod_name
+            ),
+            Severity::Warning => format!(
+                "The game named {} here and carried on. Nothing to do unless something in that mod misbehaves in game; then this line is where to look.",
+                mod_name
+            ),
+        },
         polyfill_rule_id_suggestion: None,
         mod_name: Some(mod_name.to_string()),
+        severity,
     }
 }
 
 /// Translates raw Java stacktraces & Lua errors into actionable cards.
 pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedErrorPayload> {
+    let mut card = translate_log_error_rule(line, counter)?;
+    card.severity = Severity::of_line(line);
+    Some(card)
+}
+
+fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErrorPayload> {
     // A card says something went wrong. The rules below match on names a mod puts in the log --
     // "FancyHandwork", "SaucedCarts", "dSAG" -- and the game writes those names when the mod
     // merely loads, so without this the Monitor reported `LOG : Mod f:0> loading FancyHandwork`
@@ -410,6 +450,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "A non-player entity (zombie or NPC) interacted with a door or window, triggering a Build 42 JVM check for local players on a null character object.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_OBJECT_INTERACT_SAFETY".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("B42_OBJECT_INTERACT_SAFETY".to_string()),
         })
     } else if line.contains("BWORoomPrograms") || (line.contains("restaurant") && line.contains("getName")) {
@@ -422,6 +463,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "Bandits Week One room program attempted to query getName() on an outdoor/unzoned tile where getRoom() is nil, generating error floods on each AI tick.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_BANDITS_ROOM_SAFETY".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("B42_BANDITS_ROOM_SAFETY".to_string()),
         })
     } else if line.contains("dSAG") || line.contains("onNewDay") || line.contains("ReportWindow") {
@@ -434,6 +476,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "Daily Report Journal rollover or player death event executed callbacks on an uninitialized UI window.".to_string(),
             recommended_action: "Apply Polyfill Rule: B42_DAILY_REPORT_SAFETY".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("B42_DAILY_REPORT_SAFETY".to_string()),
         })
     } else if line.contains("UnknownFormatConversionException") {
@@ -446,6 +489,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to collapse.".to_string(),
             recommended_action: "Apply Polyfill Rule: SANITIZE_TRANSLATOR_FORMAT".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SANITIZE_TRANSLATOR_FORMAT".to_string()),
         })
     } else if line.contains("attempted index of non-table") || line.contains("attempted index: getName of non-table") {
@@ -458,6 +502,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "Mod code attempted to access properties of a nil/uninitialized table before PZ Build 42 instantiated it.".to_string(),
             recommended_action: "Apply Polyfill Rule: SAFE_GLOBAL_TABLE_ACCESS".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("NullPointerException") {
@@ -470,6 +515,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "A Java method returned null or received a null parameter from a legacy Lua mod call.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to handle null Java interop arguments safely.".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("B42_OBJECT_INTERACT_SAFETY".to_string()),
         })
     } else if line.contains("KahluaThreadException") || line.contains("se.krka.kahlua.vm.KahluaException") {
@@ -482,6 +528,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "An unhandled Lua runtime exception was thrown inside the PZ Kahlua VM.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to protect game loops and callframe stacktraces.".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("IndexOutOfBoundsException") || line.contains("Index 0 out of bounds") {
@@ -494,6 +541,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "A mod accessed IsoPlayer.getPlayers() or getOnlinePlayers() index 0 while the Java player collection was empty during a render/tick loop in Multiplayer.".to_string(),
             recommended_action: "Apply Universal Master Polyfills (Safe ArrayList Proxy & getOnlinePlayers shield).".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("B42_DAILY_REPORT_SAFETY".to_string()),
         })
     } else if line.contains("FancyHandwork") || line.contains("fancyMP") || line.contains("aFancyHandwork") {
@@ -506,6 +554,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "Fancy Handwork fancyMP loop threw an uncaught error when evaluating local/remote player hand objects on tick.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to guard FancyHandwork callbacks safely.".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("SaucedCarts") || line.contains("Pushable Carts") {
@@ -518,6 +567,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "Pushable Carts vehicle/entity interaction threw a null pointer exception during multiplayer state updates.".to_string(),
             recommended_action: "Apply Universal Master Polyfills to guard SaucedCarts interop.".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
         })
     } else if line.contains("duplicate recipe") || line.contains("duplicate item") {
@@ -530,6 +580,7 @@ pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedError
             explanation: "Multiple active mods registered the same script ID or recipe name, causing overwrite conflicts.".to_string(),
             recommended_action: "Use Merger Module to merge script definitions into Master Patch.".to_string(),
             mod_name: None,
+            severity: Severity::Exception,
             polyfill_rule_id_suggestion: None,
         })
     } else {
@@ -959,6 +1010,35 @@ mod card_gate_tests {
         );
         assert!(card.is_some());
         assert!(card.unwrap().title.contains("Fancy Handwork"));
+    }
+
+    /// The level the game wrote decides: a WARN is a warning even when it says "Exception".
+    #[test]
+    fn a_card_carries_the_level_the_game_gave_the_line() {
+        use super::Severity;
+        let translator = translate_log_error(
+            "WARN : General      f:0> Translator.reportMissingArgumentsFromPastAbuse> Exception thrown java.util.UnknownFormatConversionException: Conversion = ')'",
+            1,
+        )
+        .expect("a card");
+        assert_eq!(translator.severity, Severity::Warning);
+
+        let threw = translate_log_error(
+            "ERROR: General      f:304> 20)).FHhandleKeybinds> Exception thrown aFancyHandwork.lua:126",
+            2,
+        )
+        .expect("a card");
+        assert_eq!(threw.severity, Severity::Exception);
+
+        // A stack-trace line has no level prefix: it only exists because something threw.
+        assert_eq!(
+            Severity::of_line("java.lang.NullPointerException: Cannot invoke \"zombie.input.KeybindId.getId()\""),
+            Severity::Exception
+        );
+        assert_eq!(
+            Severity::of_line("WARN : Lua          f:0 at Lua((MOD:The Only Cure)).ZombiesAmputation.lua> require(\"TOC/Controllers/ItemsController\") failed"),
+            Severity::Warning
+        );
     }
 }
 
