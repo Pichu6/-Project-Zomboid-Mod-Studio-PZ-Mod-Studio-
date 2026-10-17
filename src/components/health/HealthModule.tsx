@@ -151,7 +151,18 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     }
   };
 
-  const handleFix = (fix: HealthFix) => {
+  /**
+   * What the last button did, in words. A load-order change is invisible from this screen -- the
+   * row stays, because two mods still define the same thing -- so without this the app looks
+   * like it did nothing.
+   */
+  const [done, setDone] = useState<string | null>(null);
+  const say = (what: string) => {
+    setDone(what);
+    window.setTimeout(() => setDone((current) => (current === what ? null : current)), 6000);
+  };
+
+  const handleFix = (fix: HealthFix, issue?: HealthIssue) => {
     if (fix.action === 'merge_files') {
       mergeFiles(fix.relative_paths);
       return;
@@ -183,14 +194,45 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       if (!confirm(`Switch off ${name}?\n\nIt stays installed, and you can switch it back on in the Mod List.`)) return;
     }
     const next = applyFix(mods, fix);
-    if (next) onApplyModList(next);
+    if (!next) return;
+    onApplyModList(next);
+    if (fix.action === 'move_before') {
+      const moved = nameOf(fix.mod_id);
+      const anchor = nameOf(fix.before);
+      say(
+        issue && YOUR_CALL_CODES.has(issue.code)
+          ? `The game will now use ${anchor}'s version: ${moved} loads before it.`
+          : `${moved} now loads before ${anchor}.`
+      );
+    } else if (fix.action === 'enable_mod') {
+      say(`${nameOf(fix.mod_id)} is switched on.`);
+    } else if (fix.action === 'disable_mod') {
+      say(`${nameOf(fix.mod_id)} is switched off.`);
+    } else if (fix.action === 'remove_from_list') {
+      say(`${fix.entry} is out of the list.`);
+    }
   };
 
   const handleFixes = (list: HealthFix[]) => {
     let next = mods;
-    for (const fix of list) next = applyFix(next, fix) ?? next;
-    if (next !== mods) onApplyModList(next);
+    let applied = 0;
+    for (const fix of list) {
+      const after = applyFix(next, fix);
+      if (after) {
+        next = after;
+        applied += 1;
+      }
+    }
+    if (next === mods) {
+      say('Nothing changed: those fixes are already in place.');
+      return;
+    }
+    onApplyModList(next);
+    say(`${applied} change${applied === 1 ? '' : 's'} made to your mod list.`);
   };
+
+  /** The name the Mod List shows for a mod id. */
+  const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
 
   const safeFixes = useMemo(() => {
     if (!report) return [] as HealthFix[];
@@ -369,6 +411,14 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         </div>
       )}
 
+      {done && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+          <span>{done}</span>
+          <span className="text-emerald-500/70">Saved to your mod list.</span>
+        </div>
+      )}
+
       {report && report.issues.length === 0 && (
         <div className="flex items-center gap-3 p-5 rounded-xl border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-400" aria-hidden="true" />
@@ -402,11 +452,13 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                         <button
                           key={i}
                           type="button"
-                          onClick={() => (enableThenMove ? handleFixes(applicable) : handleFix(fix))}
+                          onClick={() => (enableThenMove ? handleFixes(applicable) : handleFix(fix, issue))}
                           disabled={fix.action === 'merge_files' && mergeBusy}
                           className="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 cursor-pointer"
                         >
-                          {fixLabel(fix)}
+                          {YOUR_CALL_CODES.has(issue.code) && fix.action === 'move_before'
+                            ? `Use ${nameOf(fix.before)}'s version instead`
+                            : fixLabel(fix)}
                         </button>
                       ))}
                     </div>
