@@ -1,9 +1,13 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { ModInfo, ModPreset, MissingModsReport, HealthIssue, CatalogModSummary, AppInstance, ModListVersion } from '../../types';
+import React, { useState, useRef, useMemo } from 'react';
+import { ModInfo, HealthIssue, CatalogModSummary, AppInstance } from '../../types';
 import { SourceBadge, sourceOf } from '../common/SourceBadge';
 import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, explainError } from '../../services/tauri';
+import { TauriService } from '../../services/tauri';
+import { findInstalledDependencyInMods, normalizeModId } from './modLookup';
+import { ModPresets } from './ModPresets';
+import { ModListHistory } from './ModListHistory';
+import { ModInspector } from './ModInspector';
 import {
   BookOpen,
   Copy,
@@ -22,26 +26,14 @@ import {
   ChevronsUp,
   ChevronsDown,
   Hash,
-  History,
   Check,
   Package,
   MapPin,
-  ExternalLink,
-  Layers,
   FolderX,
   ShieldCheck,
   HelpCircle,
   AlertTriangle,
   X,
-  ShieldAlert,
-  Link2,
-  Save,
-  Download,
-  Upload,
-  Bookmark,
-  Sparkles,
-  Trash2,
-  Plus,
 } from 'lucide-react';
 
 interface LoadOrderModuleProps {
@@ -90,128 +82,6 @@ const MOD_FILTERS = [
 
 type ModFilterId = (typeof MOD_FILTERS)[number]['id'];
 
-const normalizeModId = (id: string): string => {
-  return id
-    .trim()
-    .toLowerCase()
-    .replace(/^[\\/]+/, '')
-    .replace(/[\\'"]/g, '')
-    .trim();
-};
-
-const findInstalledDependencyInMods = (reqRaw: string, mods: ModInfo[]): ModInfo | undefined => {
-  if (!reqRaw || !reqRaw.trim()) return undefined;
-  const cleanReq = reqRaw.trim();
-  const normReq = normalizeModId(cleanReq);
-  const alphaReq = normReq.replace(/[^a-z0-9]/g, '');
-
-  // 1. Pass 1: Exact match on Mod ID, Workshop ID, or exact Mod Name FIRST!
-  const exactMatch = mods.find((m) => {
-    const normM = normalizeModId(m.mod_id);
-    const normName = normalizeModId(m.name);
-    if (normM === normReq) return true;
-    if (m.workshop_id && m.workshop_id.trim() === cleanReq) return true;
-    if (normName === normReq) return true;
-    return false;
-  });
-  if (exactMatch) return exactMatch;
-
-  // 2. Pass 2: Full Alphanumeric Match (ignores punctuation/dashes/brackets)
-  const alphaMatches = mods.filter((m) => {
-    const alphaM = normalizeModId(m.mod_id).replace(/[^a-z0-9]/g, '');
-    const alphaName = normalizeModId(m.name).replace(/[^a-z0-9]/g, '');
-    return (alphaM.length > 0 && alphaM === alphaReq) || (alphaName.length > 0 && alphaName === alphaReq);
-  });
-  if (alphaMatches.length === 1) return alphaMatches[0];
-  if (alphaMatches.length > 1) {
-    const enabled = alphaMatches.find((c) => c.enabled);
-    if (enabled) return enabled;
-    return alphaMatches[0];
-  }
-
-  // 3. Pass 3: Prefix match (only if no exact or full alphanumeric match exists)
-  const prefixMatches = mods.filter((m) => {
-    const normM = normalizeModId(m.mod_id);
-    return normM.startsWith(normReq + "_") || normM.startsWith(normReq + "-");
-  });
-  if (prefixMatches.length > 0) {
-    const enabled = prefixMatches.find((c) => c.enabled);
-    if (enabled) return enabled;
-    return prefixMatches[0];
-  }
-
-  return undefined;
-};
-
-const renderPZRichText = (text?: string): React.ReactNode => {
-  if (!text) return <span className="text-slate-500 italic">No description provided in mod.info manifest.</span>;
-
-  let cleanText = text.replace(/<LINE>/gi, '\n');
-  const parts = cleanText.split(/(<[^>]+>)/g);
-
-  let currentSize = 'small';
-  let currentColor = 'inherit';
-  let currentAlign = 'left';
-
-  const elements: React.ReactNode[] = [];
-
-  parts.forEach((part, index) => {
-    if (!part) return;
-
-    if (part.startsWith('<') && part.endsWith('>')) {
-      const tagContent = part.slice(1, -1).trim();
-      const upperTag = tagContent.toUpperCase();
-
-      if (upperTag.startsWith('SIZE:')) {
-        const sizeVal = upperTag.split(':')[1].toLowerCase();
-        currentSize = sizeVal;
-      } else if (upperTag.startsWith('RGB:')) {
-        const rgbStr = tagContent.slice(4).trim();
-        const rgbVals = rgbStr.split(',').map((v) => parseFloat(v.trim()));
-        if (rgbVals.length >= 3 && !isNaN(rgbVals[0])) {
-          const r = rgbVals[0] <= 1.0 ? Math.round(rgbVals[0] * 255) : Math.round(rgbVals[0]);
-          const g = rgbVals[1] <= 1.0 ? Math.round(rgbVals[1] * 255) : Math.round(rgbVals[1]);
-          const b = rgbVals[2] <= 1.0 ? Math.round(rgbVals[2] * 255) : Math.round(rgbVals[2]);
-          const a = rgbVals.length >= 4 ? rgbVals[3] : 1;
-          currentColor = `rgba(${r}, ${g}, ${b}, ${a})`;
-        }
-      } else if (upperTag === 'LEFT') {
-        currentAlign = 'left';
-      } else if (upperTag === 'CENTRE' || upperTag === 'CENTER') {
-        currentAlign = 'center';
-      } else if (upperTag === 'RIGHT') {
-        currentAlign = 'right';
-      }
-    } else {
-      const fontSizeClass =
-        currentSize === 'large'
-          ? 'text-sm font-bold tracking-wide block my-1'
-          : currentSize === 'medium'
-          ? 'text-xs font-bold tracking-wide block my-0.5'
-          : 'text-[11px] leading-relaxed';
-
-      const lines = part.split('\n');
-      lines.forEach((line, lIdx) => {
-        if (line) {
-          elements.push(
-            <span
-              key={`${index}-${lIdx}`}
-              className={`${fontSizeClass} inline-block`}
-              style={{ color: currentColor === 'inherit' ? undefined : currentColor, textAlign: currentAlign as any }}
-            >
-              {line}
-            </span>
-          );
-        }
-        if (lIdx < lines.length - 1) {
-          elements.push(<br key={`${index}-br-${lIdx}`} />);
-        }
-      });
-    }
-  });
-
-  return <div className="space-y-0.5 font-sans leading-relaxed text-slate-200 select-text whitespace-pre-wrap">{elements}</div>;
-};
 
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   paths,
@@ -238,207 +108,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [showAutoSortNotice, setShowAutoSortNotice] = useState<boolean>(false);
   const [dontShowNoticeChecked, setDontShowNoticeChecked] = useState<boolean>(false);
-  const [imageError, setImageError] = useState<boolean>(false);
-  /** The selected mod's poster, read from disk as a data URL (the webview cannot open files). */
-  const [posterSrc, setPosterSrc] = useState<string | null>(null);
-  /** Workshop id -> the picture on its Workshop page, for the mods that ship none. */
-  const [workshopPreviews, setWorkshopPreviews] = useState<Map<string, string>>(new Map());
 
-  // Preset & Profile Management State
-  const [savedPresets, setSavedPresets] = useState<ModPreset[]>(() => {
-    try {
-      const stored = localStorage.getItem('pz_mod_studio_saved_presets');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [activePresetName, setActivePresetName] = useState<string | null>(null);
-  const [isPresetDropdownOpen, setIsPresetDropdownOpen] = useState<boolean>(false);
-  const [isPresetModalOpen, setIsPresetModalOpen] = useState<boolean>(false);
-  const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState<boolean>(false);
-  const [newPresetName, setNewPresetName] = useState<string>('');
-  const [newPresetDesc, setNewPresetDesc] = useState<string>('');
-  const [importedPreset, setImportedPreset] = useState<ModPreset | null>(null);
-  const [missingReport, setMissingReport] = useState<MissingModsReport | null>(null);
-  /** Earlier versions of the list, read from the Studio's own backups when asked for. */
-  const [history, setHistory] = useState<ModListVersion[] | null>(null);
-  const [restoring, setRestoring] = useState<string | null>(null);
-  const [_isExportingPreset, setIsExportingPreset] = useState<boolean>(false);
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const handleSaveCurrentAsPreset = () => {
-    if (!newPresetName.trim()) {
-      alert('Please enter a name for the preset.');
-      return;
-    }
-    const newPreset: ModPreset = {
-      id: `preset_${Date.now()}`,
-      name: newPresetName.trim(),
-      description: newPresetDesc.trim() || undefined,
-      author: undefined,
-      created_at: new Date().toISOString(),
-      mods: mods.filter((m) => m.enabled).map((m) => ({
-        mod_id: m.mod_id,
-        name: m.name,
-        workshop_id: m.workshop_id,
-        enabled: true,
-      })),
-      // Only the mods this preset is about: the full list would hand the other player every
-      // mod the exporter happens to own, plus packages that exist on no other machine.
-      load_order: mods.filter((m) => m.enabled).map((m) => m.mod_id),
-    };
-
-    const updated = [newPreset, ...savedPresets.filter((p) => p.name !== newPreset.name)];
-    setSavedPresets(updated);
-    localStorage.setItem('pz_mod_studio_saved_presets', JSON.stringify(updated));
-    setActivePresetName(newPreset.name);
-    setIsSavePresetModalOpen(false);
-    setNewPresetName('');
-    setNewPresetDesc('');
-    setSaveToast(`✨ Preset '${newPreset.name}' saved successfully.`);
-    setTimeout(() => setSaveToast(null), 3000);
-  };
-
-  const handleApplyPreset = (preset: ModPreset) => {
-    const activeIds = preset.mods.filter((m) => m.enabled).map((m) => m.mod_id);
-    if (onApplyPresetLoadOrder) {
-      onApplyPresetLoadOrder(preset.load_order, activeIds);
-    } else {
-      const activeSet = new Set(activeIds);
-      const modMap = new Map(mods.map((m) => [m.mod_id, m]));
-      const reordered: ModInfo[] = [];
-
-      preset.load_order.forEach((id) => {
-        const found = modMap.get(id);
-        if (found) {
-          reordered.push({ ...found, enabled: activeSet.has(id) });
-          modMap.delete(id);
-        }
-      });
-
-      modMap.forEach((m) => {
-        reordered.push({ ...m, enabled: activeSet.has(m.mod_id) });
-      });
-
-      triggerReorder(reordered);
-    }
-    setActivePresetName(preset.name);
-    setIsPresetDropdownOpen(false);
-    setIsPresetModalOpen(false);
-    setSaveToast(`✨ Preset '${preset.name}' applied to the game.`);
-    setTimeout(() => setSaveToast(null), 3000);
-  };
-
-  const handleDeletePreset = (presetId: string) => {
-    const target = savedPresets.find((p) => p.id === presetId);
-    if (confirm(`Delete preset '${target?.name || ''}'?`)) {
-      const updated = savedPresets.filter((p) => p.id !== presetId);
-      setSavedPresets(updated);
-      localStorage.setItem('pz_mod_studio_saved_presets', JSON.stringify(updated));
-      if (activePresetName === target?.name) {
-        setActivePresetName(null);
-      }
-      setSaveToast(`Preset deleted.`);
-      setTimeout(() => setSaveToast(null), 2500);
-    }
-  };
-
-  const handleExportPresetFile = async (targetPreset?: ModPreset) => {
-    const presetToExport: ModPreset = targetPreset || {
-      id: `preset_${Date.now()}`,
-      name: activePresetName || 'ModList_Preset',
-      description: 'Exported from PZ Mod Studio',
-      author: undefined,
-      created_at: new Date().toISOString(),
-      mods: mods.filter((m) => m.enabled).map((m) => ({
-        mod_id: m.mod_id,
-        name: m.name,
-        workshop_id: m.workshop_id,
-        enabled: true,
-      })),
-      // Only the mods this preset is about: the full list would hand the other player every
-      // mod the exporter happens to own, plus packages that exist on no other machine.
-      load_order: mods.filter((m) => m.enabled).map((m) => m.mod_id),
-    };
-
-    // The same list under different sandbox settings is a different game, so they can travel
-    // with it. Asked for before the save dialog, and only when there is something to offer.
-    let sandboxName: string | null = null;
-    const mine = await TauriService.sandboxPresets(paths.user_zomboid_dir);
-    if (mine.length === 1) {
-      const only = mine[0];
-      if (
-        confirm(
-          `Include your sandbox settings "${only.name}" (${only.settings} settings, ` +
-            `${only.mod_settings} of them from mods)?\n\nWhoever opens the pack can save them as a preset ` +
-            `and pick them when starting a game.`
-        )
-      ) {
-        sandboxName = only.name;
-      }
-    } else if (mine.length > 1) {
-      const answer = prompt(
-        `Include sandbox settings in the pack? Type the name, or leave it empty for none.\n\n` +
-          mine.map((p) => `- ${p.name} (${p.settings} settings, ${p.mod_settings} from mods)`).join('\n')
-      );
-      const match = mine.find((p) => p.name.toLowerCase() === (answer ?? '').trim().toLowerCase());
-      if (answer && answer.trim() && !match) {
-        alert(`There is no sandbox preset called "${answer.trim()}". The pack will have no settings in it.`);
-      }
-      sandboxName = match?.name ?? null;
-    }
-
-    setIsExportingPreset(true);
-    try {
-      const defaultFileName = `${presetToExport.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pzpack`;
-      const filePath = await TauriService.pickSaveFile(defaultFileName, 'PZ Mod Studio Preset (.pzpack)', 'pzpack');
-      if (filePath) {
-        await TauriService.exportPresetFile(paths, presetToExport, filePath, sandboxName);
-        setSaveToast(`✨ Collection exported to: ${filePath}`);
-        setTimeout(() => setSaveToast(null), 4000);
-      }
-    } catch (err: any) {
-      alert(`Error exporting preset: ${explainError(err)}`);
-    } finally {
-      setIsExportingPreset(false);
-    }
-  };
-
-  const handleImportPresetFile = async () => {
-    try {
-      const filePath = await TauriService.pickOpenFile('PZ Mod Studio Preset (.pzpack)', 'pzpack');
-      if (filePath) {
-        const preset: ModPreset = await TauriService.importPresetFile(filePath);
-        setImportedPreset(preset);
-
-        const report: MissingModsReport = await TauriService.checkMissingPresetMods(
-          preset,
-          paths.user_zomboid_dir,
-          paths.workshop_dir
-        );
-        setMissingReport(report);
-        setIsPresetModalOpen(true);
-        setIsPresetDropdownOpen(false);
-      }
-    } catch (err: any) {
-      alert(`Error importing .pzpack file: ${explainError(err)}`);
-    }
-  };
-
-  const handleApplyImportedPreset = () => {
-    if (!importedPreset) return;
-    handleApplyPreset(importedPreset);
-    const exists = savedPresets.some((p) => p.name === importedPreset.name);
-    if (!exists) {
-      const updated = [importedPreset, ...savedPresets];
-      setSavedPresets(updated);
-      localStorage.setItem('pz_mod_studio_saved_presets', JSON.stringify(updated));
-    }
-    setImportedPreset(null);
-    setMissingReport(null);
-  };
 
   const triggerReorder = (newOrder: ModInfo[]) => {
     onReorder(newOrder);
@@ -448,40 +120,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     onToggleMod(modId);
   };
 
-  /** The name the list shows for a mod id, or the id when it is not installed any more. */
-  const nameOfMod = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
-
-  const openHistory = async () => {
-    setHistory(await TauriService.modListHistory(paths));
-  };
-
-  /**
-   * Goes back to an earlier list. The list on disk now becomes a version of its own, so this can
-   * be undone the same way, and the Mod List is re-read because the file is the source of truth.
-   */
-  const handleRestoreVersion = async (version: ModListVersion) => {
-    const changes = [
-      version.added.length > 0 ? `switch ${version.added.length} back on` : null,
-      version.removed.length > 0 ? `switch ${version.removed.length} off` : null,
-    ].filter(Boolean);
-    const ok = window.confirm(
-      `Go back to the list saved at ${version.saved_at} (${version.active_count} mods)?` +
-        (changes.length > 0 ? `\n\nThis would ${changes.join(' and ')}.` : '\n\nIt matches your list as it is now.') +
-        `\n\nYour list as it is now is kept as a version too, so you can come straight back.`
-    );
-    if (!ok) return;
-    setRestoring(version.file);
-    try {
-      await TauriService.restoreModListVersion(paths, version.file);
-      await onRefreshMods();
-      setHistory(await TauriService.modListHistory(paths));
-      setSaveToast(`Your mod list is back to ${version.saved_at}.`);
-      setTimeout(() => setSaveToast(null), 4000);
-    } catch (err) {
-      alert(explainError(err));
-    } finally {
-      setRestoring(null);
-    }
+  /** The green note at the top right, gone again after a moment. */
+  const showToast = (message: string, ms = 3000) => {
+    setSaveToast(message);
+    setTimeout(() => setSaveToast(null), ms);
   };
 
   const handleRefresh = async () => {
@@ -491,50 +133,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
-
-  // Most mods ship no picture of their own, so ask Steam once for all of them instead of
-  // waiting for a request every time the user picks a different mod.
-  const workshopIdsKey = useMemo(
-    () => [...new Set(mods.map((m) => m.workshop_id).filter((id): id is string => !!id))].sort().join(','),
-    [mods]
-  );
-  useEffect(() => {
-    if (!workshopIdsKey) return;
-    let cancelled = false;
-    TauriService.workshopDetails(workshopIdsKey.split(','))
-      .then((items) => {
-        if (cancelled) return;
-        setWorkshopPreviews(new Map(items.filter((i) => i.preview_url).map((i) => [i.workshop_id, i.preview_url!])));
-      })
-      .catch(() => undefined); // offline: the mods that ship a poster still show one
-    return () => {
-      cancelled = true;
-    };
-  }, [workshopIdsKey]);
-
-  // The selected mod's picture: its own poster read from disk, else the Workshop one.
-  useEffect(() => {
-    setImageError(false);
-    setPosterSrc(null);
-    const file = selectedMod?.poster_url;
-    const workshopId = selectedMod?.workshop_id;
-    if (!selectedMod || !paths.is_valid) return;
-    let cancelled = false;
-
-    const fromWorkshop = async () => {
-      const url = workshopId ? workshopPreviews.get(workshopId) : undefined;
-      if (!url) throw new Error('no picture for this mod');
-      return url;
-    };
-
-    (file ? TauriService.readModImage(paths, file).catch(fromWorkshop) : fromWorkshop())
-      .then((src) => !cancelled && setPosterSrc(src))
-      .catch(() => !cancelled && setImageError(true));
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModId, selectedMod?.poster_url, selectedMod?.workshop_id, paths.is_valid, workshopPreviews]);
 
   const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -819,37 +417,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setHighlightedModId(dragged);
     setTimeout(() => setHighlightedModId(null), 1200);
   };
-
-  const reverseDependents = useMemo(() => {
-    if (!selectedMod) return [];
-    return mods.filter(
-      (m) =>
-        m.mod_id !== selectedMod.mod_id &&
-        m.dependencies.some((dep) => {
-          const matched = findInstalledDependencyInMods(dep, [selectedMod]);
-          return matched !== undefined;
-        })
-    );
-  }, [selectedMod, mods]);
-
-  const parentLibraries = useMemo(() => {
-    if (!selectedMod) return [];
-
-    const list: { raw: string; matchedMod?: ModInfo }[] = [];
-    const seenIds = new Set<string>();
-
-    if (selectedMod.dependencies && selectedMod.dependencies.length > 0) {
-      for (const reqRaw of selectedMod.dependencies) {
-        const matched = findInstalledDependencyInMods(reqRaw, mods);
-        if (matched) {
-          seenIds.add(matched.mod_id);
-        }
-        list.push({ raw: reqRaw, matchedMod: matched });
-      }
-    }
-
-    return list;
-  }, [selectedMod, mods]);
 
   const moveUp = (index: number) => {
     if (index <= 0) return;
@@ -1204,99 +771,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Presets & Mod Lists Dropdown & Actions */}
-          <div className="relative">
-            <button
-              onClick={() => setIsPresetDropdownOpen(!isPresetDropdownOpen)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
-              title="Preset Management & Collections (.pzpack)"
-            >
-              <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{activePresetName ? `Preset: ${activePresetName}` : `Presets (${savedPresets.length})`}</span>
-            </button>
-
-            {isPresetDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-2 space-y-2">
-                <div className="text-[11px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
-                  <span>Mod Presets</span>
-                  <span className="text-cyan-400 font-mono text-[10px]">{savedPresets.length} Saved</span>
-                </div>
-
-                <div className="space-y-1">
-                  <button
-                    onClick={() => {
-                      setIsSavePresetModalOpen(true);
-                      setIsPresetDropdownOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-emerald-300 hover:bg-emerald-950/40 rounded-lg transition text-left cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Save Current List as Preset</span>
-                  </button>
-
-                  <button
-                    onClick={handleImportPresetFile}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-cyan-300 hover:bg-cyan-950/40 rounded-lg transition text-left cursor-pointer"
-                  >
-                    <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Import .pzpack File</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleExportPresetFile();
-                      setIsPresetDropdownOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded-lg transition text-left cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Export Current List (.pzpack)</span>
-                  </button>
-                </div>
-
-                {savedPresets.length > 0 && (
-                  <>
-                    <div className="text-[10px] font-bold text-slate-500 px-2 pt-1 uppercase border-t border-slate-800">
-                      Load Saved Preset
-                    </div>
-                    <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
-                      {savedPresets.map((p) => (
-                        <div
-                          key={p.id}
-                          className="flex items-center justify-between p-1.5 bg-slate-950 hover:bg-slate-800/80 rounded-lg border border-slate-800/80 text-xs group"
-                        >
-                          <button
-                            onClick={() => handleApplyPreset(p)}
-                            className="flex-1 text-left truncate pr-2 text-slate-200 hover:text-cyan-300 font-medium text-xs cursor-pointer"
-                            title={`Load ${p.name} (${p.mods.length} mods)`}
-                          >
-                            <div className="truncate font-semibold">{p.name}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{p.mods.filter((m) => m.enabled).length} active mods</div>
-                          </button>
-                          <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100">
-                            <button
-                              onClick={() => handleExportPresetFile(p)}
-                              className="p-1 hover:text-cyan-400 transition cursor-pointer"
-                              title="Export as .pzpack"
-                            >
-                              <Download className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDeletePreset(p.id)}
-                              className="p-1 hover:text-red-400 transition cursor-pointer"
-                              title="Delete preset"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          <ModPresets
+            paths={paths}
+            mods={mods}
+            onApplyPresetLoadOrder={onApplyPresetLoadOrder}
+            onReorder={triggerReorder}
+            onOpenInBrowser={onOpenInBrowser}
+            toast={showToast}
+          />
 
           <button
             onClick={handleRefresh}
@@ -1397,14 +879,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={openHistory}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 cursor-pointer transition"
-            title="Earlier versions of your mod list, saved every time the Studio wrote it"
-          >
-            <History className="w-3.5 h-3.5 text-slate-400" />
-            <span>History</span>
-          </button>
+          <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
 
           <button
             onClick={handleAutoSortDependencies}
@@ -1415,67 +890,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Earlier versions of the list, which were on disk all along. */}
-      {history !== null && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setHistory(null)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-xl p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <History className="w-4 h-4 text-cyan-400" />
-                  <span>Your mod list, earlier</span>
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Every time the Studio wrote your list it kept the previous one. The last twenty are here.
-                </p>
-              </div>
-              <button onClick={() => setHistory(null)} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer">
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {history.length === 0 ? (
-              <p className="text-xs text-slate-400 py-6 text-center">
-                No earlier version yet. One is kept each time your list changes.
-              </p>
-            ) : (
-              <div className="max-h-80 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800">
-                {history.map((v) => {
-                  const same = v.added.length === 0 && v.removed.length === 0;
-                  return (
-                    <div key={v.file} className="p-3 flex items-start justify-between gap-3 hover:bg-slate-950/60 transition">
-                      <div className="min-w-0">
-                        <div className="text-xs font-mono text-slate-200">{v.saved_at}</div>
-                        <div className="text-[11px] text-slate-400">
-                          {v.active_count} mods
-                          {same ? ' · same as your list now' : ''}
-                          {v.added.length > 0 ? ` · ${v.added.length} back on` : ''}
-                          {v.removed.length > 0 ? ` · ${v.removed.length} off` : ''}
-                        </div>
-                        {(v.added.length > 0 || v.removed.length > 0) && (
-                          <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                            {[...v.added.map((id) => `+${nameOfMod(id)}`), ...v.removed.map((id) => `-${nameOfMod(id)}`)]
-                              .slice(0, 6)
-                              .join(', ')}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleRestoreVersion(v)}
-                        disabled={restoring !== null}
-                        className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 cursor-pointer transition disabled:opacity-50"
-                      >
-                        {restoring === v.file ? 'Going back...' : 'Go back to this'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Save Notification Toast */}
       {saveToast && (
@@ -1982,342 +1396,32 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           </div>
         </div>
 
-        {/* Right Column (5 cols): Selected Mod Workshop Inspector */}
-        <div className="col-span-12 lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4">
-          {selectedMod ? (
-            <div className="flex-1 flex flex-col overflow-y-auto space-y-4 pr-1">
-              <div className="border-b border-slate-800 pb-3 space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                      {selectedMod.is_map_mod ? 'MAP MOD' : selectedMod.is_library ? 'BASE LIBRARY' : 'SCRIPT MOD'}
-                    </span>
-                    {selectedMod.workshop_id && multiModPackageMap[selectedMod.workshop_id] && workshopColorMap[selectedMod.workshop_id] && (
-                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${workshopColorMap[selectedMod.workshop_id].badge} flex items-center gap-1`}>
-                        <Layers className="w-3 h-3" />
-                        Multi-Mod Package
-                      </span>
-                    )}
-                  </div>
-
-                  {selectedMod.workshop_id && onOpenInBrowser && (
-                    <button
-                      onClick={() => onOpenInBrowser(selectedMod.workshop_id!)}
-                      className="flex items-center gap-1 text-[10px] text-cyan-400 hover:underline font-mono bg-transparent border-0 cursor-pointer"
-                      title="Opens this mod in Browse Mods: description, images and the Workshop page"
-                    >
-                      <span>Open in Mod Browser (#{selectedMod.workshop_id})</span>
-                      <BookOpen className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-
-                <h3
-                  onClick={() => handleJumpToMod(selectedMod.mod_id)}
-                  className="text-base font-bold text-slate-100 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1.5"
-                  title="Click to center and highlight this mod in the left list"
-                >
-                  <span>{selectedMod.name}</span>
-                </h3>
-                <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{selectedMod.mod_id}</code></div>
-              </div>
-
-              {/* Load Order Violation Warning Card */}
-              {loadOrderViolationsMap[selectedMod.mod_id] && loadOrderViolationsMap[selectedMod.mod_id].length > 0 && (
-                <div className="p-3 bg-orange-950/70 border-2 border-orange-500 rounded-xl space-y-2 text-xs shadow-lg">
-                  <div className="flex items-center justify-between font-bold text-orange-300">
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert className="w-4 h-4 text-orange-400 shrink-0" />
-                      <span>Warning: Incorrect Load Order</span>
-                    </div>
-                    <span className="text-[10px] font-mono bg-orange-900/80 text-orange-200 px-2 py-0.5 rounded border border-orange-600">
-                      Position #{mods.findIndex((m) => m.mod_id === selectedMod.mod_id) + 1}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-200 leading-relaxed">
-                    This mod is loading <b>BEFORE</b> its required dependency{' '}
-                    <b className="text-orange-300">[{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}]</b> (Position #{loadOrderViolationsMap[selectedMod.mod_id][0].requiredModIndex + 1}). Must be placed <b>AFTER</b> in the list to avoid errors.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => handleFixLoadOrderViolation(selectedMod.mod_id, loadOrderViolationsMap[selectedMod.mod_id][0].requiredModId)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
-                    >
-                      <Wand2 className="w-4 h-4" />
-                      <span>Move After {loadOrderViolationsMap[selectedMod.mod_id][0].requiredModName}</span>
-                    </button>
-                    <button
-                      onClick={() => handleJumpToMod(loadOrderViolationsMap[selectedMod.mod_id][0].requiredModId)}
-                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-orange-300 border border-orange-800 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Jump to required dependency"
-                    >
-                      <span>Ver Dep</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Disabled Dependency Warning Card */}
-              {missingActiveDependenciesMap[selectedMod.mod_id] && missingActiveDependenciesMap[selectedMod.mod_id].length > 0 && (
-                <div className="p-3 bg-rose-950/60 border-2 border-rose-500/80 rounded-xl space-y-2 text-xs">
-                  <div className="flex items-center gap-2 font-bold text-rose-300">
-                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span>Warning: Base Library Disabled</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    This mod is active but requires the library{' '}
-                    <b className="text-rose-300">[{missingActiveDependenciesMap[selectedMod.mod_id][0].name}]</b> which is DISABLED.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => handleToggleSingleMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>Activate Library</span>
-                    </button>
-                    <button
-                      onClick={() => handleJumpToMod(missingActiveDependenciesMap[selectedMod.mod_id][0].mod_id)}
-                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Jump to library in list"
-                    >
-                      <span>View Mod</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Active Incompatibility Warning Card in Inspector */}
-              {activeConflictsMap[selectedMod.mod_id] && activeConflictsMap[selectedMod.mod_id].length > 0 && (
-                <div className="p-3 bg-amber-950/60 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs">
-                  <div className="flex items-center gap-2 font-bold text-amber-300">
-                    <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Warning: Incompatibility Detected</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Mutually exclusive with:{' '}
-                    <b className="text-amber-300">[{activeConflictsMap[selectedMod.mod_id][0].conflictingModName}]</b>.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => handleJumpToMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
-                    >
-                      <span>View Conflicting Mod</span>
-                    </button>
-                    <button
-                      onClick={() => handleToggleSingleMod(activeConflictsMap[selectedMod.mod_id][0].conflictingModId)}
-                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Deactivate conflicting variant"
-                    >
-                      <span>Deactivate</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Top Section: Split Description (Left) + Poster Thumbnail Frame (Right) */}
-              <div className="grid grid-cols-12 gap-3 items-start">
-                {/* Left Description Box with Parsed RichText */}
-                <div className="col-span-12 sm:col-span-7 space-y-1">
-                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Mod Overview & Description
-                  </label>
-                  <div className="p-3 bg-slate-950/90 rounded-xl text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 h-48 overflow-y-auto select-text shadow-inner">
-                    {renderPZRichText(selectedMod.description)}
-                  </div>
-                </div>
-
-                {/* Right Poster Image Frame (256x256 image with fallback) */}
-                <div className="col-span-12 sm:col-span-5 space-y-1">
-                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Mod Poster
-                  </label>
-                  <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
-                    {posterSrc && !imageError ? (
-                      <img
-                        src={posterSrc}
-                        alt={selectedMod.name}
-                        className="w-full h-full object-cover rounded-xl"
-                        onError={() => setImageError(true)}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-3 text-center space-y-2">
-                        <div className="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center shadow">
-                          {selectedMod.is_map_mod ? (
-                            <MapPin className="w-5 h-5 text-amber-400" />
-                          ) : selectedMod.is_library ? (
-                            <Package className="w-5 h-5 text-purple-400" />
-                          ) : (
-                            <ListOrdered className="w-5 h-5 text-cyan-400" />
-                          )}
-                        </div>
-                        <span className="text-[11px] font-bold text-slate-200 line-clamp-1 max-w-[150px]">
-                          {selectedMod.name}
-                        </span>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          <span>{selectedMod.is_map_mod ? 'Map Tile' : selectedMod.is_library ? 'Framework' : 'Script Mod'}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Section: In-Game Style Metadata Table Grid */}
-              <div className="bg-slate-950/80 border border-slate-800 rounded-xl overflow-hidden text-xs shadow-md">
-                <div className="bg-slate-900/90 px-3.5 py-2 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
-                  <span>Mod Metadata Details</span>
-                  <span className="text-[10px] font-mono text-emerald-400 font-normal">PZ Build 42 Manifest</span>
-                </div>
-                <div className="divide-y divide-slate-800/60 font-mono text-[11px]">
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Status</div>
-                    <div className={`col-span-8 font-bold ${selectedMod.enabled ? 'text-emerald-400' : 'text-slate-500'}`}>
-                      {selectedMod.enabled ? 'Enabled' : 'Disabled'}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Version</div>
-                    <div className="col-span-8 text-slate-200">{selectedMod.version || '1.0'}</div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Author</div>
-                    <div className="col-span-8 text-cyan-300 font-bold">{selectedMod.author || 'Unknown'}</div>
-                  </div>
-
-                  {selectedMod.url && (
-                    <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                      <div className="col-span-4 text-slate-400">Homepage</div>
-                      <div className="col-span-8">
-                        <button
-                          onClick={() => TauriService.openExternalUrl(selectedMod.url!)}
-                          className="text-cyan-400 hover:underline font-mono truncate max-w-full text-left"
-                        >
-                          {selectedMod.url}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Mod ID</div>
-                    <div className="col-span-8 text-emerald-400 font-bold">{selectedMod.mod_id}</div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Workshop ID</div>
-                    <div className="col-span-8 text-slate-300">{selectedMod.workshop_id || 'Built-in / Local'}</div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Source</div>
-                    <div className="col-span-8 text-slate-300">{selectedMod.workshop_id ? 'Steam Workshop' : 'Local Directory'}</div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                    <div className="col-span-4 text-slate-400">Zomboid Version</div>
-                    <div className="col-span-8 text-slate-300">{selectedMod.pzversion || '42.0+'}</div>
-                  </div>
-
-                  <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
-                    <div className="col-span-4 text-slate-400 pt-0.5">Incompatible With</div>
-                    <div className="col-span-8">
-                      {selectedMod.incompatible && selectedMod.incompatible.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {selectedMod.incompatible.map((incRaw, idx) => (
-                            <span key={idx} className="text-amber-400 font-bold">{incRaw}</span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-600 italic">-</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 1: Base Libraries (Library Required by this Mod) */}
-              <div className="space-y-1 border-t border-slate-800 pt-3">
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                    <Package className="w-3.5 h-3.5 text-emerald-400" />
-                    Library Required by this Mod ({parentLibraries.length})
-                  </span>
-                </label>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {parentLibraries.length > 0 ? (
-                    parentLibraries.map((item, idx) => {
-                      const matched = item.matchedMod;
-                      const isDepDisabled = matched && !matched.enabled;
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => handleJumpToDependency(item.raw)}
-                          className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition cursor-pointer flex items-center gap-2 shadow-sm ${
-                            isDepDisabled
-                              ? 'bg-rose-950/80 border-rose-700 text-rose-200 hover:border-rose-400 shadow'
-                              : matched
-                              ? 'bg-emerald-950/80 border-emerald-700 text-emerald-200 hover:border-emerald-400 shadow'
-                              : 'bg-red-950/80 border-red-700 text-red-200 hover:border-red-400 shadow'
-                          }`}
-                          title={
-                            matched
-                              ? `Click to center and go to parent library [${matched.name}] (${matched.enabled ? 'ACTIVE' : 'DISABLED'})`
-                              : `Library not installed: ${item.raw} (Click to search on Steam Workshop)`
-                          }
-                        >
-                          <span className={`w-2 h-2 rounded-full ${isDepDisabled ? 'bg-rose-400 animate-pulse' : matched ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                          <span>{matched ? matched.name : item.raw}</span>
-                          <ExternalLink className="w-3 h-3 text-emerald-400 shrink-0 ml-0.5" />
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <span className="text-xs text-slate-500 italic">No base library required by this mod</span>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION 2: Reverse Dependents (Mods Requiring This Library) */}
-              <div className="space-y-1 border-t border-slate-800 pt-3">
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-purple-400 font-bold">
-                    <Link2 className="w-3.5 h-3.5 text-purple-400" />
-                    Mods Requiring This Library ({reverseDependents.length})
-                  </span>
-                </label>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {reverseDependents.length > 0 ? (
-                    reverseDependents.map((depMod) => (
-                      <button
-                        key={depMod.mod_id}
-                        onClick={() => handleJumpToMod(depMod.mod_id)}
-                        className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition cursor-pointer flex items-center gap-2 shadow-sm ${
-                          depMod.enabled
-                            ? 'bg-purple-950/80 border-purple-700 text-purple-200 hover:border-purple-400 shadow'
-                            : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
-                        }`}
-                        title={`Click to center and go to child mod [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                        <span>{depMod.name}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <span className="text-xs text-slate-500 italic">No installed mods require this library</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-slate-500 text-xs">
-              Select a mod from the left list to view Workshop metadata details.
-            </div>
-          )}
-        </div>
+        {/* Right Column (5 cols): the selected mod, its problems and what it needs. */}
+        <ModInspector
+          paths={paths}
+          mod={selectedMod}
+          mods={mods}
+          position={selectedMod ? modIndexById.get(selectedMod.mod_id) ?? -1 : -1}
+          problems={
+            selectedMod
+              ? {
+                  orderViolation: loadOrderViolationsMap[selectedMod.mod_id]?.[0],
+                  disabledDependency: missingActiveDependenciesMap[selectedMod.mod_id]?.[0],
+                  incompatibility: activeConflictsMap[selectedMod.mod_id]?.[0],
+                }
+              : {}
+          }
+          packageBadgeClass={
+            selectedMod?.workshop_id && multiModPackageMap[selectedMod.workshop_id]
+              ? workshopColorMap[selectedMod.workshop_id]?.badge
+              : undefined
+          }
+          onJumpToMod={handleJumpToMod}
+          onJumpToDependency={handleJumpToDependency}
+          onFixLoadOrder={handleFixLoadOrderViolation}
+          onToggleMod={handleToggleSingleMod}
+          onOpenInBrowser={onOpenInBrowser}
+        />
       </div>
 
       {/* In-App Auto-Sort Notice Modal */}
@@ -2380,217 +1484,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
       )}
 
-      {/* Save Preset Dialog Modal */}
-      {isSavePresetModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <Bookmark className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-slate-100">Save Current List as Preset</h3>
-              </div>
-              <button onClick={() => setIsSavePresetModalOpen(false)} className="text-slate-500 hover:text-slate-300 p-1">
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Save the current configuration of <b className="text-emerald-400">{activeCount} active mods</b> and its load order so you can restore it at any time.
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Preset Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Hardcore Survival 1993, Vanilla Plus..."
-                  value={newPresetName}
-                  onChange={(e) => setNewPresetName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Description (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Optimized collection with weapon and UI mods"
-                  value={newPresetDesc}
-                  onChange={(e) => setNewPresetDesc(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setIsSavePresetModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveCurrentAsPreset}
-                disabled={!newPresetName.trim()}
-                className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Save Preset</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Imported Preset & Missing Mods Diagnostic Modal */}
-      {isPresetModalOpen && importedPreset && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-5 h-5 text-cyan-400" />
-                <div>
-                  <h3 className="text-base font-bold text-slate-100">Collection: {importedPreset.name}</h3>
-                  <p className="text-[11px] text-slate-400">{importedPreset.description || 'Imported from .pzpack file'}</p>
-                </div>
-              </div>
-              <button onClick={() => { setIsPresetModalOpen(false); setImportedPreset(null); setMissingReport(null); }} className="text-slate-500 hover:text-slate-300 p-1">
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {/* Diagnostic Report */}
-            {missingReport && (
-              <div className="space-y-2">
-                {missingReport.missing_mods.length > 0 ? (
-                  <div className="p-3.5 bg-amber-950/70 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs shadow-md">
-                    <div className="flex items-center justify-between font-bold text-amber-300">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Mods Not Installed on your PC ({missingReport.missing_mods.length})</span>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      To fully enjoy this preset, subscribe to these mods on Steam Workshop:
-                    </p>
-                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
-                      {missingReport.missing_mods.map((m, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-1.5 bg-slate-950/80 rounded border border-slate-800 text-[11px] font-mono">
-                          <span className="text-slate-200 truncate max-w-[240px]">{m.name}</span>
-                          {m.workshop_id ? (
-                            <button
-                              onClick={() => (onOpenInBrowser ? onOpenInBrowser(m.workshop_id!) : TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshop_id}`))}
-                              className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
-                            >
-                              <span>Steam (#{m.workshop_id})</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </button>
-                          ) : (
-                            <span className="text-slate-500 text-[10px]">Local Mod</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3.5 bg-emerald-950/60 border border-emerald-700/80 rounded-xl flex items-center gap-3 text-xs text-emerald-300">
-                    <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
-                    <div>
-                      <div className="font-bold">All mods in the collection are installed!</div>
-                      <div className="text-[11px] text-slate-300">You can apply the order and activation immediately.</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Settings that came with the pack: saved only if the player wants them. */}
-                {importedPreset?.sandbox && (
-                  <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
-                    <div className="text-[11px] text-slate-200">
-                      This pack also carries the sandbox settings{' '}
-                      <b className="text-slate-100">{importedPreset.sandbox.name}</b> —{' '}
-                      {importedPreset.sandbox.settings} settings,{' '}
-                      {importedPreset.sandbox.mod_settings} of them from mods.
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!importedPreset?.sandbox) return;
-                        try {
-                          const name = await TauriService.writeSandboxPreset(paths.user_zomboid_dir, importedPreset.sandbox);
-                          setSaveToast(`Saved as the sandbox preset "${name}". Pick it when you start a game.`);
-                          setTimeout(() => setSaveToast(null), 5000);
-                        } catch (err) {
-                          alert(explainError(err));
-                        }
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 cursor-pointer transition"
-                      title="Writes them into Zomboid/Sandbox Presets without touching any preset of your own"
-                    >
-                      Save these settings as a preset
-                    </button>
-                  </div>
-                )}
-
-                {/* The same list on a different build is a different game. */}
-                {missingReport.pack_game_version &&
-                  missingReport.your_game_version &&
-                  missingReport.pack_game_version !== missingReport.your_game_version && (
-                    <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-slate-300">
-                      This list was put together on build <b className="text-slate-100">{missingReport.pack_game_version}</b>;
-                      yours is <b className="text-slate-100">{missingReport.your_game_version}</b>. Mods made for one build do
-                      not always work on the other, and saves never cross them.
-                    </div>
-                  )}
-
-                {/* Installed, but not the copy the pack was made with. */}
-                {missingReport.drift && missingReport.drift.length > 0 && (
-                  <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
-                    <div className="text-[11px] font-bold text-slate-200">
-                      {missingReport.drift.length} mod{missingReport.drift.length === 1 ? '' : 's'} differ from the copy this
-                      list was made with
-                    </div>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      Steam only ever gives you the newest copy, so there is nothing to fix here. It is worth knowing when a
-                      recipe or an item is not where the sender said it was.
-                    </p>
-                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
-                      {missingReport.drift.map((d) => (
-                        <div key={d.mod_id} className="flex items-center justify-between gap-2 p-1.5 bg-slate-950/80 rounded border border-slate-800 text-[11px]">
-                          <span className="text-slate-200 truncate">{d.name}</span>
-                          <span className="font-mono text-[10px] text-slate-400 shrink-0">
-                            {d.direction === 'older'
-                              ? 'yours is older'
-                              : d.direction === 'newer'
-                              ? 'yours is newer'
-                              : 'version differs'}
-                            {d.pack_version || d.your_version ? ` (${d.pack_version ?? '?'} \u2192 ${d.your_version ?? '?'})` : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => { setIsPresetModalOpen(false); setImportedPreset(null); setMissingReport(null); }}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApplyImportedPreset}
-                className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Check className="w-4 h-4" />
-                <span>Apply Preset to my Game</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
