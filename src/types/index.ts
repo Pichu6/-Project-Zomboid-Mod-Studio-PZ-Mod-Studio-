@@ -66,40 +66,14 @@ export interface CollisionRegion {
 }
 
 // ==========================================
-// Module 2: JSON-Driven Polyfill Engine
+// Module 2: The Build 42 shim
 // ==========================================
 
-export type RuleCategory =
-  | 'ARGUMENT_TYPE_WRAPPER'
-  | 'SAFE_GLOBAL'
-  | 'TRANSLATOR_FIX'
-  | 'REQUIRE_REDIRECT'
-  | 'CUSTOM_SHIM';
-
-export type RuleSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-
-export interface PolyfillRule {
-  id: string;
-  name: string;
-  description: string;
-  category: RuleCategory;
-  severity: RuleSeverity;
-  enabled: boolean;
-  pattern: {
-    type: string;
-    target_function?: string;
-    target_global?: string;
-    target_method?: string;
-    [key: string]: unknown;
-  };
-  action: {
-    type: string;
-    wrapper_template?: string;
-    shim_code?: string;
-    regex?: string;
-    replacement?: string;
-    mappings?: Record<string, string>;
-  };
+/** One numbered part of the Build 42 shim, as the shim itself heads it. */
+export interface PolyfillSection {
+  number: string;
+  title: string;
+  lines: number;
 }
 
 // ==========================================

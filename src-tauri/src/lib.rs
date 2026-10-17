@@ -298,6 +298,12 @@ fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog:
 }
 
 /// Every earlier version of the mod list the Studio kept, newest first.
+/// What the Build 42 shim covers, read from the shim that ships inside merge packages.
+#[tauri::command(async)]
+fn polyfill_sections_cmd() -> Vec<patch_generator::PolyfillSection> {
+    patch_generator::polyfill_sections()
+}
+
 #[tauri::command(async)]
 fn mod_list_history_cmd(paths: StudioPaths) -> Vec<load_order::ini_parser::ModListVersion> {
     load_order::ini_parser::list_mod_list_history(&paths.mod_list_ini_path, &paths.user_zomboid_dir)
@@ -629,6 +635,7 @@ pub fn run() {
             steam_client_ready_cmd,
             launch_sandbox_cmd,
             script_conflicts_cmd,
+            polyfill_sections_cmd,
             mod_list_history_cmd,
             restore_mod_list_version_cmd,
             bisect_state_cmd,

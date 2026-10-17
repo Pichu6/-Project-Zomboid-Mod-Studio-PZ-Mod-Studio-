@@ -35,7 +35,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | ✅ | **Health report**: everything that will go wrong on launch, with the reason (Mod Health tab, MCP `get_mod_health`) | The thing players need most |
 | ⬜ | Catalog cache (rescan only changed folders) | Measured: the full catalog of 115 mods builds in well under 0.5 s, so this waits until it is needed |
 | 🔨 | Split the 2000-line components; virtualized mod list; one state store | Done: the Mod List takes its problems from the health check (no more guessed conflicts) and no longer scans the list per row. Next: virtualization and splitting |
-| ⬜ | Polyfills split into: B41→B42 compatibility layer · vanilla/MP bug fixes · per-mod patches that only run when that mod is active. Settings toggles control what ships (today they do nothing) | Honest, opt-in patching |
+| 🔨 | Honest shim: the hand-written rules file that promised thirteen fixes nobody applied is gone (one of them redirected `require("ISUI/ISPanel")` to a file Build 42 does not have), Settings lists the shim's own nine parts with their line counts read from the shim that ships, and crash cards are no longer hidden because that file called a fix "enabled". Next: split part 5 (1565 lines in one block) into B41→B42 · vanilla/MP fixes · per-mod patches that only run when that mod is active, each switchable | Honest, opt-in patching |
 
 ## Phase 1: The manager everyone expects
 

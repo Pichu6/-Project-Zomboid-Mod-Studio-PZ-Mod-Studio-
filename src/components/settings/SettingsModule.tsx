@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
-import { PolyfillRule } from '../../types';
+import { PolyfillSection } from '../../types';
 import { TauriService } from '../../services/tauri';
 
 export interface StudioPathsUI {
@@ -14,17 +14,22 @@ export interface StudioPathsUI {
 interface SettingsModuleProps {
   paths: StudioPathsUI;
   /** What the Build 42 shim covers; shown as a list, not as switches. */
-  rules: PolyfillRule[];
   onSavePaths: (updatedPaths: StudioPathsUI) => void;
   onAutoDetect: () => void;
 }
 
 export const SettingsModule: React.FC<SettingsModuleProps> = ({
   paths,
-  rules,
   onSavePaths,
   onAutoDetect,
 }) => {
+  /** What the shim covers, as the shim heads its own parts. */
+  const [shimSections, setShimSections] = useState<PolyfillSection[]>([]);
+  const shimLines = shimSections.reduce((n, s) => n + s.lines, 0);
+
+  useEffect(() => {
+    void (async () => setShimSections(await TauriService.polyfillSections()))();
+  }, []);
   const [activeSubTab, setActiveSubTab] = useState<'PATHS' | 'POLYFILLS' | 'MCP'>('PATHS');
   /**
    * The MCP server, the Claude Agent and the in-game bridge are for people building things on
@@ -606,18 +611,28 @@ The file the game reads to know which mods are on and in what order. Found autom
               </div>
 
               <div className="pt-3 border-t border-slate-800">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">What it covers</div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">What it covers</div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    read from the shim itself{shimLines > 0 ? ` · ${shimLines} lines of Lua` : ''}
+                  </div>
+                </div>
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
-                  {rules.map((rule) => (
-                    <li key={rule.id} className="flex items-start gap-2 text-[11px] text-slate-300">
+                  {shimSections.map((section) => (
+                    <li key={section.number} className="flex items-start gap-2 text-[11px] text-slate-300">
                       <Check className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
                       <span>
-                        {rule.name}
-                        <span className="block text-[10px] text-slate-500">{rule.description}</span>
+                        {section.title}
+                        <span className="block text-[10px] text-slate-500 font-mono">
+                          part {section.number} · {section.lines} lines
+                        </span>
                       </span>
                     </li>
                   ))}
                 </ul>
+                {shimSections.length === 0 && (
+                  <p className="text-[11px] text-slate-500">The shim could not be read from this build of the Studio.</p>
+                )}
               </div>
             </div>
           </div>

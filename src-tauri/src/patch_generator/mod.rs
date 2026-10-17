@@ -226,6 +226,55 @@ pub fn generate_master_polyfill_lua() -> String {
     MASTER_POLYFILL_LUA.to_string()
 }
 
+/// One numbered part of the shim, as the shim itself heads it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolyfillSection {
+    /// "4.1", as written in the file.
+    pub number: String,
+    pub title: String,
+    /// Lines of Lua under this heading, so a part that does nothing cannot look like one that does.
+    pub lines: usize,
+}
+
+/// What the shim covers, read out of the shim that ships.
+///
+/// This list used to be written by hand in the app, which let it drift: it promised fixes the Lua
+/// never made, one of them redirecting `require("ISUI/ISPanel")` to a file Build 42 does not have.
+/// Reading the headings of the file that is actually written into the package cannot drift.
+pub fn polyfill_sections() -> Vec<PolyfillSection> {
+    let mut sections: Vec<PolyfillSection> = Vec::new();
+    for line in MASTER_POLYFILL_LUA.lines() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("-- ") else {
+            if let Some(last) = sections.last_mut() {
+                if !trimmed.is_empty() {
+                    last.lines += 1;
+                }
+            }
+            continue;
+        };
+        // A heading is "-- 4.1 Title" or "-- 4. Title"; anything else is an ordinary comment.
+        let (number, title) = match rest.split_once(' ') {
+            Some((number, title))
+                if number.starts_with(|c: char| c.is_ascii_digit())
+                    && number.trim_end_matches('.').chars().all(|c| c.is_ascii_digit() || c == '.') =>
+            {
+                (number.trim_end_matches('.').to_string(), title.trim().to_string())
+            }
+            _ => continue,
+        };
+        if title.is_empty() {
+            continue;
+        }
+        // The file heads some parts twice; the first heading wins.
+        if sections.iter().any(|x| x.number == number) {
+            continue;
+        }
+        sections.push(PolyfillSection { number, title, lines: 0 });
+    }
+    sections
+}
+
 /// Generates a synthetic master patch mod under Zomboid/mods/<package_folder_name> and updates ModListData.ini.
 pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     let pkg_name = req.package_folder_name
@@ -268,21 +317,6 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
 
     let polyfill_lua_content = generate_master_polyfill_lua();
     
-    let ui_override_content = r#"
--- PZ Mod Studio In-Game Load Order & Master Patch Lock
-local Events = Events or triggerEvent
-Events.OnGameStart.Add(function()
-    if ModLoadOrderUI then
-        ModLoadOrderUI.onAuto = function(self)
-            local text = "PZ Mod Studio Control Active:\nLoad order is managed automatically by PZ Mod Studio.\nIn-game primitive re-sorting is locked to preserve Master Patch overrides."
-            local modal = ISModalDialog:new(0, 0, 420, 160, text, false, nil, nil)
-            modal:initialise()
-            modal:addToUIManager()
-        end
-    end
-end)
-"#;
-
     let png_256 = get_preview_png_bytes();
 
     for patch_mod_dir in &target_dirs {
@@ -343,14 +377,10 @@ end)
         let _ = fs::create_dir_all(&polyfill_42_dir);
         let _ = fs::write(polyfill_42_dir.join("Z_PZModStudio_Polyfills.lua"), &polyfill_lua_content);
 
-        // UI Override shims
-        let client_override_dir = media_dir.join("lua").join("client").join("OptionScreens");
-        let _ = fs::create_dir_all(&client_override_dir);
-        let _ = fs::write(client_override_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content);
-
-        let client_override_42_dir = media_42_dir.join("lua").join("client").join("OptionScreens");
-        let _ = fs::create_dir_all(&client_override_42_dir);
-        let _ = fs::write(client_override_42_dir.join("Z_PZModStudio_UIOverride.lua"), ui_override_content);
+        // Nothing else is written: a package carries merged files and the shim, and leaves the
+        // game's own screens alone. It used to replace the in-game mod-order screen's "Auto"
+        // button with a message saying sorting was locked by the Studio, which is not the
+        // Studio's to take away — the next save of the mod list puts its order back anyway.
     }
 
     // 2. Update ModListData.ini to place clean_pkg_name at the end of load order and remove any other synthetic packages
@@ -1535,4 +1565,43 @@ fn remember_package_in_saved_order(user_zomboid_dir: &str, package: &str, active
         load_order,
         active_mods.to_vec(),
     );
+}
+
+#[cfg(test)]
+mod shim_tests {
+    use super::*;
+
+    #[test]
+    fn the_shims_own_headings_are_what_the_app_lists() {
+        let sections = polyfill_sections();
+        assert!(sections.len() >= 8, "found only {:?}", sections);
+        assert_eq!(sections[0].number, "1");
+        assert!(sections[0].title.contains("Translator"), "{}", sections[0].title);
+        // Numbers are unique and each part has some Lua under it.
+        let mut numbers: Vec<&str> = sections.iter().map(|s| s.number.as_str()).collect();
+        let before = numbers.len();
+        numbers.sort();
+        numbers.dedup();
+        assert_eq!(numbers.len(), before, "a number is listed twice");
+        assert!(sections.iter().all(|s| s.lines > 0), "{:?}", sections.iter().find(|s| s.lines == 0));
+    }
+
+    #[test]
+    fn a_package_no_longer_takes_the_games_own_sort_button_away() {
+        // The shim is Lua the game runs; nothing in the package replaces a vanilla screen.
+        assert!(!MASTER_POLYFILL_LUA.contains("ModLoadOrderUI"));
+    }
+}
+
+#[cfg(test)]
+mod shim_listing {
+    /// Prints the list the Settings card now shows.
+    /// cargo test what_the_shim_covers -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn what_the_shim_covers() {
+        for s in super::polyfill_sections() {
+            println!("  {:>4}  {:<70} {} lines", s.number, s.title, s.lines);
+        }
+    }
 }

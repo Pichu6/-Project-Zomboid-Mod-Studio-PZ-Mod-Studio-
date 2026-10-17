@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -677,6 +677,15 @@ export const TauriService = {
       return await invoke<HealthIssue[]>('script_conflicts_cmd', { paths, active });
     } catch {
       // Nothing is broken if this cannot be read; the rest of the health check stands on its own.
+      return [];
+    }
+  },
+
+  /** What the Build 42 shim covers, read from the shim that ships. */
+  polyfillSections: async (): Promise<PolyfillSection[]> => {
+    try {
+      return await invoke<PolyfillSection[]>('polyfill_sections_cmd');
+    } catch {
       return [];
     }
   },

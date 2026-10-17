@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile } from './types';
-import { DEFAULT_POLYFILL_RULES } from './data/default_rules';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
@@ -25,7 +24,6 @@ import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('PROFILES');
   const [conflicts, setConflicts] = useState<VfsConflict[]>([]);
-  const rules = DEFAULT_POLYFILL_RULES;
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [activeProfile, setActiveProfile] = useState<AppProfile | null>(null);
   /** Every saved profile, so the Mod List can say which of them a mod belongs to. */
@@ -136,11 +134,7 @@ export const App: React.FC = () => {
 
     TauriService.listenSandboxErrorCards((card) => {
       setErrorCards((prev) => {
-        // If suggested polyfill rule is ALREADY active, skip card creation!
-        if (card.polyfill_rule_id_suggestion && rules.some((r) => r.id === card.polyfill_rule_id_suggestion && r.enabled)) {
-          return prev;
-        }
-        // Deduplicate cards by title or rule suggestion so 32 identical cards never stack!
+        // Deduplicate cards by title or rule suggestion so 32 identical cards never stack.
         const isDuplicate = prev.some((c) => c.title === card.title || (c.polyfill_rule_id_suggestion && c.polyfill_rule_id_suggestion === card.polyfill_rule_id_suggestion));
         if (isDuplicate) return prev;
 
@@ -153,7 +147,7 @@ export const App: React.FC = () => {
     return () => {
       if (unlistenErrorCards) unlistenErrorCards();
     };
-  }, [rules]);
+  }, []);
 
 
 
@@ -663,7 +657,6 @@ export const App: React.FC = () => {
             <div className="flex-1 flex flex-col min-h-0 font-sans">
               <SettingsModule
                 paths={paths}
-                rules={rules}
                 onSavePaths={handleSavePaths}
                 onAutoDetect={handleAutoDetect}
               />
