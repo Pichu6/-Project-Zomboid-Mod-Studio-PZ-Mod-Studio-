@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan, SandboxPresetInfo, PresetSandbox } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -899,6 +899,26 @@ export const TauriService = {
     sandboxPreset?: string | null
   ): Promise<any> => {
     return await invoke('export_preset_file', { paths, preset, filePath, sandboxPreset: sandboxPreset ?? null });
+  },
+
+  /** The text files of one installed mod, to pick one to patch. */
+  modFiles: async (paths: StudioPathsUI, modId: string): Promise<ModFile[]> => {
+    return await invoke<ModFile[]>('mod_files_cmd', { paths, modId });
+  },
+
+  /** Opens one mod's file as something the Merger can edit and save into the package. */
+  modFileToPatch: async (paths: StudioPathsUI, modId: string, relativePath: string): Promise<VfsConflict> => {
+    const raw = await invoke<any>('mod_file_to_patch_cmd', { paths, modId, relativePath });
+    return {
+      ...raw,
+      competing_mods: raw.competing_files.map((f: any) => ({
+        mod_id: f.mod_id,
+        mod_name: f.mod_name,
+        absolute_path: f.absolute_path,
+        content: f.content,
+      })),
+      status: raw.status || 'MANUAL_CONFLICT',
+    } as VfsConflict;
   },
 
   /** The player's own sandbox presets, so one can be put into a pack. */

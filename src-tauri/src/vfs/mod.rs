@@ -1,3 +1,5 @@
+pub mod mod_patch;
+
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -462,6 +464,14 @@ pub fn scan_conflicts_for_package(
         }
     }
 
+    // path -> the one mod that ships it, for the patched files below.
+    let mut single_owners: HashMap<String, String> = HashMap::new();
+    for (rel, owners) in &by_path {
+        if owners.len() == 1 {
+            single_owners.insert(rel.clone(), owners[0].1.clone());
+        }
+    }
+
     let mut file_map: Vec<(String, Vec<CompetingModFileRaw>)> = Vec::new();
     for (rel, mut owners) in by_path {
         if owners.len() < 2 || is_loaded_from_every_mod(&rel) {
@@ -586,6 +596,24 @@ pub fn scan_conflicts_for_package(
     // walk above cannot see them. They are the same question, so they are listed here too.
     let definitions = crate::scripts::script_definition_conflicts(catalog, &active);
     conflicts.extend(crate::scripts::as_merger_conflicts(&definitions, &draft_map));
+
+    // A file only one mod ships is no conflict, so the walk drops it -- including one the user
+    // opened to patch a bug of that mod's own. Once the package holds a decision for it, it
+    // belongs in the list like anything else, or it would vanish on the next rescan and the
+    // package would keep a file nothing in the app could show.
+    for (rel_path, (saved_content, saved_status)) in &draft_map {
+        if conflicts.iter().any(|c| &c.relative_path == rel_path) {
+            continue;
+        }
+        let Some(owner) = single_owners.get(rel_path) else { continue };
+        let Ok(mut entry) = crate::vfs::mod_patch::conflict_for_mod_file(catalog, paths, owner, rel_path)
+        else {
+            continue;
+        };
+        entry.merged_output = saved_content.clone();
+        entry.status = Some(saved_status.clone());
+        conflicts.push(entry);
+    }
 
     conflicts
 }

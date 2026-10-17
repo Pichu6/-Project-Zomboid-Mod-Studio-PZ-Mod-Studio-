@@ -301,6 +301,24 @@ fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog:
 /// What the Build 42 shim covers, read from the shim that ships inside merge packages.
 /// What a link offers, worked out without downloading it.
 /// The player's own sandbox presets, so one can be put into a pack.
+/// The text files of one installed mod, to pick one to patch.
+#[tauri::command(async)]
+fn mod_files_cmd(paths: StudioPaths, mod_id: String) -> Result<Vec<vfs::mod_patch::ModFile>, String> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    vfs::mod_patch::files_of_mod(&catalog, &mod_id)
+}
+
+/// One mod's file, in the shape the Merger edits and saves into the package.
+#[tauri::command(async)]
+fn mod_file_to_patch_cmd(
+    paths: StudioPaths,
+    mod_id: String,
+    relative_path: String,
+) -> Result<vfs::VfsConflictRaw, String> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    vfs::mod_patch::conflict_for_mod_file(&catalog, &paths, &mod_id, &relative_path)
+}
+
 #[tauri::command(async)]
 fn sandbox_presets_cmd(
     user_zomboid_dir: String,
@@ -674,6 +692,8 @@ pub fn run() {
             steam_client_ready_cmd,
             launch_sandbox_cmd,
             script_conflicts_cmd,
+            mod_files_cmd,
+            mod_file_to_patch_cmd,
             sandbox_presets_cmd,
             write_sandbox_preset_cmd,
             resolve_url_install_cmd,

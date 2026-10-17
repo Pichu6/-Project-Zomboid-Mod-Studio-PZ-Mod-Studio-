@@ -608,6 +608,7 @@ export const App: React.FC = () => {
             <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-slate-500">Loading the merge editor...</div>}>
             <MergerModule
               conflicts={conflicts}
+              mods={mods}
               paths={paths}
               onResolveConflict={handleResolveConflict}
               onAutoMergeAll={handleAutoMergeAll}

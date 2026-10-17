@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { VfsConflict, ChangeRegion, ModChangeSummary } from '../../types';
+import { VfsConflict, ChangeRegion, ModChangeSummary, ModInfo, ModFile } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
 import {
@@ -35,12 +35,16 @@ import {
   Minus,
   Lock,
   Info,
+  Wrench,
+  X,
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import '../../monacoSetup';
 
 interface MergerModuleProps {
   conflicts: VfsConflict[];
+  /** Installed mods, to pick one whose file you want to patch. */
+  mods: ModInfo[];
   paths: StudioPathsUI;
   onResolveConflict: (conflictId: string, resolvedCode: string, packageFolderName?: string) => void;
   onAutoMergeAll?: (packageFolderName?: string) => Promise<boolean>;
@@ -200,7 +204,8 @@ const modLineFor = (summary: ModChangeSummary | undefined, baseLine: number): nu
 };
 
 export const MergerModule: React.FC<MergerModuleProps> = ({
-  conflicts,
+  conflicts: scannedConflicts,
+  mods,
   paths,
   onResolveConflict,
   onAutoMergeAll,
@@ -216,6 +221,26 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   focusRelativePath,
   onFocusHandled,
 }) => {
+  /**
+   * Files opened to patch a mod's own bug. They are not conflicts -- only one mod ships them --
+   * so the scan does not list them until the package holds a decision for one; until then they
+   * live here, beside the scanned ones, and behave the same.
+   */
+  const [patchTargets, setPatchTargets] = useState<VfsConflict[]>([]);
+  const conflicts = useMemo(
+    () => [
+      ...scannedConflicts,
+      ...patchTargets.filter((p) => !scannedConflicts.some((c) => c.relative_path === p.relative_path)),
+    ],
+    [scannedConflicts, patchTargets]
+  );
+
+  const [isPatchPickerOpen, setIsPatchPickerOpen] = useState(false);
+  const [patchModId, setPatchModId] = useState<string | null>(null);
+  const [patchModSearch, setPatchModSearch] = useState('');
+  const [patchFiles, setPatchFiles] = useState<ModFile[] | null>(null);
+  const [patchFileSearch, setPatchFileSearch] = useState('');
+
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(false);
   const [isRescanning, setIsRescanning] = useState<boolean>(false);
@@ -312,6 +337,37 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           ? `✓ Package "${pkg.display_name}" activated and VISIBLE in the mod list.`
           : `✓ Package "${pkg.display_name}" HIDDEN from the mod list.`
       );
+    }
+  };
+
+  /** Lists a mod's files when one is chosen in the picker. */
+  const chooseModToPatch = async (modId: string) => {
+    setPatchModId(modId);
+    setPatchFiles(null);
+    setPatchFileSearch('');
+    try {
+      setPatchFiles(await TauriService.modFiles(paths, modId));
+    } catch (err) {
+      alert(explainError(err));
+      setPatchModId(null);
+    }
+  };
+
+  /**
+   * Opens one of a mod's own files for patching. It joins the list like a conflict and is edited
+   * and saved the same way; the package, loading last, is then what the game reads for it.
+   */
+  const openModFileToPatch = async (modId: string, relativePath: string) => {
+    try {
+      const entry = await TauriService.modFileToPatch(paths, modId, relativePath);
+      setPatchTargets((current) => [...current.filter((c) => c.relative_path !== entry.relative_path), entry]);
+      setSelectedConflictId(entry.id);
+      setIsPatchPickerOpen(false);
+      setPatchModId(null);
+      setPatchFiles(null);
+      showToast(`${relativePath} opened. Edit it and press Save to put it in the package.`);
+    } catch (err) {
+      alert(explainError(err));
     }
   };
 
@@ -888,6 +944,118 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">
+      {/* Picking a mod's file to patch: a bug in one mod, which no merge can reach. */}
+      {isPatchPickerOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={() => setIsPatchPickerOpen(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-amber-400" />
+                  <span>Patch a mod file</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5 max-w-xl leading-relaxed">
+                  For a bug in one mod, where there is nothing to merge. Your copy goes in this
+                  package, which loads last, so the game reads it instead of the mod's — for that
+                  file only. The mod stays on and the rest of it is untouched.
+                </p>
+              </div>
+              <button onClick={() => setIsPatchPickerOpen(false)} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer">
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            {!patchModId ? (
+              <>
+                <input
+                  type="text"
+                  value={patchModSearch}
+                  onChange={(e) => setPatchModSearch(e.target.value)}
+                  placeholder="Which mod?"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+                <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-900">
+                  {mods
+                    .filter((m) => !m.mod_id.startsWith('Z_PZModStudio_'))
+                    .filter((m) => {
+                      const q = patchModSearch.trim().toLowerCase();
+                      return !q || m.name.toLowerCase().includes(q) || m.mod_id.toLowerCase().includes(q);
+                    })
+                    .slice(0, 200)
+                    .map((m) => (
+                      <button
+                        key={m.mod_id}
+                        type="button"
+                        onClick={() => chooseModToPatch(m.mod_id)}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-950/70 cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">{m.name}</span>
+                        <span className="font-mono text-[10px] text-slate-500 shrink-0">{m.mod_id}</span>
+                      </button>
+                    ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPatchModId(null);
+                      setPatchFiles(null);
+                    }}
+                    className="text-[11px] px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                  >
+                    ← Another mod
+                  </button>
+                  <input
+                    type="text"
+                    value={patchFileSearch}
+                    onChange={(e) => setPatchFileSearch(e.target.value)}
+                    placeholder="Which file? (lua, scripts)"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-900">
+                  {patchFiles === null ? (
+                    <div className="px-3 py-6 text-center text-xs text-slate-500">Reading the mod…</div>
+                  ) : patchFiles.length === 0 ? (
+                    <div className="px-3 py-6 text-center text-xs text-slate-500">
+                      This mod ships no Lua or script files the build reads.
+                    </div>
+                  ) : (
+                    patchFiles
+                      .filter((f) => {
+                        const q = patchFileSearch.trim().toLowerCase();
+                        return !q || f.relative_path.toLowerCase().includes(q);
+                      })
+                      .map((f) => (
+                        <button
+                          key={f.relative_path}
+                          type="button"
+                          onClick={() => openModFileToPatch(patchModId, f.relative_path)}
+                          className="w-full text-left px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-950/70 cursor-pointer flex items-center justify-between gap-2"
+                        >
+                          <span className="font-mono truncate">{f.relative_path}</span>
+                          <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                            {(f.bytes / 1024).toFixed(1)} KB
+                          </span>
+                        </button>
+                      ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {toastMessage && (
         <div className="bg-gradient-to-r from-cyan-900/90 to-emerald-900/90 border-b border-cyan-500/50 text-cyan-100 text-xs px-4 py-2 flex items-center justify-between animate-fade-in shadow-md shrink-0">
           <div className="flex items-center gap-2">
@@ -1235,6 +1403,20 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             <div className="flex items-center gap-2 shrink-0">
               {!isCurrentlyPackaged && (
                 <>
+                  <button
+                    onClick={() => {
+                      setIsPatchPickerOpen(true);
+                      setPatchModId(null);
+                      setPatchFiles(null);
+                      setPatchModSearch('');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition shadow bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 cursor-pointer"
+                    title="Open one mod's own file to patch a bug in it. The package loads last, so the game reads your copy of that one file."
+                  >
+                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    Patch a mod file
+                  </button>
+
                   <button
                     onClick={handleAutoMergeAllClick}
                     disabled={!hasPendingConflicts}

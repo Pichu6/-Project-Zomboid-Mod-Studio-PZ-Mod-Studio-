@@ -526,6 +526,14 @@ export interface SortResult {
   cycle: string[];
 }
 
+/** One text file of an installed mod, as the game reads it. */
+export interface ModFile {
+  relative_path: string;
+  absolute_path: string;
+  bytes: number;
+  kind: string;
+}
+
 /** One of the player's own sandbox presets. */
 export interface SandboxPresetInfo {
   name: string;
