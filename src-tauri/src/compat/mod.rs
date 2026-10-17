@@ -76,6 +76,182 @@ fn files_under(dir: &Path, ext: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Every item type Build 41 could declare, and what Build 42 calls it. Checked against the
+/// installed game by `the_item_types_are_the_ones_the_game_uses`: Build 42 writes `ItemType` on
+/// all 5105 of its own items and `Type` on none of them, with these namespaced values.
+const ITEM_TYPES_B41_TO_B42: [(&str, &str); 14] = [
+    ("Normal", "base:normal"),
+    ("Food", "base:food"),
+    ("Clothing", "base:clothing"),
+    ("Weapon", "base:weapon"),
+    ("WeaponPart", "base:weaponpart"),
+    ("Container", "base:container"),
+    ("Drainable", "base:drainable"),
+    ("Literature", "base:literature"),
+    ("Key", "base:key"),
+    ("AlarmClock", "base:alarmclock"),
+    ("AlarmClockClothing", "base:alarmclockclothing"),
+    ("Radio", "base:radio"),
+    ("Moveable", "base:moveable"),
+    ("Map", "base:map"),
+];
+
+/// Rewrites Build 41 `Type =` lines inside `item` blocks as Build 42 `ItemType =`, in place.
+///
+/// The file is edited line by line rather than reparsed and written out, so a mod author's own
+/// formatting, comments and ordering survive; only the lines that have to change, change. Brace
+/// depth says which block a line is in, because `Type =` means something else outside an `item`
+/// (a vehicle part, a fixing) and must be left alone there. A value Build 41 never had is left
+/// alone too, and reported: guessing a type would be worse than the mod not loading it.
+fn convert_item_types(roots: &[PathBuf]) -> (Vec<String>, Vec<String>) {
+    let mut changed_items = 0usize;
+    let mut changed_files = 0usize;
+    let mut unknown: Vec<String> = Vec::new();
+
+    for root in roots {
+        for script in files_under(&root.join("media").join("scripts"), "txt") {
+            let Ok(text) = fs::read_to_string(&script) else { continue };
+            let mut out = String::with_capacity(text.len());
+            let mut here = 0usize;
+            // The kind of block each open brace belongs to, innermost last.
+            let mut stack: Vec<String> = Vec::new();
+            // What has been read since the last `{`, `}` or `,`: a header, or a field. Kept as
+            // written, so whatever is passed through is byte for byte what the author wrote.
+            let mut statement = String::new();
+            // The same text with the comments left out, which is what a block header and a field
+            // name are read from: a comment sitting above a header is not part of it.
+            let mut code = String::new();
+            // A comment can hold anything, braces included, so it counts as text and never as
+            // code. A field with a comment inside it is passed through rather than rewritten.
+            let mut commented = false;
+            let mut in_block_comment = false;
+            let mut in_line_comment = false;
+
+            // Walked character by character, so a whole item written on one line is seen too.
+            let chars: Vec<char> = text.chars().collect();
+            let mut i = 0;
+            while i < chars.len() {
+                let c = chars[i];
+                let next = chars.get(i + 1).copied();
+
+                if in_block_comment {
+                    statement.push(c);
+                    if c == '*' && next == Some('/') {
+                        statement.push('/');
+                        i += 2;
+                        in_block_comment = false;
+                        continue;
+                    }
+                    i += 1;
+                    continue;
+                }
+                if in_line_comment {
+                    statement.push(c);
+                    if c == '\n' {
+                        in_line_comment = false;
+                    }
+                    i += 1;
+                    continue;
+                }
+                if c == '/' && (next == Some('*') || next == Some('/')) {
+                    in_block_comment = next == Some('*');
+                    in_line_comment = next == Some('/');
+                    commented = true;
+                    statement.push(c);
+                    statement.push(next.unwrap());
+                    i += 2;
+                    continue;
+                }
+
+                match c {
+                    '{' => {
+                        let head = code.split_whitespace().next().unwrap_or_default().to_string();
+                        stack.push(head);
+                        out.push_str(&statement);
+                        out.push('{');
+                        statement.clear();
+                        code.clear();
+                        commented = false;
+                    }
+                    '}' | ',' | ';' => {
+                        let in_item = stack.last().is_some_and(|k| k == "item");
+                        match convert_type_statement(&statement).filter(|_| in_item && !commented) {
+                            Some((rewritten, Some(_))) => {
+                                here += 1;
+                                out.push_str(&rewritten);
+                            }
+                            Some((kept, None)) => {
+                                unknown.push(statement.trim().to_string());
+                                out.push_str(&kept);
+                            }
+                            None => out.push_str(&statement),
+                        }
+                        statement.clear();
+                        code.clear();
+                        commented = false;
+                        if c == '}' {
+                            stack.pop();
+                        }
+                        out.push(c);
+                    }
+                    other => {
+                        statement.push(other);
+                        code.push(other);
+                    }
+                }
+                i += 1;
+            }
+            out.push_str(&statement);
+
+            if here > 0 {
+                // Everything but the converted fields is passed through untouched, line endings
+                // and all, because the file was walked as it is rather than reassembled.
+                if fs::write(&script, out).is_ok() {
+                    changed_items += here;
+                    changed_files += 1;
+                }
+            }
+        }
+    }
+
+    let mut changes = Vec::new();
+    if changed_items > 0 {
+        changes.push(format!(
+            "Rewrote {} item(s) in {} script file(s) from the Build 41 \"Type =\" field to Build 42's \
+             \"ItemType =\" with its namespaced value (Clothing -> base:clothing).",
+            changed_items, changed_files
+        ));
+    }
+    let mut warnings = Vec::new();
+    if !unknown.is_empty() {
+        unknown.sort();
+        unknown.dedup();
+        warnings.push(format!(
+            "{} item type(s) were left as they are because Build 41 had no such type, so there is \
+             nothing to map them to: {}.",
+            unknown.len(),
+            unknown.join(", ")
+        ));
+    }
+    (changes, warnings)
+}
+
+/// One line: `Some((rewritten, Some(b42 value)))` when it is a `Type =` line that maps,
+/// `Some((line, None))` when it is one that does not, `None` when it is not a `Type =` line.
+fn convert_type_statement(statement: &str) -> Option<(String, Option<&'static str>)> {
+    let trimmed = statement.trim_start();
+    let lead = &statement[..statement.len() - trimmed.len()];
+    // "TypeSomething = x" is a different field: the `=` has to follow "Type" itself.
+    let value = trimmed.strip_prefix("Type")?.trim_start().strip_prefix('=')?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    match ITEM_TYPES_B41_TO_B42.iter().find(|(b41, _)| b41.eq_ignore_ascii_case(value)) {
+        Some((_, b42)) => Some((format!("{}ItemType = {}", lead, b42), Some(*b42))),
+        None => Some((statement.to_string(), None)),
+    }
+}
+
 /// Things in the folders the game will read that typically break when a B41 mod runs on B42.
 fn scan_for_problems(roots: &[PathBuf], target_is_b42: bool) -> Vec<String> {
     let mut warnings = Vec::new();
@@ -261,12 +437,24 @@ fn adapt(dest: &Path, game_version: u32) -> Result<(Vec<String>, Vec<String>, St
         changes.push("Nothing needed changing: the copy is identical to the original.".to_string());
     }
 
-    // 3. What may still break.
+    // 3. Build 41 fields the Build 42 parser does not know.
     let mut roots = vec![info_path.parent().unwrap().to_path_buf()];
     if dest.join("common").is_dir() {
         roots.push(dest.join("common"));
     }
-    let warnings = scan_for_problems(&roots, is_b42);
+    let mut warnings = Vec::new();
+    if is_b42 {
+        let (converted, left_alone) = convert_item_types(&roots);
+        changes.extend(converted);
+        warnings.extend(left_alone);
+    }
+
+    // 4. What may still break.
+    warnings.extend(scan_for_problems(&roots, is_b42));
+    if changes.len() > 1 {
+        // "Nothing needed changing" is only true when nothing else is listed.
+        changes.retain(|c| !c.starts_with("Nothing needed changing"));
+    }
     Ok((changes, warnings, mod_id))
 }
 
@@ -373,8 +561,119 @@ mod tests {
         assert!(r.changes.iter().any(|c| c.contains("Build 42 layout")));
         let joined = r.warnings.join(" | ");
         assert!(joined.contains("recipe"), "{}", joined);
-        assert!(joined.contains("Type ="), "{}", joined);
         assert!(joined.contains("translation"), "{}", joined);
         assert!(joined.contains("broken.lua"), "{}", joined);
+        // The Build 41 item field is not a warning any more: it was converted.
+        assert!(!joined.contains("Type ="), "{}", joined);
+        assert!(r.changes.iter().any(|c| c.contains("ItemType")), "{:?}", r.changes);
+        let items = fs::read_to_string(dest.join("42/media/scripts/items.txt")).unwrap();
+        assert!(items.contains("ItemType = base:normal,"), "{}", items);
+    }
+
+    #[test]
+    fn only_an_items_own_type_field_is_converted() {
+        let text = r#"module Base
+{
+    item Thing
+    {
+        DisplayName = Thing,
+        Type = Clothing,
+    }
+    fixing Fix
+    {
+        Type = Other,
+    }
+    item Odd { Type = SomethingNew, }
+}
+"#;
+        let dir = std::env::temp_dir().join(format!("pzms-itemtype-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("media/scripts")).unwrap();
+        fs::write(dir.join("media/scripts/x.txt"), text).unwrap();
+
+        let (changes, warnings) = convert_item_types(&[dir.clone()]);
+        let after = fs::read_to_string(dir.join("media/scripts/x.txt")).unwrap();
+
+        // The item was converted, with its indentation kept.
+        assert!(after.contains("        ItemType = base:clothing,"), "{}", after);
+        // A `Type =` that is not an item's own field is left exactly as it was.
+        assert!(after.contains("        Type = Other,"), "{}", after);
+        // A value Build 41 never had is left alone and reported instead of guessed.
+        assert!(after.contains("item Odd { Type = SomethingNew, }"), "{}", after);
+        assert!(changes[0].contains("Rewrote 1 item"), "{:?}", changes);
+        assert!(warnings[0].contains("SomethingNew"), "{:?}", warnings);
+        // Nothing else moved: same number of lines, same ending.
+        assert_eq!(after.lines().count(), text.lines().count());
+        assert!(after.ends_with('\n'));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Converts a copy of a real mod folder and prints every line that changed, to be sure only
+    /// the fields meant to change did.
+    /// PZMS_CONVERT_SOURCE=<a mod folder> cargo test converts_only_the_fields -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn converts_only_the_fields() {
+        let Ok(src) = std::env::var("PZMS_CONVERT_SOURCE") else { return };
+        let work = std::env::temp_dir().join(format!("pzms-convert-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&work);
+        crate::mod_install::copy_tree(Path::new(&src), &work).unwrap();
+
+        let before: Vec<(PathBuf, String)> = files_under(&work.join("media").join("scripts"), "txt")
+            .into_iter()
+            .filter_map(|f| fs::read_to_string(&f).ok().map(|t| (f, t)))
+            .collect();
+        let (changes, warnings) = convert_item_types(&[work.clone()]);
+        println!("changes: {:?}
+warnings: {:?}", changes, warnings);
+
+        let mut differing_lines = 0;
+        for (path, old) in &before {
+            let new = fs::read_to_string(path).unwrap();
+            if &new == old {
+                continue;
+            }
+            assert_eq!(new.lines().count(), old.lines().count(), "line count changed in {}", path.display());
+            for (a, b) in old.lines().zip(new.lines()) {
+                if a != b {
+                    differing_lines += 1;
+                    println!("  - {}
+  + {}", a, b);
+                    assert!(b.contains("ItemType ="), "a line changed that was not a Type field: {}", b);
+                }
+            }
+        }
+        println!("{} line(s) differ", differing_lines);
+        let _ = fs::remove_dir_all(&work);
+    }
+
+    /// The table above is only right if it is what the installed game writes.
+    /// PZMS_PZ_DIR=... cargo test the_item_types_are_the_ones_the_game_uses -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn the_item_types_are_the_ones_the_game_uses() {
+        let Ok(pz) = std::env::var("PZMS_PZ_DIR") else { return };
+        let scripts = Path::new(&pz).join("media").join("scripts");
+        let mut used: std::collections::BTreeSet<String> = Default::default();
+        let mut old_field = 0usize;
+        for f in files_under(&scripts, "txt") {
+            let Ok(text) = fs::read_to_string(&f) else { continue };
+            for line in text.lines() {
+                let t = line.trim();
+                if let Some(v) = t.strip_prefix("ItemType") {
+                    if let Some(v) = v.trim_start().strip_prefix('=') {
+                        used.insert(v.trim().trim_end_matches(',').trim().to_string());
+                    }
+                } else if t.starts_with("Type") && t[4..].trim_start().starts_with('=') {
+                    old_field += 1;
+                }
+            }
+        }
+        println!("{} ItemType values in the game: {:?}", used.len(), used);
+        assert_eq!(old_field, 0, "the game still writes the Build 41 field somewhere");
+        for (b41, b42) in ITEM_TYPES_B41_TO_B42 {
+            assert!(used.contains(b42), "the game does not use {} (mapped from {})", b42, b41);
+        }
     }
 }
