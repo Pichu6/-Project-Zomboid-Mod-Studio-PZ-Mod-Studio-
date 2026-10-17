@@ -524,6 +524,8 @@ pub enum SuggestedFix {
     OpenWorkshopPage { workshop_id: String },
     /// Copy the mod to Zomboid/mods and adapt it to the installed build.
     MakeCompatibleCopy { mod_id: String },
+    /// Keep a copy of the version installed today, before Steam replaces it.
+    KeepVersion { mod_id: String },
     /// Remove a compatible copy (back to the original).
     RemoveCompatibleCopy { folder: String },
     /// Merge these shared files automatically into the Studio package and publish it.
@@ -561,6 +563,7 @@ impl IssueList {
                 SuggestedFix::RemoveFromList { .. }
                 | SuggestedFix::OpenWorkshopPage { .. }
                 | SuggestedFix::MakeCompatibleCopy { .. }
+                | SuggestedFix::KeepVersion { .. }
                 | SuggestedFix::RemoveCompatibleCopy { .. }
                 | SuggestedFix::MergeFiles { .. }
                 | SuggestedFix::OpenInMerger { .. } => None,
@@ -778,7 +781,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                 list.push(Severity::Warning, "workshop_update_pending", Some(id),
                     format!("Steam has a newer version of {}{} that is not downloaded yet. Let Steam download it (restart Steam if it is stuck): servers reject players whose mod versions differ (\"Workshop item version is different than the server's\").",
                         describe(m), when.map(|w| format!(" (published {})", w)).unwrap_or_default()),
-                    vec![SuggestedFix::OpenWorkshopPage { workshop_id: workshop_id.clone() }]);
+                    vec![SuggestedFix::KeepVersion { mod_id: m.id.clone() }, SuggestedFix::OpenWorkshopPage { workshop_id: workshop_id.clone() }]);
             }
             if state.updated_since_last_play {
                 updated_since_play.push(describe(m));

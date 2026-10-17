@@ -9,6 +9,7 @@ import { ModPresets } from './ModPresets';
 import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
 import { RowHealthChips } from './RowHealth';
+import { KeptVersions } from './KeptVersions';
 import {
   BookOpen,
   Copy,
@@ -27,6 +28,7 @@ import {
   ChevronsUp,
   ChevronsDown,
   Hash,
+  Archive,
   Check,
   Package,
   MapPin,
@@ -118,6 +120,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
 
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  /** The mod whose kept versions are open in the dialog. */
+  const [keptVersionsOf, setKeptVersionsOf] = useState<ModInfo | null>(null);
 
   const triggerReorder = (newOrder: ModInfo[]) => {
     onReorder(newOrder);
@@ -499,6 +503,23 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       onSelect: () => TauriService.openModFolder(paths, catalogById?.get(mod.mod_id)?.root_dir ?? ''),
       disabled: !catalogById?.get(mod.mod_id)?.root_dir,
       disabledReason: 'The Studio does not know where this mod lives',
+    },
+    {
+      label: 'Keep this version',
+      icon: Archive,
+      separatorBefore: true,
+      onSelect: () => {
+        void TauriService.keepModVersion(paths, mod.mod_id).then((kept) =>
+          showToast(`${kept.mod_name} as it is today is kept (${kept.kept_at}).`)
+        );
+      },
+      disabled: !catalogById?.get(mod.mod_id)?.root_dir,
+      disabledReason: 'The Studio does not know where this mod lives',
+    },
+    {
+      label: 'Kept versions…',
+      icon: Archive,
+      onSelect: () => setKeptVersionsOf(mod),
     },
     {
       label: 'Copy the mod id',
@@ -902,6 +923,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           </div>
 
           <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
+          <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
 
           <button
             onClick={handleAutoSortDependencies}
@@ -1257,7 +1279,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
                           {/* Every problem the health check found for this mod, with its fix. */}
                           <RowHealthChips
+                            paths={paths}
                             issues={rowIssues}
+                            onNote={showToast}
                             mods={mods}
                             onApplyList={triggerReorder}
                             onJumpToMod={handleJumpToMod}

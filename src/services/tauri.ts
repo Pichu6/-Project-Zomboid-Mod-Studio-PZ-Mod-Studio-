@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -343,6 +343,43 @@ export const TauriService = {
   /** Removes a compatible copy (moved to Zomboid/PZModStudio_Backups/mods). */
   removeCompatibleCopy: async (paths: StudioPathsUI, folder: string): Promise<void> => {
     await invoke('remove_compatible_copy_cmd', { paths, folder });
+  },
+
+  /** Keeps a copy of the mod as installed today, under Zomboid/PZModStudio_Snapshots. */
+  keepModVersion: async (paths: StudioPathsUI, modId: string): Promise<KeptVersion> => {
+    try {
+      return await invoke<KeptVersion>('keep_mod_version_cmd', { paths, modId });
+    } catch (err) {
+      reportBackendError('Keeping a copy of the mod', err);
+      throw err;
+    }
+  },
+
+  listKeptVersions: async (paths: StudioPathsUI): Promise<KeptVersion[]> => {
+    try {
+      return await invoke<KeptVersion[]>('list_kept_versions_cmd', { paths });
+    } catch {
+      return [];
+    }
+  },
+
+  /** Puts a kept version back as a local copy in Zomboid/mods that wins over the Workshop one. */
+  restoreKeptVersion: async (paths: StudioPathsUI, path: string): Promise<KeptVersion> => {
+    try {
+      return await invoke<KeptVersion>('restore_kept_version_cmd', { paths, path });
+    } catch (err) {
+      reportBackendError('Putting the kept version back', err);
+      throw err;
+    }
+  },
+
+  deleteKeptVersion: async (paths: StudioPathsUI, path: string): Promise<void> => {
+    try {
+      await invoke('delete_kept_version_cmd', { paths, path });
+    } catch (err) {
+      reportBackendError('Deleting the kept version', err);
+      throw err;
+    }
   },
 
   /** Whether a Steam Web API key is saved (the key is never returned). */

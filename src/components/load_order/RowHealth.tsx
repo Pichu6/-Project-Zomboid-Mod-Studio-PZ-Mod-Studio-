@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertTriangle, Info, Wrench, XCircle } from 'lucide-react';
 import { HealthFix, HealthIssue, HealthSeverity, ModInfo } from '../../types';
 import { TauriService } from '../../services/tauri';
+import { StudioPathsUI } from '../settings/SettingsModule';
 import { applyFix } from '../../utils/healthFix';
 
 /** What a row says for each code the health check can raise. Short: the row is narrow. */
@@ -56,6 +57,8 @@ const fixLabel = (fix: HealthFix, nameOf: (id: string) => string): string => {
       return 'Open Workshop page';
     case 'open_in_merger':
       return 'Open in the Merger';
+    case 'keep_version':
+      return 'Keep this version';
     case 'merge_files':
     case 'make_compatible_copy':
     case 'remove_compatible_copy':
@@ -64,6 +67,7 @@ const fixLabel = (fix: HealthFix, nameOf: (id: string) => string): string => {
 };
 
 interface RowHealthChipsProps {
+  paths: StudioPathsUI;
   issues: HealthIssue[];
   mods: ModInfo[];
   /** Replaces the list (order + switches) and persists it. */
@@ -71,6 +75,8 @@ interface RowHealthChipsProps {
   onJumpToMod: (modId: string) => void;
   onOpenMerger?: (relativePath: string) => void;
   onGoToHealth?: () => void;
+  /** A line for the list's toast, for a fix that happened on disk. */
+  onNote?: (message: string) => void;
 }
 
 /**
@@ -78,7 +84,7 @@ interface RowHealthChipsProps {
  * the fix beside it when the row can apply it. The chip itself goes to the other mod involved,
  * or to Mod Health when there is none.
  */
-export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ issues, mods, onApplyList, onJumpToMod, onOpenMerger, onGoToHealth }) => {
+export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, mods, onApplyList, onJumpToMod, onOpenMerger, onGoToHealth, onNote }) => {
   if (issues.length === 0) return null;
   const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
 
@@ -99,6 +105,11 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ issues, mods, on
       case 'open_in_merger':
         if (onOpenMerger) onOpenMerger(fix.relative_path);
         else onGoToHealth?.();
+        return;
+      case 'keep_version':
+        void TauriService.keepModVersion(paths, fix.mod_id).then((kept) =>
+          onNote?.(`${kept.mod_name} as it is today is kept (${kept.kept_at}). Right-click the row for its kept versions.`)
+        );
         return;
       case 'merge_files':
       case 'make_compatible_copy':

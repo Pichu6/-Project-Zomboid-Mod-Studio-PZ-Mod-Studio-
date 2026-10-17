@@ -22,7 +22,7 @@ interface HealthModuleProps {
 
 /** Fixes handled here (not by rewriting the mod list). */
 const ACTION_FIXES = new Set<HealthFix['action']>([
-  'subscribe_workshop', 'open_workshop_page', 'make_compatible_copy', 'remove_compatible_copy', 'merge_files', 'open_in_merger',
+  'subscribe_workshop', 'open_workshop_page', 'make_compatible_copy', 'keep_version', 'remove_compatible_copy', 'merge_files', 'open_in_merger',
 ]);
 
 /** Fixes the "fix all" button may apply without asking: they only enable or reorder. */
@@ -53,6 +53,8 @@ const fixLabel = (fix: HealthFix): string => {
       return 'Open Workshop page';
     case 'make_compatible_copy':
       return 'Make compatible copy';
+    case 'keep_version':
+      return 'Keep the version you have';
     case 'remove_compatible_copy':
       return 'Remove compatible copy';
     case 'merge_files':
@@ -148,6 +150,17 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     }
     if (fix.action === 'remove_compatible_copy') {
       removeCompatibleCopy(fix.folder);
+      return;
+    }
+    if (fix.action === 'keep_version') {
+      void (async () => {
+        try {
+          const kept = await TauriService.keepModVersion(paths, fix.mod_id);
+          say(`${kept.mod_name} as it is today is kept (${kept.kept_at}). If the update breaks a save: Mod List, right-click, Kept versions.`);
+        } catch {
+          // Already shown by TauriService.
+        }
+      })();
       return;
     }
     if (fix.action === 'open_workshop_page') {

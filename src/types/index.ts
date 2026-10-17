@@ -74,6 +74,19 @@ export interface CollisionRegion {
 // ==========================================
 
 /** One numbered part of the Build 42 shim, as the shim itself heads it. */
+/** A copy of a mod as it was installed on a day, kept so an update can be undone. */
+export interface KeptVersion {
+  mod_id: string;
+  mod_name: string;
+  folder: string;
+  kept_at: string;
+  version: string | null;
+  workshop_id: string | null;
+  source_dir: string;
+  path: string;
+  bytes: number;
+}
+
 /** One per-mod patch of the shim's part 7, with its switch. */
 export interface ShimPatch {
   name: string;
@@ -306,6 +319,7 @@ export type HealthFix =
   | { action: 'subscribe_workshop'; hint: string }
   | { action: 'open_workshop_page'; workshop_id: string }
   | { action: 'make_compatible_copy'; mod_id: string }
+  | { action: 'keep_version'; mod_id: string }
   | { action: 'remove_compatible_copy'; folder: string }
   | { action: 'merge_files'; relative_paths: string[] }
   | { action: 'open_in_merger'; relative_path: string };

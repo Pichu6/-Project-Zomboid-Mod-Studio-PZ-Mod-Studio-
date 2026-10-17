@@ -18,6 +18,7 @@ pub mod scripts;
 pub mod secrets;
 pub mod steam_client;
 pub mod server_manager;
+pub mod snapshots;
 pub mod vdf;
 pub mod vfs;
 pub mod workshop;
@@ -271,6 +272,34 @@ fn make_compatible_copy_cmd(paths: StudioPaths, mod_id: String, replace_existing
 #[tauri::command(async)]
 fn remove_compatible_copy_cmd(paths: StudioPaths, folder: String) -> Result<(), String> {
     compat::remove_compatible_copy(&paths.user_zomboid_dir, &folder)
+}
+
+/// Keeps a copy of the mod as it is installed today, for when an update breaks a save.
+#[tauri::command(async)]
+fn keep_mod_version_cmd(paths: StudioPaths, mod_id: String) -> Result<snapshots::KeptVersion, String> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let m = catalog.resolve(&mod_id).ok_or_else(|| format!("{} is not installed.", mod_id))?;
+    let workshop_id = match &m.source {
+        catalog::ModSource::Workshop { workshop_id } => Some(workshop_id.clone()),
+        _ => None,
+    };
+    snapshots::keep_version(&paths.user_zomboid_dir, &m.id, &m.name, std::path::Path::new(&m.root_dir), m.info.mod_version.clone(), workshop_id)
+}
+
+#[tauri::command(async)]
+fn list_kept_versions_cmd(paths: StudioPaths) -> Vec<snapshots::KeptVersion> {
+    snapshots::list_kept_versions(&paths.user_zomboid_dir)
+}
+
+/// Puts a kept version back as a local copy that wins over the Workshop original.
+#[tauri::command(async)]
+fn restore_kept_version_cmd(paths: StudioPaths, path: String) -> Result<snapshots::KeptVersion, String> {
+    snapshots::restore_kept_version(&paths.user_zomboid_dir, &path)
+}
+
+#[tauri::command(async)]
+fn delete_kept_version_cmd(paths: StudioPaths, path: String) -> Result<(), String> {
+    snapshots::delete_kept_version(&paths.user_zomboid_dir, &path)
 }
 
 /// Game-exact load-order sort of the whole list (enabled and disabled), keeping the user's order
@@ -749,6 +778,10 @@ pub fn run() {
             sort_load_order_cmd,
             make_compatible_copy_cmd,
             remove_compatible_copy_cmd,
+            keep_mod_version_cmd,
+            list_kept_versions_cmd,
+            restore_kept_version_cmd,
+            delete_kept_version_cmd,
             nexus_search_cmd,
             nexus_categories_cmd,
             nexus_mod_details_cmd,
