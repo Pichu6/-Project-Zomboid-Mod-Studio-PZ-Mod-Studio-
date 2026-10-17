@@ -263,51 +263,160 @@ pub fn union_of(values: &[Option<String>]) -> Option<String> {
     Some(merged.join(";"))
 }
 
-/// The block the Studio would add to a package to settle a conflict: only the properties the mods
-/// set differently, merged where they can be and left at what the game does today where they
-/// cannot, so adding it changes nothing until a value is edited.
+/// The block the Studio adds to a package to settle a conflict.
+///
+/// It is the whole declaration, not only the properties the mods disagree about. Writing only
+/// those was enough for an `item`, where the game applies each declaration to the item it already
+/// has -- and fatal for a `character_profession_definition`, where it builds the profession from
+/// the declaration it is reading: a block with two properties and no description crashed the game
+/// on startup with "Script load errors", because the description it then asked for was null. The
+/// game decides which kinds work which way, so the safe block is the complete one, which is
+/// right under both.
+///
+/// It starts from the declaration of the mod that loads last -- its text, its nested blocks, its
+/// formatting -- then settles the clashing properties in place and adds what earlier mods set and
+/// it does not, so nothing either mod contributed is lost.
 pub fn merged_block(conflict: &ScriptDefConflict) -> String {
-    let mut out = String::new();
-    out.push_str(&format!(
-        "/* {} is declared by {}.\n   Only what they set differently is written here; everything \
-else each of them sets still applies.\n   This package loads last, so these values win. */\n",
-        conflict.definition,
-        conflict.mods.join(" and "),
-    ));
     let indent = if conflict.module.is_empty() { "" } else { "    " };
-    if !conflict.module.is_empty() {
-        out.push_str(&format!("module {}\n{{\n", conflict.module));
-    }
-    out.push_str(&format!("{}{} {}\n{}{{\n", indent, conflict.kind, conflict.name, indent));
+    let field = format!("{}    ", indent);
 
-    for property in &conflict.clashing {
-        let last = property.values.iter().flatten().last().cloned().unwrap_or_default();
-        match union_of(&property.values) {
-            Some(merged) => {
-                out.push_str(&format!("{}    {} = {},\n", indent, property.key, merged));
-            }
-            None => {
-                // Each mod's value, with the one the game uses today active and the rest
-                // commented, which is how the Merger shows a choice everywhere else.
-                for (i, value) in property.values.iter().enumerate() {
-                    let Some(value) = value else { continue };
-                    if *value == last {
-                        continue;
-                    }
-                    out.push_str(&format!(
-                        "{}    /* {} wants: {} = {}, */\n",
-                        indent,
-                        conflict.mods.get(i).cloned().unwrap_or_default(),
-                        property.key,
-                        value
-                    ));
+    // How each clashing property should read, and the other values worth keeping in sight.
+    let resolved: Vec<(String, String, Vec<String>)> = conflict
+        .clashing
+        .iter()
+        .map(|property| {
+            let last = property.values.iter().flatten().next_back().cloned().unwrap_or_default();
+            match union_of(&property.values) {
+                Some(merged) => (property.key.clone(), merged, Vec::new()),
+                None => {
+                    let others: Vec<String> = property
+                        .values
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, v)| {
+                            let v = v.as_ref()?;
+                            (*v != last).then(|| {
+                                format!(
+                                    "{} wants: {} = {},",
+                                    conflict.mods.get(i).cloned().unwrap_or_default(),
+                                    property.key,
+                                    v
+                                )
+                            })
+                        })
+                        .collect();
+                    (property.key.clone(), last, others)
                 }
-                out.push_str(&format!("{}    {} = {},\n", indent, property.key, last));
+            }
+        })
+        .collect();
+
+    // The last mod's own body, with those properties rewritten where they appear.
+    let last_body = conflict.bodies.last().cloned().unwrap_or_default();
+    let mut body = String::new();
+    let mut written: Vec<String> = Vec::new();
+    let mut depth = 0usize;
+    let mut statement = String::new();
+    let flush = |statement: &str,
+                 body: &mut String,
+                 written: &mut Vec<String>,
+                 ended: bool| {
+        let key = statement.split('=').next().unwrap_or("").trim().to_string();
+        if let Some((_, value, others)) = resolved.iter().find(|(k, _, _)| *k == key) {
+            for other in others {
+                body.push_str(&format!("\n{}/* {} */", field, other));
+            }
+            body.push_str(&format!("\n{}{} = {}", field, key, value));
+            if ended {
+                body.push(',');
+            }
+            written.push(key);
+        } else {
+            // Everything the last mod sets is already here: remember it, or it would be added a
+            // second time below as if only an earlier mod had set it.
+            if !key.is_empty() && statement.contains('=') {
+                written.push(key);
+            }
+            body.push_str(statement);
+            if ended {
+                body.push(',');
+            }
+        }
+    };
+    for c in last_body.chars() {
+        match c {
+            '{' => {
+                depth += 1;
+                body.push_str(&statement);
+                statement.clear();
+                body.push('{');
+            }
+            '}' => {
+                depth = depth.saturating_sub(1);
+                body.push_str(&statement);
+                statement.clear();
+                body.push('}');
+            }
+            ',' if depth == 0 => {
+                flush(&statement, &mut body, &mut written, true);
+                statement.clear();
+            }
+            _ if depth == 0 => statement.push(c),
+            other => {
+                body.push(other);
             }
         }
     }
+    flush(&statement, &mut body, &mut written, false);
 
-    out.push_str(&format!("{}}}\n", indent));
+    // Anything an earlier mod set that the last one never mentions, so a merge keeps it even
+    // where the game rebuilds the thing from this declaration alone.
+    let mut extra = String::new();
+    for (key, value, others) in &resolved {
+        if written.iter().any(|k| k == key) {
+            continue;
+        }
+        for other in others {
+            extra.push_str(&format!("{}/* {} */\n", field, other));
+        }
+        extra.push_str(&format!("{}{} = {},\n", field, key, value));
+    }
+    for (i, raw) in conflict.bodies.iter().enumerate() {
+        if i + 1 == conflict.bodies.len() {
+            continue;
+        }
+        for (key, value) in top_level_props(raw) {
+            if written.iter().any(|k| *k == key) || resolved.iter().any(|(k, _, _)| *k == key) {
+                continue;
+            }
+            written.push(key.clone());
+            extra.push_str(&format!(
+                "{}{} = {}, /* from {} */\n",
+                field,
+                key,
+                value,
+                conflict.mods.get(i).cloned().unwrap_or_default()
+            ));
+        }
+    }
+
+    let mut out = format!(
+        "/* {} is declared by {}.\n   This is the whole declaration, settled: it loads last, so \
+the game reads this one.\n   Built from {}'s, with what the others set added or merged in. */\n",
+        conflict.definition,
+        conflict.mods.join(" and "),
+        conflict.mods.last().cloned().unwrap_or_default(),
+    );
+    if !conflict.module.is_empty() {
+        out.push_str(&format!("module {}\n{{\n", conflict.module));
+    }
+    out.push_str(&format!("{}{} {}\n{}{{", indent, conflict.kind, conflict.name, indent));
+    out.push_str(body.trim_end());
+    if !extra.is_empty() {
+        out.push('\n');
+        out.push_str(extra.trim_end());
+    }
+    out.push_str(&format!("\n{}}}\n", indent));
     if !conflict.module.is_empty() {
         out.push_str("}\n");
     }
@@ -749,6 +858,115 @@ mod property_tests {
 mod merge_tests {
     use super::*;
 
+    /// Two whole declarations, as two mods would write them.
+    fn with_bodies(kind: &str, first: &str, second: &str, clashing: Vec<ClashingProperty>) -> ScriptDefConflict {
+        ScriptDefConflict {
+            definition: format!("{} Base.Thing", kind),
+            kind: kind.to_string(),
+            module: "Base".into(),
+            name: "Thing".into(),
+            mod_ids: vec!["A".into(), "B".into()],
+            mods: vec!["Mod A".into(), "Mod B".into()],
+            files: vec!["a.txt".into(), "b.txt".into()],
+            absolute_files: vec!["a.txt".into(), "b.txt".into()],
+            bodies: vec![first.to_string(), second.to_string()],
+            clashing,
+        }
+    }
+
+    #[test]
+    fn the_merged_block_is_a_whole_declaration_the_game_can_build_from() {
+        // What crashed the game: a profession written with only the two properties in dispute.
+        // The last mod's own declaration is the starting point, so the description is still there.
+        let first = "
+        UIName = UI_prof_Burglar,
+        UIDescription = UI_profdesc_burglar,
+        Cost = -6,
+        XPBoosts = Nimble=2;Lockpicking=1,
+    ";
+        let second = "
+        UIName = UI_prof_Burglar,
+        UIDescription = UI_profdesc_burglar,
+        Cost = -6,
+        XPBoosts = Nimble=2;Sneak=2,
+    ";
+        let c = with_bodies(
+            "character_profession_definition",
+            first,
+            second,
+            vec![ClashingProperty {
+                key: "XPBoosts".into(),
+                values: vec![Some("Nimble=2;Lockpicking=1".into()), Some("Nimble=2;Sneak=2".into())],
+            }],
+        );
+        let block = merged_block(&c);
+        assert!(block.contains("UIDescription = UI_profdesc_burglar,"), "{}", block);
+        assert!(block.contains("Cost = -6,"), "{}", block);
+        // And the property they disagree about holds both.
+        // Both mods' boosts, in the order they were met.
+        assert!(block.contains("XPBoosts = Nimble=2;Lockpicking=1;Sneak=2,"), "{}", block);
+        // And nothing is written twice.
+        assert_eq!(block.matches("Cost =").count(), 1, "{}", block);
+        assert_eq!(block.matches("UIDescription =").count(), 1, "{}", block);
+        // Written once, not twice.
+        assert_eq!(block.matches("XPBoosts =").count(), 1, "{}", block);
+    }
+
+    #[test]
+    fn what_only_the_earlier_mod_sets_is_carried_over() {
+        let first = "
+        StaticModel = FR_Tire,
+        Weight = 15,
+    ";
+        let second = "
+        StaticModel = Wheel_Hand,
+        primaryAnimMask = holdingbagright,
+    ";
+        let c = with_bodies(
+            "item",
+            first,
+            second,
+            vec![ClashingProperty {
+                key: "StaticModel".into(),
+                values: vec![Some("FR_Tire".into()), Some("Wheel_Hand".into())],
+            }],
+        );
+        let block = merged_block(&c);
+        // The last mod's own line, kept.
+        assert!(block.contains("primaryAnimMask = holdingbagright,"), "{}", block);
+        // The earlier mod's weight, which the last one never mentions, carried over and credited.
+        assert!(block.contains("Weight = 15, /* from Mod A */"), "{}", block);
+        // The one value that cannot hold both: today's active, the other in sight.
+        assert!(block.contains("StaticModel = Wheel_Hand"), "{}", block);
+        assert!(block.contains("/* Mod A wants: StaticModel = FR_Tire, */"), "{}", block);
+    }
+
+    #[test]
+    fn a_nested_block_inside_the_declaration_survives() {
+        let first = "
+        mechanicType = 1,
+    ";
+        let second = "
+        mechanicType = 2,
+        part Engine
+        {
+            category = engine,
+        }
+    ";
+        let c = with_bodies(
+            "vehicle",
+            first,
+            second,
+            vec![ClashingProperty {
+                key: "mechanicType".into(),
+                values: vec![Some("1".into()), Some("2".into())],
+            }],
+        );
+        let block = merged_block(&c);
+        assert!(block.contains("part Engine"), "{}", block);
+        assert!(block.contains("category = engine,"), "{}", block);
+    }
+
     fn conflict(key: &str, a: &str, b: &str) -> ScriptDefConflict {
         ScriptDefConflict {
             definition: "item Base.Thing".into(),
@@ -789,16 +1007,6 @@ mod merge_tests {
             union_of(&[Some("Nimble=2;Sneak=2".into()), Some("Nimble=2;Lockpicking=1".into())]).as_deref(),
             Some("Nimble=2;Sneak=2;Lockpicking=1")
         );
-    }
-
-    #[test]
-    fn the_merged_block_only_sets_what_they_disagree_about() {
-        let block = merged_block(&conflict("GrantedRecipes", "A;B", "A;C"));
-        assert!(block.contains("module Base"), "{}", block);
-        assert!(block.contains("item Thing"), "{}", block);
-        assert!(block.contains("GrantedRecipes = A;B;C,"), "{}", block);
-        // Nothing else is written: the game applies both mods for everything else.
-        assert_eq!(block.matches('=').count(), 1, "{}", block);
     }
 
     #[test]
