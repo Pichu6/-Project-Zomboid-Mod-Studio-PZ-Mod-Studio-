@@ -321,19 +321,76 @@ pub fn issues_for_script_conflicts(
                 if group.len() > named.len() { ", ..." } else { "" }
             )
         };
-        let message = format!(
-            "{} and {} {} define {}, in different files ({}). The game keeps {}'s version of \
-             {}, because it loads last. Which one you want is your call: nothing is broken either \
-             way, and neither the game nor the Studio has a rule to sort it.",
-            losers.join(", "),
-            winner,
-            if c.mod_ids.len() > 2 { "all" } else { "both" },
-            what,
-            c.files.join(" / "),
-            winner,
-            if group.len() == 1 { "it" } else { "them" },
+        // The game applies every declaration to the same thing in turn, so what is at stake is
+        // not the whole definition but the handful of properties two mods set differently.
+        let mut keys: Vec<&str> = group
+            .iter()
+            .flat_map(|x| x.clashing.iter().map(|p| p.key.as_str()))
+            .collect();
+        keys.sort_unstable();
+        keys.dedup();
+        let shown: Vec<&str> = keys.iter().take(4).copied().collect();
+        let properties = format!(
+            "{}{}",
+            shown.join(", "),
+            if keys.len() > shown.len() { ", ..." } else { "" }
         );
-        // Whoever loads last wins, so the only way to pick the other version is to load it later.
+        // One example, with long values cut: a recipe list can run to three hundred characters.
+        let short = |v: &str| {
+            if v.chars().count() > 60 {
+                format!("{}...", v.chars().take(60).collect::<String>())
+            } else {
+                v.to_string()
+            }
+        };
+        let example = group
+            .iter()
+            .find_map(|x| x.clashing.first().map(|p| (x, p)))
+            .map(|(x, p)| {
+                let values: Vec<String> = p
+                    .values
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, v)| v.as_ref().map(|v| format!("{} = {}", x.mods[i], short(v))))
+                    .collect();
+                format!(" On {}, that is {}.", x.definition, values.join(" against "))
+            })
+            .unwrap_or_default();
+
+        let each = if c.mod_ids.len() > 2 { "every one of them" } else { "both mods" };
+        let message = if keys.is_empty() {
+            // Nothing to compare property by property: the block's contents are nested blocks
+            // (an entity's skin, a recipe's ingredients), so only that they differ is known.
+            format!(
+                "{} and {} all declare {}, in different files ({}), and their contents differ. \
+                 What differs is inside nested blocks, which the Studio does not compare, so it \
+                 cannot say what is at stake here — only that {} loads last.",
+                losers.join(", "),
+                winner,
+                what,
+                c.files.join(" / "),
+                winner,
+            )
+        } else {
+            format!(
+                "{} and {} {} set {} on {}, in different files ({}). The game applies {} to the \
+                 same {}, so everything else each of them sets is kept; only {} decided by the \
+                 load order, and {} loads last.{}",
+                losers.join(", "),
+                winner,
+                if c.mod_ids.len() > 2 { "all" } else { "both" },
+                properties,
+                what,
+                c.files.join(" / "),
+                each,
+                if group.len() == 1 { "thing" } else { "things" },
+                if keys.len() == 1 { "that property is" } else { "those properties are" },
+                winner,
+                example,
+            )
+        };
+        // The last mod to load decides a clashing property, so the only way to pick the other
+        // value is to load that mod later.
         let fixes = if c.mod_ids.len() == 2 {
             vec![SuggestedFix::MoveBefore {
                 mod_id: winner_id.clone(),
@@ -354,8 +411,8 @@ pub fn issues_for_script_conflicts(
             "script_definition_conflict_more",
             None,
             format!(
-                "{} more definitions, across {} other pairs of mods, are declared twice. Each one \
-                 is kept from whichever mod loads last.",
+                "{} more things, across {} other pairs of mods, have a property two mods set \
+                 differently. Whichever mod loads last decides each one.",
                 left,
                 groups.len() - SHOWN
             ),
@@ -1011,6 +1068,10 @@ mod script_conflict_issue_tests {
             mod_ids: mods.iter().map(|m| m.to_string()).collect(),
             mods: mods.iter().map(|m| m.to_string()).collect(),
             files: vec!["media/scripts/a.txt".into(), "media/scripts/b.txt".into()],
+            clashing: vec![crate::scripts::ClashingProperty {
+                key: "StaticModel".to_string(),
+                values: vec![Some("One".to_string()), Some("Other".to_string())],
+            }],
         }
     }
 
@@ -1026,6 +1087,9 @@ mod script_conflict_issue_tests {
         let issues = issues_for_script_conflicts(&conflicts);
         assert_eq!(issues.len(), 2, "{:#?}", issues);
         assert!(issues[0].message.contains("4 things"), "{}", issues[0].message);
+        assert!(issues[0].message.contains("StaticModel"), "{}", issues[0].message);
+        // It no longer claims the loser's whole definition is thrown away.
+        assert!(!issues[0].message.contains("is ignored"), "{}", issues[0].message);
         assert!(issues[0].message.contains("Base.ModernTire1"), "{}", issues[0].message);
         assert!(issues[0].message.contains("..."), "{}", issues[0].message);
         // The second pair is named in full, since it is about one thing.

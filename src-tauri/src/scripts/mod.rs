@@ -13,7 +13,7 @@
 //! can appear anywhere. Nothing is rewritten here; this only reads.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use walkdir::WalkDir;
@@ -30,6 +30,47 @@ pub struct ScriptDef {
     /// The block's body with its whitespace collapsed, so two mods shipping the same definition
     /// are not reported as disagreeing about it.
     pub body: String,
+}
+
+/// The `Key = value` lines a block sets directly, with whatever is inside nested blocks left
+/// out: those belong to the nested block, not to this one.
+pub fn top_level_props(body: &str) -> BTreeMap<String, String> {
+    let mut props = BTreeMap::new();
+    let mut depth = 0usize;
+    let mut statement = String::new();
+    let take = |statement: &str, props: &mut BTreeMap<String, String>| {
+        if let Some((key, value)) = statement.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
+            if !key.is_empty() && !key.contains(char::is_whitespace) {
+                props.insert(key.to_string(), value.to_string());
+            }
+        }
+    };
+    for c in body.chars() {
+        match c {
+            '{' => {
+                depth += 1;
+                statement.clear();
+            }
+            '}' => {
+                depth = depth.saturating_sub(1);
+                statement.clear();
+            }
+            // A property ends at its comma. A semicolon does not end anything: it separates the
+            // values inside one, as in `XPBoosts = Nimble=2;Sneak=2;Lockpicking=1`, and treating
+            // it as an ending cut every such value down to its first entry — which made two mods
+            // granting different XP look like they agreed.
+            ',' if depth == 0 => {
+                take(&statement, &mut props);
+                statement.clear();
+            }
+            _ if depth == 0 => statement.push(c),
+            _ => {}
+        }
+    }
+    take(&statement, &mut props);
+    props
 }
 
 impl ScriptDef {
@@ -134,17 +175,28 @@ pub fn parse_script_defs(text: &str) -> Vec<ScriptDef> {
     defs
 }
 
-/// The same thing declared by more than one active mod.
+/// One property two mods set differently on the same thing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClashingProperty {
+    pub key: String,
+    /// What each mod sets it to, in the same order as `mods`; `None` where a mod does not set it.
+    pub values: Vec<Option<String>>,
+}
+
+/// The same thing declared by more than one active mod, and what they really disagree about.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScriptDefConflict {
     /// `item Base.Axe`, as the game would name it.
     pub definition: String,
     pub kind: String,
-    /// The mods declaring it, in load order: the last one is the one the game keeps.
+    /// The mods declaring it, in load order: for a clashing property, the last one decides.
     pub mod_ids: Vec<String>,
     pub mods: Vec<String>,
     /// The file each mod declares it in, in the same order.
     pub files: Vec<String>,
+    /// Properties more than one of them sets, to different values. Everything else they set is
+    /// theirs alone and survives whatever the order.
+    pub clashing: Vec<ClashingProperty>,
 }
 
 /// Script files the game merges rather than overrides, where declaring the same name twice is
@@ -161,7 +213,8 @@ pub fn script_definition_conflicts(
 ) -> Vec<ScriptDefConflict> {
     let game = catalog.game_version_int();
     // definition -> the mods declaring it, in load order.
-    let mut by_def: HashMap<String, Vec<(usize, String, String, String, String)>> = HashMap::new();
+    type Declaration = (usize, String, String, String, String, BTreeMap<String, String>);
+    let mut by_def: HashMap<String, Vec<Declaration>> = HashMap::new();
     let mut seen_mods = std::collections::HashSet::new();
 
     for (position, entry) in active.iter().enumerate() {
@@ -195,12 +248,14 @@ pub fn script_definition_conflicts(
             }
             let Ok(text) = std::fs::read_to_string(&abs) else { continue };
             for def in parse_script_defs(&text) {
+                let props = top_level_props(&def.body);
                 by_def.entry(def.full_name()).or_default().push((
                     position,
                     m.id.clone(),
                     m.name.clone(),
                     rel.clone(),
                     def.body,
+                    props,
                 ));
             }
         }
@@ -213,17 +268,41 @@ pub fn script_definition_conflicts(
         if owners.len() < 2 {
             continue;
         }
-        let first_body = owners[0].4.clone();
-        if owners.iter().all(|o| o.4 == first_body) {
-            continue;
-        }
         owners.sort_by_key(|o| o.0);
+
+        // The game applies each declaration to the same thing in turn, which is how a mod can
+        // ship a three-line `item` block that only adds a model to someone else's item. So what
+        // matters is not who declared it last, but which single properties two of them set to
+        // different values: those are decided by the order, and nothing else is.
+        let mut clashing: Vec<ClashingProperty> = Vec::new();
+        let mut keys: Vec<&String> = owners.iter().flat_map(|o| o.5.keys()).collect();
+        keys.sort();
+        keys.dedup();
+        for key in keys {
+            let values: Vec<Option<String>> = owners.iter().map(|o| o.5.get(key).cloned()).collect();
+            let set: Vec<&String> = values.iter().flatten().collect();
+            if set.len() > 1 && set.iter().any(|v| *v != set[0]) {
+                clashing.push(ClashingProperty { key: key.clone(), values });
+            }
+        }
+
+        // Blocks with no properties at all (a recipe's ingredient lines, a model's own nesting)
+        // cannot be compared this way: fall back to whether the text differs at all.
+        let comparable = owners.iter().any(|o| !o.5.is_empty());
+        if clashing.is_empty() {
+            let first_body = owners[0].4.clone();
+            if comparable || owners.iter().all(|o| o.4 == first_body) {
+                continue;
+            }
+        }
+
         out.push(ScriptDefConflict {
             kind: definition.split_whitespace().next().unwrap_or_default().to_string(),
             definition,
             mod_ids: owners.iter().map(|o| o.1.clone()).collect(),
             mods: owners.iter().map(|o| o.2.clone()).collect(),
             files: owners.iter().map(|o| o.3.clone()).collect(),
+            clashing,
         });
     }
     // Stable and readable: by what is declared.
@@ -407,5 +486,32 @@ mod live_tests {
         for c in conflicts.iter().take(25) {
             println!("  {} <- {}", c.definition, c.mods.join(" , "));
         }
+    }
+}
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+
+    #[test]
+    fn a_semicolon_separates_values_inside_a_property_and_does_not_end_it() {
+        let props = top_level_props(
+            "CharacterProfession = base:burglar, XPBoosts = Nimble=2;Sneak=2;Lockpicking=1, Cost = -6,",
+        );
+        assert_eq!(props.get("XPBoosts").map(String::as_str), Some("Nimble=2;Sneak=2;Lockpicking=1"));
+        assert_eq!(props.get("Cost").map(String::as_str), Some("-6"));
+        // Two professions granting different XP must not look the same.
+        let other = top_level_props("XPBoosts = Nimble=2;Sneak=2,");
+        assert_ne!(props.get("XPBoosts"), other.get("XPBoosts"));
+    }
+
+    #[test]
+    fn what_a_nested_block_sets_belongs_to_the_nested_block() {
+        let props = top_level_props(
+            "mechanicType = 2, part Engine { category = engine, Weight = 9, } DisplayName = Van,",
+        );
+        assert_eq!(props.len(), 2, "{:?}", props);
+        assert!(props.contains_key("mechanicType") && props.contains_key("DisplayName"));
+        assert!(!props.contains_key("category"));
     }
 }
