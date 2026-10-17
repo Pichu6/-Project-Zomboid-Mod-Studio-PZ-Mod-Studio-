@@ -302,6 +302,23 @@ fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog:
 /// What a link offers, worked out without downloading it.
 /// The player's own sandbox presets, so one can be put into a pack.
 /// The text files of one installed mod, to pick one to patch.
+/// For each `require("...") failed` asked about, where that module really is.
+///
+/// Indexing every Lua file of the game and the active mods takes a moment, so the whole set is
+/// answered in one call rather than one card at a time.
+#[tauri::command(async)]
+fn resolve_failed_requires_cmd(
+    paths: StudioPaths,
+    wanted: Vec<String>,
+) -> Vec<sandbox::requires::RequireAnswer> {
+    let active: Vec<String> = load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
+        .map(|d| d.active_mods)
+        .unwrap_or_default();
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let index = sandbox::requires::index_modules(&paths, &catalog, &active);
+    wanted.iter().map(|w| sandbox::requires::answer_for(w, &index)).collect()
+}
+
 #[tauri::command(async)]
 fn mod_files_cmd(paths: StudioPaths, mod_id: String) -> Result<Vec<vfs::mod_patch::ModFile>, String> {
     let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
@@ -692,6 +709,7 @@ pub fn run() {
             steam_client_ready_cmd,
             launch_sandbox_cmd,
             script_conflicts_cmd,
+            resolve_failed_requires_cmd,
             mod_files_cmd,
             mod_file_to_patch_cmd,
             sandbox_presets_cmd,

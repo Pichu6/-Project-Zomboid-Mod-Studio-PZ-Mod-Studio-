@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -899,6 +899,18 @@ export const TauriService = {
     sandboxPreset?: string | null
   ): Promise<any> => {
     return await invoke('export_preset_file', { paths, preset, filePath, sandboxPreset: sandboxPreset ?? null });
+  },
+
+  /**
+   * For each `require("...") failed`, where that module really is. Answered in one call: the
+   * index covers every Lua file of the game and the active mods.
+   */
+  resolveFailedRequires: async (paths: StudioPathsUI, wanted: string[]): Promise<RequireAnswer[]> => {
+    try {
+      return await invoke<RequireAnswer[]>('resolve_failed_requires_cmd', { paths, wanted });
+    } catch {
+      return [];
+    }
   },
 
   /** The text files of one installed mod, to pick one to patch. */

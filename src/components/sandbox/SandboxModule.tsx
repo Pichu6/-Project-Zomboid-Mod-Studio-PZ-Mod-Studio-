@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { TranslatedErrorCard, LogFileInfoUI, ModInfo } from '../../types';
+import { TranslatedErrorCard, LogFileInfoUI, ModInfo, RequireAnswer } from '../../types';
 import { BisectPanel } from './BisectPanel';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
@@ -388,6 +388,39 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   }, [activeTab?.lines]);
 
   const timesSeen = (card: TranslatedErrorCard) => errorCounts.counts.get(errorShape(card.raw_error)) ?? 0;
+
+  /**
+   * `require("X") failed` is the commonest complaint in a Build 42 log and says nothing you can
+   * act on by itself. The module is usually still there under another path, sometimes in another
+   * mod, sometimes nowhere at all -- and which of the three it is decides what to do about it.
+   * Looked up for every such card at once, since the index costs the same for one or twenty.
+   */
+  const [requireAnswers, setRequireAnswers] = useState<Record<string, RequireAnswer>>({});
+
+  const moduleWanted = (card: TranslatedErrorCard): string | null => {
+    const found = card.raw_error.match(/require\(\s*["']([^"']+)["']\s*\)/);
+    return found ? found[1] : null;
+  };
+
+  useEffect(() => {
+    const wanted = Array.from(
+      new Set(errorCards.map(moduleWanted).filter((w): w is string => !!w))
+    ).filter((w) => !(w in requireAnswers));
+    if (wanted.length === 0 || !paths.is_valid) return;
+    let alive = true;
+    void (async () => {
+      const answers = await TauriService.resolveFailedRequires(paths, wanted);
+      if (!alive) return;
+      setRequireAnswers((current) => {
+        const next = { ...current };
+        for (const a of answers) next[a.wanted] = a;
+        return next;
+      });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [errorCards, paths.is_valid]);
 
   /**
    * The mod a card belongs to when the error line itself does not say.
@@ -904,6 +937,24 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Log Snippet</div>
                     <div className="truncate">{card.raw_error}</div>
                   </div>
+
+                  {/* Where the module it asked for actually is. */}
+                  {(() => {
+                    const wanted = moduleWanted(card);
+                    const answer = wanted ? requireAnswers[wanted] : undefined;
+                    if (!answer) return null;
+                    const best = answer.candidates[0];
+                    return (
+                      <div className="px-2.5 py-2 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 leading-relaxed space-y-1">
+                        <div>{answer.summary}</div>
+                        {best && !best.same_path && (
+                          <div className="font-mono text-[10px] text-emerald-300">
+                            {answer.wanted} &rarr; {best.module_path}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {card.polyfill_rule_id_suggestion ? (
                     <button

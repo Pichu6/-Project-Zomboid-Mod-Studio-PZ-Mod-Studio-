@@ -526,6 +526,21 @@ export interface SortResult {
   cycle: string[];
 }
 
+/** A module that exists, and where. */
+export interface ModuleCandidate {
+  module_path: string;
+  phase: string;
+  owner: string;
+  same_path: boolean;
+}
+
+/** What became of one failed `require`. */
+export interface RequireAnswer {
+  wanted: string;
+  candidates: ModuleCandidate[];
+  summary: string;
+}
+
 /** One text file of an installed mod, as the game reads it. */
 export interface ModFile {
   relative_path: string;
