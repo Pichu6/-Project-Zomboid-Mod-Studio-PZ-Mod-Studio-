@@ -293,19 +293,45 @@ pub fn issues_for_script_conflicts(
 ) -> Vec<HealthIssue> {
     const SHOWN: usize = 30;
     let mut list = IssueList(Vec::new());
-    for c in conflicts.iter().take(SHOWN) {
+
+    // Two mods that disagree about one item usually disagree about twenty: the same pair, the
+    // same files, the same decision. Grouped by the mods involved, in the order they were found.
+    let mut groups: Vec<(Vec<String>, Vec<&crate::scripts::ScriptDefConflict>)> = Vec::new();
+    for c in conflicts {
+        match groups.iter_mut().find(|(ids, _)| ids == &c.mod_ids) {
+            Some((_, list)) => list.push(c),
+            None => groups.push((c.mod_ids.clone(), vec![c])),
+        }
+    }
+
+    for (_, group) in groups.iter().take(SHOWN) {
+        let c = group[0];
         let winner = c.mods.last().cloned().unwrap_or_default();
         let winner_id = c.mod_ids.last().cloned().unwrap_or_default();
         let losers: Vec<&str> = c.mods[..c.mods.len().saturating_sub(1)].iter().map(String::as_str).collect();
+        // What they disagree about, with a few named so it is recognisable.
+        let named: Vec<&str> = group.iter().take(3).map(|x| x.definition.as_str()).collect();
+        let what = if group.len() == 1 {
+            named[0].to_string()
+        } else {
+            format!(
+                "{} things ({}{})",
+                group.len(),
+                named.join(", "),
+                if group.len() > named.len() { ", ..." } else { "" }
+            )
+        };
         let message = format!(
-            "{} and {} both define {}, in different files ({}). The game keeps {}'s version, \
-             because it loads last; {}'s is ignored for this one definition.",
+            "{} and {} {} define {}, in different files ({}). The game keeps {}'s version of \
+             {}, because it loads last. Which one you want is your call: nothing is broken either \
+             way, and neither the game nor the Studio has a rule to sort it.",
             losers.join(", "),
             winner,
-            c.definition,
+            if c.mod_ids.len() > 2 { "all" } else { "both" },
+            what,
             c.files.join(" / "),
             winner,
-            losers.join(", "),
+            if group.len() == 1 { "it" } else { "them" },
         );
         // Whoever loads last wins, so the only way to pick the other version is to load it later.
         let fixes = if c.mod_ids.len() == 2 {
@@ -321,15 +347,17 @@ pub fn issues_for_script_conflicts(
             last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
         }
     }
-    if conflicts.len() > SHOWN {
+    if groups.len() > SHOWN {
+        let left: usize = groups.iter().skip(SHOWN).map(|(_, g)| g.len()).sum();
         list.push(
             Severity::Info,
             "script_definition_conflict_more",
             None,
             format!(
-                "{} more definitions are declared by two or more of your mods. Each one is kept \
-                 from whichever mod loads last.",
-                conflicts.len() - SHOWN
+                "{} more definitions, across {} other pairs of mods, are declared twice. Each one \
+                 is kept from whichever mod loads last.",
+                left,
+                groups.len() - SHOWN
             ),
             Vec::new(),
         );
@@ -968,5 +996,69 @@ mod tests {
         let b = report.issues.iter().find(|i| i.message.contains("b.lua")).unwrap();
         assert_eq!(b.fixes, vec![SuggestedFix::OpenInMerger { relative_path: "b.lua".into() }]);
         assert!(report.issues.iter().any(|i| i.code == "file_conflict_stale"));
+    }
+}
+
+#[cfg(test)]
+mod script_conflict_issue_tests {
+    use super::*;
+    use crate::scripts::ScriptDefConflict;
+
+    fn conflict(def: &str, mods: [&str; 2]) -> ScriptDefConflict {
+        ScriptDefConflict {
+            definition: def.to_string(),
+            kind: def.split_whitespace().next().unwrap_or_default().to_string(),
+            mod_ids: mods.iter().map(|m| m.to_string()).collect(),
+            mods: mods.iter().map(|m| m.to_string()).collect(),
+            files: vec!["media/scripts/a.txt".into(), "media/scripts/b.txt".into()],
+        }
+    }
+
+    #[test]
+    fn one_pair_of_mods_is_one_row_however_much_they_disagree_about() {
+        let conflicts = vec![
+            conflict("item Base.ModernTire1", ["Cars", "Carry"]),
+            conflict("item Base.ModernTire2", ["Cars", "Carry"]),
+            conflict("item Base.ModernTire3", ["Cars", "Carry"]),
+            conflict("item Base.NormalTire1", ["Cars", "Carry"]),
+            conflict("character_trait_definition Base.base:burglar", ["Details", "Lockpicking"]),
+        ];
+        let issues = issues_for_script_conflicts(&conflicts);
+        assert_eq!(issues.len(), 2, "{:#?}", issues);
+        assert!(issues[0].message.contains("4 things"), "{}", issues[0].message);
+        assert!(issues[0].message.contains("Base.ModernTire1"), "{}", issues[0].message);
+        assert!(issues[0].message.contains("..."), "{}", issues[0].message);
+        // The second pair is named in full, since it is about one thing.
+        assert!(issues[1].message.contains("base:burglar"), "{}", issues[1].message);
+        // Each still offers the one move that would flip the decision.
+        assert_eq!(issues[0].fixes.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod live_script_issue_tests {
+    /// How the real list's script conflicts read in Mod Health.
+    /// PZMS_PZ_DIR=... PZMS_WORKSHOP_DIR=... PZMS_ZOMBOID_DIR=...
+    /// cargo test --release the_real_script_conflict_rows -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn the_real_script_conflict_rows() {
+        let (Ok(pz), Ok(workshop), Ok(zomboid)) = (
+            std::env::var("PZMS_PZ_DIR"),
+            std::env::var("PZMS_WORKSHOP_DIR"),
+            std::env::var("PZMS_ZOMBOID_DIR"),
+        ) else {
+            return;
+        };
+        let _ = pz;
+        let active = crate::load_order::ini_parser::read_mod_list_ini(&format!("{}/mods/default.txt", zomboid))
+            .map(|d| d.active_mods)
+            .unwrap_or_default();
+        let issues = super::script_definition_issues(&workshop, &zomboid, &active);
+        println!("{} row(s) in Mod Health:", issues.len());
+        for i in &issues {
+            println!("  - {}", i.message);
+            println!("    fixes: {}", i.fixes.len());
+        }
     }
 }

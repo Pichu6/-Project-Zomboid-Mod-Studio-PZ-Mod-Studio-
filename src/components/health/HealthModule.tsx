@@ -27,6 +27,14 @@ const ACTION_FIXES = new Set<HealthFix['action']>([
 /** Fixes the "fix all" button may apply without asking: they only enable or reorder. */
 const SAFE_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'move_before']);
 
+/**
+ * Issues whose fix is a matter of taste, not of the game's rules: two mods defining the same item
+ * is not broken, and which version you want is nobody's call but yours. Their fix stays on its own
+ * row and is kept out of the one-click button, which is for what the game itself would complain
+ * about.
+ */
+const YOUR_CALL_CODES = new Set(['script_definition_conflict']);
+
 const isStudioDraftPackage = (m: ModInfo) =>
   m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && m.is_packaged === false;
 
@@ -186,7 +194,9 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
 
   const safeFixes = useMemo(() => {
     if (!report) return [] as HealthFix[];
-    return report.issues.flatMap((i) => i.fixes.filter((f) => SAFE_FIX_ACTIONS.has(f.action)));
+    return report.issues
+      .filter((i) => !YOUR_CALL_CODES.has(i.code))
+      .flatMap((i) => i.fixes.filter((f) => SAFE_FIX_ACTIONS.has(f.action)));
   }, [report]);
 
   const handleFixAllSafe = () => {
@@ -206,7 +216,10 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     const all = report.issues.flatMap((i) => i.fixes.flatMap((f) => (f.action === 'merge_files' ? f.relative_paths : [])));
     return Array.from(new Set(all));
   }, [report]);
-  const safeIssueCount = report?.issues.filter((i) => i.fixes.some((f) => SAFE_FIX_ACTIONS.has(f.action))).length ?? 0;
+  const safeIssueCount =
+    report?.issues.filter(
+      (i) => !YOUR_CALL_CODES.has(i.code) && i.fixes.some((f) => SAFE_FIX_ACTIONS.has(f.action))
+    ).length ?? 0;
 
   const grouped = useMemo(() => {
     const groups: Record<HealthSeverity, HealthIssue[]> = { error: [], warning: [], info: [] };
