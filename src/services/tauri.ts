@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -665,6 +665,19 @@ export const TauriService = {
     } catch (err) {
       reportBackendError('Importing the package', err);
       throw err;
+    }
+  },
+
+  /**
+   * Things two or more active mods declare: the same item or recipe in differently named files,
+   * which collide nowhere on disk. Asked for separately because it reads every script.
+   */
+  scriptConflicts: async (paths: StudioPathsUI, active: string[]): Promise<HealthIssue[]> => {
+    try {
+      return await invoke<HealthIssue[]>('script_conflicts_cmd', { paths, active });
+    } catch {
+      // Nothing is broken if this cannot be read; the rest of the health check stands on its own.
+      return [];
     }
   },
 

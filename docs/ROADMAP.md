@@ -46,7 +46,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | 🔨 | Undo / history for every load-order change | Auto-sort is now game-exact (moves only what rules force) and can be undone; full history next |
 | ✅ | Filters and search: switched on/off, with a problem, maps, libraries, won't load on this build, updated recently — each with its count; and drag a mod to where it should load | Every manager |
 | 🔨 | Profiles export and import as `.pzpack`, with every mod's Workshop id so the other player can subscribe (done). Next: sandbox settings in the same file | r2modman, Modrinth `.mrpack` |
-| ⬜ | Per-file conflict view: which mod's file the game actually uses, plus script-level conflicts (same item/recipe defined twice) | MO2 conflict pane |
+| 🔨 | Script-level conflicts: every active mod's scripts are parsed (brace-walking, every block kind, nested blocks) and anything two mods both declare — the same `item`, `craftRecipe`, `vehicle`, `xuiSkin` — is an Info issue naming the files and the mod the game keeps, with "move it before" to pick the other. Next: the same view per file | MO2 conflict pane |
 | ⬜ | Server tools: build `WorkshopItems=` / `Mods=` / `Map=` from a profile using real IDs from `mod.info`; detect client/server mismatches | Top server-admin pain point |
 
 ## Phase 2: Every mod source in one place (a "Modrinth for Project Zomboid")
@@ -102,7 +102,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 |---|---|---|
 | ✅ | Mod Health finds file conflicts by itself (pending / changed since merge / merged); safe ones merge in one click, the rest open in the Merger on that file | You only go to the Merger when two mods change the same lines |
 | ✅ | Per-conflict choice: keep both · only this mod · vanilla · your own edit, as one row above the editor that shows which is active | Replaces the per-mod toggles, which were hidden and meant two different things |
-| ⬜ | Fix the script merger (items/recipes/`craftRecipe`, nested blocks) | Current one truncates nested blocks |
+| ✅ | The old block merger, which dropped every kind it did not know and ended a definition at the first nested `}`, was dead code and is gone. `src-tauri/src/scripts` parses scripts properly instead; merging a script file is diff3 over its text, as for Lua | It truncated nested blocks |
 | ⬜ | Translation merge (JSON) | B42.15+ format |
 
 ## Phase 6: Sharing

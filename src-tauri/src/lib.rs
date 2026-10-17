@@ -14,6 +14,7 @@ pub mod origins;
 pub mod patch_generator;
 pub mod preset_manager;
 pub mod sandbox;
+pub mod scripts;
 pub mod secrets;
 pub mod steam_client;
 pub mod server_manager;
@@ -288,6 +289,13 @@ fn launch_sandbox_cmd<R: tauri::Runtime>(
 }
 
 /// The hunt in progress, if the player left one running.
+/// Things two or more active mods declare (the same item, recipe or vehicle in different files).
+/// Read-only, and asked for on its own because it reads every script of every active mod.
+#[tauri::command(async)]
+fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog::HealthIssue> {
+    catalog::script_definition_issues(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
+}
+
 #[tauri::command(async)]
 fn bisect_state_cmd(paths: StudioPaths) -> Option<bisect::BisectSession> {
     bisect::load(&paths.user_zomboid_dir)
@@ -603,6 +611,7 @@ pub fn run() {
             workshop_subscribe_cmd,
             steam_client_ready_cmd,
             launch_sandbox_cmd,
+            script_conflicts_cmd,
             bisect_state_cmd,
             bisect_start_cmd,
             bisect_answer_cmd,

@@ -22,10 +22,19 @@ export function useModHealth(paths: StudioPathsUI, mods: ModInfo[]) {
     const id = ++requestId.current;
     setChecking(true);
     try {
-      const health = await TauriService.getModHealth(paths, activeKey ? activeKey.split('\n') : []);
+      const active = activeKey ? activeKey.split('\n') : [];
+      const health = await TauriService.getModHealth(paths, active);
       if (id === requestId.current) {
         setReport(health.report);
         setCatalog(health.catalog.mods);
+      }
+      // Reading every script of every active mod takes a moment, so it follows the check the Mod
+      // List is waiting on instead of holding it up.
+      const declaredTwice = await TauriService.scriptConflicts(paths, active);
+      if (id === requestId.current && declaredTwice.length > 0) {
+        setReport((previous) =>
+          previous ? { ...previous, issues: [...previous.issues, ...declaredTwice] } : previous
+        );
       }
     } catch (err) {
       if (id === requestId.current) reportBackendError('Checking mod health', err);

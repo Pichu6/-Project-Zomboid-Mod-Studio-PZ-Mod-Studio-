@@ -273,6 +273,70 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
     ModHealth { catalog, report }
 }
 
+/// The quiet conflict: two mods defining the same item, recipe or vehicle in differently named
+/// files, which collide nowhere on disk. The game keeps whichever was read last, so the earlier
+/// mod's version of that one thing is simply gone, and nothing says so.
+pub fn script_definition_issues(
+    workshop_dir: &str,
+    user_zomboid_dir: &str,
+    active: &[String],
+) -> Vec<HealthIssue> {
+    let catalog = build_catalog(workshop_dir, user_zomboid_dir, None);
+    let conflicts = crate::scripts::script_definition_conflicts(&catalog, active);
+    issues_for_script_conflicts(&conflicts)
+}
+
+/// Turns what two mods both declare into issues, newest first, capped so one messy list cannot
+/// bury the problems that stop the game loading.
+pub fn issues_for_script_conflicts(
+    conflicts: &[crate::scripts::ScriptDefConflict],
+) -> Vec<HealthIssue> {
+    const SHOWN: usize = 30;
+    let mut list = IssueList(Vec::new());
+    for c in conflicts.iter().take(SHOWN) {
+        let winner = c.mods.last().cloned().unwrap_or_default();
+        let winner_id = c.mod_ids.last().cloned().unwrap_or_default();
+        let losers: Vec<&str> = c.mods[..c.mods.len().saturating_sub(1)].iter().map(String::as_str).collect();
+        let message = format!(
+            "{} and {} both define {}, in different files ({}). The game keeps {}'s version, \
+             because it loads last; {}'s is ignored for this one definition.",
+            losers.join(", "),
+            winner,
+            c.definition,
+            c.files.join(" / "),
+            winner,
+            losers.join(", "),
+        );
+        // Whoever loads last wins, so the only way to pick the other version is to load it later.
+        let fixes = if c.mod_ids.len() == 2 {
+            vec![SuggestedFix::MoveBefore {
+                mod_id: winner_id.clone(),
+                before: c.mod_ids[0].clone(),
+            }]
+        } else {
+            Vec::new()
+        };
+        list.push(Severity::Info, "script_definition_conflict", Some(&winner_id), message, fixes);
+        if let Some(last) = list.0.last_mut() {
+            last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
+        }
+    }
+    if conflicts.len() > SHOWN {
+        list.push(
+            Severity::Info,
+            "script_definition_conflict_more",
+            None,
+            format!(
+                "{} more definitions are declared by two or more of your mods. Each one is kept \
+                 from whichever mod loads last.",
+                conflicts.len() - SHOWN
+            ),
+            Vec::new(),
+        );
+    }
+    list.0
+}
+
 /// Shared files the game would load from only one mod: "pending" (not merged) and "stale"
 /// (merged, but a mod changed since) become warnings; "merged" ones are fine.
 pub fn add_file_conflict_issues(report: &mut HealthReport, conflicts: &[crate::vfs::FileConflictState]) {

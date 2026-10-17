@@ -215,7 +215,7 @@ pub fn start(
     }
 
     let trial = half(&candidates);
-    let mut session = BisectSession {
+    let session = BisectSession {
         started_at: now(),
         phase: BisectPhase::Narrowing,
         original_active,
