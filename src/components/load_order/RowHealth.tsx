@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle, Info, Wrench, XCircle } from 'lucide-react';
 import { HealthFix, HealthIssue, HealthSeverity, ModInfo } from '../../types';
 import { TauriService } from '../../services/tauri';
-import { applyFix } from '../health/HealthModule';
+import { applyFix } from '../../utils/healthFix';
 
 /** What a row says for each code the health check can raise. Short: the row is narrow. */
 const LABELS: Record<string, string> = {
