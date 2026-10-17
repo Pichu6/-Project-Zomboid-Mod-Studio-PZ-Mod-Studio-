@@ -1605,3 +1605,34 @@ mod shim_listing {
         }
     }
 }
+
+#[cfg(test)]
+mod live_mod_fix {
+    /// Writes one corrected mod file into a package of its own, the way the Merger would.
+    /// PZMS_ZOMBOID_DIR=... PZMS_FIX_FILE=<the corrected file> PZMS_FIX_PATH=media/...
+    /// cargo test --release puts_a_fixed_mod_file_in_a_package -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn puts_a_fixed_mod_file_in_a_package() {
+        let (Ok(zomboid), Ok(file), Ok(rel)) = (
+            std::env::var("PZMS_ZOMBOID_DIR"),
+            std::env::var("PZMS_FIX_FILE"),
+            std::env::var("PZMS_FIX_PATH"),
+        ) else {
+            return;
+        };
+        let content = std::fs::read_to_string(&file).expect("the corrected file");
+        let result = super::generate_master_patch(super::MasterPatchRequest {
+            workshop_dir: std::env::var("PZMS_WORKSHOP_DIR").ok(),
+            pz_install_dir: std::env::var("PZMS_PZ_DIR").ok(),
+            user_zomboid_dir: zomboid.clone(),
+            mod_list_ini_path: format!("{}/mods/default.txt", zomboid),
+            merged_files: vec![super::MergedFilePayload { relative_path: rel.clone(), content }],
+            package_folder_name: Some("Z_PZModStudio_ModFixes".to_string()),
+        })
+        .expect("the package is written");
+        println!("package: {}", result.patch_mod_dir);
+        println!("files written: {}", result.files_written);
+        println!("shim: {}", result.polyfill_shim_written);
+    }
+}
