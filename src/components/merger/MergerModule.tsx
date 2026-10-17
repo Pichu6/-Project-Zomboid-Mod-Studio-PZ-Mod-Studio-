@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { VfsConflict, ChangeRegion, ModChangeSummary, ModInfo, ModFile } from '../../types';
+import { VfsConflict, ChangeRegion, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
 import { RequireFix, applyRequireFix, packageForPatch } from '../../utils/requireFix';
+import { LinedCodeSnippet, ConflictSummaryCard, modLineFor } from './CodeView';
+import { PatchFilePicker } from './PatchFilePicker';
+import { PackageList } from './PackageList';
+import { CreatePackageModal, RenamePackageModal, UnpackageModal } from './PackageModals';
 import {
   GitCompare,
   CheckCircle2,
@@ -23,21 +27,14 @@ import {
   Unlock,
   RefreshCw,
   Plus,
-  Edit2,
-  Trash2,
-  Box,
   RotateCcw,
   Code2,
   Download,
-  Upload,
   FolderOpen,
   ArrowLeft,
   Undo2,
   Minus,
-  Lock,
-  Info,
   Wrench,
-  X,
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import '../../monacoSetup';
@@ -74,146 +71,6 @@ interface MergerModuleProps {
 /** A mod's own file opened to patch, as opposed to a conflict the scan found. */
 const isPatchTarget = (c: VfsConflict | null | undefined) => !!c && c.id.startsWith('modfile_');
 
-/** Lines shown around the point of interest; big vanilla files have tens of thousands. */
-const VIEW_WINDOW = 200;
-
-interface LinedCodeSnippetProps {
-  content: string;
-  /** Line to scroll to and mark (1-based). */
-  targetLine: number;
-  /** 1-based inclusive line ranges to highlight as this side's changes. */
-  highlightRanges?: Array<[number, number]>;
-  /** Ranges to mark as collisions (shown in amber). */
-  collisionRanges?: Array<[number, number]>;
-}
-
-const inRanges = (n: number, ranges?: Array<[number, number]>) => !!ranges && ranges.some(([a, b]) => n >= a && n <= Math.max(a, b));
-
-/** Read-only code view. Module-level and memoized so switching conflicts does not rebuild it,
- *  and windowed so huge files only render ~200 lines. */
-const LinedCodeSnippet = React.memo(function LinedCodeSnippet({ content, targetLine, highlightRanges, collisionRanges }: LinedCodeSnippetProps) {
-  const lines = useMemo(() => content.split('\n'), [content]);
-  const targetRef = useRef<HTMLDivElement>(null);
-  const from = Math.max(0, Math.min(targetLine - 1 - VIEW_WINDOW / 2, lines.length - VIEW_WINDOW));
-  const to = Math.min(lines.length, from + VIEW_WINDOW);
-
-  useEffect(() => {
-    targetRef.current?.scrollIntoView({ block: 'center' });
-  }, [targetLine, content]);
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden rounded-b-lg">
-      {lines.length > VIEW_WINDOW && (
-        <div className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 border-b border-slate-800 shrink-0">
-          lines {from + 1}–{to} of {lines.length.toLocaleString()}
-        </div>
-      )}
-      <div className="flex-1 overflow-auto text-xs font-mono bg-slate-950 select-text">
-        {lines.slice(from, to).map((line, i) => {
-          const n = from + i + 1;
-          const isTarget = n === targetLine;
-          const isCollision = inRanges(n, collisionRanges);
-          const isChange = inRanges(n, highlightRanges);
-          const style = isCollision
-            ? 'bg-amber-500/25 text-amber-100 border-amber-400'
-            : isChange
-            ? 'bg-emerald-950/50 text-emerald-200 border-emerald-500/80'
-            : 'text-slate-300 border-transparent';
-          return (
-            <div key={n} ref={isTarget ? targetRef : null} className={`flex leading-6 h-6 border-l-4 ${style} ${isTarget ? 'ring-1 ring-inset ring-amber-400/70' : ''}`}>
-              <span className="w-12 shrink-0 text-right pr-2 text-[11px] text-slate-500 select-none">{n}</span>
-              <span className="px-2 whitespace-pre text-[12px]">{line || ' '}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-const regionLabel = (r: ChangeRegion) =>
-  r.kind === 'added'
-    ? `adds ${r.mod_end - r.mod_start + 1} line(s) before L${r.base_start}`
-    : r.kind === 'removed'
-    ? `removes L${r.base_start}${r.base_end > r.base_start ? `–${r.base_end}` : ''}`
-    : `changes L${r.base_start}${r.base_end > r.base_start ? `–${r.base_end}` : ''}`;
-
-/** Plain summary: how the merge was built, what each mod changes, where they collide. */
-const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (baseLine: number) => void }> = ({ conflict, onFocus }) => {
-  const changes = conflict.mod_changes ?? [];
-  const collisions = conflict.collisions ?? [];
-  const lastLoaded = conflict.competing_mods[conflict.competing_mods.length - 1];
-  return (
-    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 mb-2 shrink-0 space-y-2 text-[11px] max-h-[45%] overflow-y-auto">
-      <div className="flex items-start gap-2 text-slate-200">
-        <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-        <span>
-          {conflict.file_type === 'SCRIPT_DEFINITION' ? (
-            <>
-              {conflict.competing_mods.length} mods declare this, each in a file of its own — nothing collides on
-              disk. The game applies all of them to the same thing, so what one sets and the others do not is
-              kept whatever happens; only what they set differently is decided by the load order, today in{' '}
-              <b>{lastLoaded?.mod_name}</b>'s favour. Saving this writes a small script into your package, which
-              loads last.{' '}
-            </>
-          ) : (
-            <>
-              {conflict.competing_mods.length} mods ship this file. Without merging, the game uses only{' '}
-              <b>{lastLoaded?.mod_name}</b>'s copy (it loads last).{' '}
-            </>
-          )}
-          {conflict.strategy}
-        </span>
-      </div>
-      {collisions.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-amber-300 font-bold">Real conflicts ({collisions.length}): same vanilla lines changed differently</div>
-          <div className="flex flex-wrap gap-1.5">
-            {collisions.map((c, i) => (
-              <button key={i} type="button" onClick={() => onFocus(c.base_start)}
-                className="px-2 py-0.5 rounded border border-amber-500/50 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60 cursor-pointer font-mono">
-                L{c.base_start}{c.base_end > c.base_start ? `–${c.base_end}` : ''}: {c.mods.join(' vs ')}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {changes.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-slate-400 font-bold">What each mod changes compared to the base game</div>
-          {changes.map((m) => (
-            <div key={m.mod_id} className="flex flex-wrap items-center gap-1.5">
-              <span className="font-bold text-slate-200 mr-1">{m.mod_name}</span>
-              <span className="font-mono text-emerald-300">+{m.lines_added}</span>
-              <span className="font-mono text-red-300">−{m.lines_removed}</span>
-              <span className="text-slate-500">in {m.regions.length} place(s):</span>
-              {m.regions.slice(0, 12).map((r, i) => (
-                <button key={i} type="button" onClick={() => onFocus(r.base_start)}
-                  className="px-1.5 py-0.5 rounded border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 cursor-pointer font-mono text-[10px]">
-                  {regionLabel(r)}
-                </button>
-              ))}
-              {m.regions.length > 12 && <span className="text-slate-500">+{m.regions.length - 12} more</span>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-/** The line in a mod's own file that corresponds to vanilla line `baseLine`. */
-const modLineFor = (summary: ModChangeSummary | undefined, baseLine: number): number => {
-  if (!summary) return baseLine;
-  let offset = 0;
-  for (const r of summary.regions) {
-    if (baseLine < r.base_start) break;
-    if (baseLine <= Math.max(r.base_start, r.base_end) || r.kind === 'added' && baseLine === r.base_start) return r.mod_start;
-    offset += (r.mod_end - r.mod_start + 1) - (r.base_end - r.base_start + 1);
-  }
-  return Math.max(1, baseLine + offset);
-};
-
 export const MergerModule: React.FC<MergerModuleProps> = ({
   conflicts: scannedConflicts,
   mods,
@@ -248,11 +105,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     [scannedConflicts, patchTargets]
   );
 
-  const [isPatchPickerOpen, setIsPatchPickerOpen] = useState(false);
-  const [patchModId, setPatchModId] = useState<string | null>(null);
-  const [patchModSearch, setPatchModSearch] = useState('');
-  const [patchFiles, setPatchFiles] = useState<ModFile[] | null>(null);
-  const [patchFileSearch, setPatchFileSearch] = useState('');
+  /** The picker for a mod's own file to patch, and the mod it opens on when the Monitor named one. */
+  const [patchPicker, setPatchPicker] = useState<{ open: boolean; modId: string | null }>({ open: false, modId: null });
 
   const [selectedConflictId, setSelectedConflictId] = useState<string>(conflicts[0]?.id || '');
   const [filterNoise, setFilterNoise] = useState<boolean>(false);
@@ -269,11 +123,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [selectedPackageFolder, setSelectedPackageFolder] = useState<string>('Z_PZModStudio_MergedPatch');
   const [isPackageOpened, setIsPackageOpened] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
-  const [newPackageName, setNewPackageName] = useState<string>('');
-  const [newPackageDescription, setNewPackageDescription] = useState<string>('');
-  const [editingPackageFolder, setEditingPackageFolder] = useState<string | null>(null);
-  const [editingPackageName, setEditingPackageName] = useState<string>('');
-  const [editingPackageDescription, setEditingPackageDescription] = useState<string>('');
+  const [renamingPackage, setRenamingPackage] = useState<MergedPackageInfoUI | null>(null);
   const [isUnpackageModalOpen, setIsUnpackageModalOpen] = useState<boolean>(false);
 
   // Toast Helper
@@ -353,19 +203,6 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   };
 
-  /** Lists a mod's files when one is chosen in the picker. */
-  const chooseModToPatch = async (modId: string) => {
-    setPatchModId(modId);
-    setPatchFiles(null);
-    setPatchFileSearch('');
-    try {
-      setPatchFiles(await TauriService.modFiles(paths, modId));
-    } catch (err) {
-      alert(explainError(err));
-      setPatchModId(null);
-    }
-  };
-
   /**
    * Opens one of a mod's own files for patching. It joins the list like a conflict and is edited
    * and saved the same way; the package, loading last, is then what the game reads for it.
@@ -399,9 +236,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setSelectedConflictId(entry.id);
       setEditorContent(entry.merged_output || entry.base_content);
       setIsManuallyEdited(false);
-      setIsPatchPickerOpen(false);
-      setPatchModId(null);
-      setPatchFiles(null);
+      setPatchPicker({ open: false, modId: null });
       if (fixed) {
         const published = await savePatchTarget(entry.id, entry.relative_path, fixed.content);
         showToast(
@@ -563,18 +398,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     return isMergedStatus && matchesAst && !isManuallyEdited;
   }, [currentConflict, editorContent, isManuallyEdited]);
 
-  const handleCreatePackageSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPackageName.trim()) return;
-    const pkg = await TauriService.createMergedPackage(
-      paths.user_zomboid_dir,
-      paths.mod_list_ini_path,
-      newPackageName.trim(),
-      newPackageDescription.trim() || undefined
-    );
+  const handleCreatePackage = async (name: string, description?: string) => {
+    const pkg = await TauriService.createMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, name, description);
     if (pkg) {
-      setNewPackageName('');
-      setNewPackageDescription('');
       setIsCreateModalOpen(false);
       await fetchPackages();
       setSelectedPackageFolder(pkg.folder_name);
@@ -585,25 +411,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   };
 
-  const handleRenamePackageSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingPackageFolder || !editingPackageName.trim()) return;
-    if (editingPackageFolder === 'Z_PZModStudio_Bridge') {
+  const handleRenamePackage = async (folderName: string, name: string, description?: string) => {
+    if (folderName === 'Z_PZModStudio_Bridge') {
       alert('The Live Bridge mod is an official system module and cannot be renamed.');
-      setEditingPackageFolder(null);
+      setRenamingPackage(null);
       return;
     }
-    const pkg = await TauriService.renameMergedPackage(
-      paths.user_zomboid_dir,
-      paths.mod_list_ini_path,
-      editingPackageFolder,
-      editingPackageName.trim(),
-      editingPackageDescription.trim() || undefined
-    );
+    const pkg = await TauriService.renameMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName, name, description);
     if (pkg) {
-      setEditingPackageFolder(null);
-      setEditingPackageName('');
-      setEditingPackageDescription('');
+      setRenamingPackage(null);
       await fetchPackages();
       setSelectedPackageFolder(pkg.folder_name);
       if (onRefreshMods) await onRefreshMods();
@@ -636,16 +452,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   };
 
-  const handleExportPackage = async () => {
+  const handleExportPackage = async (folder: string = selectedPackageFolder) => {
     try {
-      const cleanName = selectedPackageFolder.replace('Z_PZModStudio_', '').toLowerCase();
+      const cleanName = folder.replace('Z_PZModStudio_', '').toLowerCase();
       const filePath = await TauriService.pickSaveFile(
         `${cleanName}_package.pzmerge`,
         'PZ Mod Studio Merged Package (.pzmerge)',
         'pzmerge'
       );
       if (filePath) {
-        await TauriService.exportMergedPackage(paths.user_zomboid_dir, selectedPackageFolder, filePath);
+        await TauriService.exportMergedPackage(paths.user_zomboid_dir, folder, filePath);
         showToast(`✨ Package successfully saved at: ${filePath}`);
       }
     } catch (err: any) {
@@ -675,9 +491,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   };
 
-  const handleOpenPhysicalFolder = async () => {
-    if (paths.user_zomboid_dir && selectedPackageFolder) {
-      await TauriService.openPackageFolder(paths.user_zomboid_dir, selectedPackageFolder);
+  const handleOpenPhysicalFolder = async (folder: string = selectedPackageFolder) => {
+    if (paths.user_zomboid_dir && folder) {
+      await TauriService.openPackageFolder(paths.user_zomboid_dir, folder);
     }
   };
 
@@ -1019,10 +835,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         if (named) {
           await openModFileToPatch(patchFocus.modId, named.relative_path, patchFocus.fix);
         } else {
-          setPatchModId(patchFocus.modId);
-          setPatchFiles(files);
-          setPatchFileSearch('');
-          setIsPatchPickerOpen(true);
+          setPatchPicker({ open: true, modId: patchFocus.modId });
           if (hint) showToast(`${patchFocus.fileHint} is not a file this build reads from the mod; pick one.`);
         }
       } catch (err) {
@@ -1068,117 +881,14 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">
-      {/* Picking a mod's file to patch: a bug in one mod, which no merge can reach. */}
-      {isPatchPickerOpen && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-          onClick={() => setIsPatchPickerOpen(false)}
-        >
-          <div
-            className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-amber-400" />
-                  <span>Patch a mod file</span>
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5 max-w-xl leading-relaxed">
-                  For a bug in one mod, where there is nothing to merge. Your copy goes in this
-                  package, which loads last, so the game reads it instead of the mod's — for that
-                  file only. The mod stays on and the rest of it is untouched.
-                </p>
-              </div>
-              <button onClick={() => setIsPatchPickerOpen(false)} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer">
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {!patchModId ? (
-              <>
-                <input
-                  type="text"
-                  value={patchModSearch}
-                  onChange={(e) => setPatchModSearch(e.target.value)}
-                  placeholder="Which mod?"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                />
-                <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-900">
-                  {mods
-                    .filter((m) => !m.mod_id.startsWith('Z_PZModStudio_'))
-                    .filter((m) => {
-                      const q = patchModSearch.trim().toLowerCase();
-                      return !q || m.name.toLowerCase().includes(q) || m.mod_id.toLowerCase().includes(q);
-                    })
-                    .slice(0, 200)
-                    .map((m) => (
-                      <button
-                        key={m.mod_id}
-                        type="button"
-                        onClick={() => chooseModToPatch(m.mod_id)}
-                        className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-950/70 cursor-pointer flex items-center justify-between gap-2"
-                      >
-                        <span className="truncate">{m.name}</span>
-                        <span className="font-mono text-[10px] text-slate-500 shrink-0">{m.mod_id}</span>
-                      </button>
-                    ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPatchModId(null);
-                      setPatchFiles(null);
-                    }}
-                    className="text-[11px] px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
-                  >
-                    ← Another mod
-                  </button>
-                  <input
-                    type="text"
-                    value={patchFileSearch}
-                    onChange={(e) => setPatchFileSearch(e.target.value)}
-                    placeholder="Which file? (lua, scripts)"
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-900">
-                  {patchFiles === null ? (
-                    <div className="px-3 py-6 text-center text-xs text-slate-500">Reading the mod…</div>
-                  ) : patchFiles.length === 0 ? (
-                    <div className="px-3 py-6 text-center text-xs text-slate-500">
-                      This mod ships no Lua or script files the build reads.
-                    </div>
-                  ) : (
-                    patchFiles
-                      .filter((f) => {
-                        const q = patchFileSearch.trim().toLowerCase();
-                        return !q || f.relative_path.toLowerCase().includes(q);
-                      })
-                      .map((f) => (
-                        <button
-                          key={f.relative_path}
-                          type="button"
-                          onClick={() => openModFileToPatch(patchModId, f.relative_path)}
-                          className="w-full text-left px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-950/70 cursor-pointer flex items-center justify-between gap-2"
-                        >
-                          <span className="font-mono truncate">{f.relative_path}</span>
-                          <span className="font-mono text-[10px] text-slate-500 shrink-0">
-                            {(f.bytes / 1024).toFixed(1)} KB
-                          </span>
-                        </button>
-                      ))
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <PatchFilePicker
+        open={patchPicker.open}
+        initialModId={patchPicker.modId}
+        paths={paths}
+        mods={mods}
+        onClose={() => setPatchPicker({ open: false, modId: null })}
+        onPick={(modId, relativePath) => void openModFileToPatch(modId, relativePath)}
+      />
 
       {toastMessage && (
         <div className="bg-gradient-to-r from-cyan-900/90 to-emerald-900/90 border-b border-cyan-500/50 text-cyan-100 text-xs px-4 py-2 flex items-center justify-between animate-fade-in shadow-md shrink-0">
@@ -1194,271 +904,22 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
       {/* LEVEL 1: Overview & Selection (When no package is opened) */}
       {!isPackageOpened ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Bar for Level 1 */}
-          <div className="bg-slate-900 border-b border-slate-800 p-3.5 flex items-center justify-between gap-4 shrink-0 shadow-md">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                <Box className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <span>Merge Packages</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
-                    {packages.length} {packages.length === 1 ? 'Package' : 'Packages'}
-                  </span>
-                </h2>
-                <p className="text-[11px] text-slate-400">
-                  Select a package and enter to inspect its merged files, edit or package.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleImportPackage}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
-                title="Import a saved package (.pzmerge) from disk"
-              >
-                <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Load Package (.pzmerge)</span>
-              </button>
-
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>➕ New Package</span>
-              </button>
-
-              {/* Package & Publish stays greyed out until a package is open */}
-              <button
-                disabled
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50 shadow shrink-0"
-                title="You must open / enter a package first to be able to scan and package"
-              >
-                <PackageCheck className="w-4 h-4 text-slate-600" />
-                <span>📦 Package & Publish</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Level 1 Body: Cards or Empty State */}
-          {packages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shadow-inner">
-                <Box className="w-8 h-8 text-emerald-400" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-200">No merge packages created</h3>
-                <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
-                  To scan conflicts and merge mods, create a merge package first or load an existing .pzmerge file.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl transition shadow-lg flex items-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>➕ Create First Merge Package</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 max-w-5xl w-full mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {packages.map((pkg) => {
-                  const isSelected = pkg.folder_name === selectedPackageFolder;
-                  return (
-                    <div
-                      key={pkg.folder_name}
-                      onClick={() => {
-                        setSelectedPackageFolder(pkg.folder_name);
-                        fetchPatchStatus();
-                      }}
-                      className={`p-5 rounded-2xl border transition shadow-lg flex flex-col justify-between space-y-4 cursor-pointer ${
-                        isSelected
-                          ? 'bg-slate-900/95 border-emerald-500/70 ring-1 ring-emerald-500/30'
-                          : 'bg-slate-900/50 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80'
-                      }`}
-                    >
-                      <div className="space-y-3">
-                        {/* Row 1: Icon, Full Display Name, and Top-Right Action Icons */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${
-                              pkg.is_companion_bridge
-                                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                                : pkg.is_packaged
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
-                            }`}>
-                              <Package className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h3 className="text-sm font-bold text-slate-100 leading-snug break-words">
-                                {pkg.display_name}
-                              </h3>
-                              <div className="text-[11px] text-slate-400 font-mono mt-0.5 break-all">
-                                {pkg.folder_name}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Quick Actions (Rename / Delete or Locked System Badge) */}
-                          {!pkg.is_companion_bridge ? (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingPackageFolder(pkg.folder_name);
-                                  setEditingPackageName(pkg.display_name);
-                                  setEditingPackageDescription(pkg.description || '');
-                                }}
-                                className="p-1.5 hover:text-cyan-300 hover:bg-slate-800 rounded-lg transition text-slate-400 cursor-pointer"
-                                title="Edit package name and description"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeletePackage(pkg.folder_name);
-                                }}
-                                className="p-1.5 hover:text-red-400 hover:bg-rose-950/40 rounded-lg transition text-slate-400 cursor-pointer"
-                                title="Delete package from disk"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div
-                              className="flex items-center gap-1 px-2 py-0.5 bg-slate-950 border border-slate-800 rounded-lg text-[10px] text-cyan-400/80 font-mono select-none"
-                              title="Integrated system Companion Mod (Protected against editing or deletion)"
-                            >
-                              <Lock className="w-2.5 h-2.5" />
-                              <span>System</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* What is actually in it. Every package the Studio makes carries the
-                            same canned description, so two of them side by side said nothing
-                            about which was which. */}
-                        {!pkg.is_companion_bridge && (
-                          <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words space-y-1">
-                            <div className="font-bold text-slate-200">
-                              {pkg.merged_files.length === 0
-                                ? 'Nothing in it yet'
-                                : `${pkg.merged_files.length} file${pkg.merged_files.length === 1 ? '' : 's'}`}
-                            </div>
-                            {pkg.merged_files.length > 0 && (
-                              <div className="text-[10px] font-mono text-slate-500 leading-snug">
-                                {pkg.merged_files
-                                  .slice(0, 3)
-                                  .map((f) => f.split('/').pop())
-                                  .join(', ')}
-                                {pkg.merged_files.length > 3 ? `, and ${pkg.merged_files.length - 3} more` : ''}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {pkg.is_companion_bridge && pkg.description && (
-                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-2 bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words">
-                            {pkg.description}
-                          </p>
-                        )}
-
-                        {/* Row 2: Status Badges and ModList Visibility */}
-                        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-800/40">
-                          {pkg.is_companion_bridge ? (
-                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                              Live IPC Bridge
-                            </span>
-                          ) : pkg.is_packaged ? (
-                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title="Compiled and ready as a mod for Project Zomboid">
-                              🟢 PACKAGED / CLOSED
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title="Open package: in editing mode with draft conflict resolutions, deactivated for gameplay">
-                              🟡 OPEN (Draft)
-                            </span>
-                          )}
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTogglePackageInModlist(pkg);
-                            }}
-                            className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition shadow cursor-pointer ${
-                              pkg.is_active_in_modlist
-                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900'
-                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200'
-                            }`}
-                            title={
-                              pkg.is_active_in_modlist
-                                ? "Active and visible in the game mod list (default.txt). Click to hide."
-                                : "Hidden from the game. Click to activate and show in ModList."
-                            }
-                          >
-                            {pkg.is_active_in_modlist ? <Eye className="w-3 h-3 text-emerald-400" /> : <EyeOff className="w-3 h-3 text-slate-400" />}
-                            <span>{pkg.is_active_in_modlist ? 'Visible in ModList' : 'Hidden in ModList'}</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2">
-                        <div className="flex items-center gap-1.5">
-                          {!pkg.is_companion_bridge && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedPackageFolder(pkg.folder_name);
-                                handleExportPackage();
-                              }}
-                              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition cursor-pointer"
-                              title="Export .pzmerge file"
-                            >
-                              <Download className="w-3.5 h-3.5 text-emerald-400" />
-                            </button>
-                          )}
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedPackageFolder(pkg.folder_name);
-                              handleOpenPhysicalFolder();
-                            }}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition cursor-pointer font-medium"
-                            title="Open physical folder in Windows Explorer"
-                          >
-                            <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-                            {pkg.is_companion_bridge && <span className="text-[11px]">View Files</span>}
-                          </button>
-                        </div>
-
-                        {!pkg.is_companion_bridge ? (
-                          <button
-                            onClick={() => handleOpenPackage(pkg.folder_name)}
-                            className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold transition shadow flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <span>🔍 Open / Enter Package</span>
-                          </button>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono px-2 py-1 bg-slate-950/60 rounded-lg border border-slate-800">
-                            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                            <span>IPC Link with the Game</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        <PackageList
+          packages={packages}
+          selectedFolder={selectedPackageFolder}
+          onSelect={(folder) => {
+            setSelectedPackageFolder(folder);
+            fetchPatchStatus();
+          }}
+          onOpen={handleOpenPackage}
+          onRename={setRenamingPackage}
+          onDelete={handleDeletePackage}
+          onToggleInModlist={handleTogglePackageInModlist}
+          onExport={handleExportPackage}
+          onOpenFolder={handleOpenPhysicalFolder}
+          onImport={handleImportPackage}
+          onCreate={() => setIsCreateModalOpen(true)}
+        />
       ) : (
         /* LEVEL 2: Workspace of the Opened Package */
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -1529,10 +990,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 <>
                   <button
                     onClick={() => {
-                      setIsPatchPickerOpen(true);
-                      setPatchModId(null);
-                      setPatchFiles(null);
-                      setPatchModSearch('');
+                      setPatchPicker({ open: true, modId: null });
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition shadow bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 cursor-pointer"
                     title="Open one mod's own file to patch a bug in it. The package loads last, so the game reads your copy of that one file."
@@ -1585,7 +1043,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               </button>
 
               <button
-                onClick={handleOpenPhysicalFolder}
+                onClick={() => handleOpenPhysicalFolder()}
                 className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow cursor-pointer"
                 title="Open physical folder in Windows"
               >
@@ -1593,7 +1051,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               </button>
 
               <button
-                onClick={handleExportPackage}
+                onClick={() => handleExportPackage()}
                 className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow cursor-pointer"
                 title="Save .pzmerge file"
               >
@@ -2132,147 +1590,14 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       </div>
     )}
 
-      {/* Create Package Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleCreatePackageSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <Package className="w-5 h-5 text-emerald-400" />
-              <span>Create New Merge Package</span>
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Enter a name and description for this package. It will be created in DRAFT mode and you can enter to merge its files independently.
-            </p>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 mb-1">Package Name:</label>
-              <input
-                type="text"
-                value={newPackageName}
-                onChange={(e) => setNewPackageName(e.target.value)}
-                placeholder="e.g: MergedPatch2"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none font-mono"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 mb-1">Description (Optional):</label>
-              <textarea
-                value={newPackageDescription}
-                onChange={(e) => setNewPackageDescription(e.target.value)}
-                placeholder="e.g: Compatibility merge to resolve collisions between weapon and vehicle mods."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none resize-none h-20"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Create Package
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Rename Package Modal */}
-      {editingPackageFolder && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleRenamePackageSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <Edit2 className="w-5 h-5 text-cyan-400" />
-              <span>Edit Package</span>
-            </h3>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 mb-1">Package Name:</label>
-              <input
-                type="text"
-                value={editingPackageName}
-                onChange={(e) => setEditingPackageName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none font-mono"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 mb-1">Description (Optional):</label>
-              <textarea
-                value={editingPackageDescription}
-                onChange={(e) => setEditingPackageDescription(e.target.value)}
-                placeholder="Mod description..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none resize-none h-20"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setEditingPackageFolder(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Save Changes
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Unpackage Confirmation Modal */}
-      {isUnpackageModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in text-slate-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
-                <Unlock className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-100">⚠️ Open Package for Editing?</h3>
-                <p className="text-xs text-slate-400 mt-0.5">The package will switch to DRAFT mode.</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2 text-xs text-slate-300">
-              <p>
-                By opening the package <b className="text-emerald-400 font-mono">{currentPackage?.display_name}</b>, you will be able to edit its code merges.
-              </p>
-              <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-mono leading-relaxed">
-                ⚠️ <b>Visibility Notice:</b> While this package is in draft, it <b>will NOT be visible in the game Mod List</b> until you click "Package & Publish".
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsUnpackageModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setIsUnpackageModalOpen(false);
-                  await handleCleanMasterPatch();
-                }}
-                className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow transition"
-              >
-                Confirm and Open Package
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CreatePackageModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreatePackage} />
+      <RenamePackageModal pkg={renamingPackage} onClose={() => setRenamingPackage(null)} onRename={handleRenamePackage} />
+      <UnpackageModal
+        open={isUnpackageModalOpen}
+        packageName={currentPackage?.display_name}
+        onClose={() => setIsUnpackageModalOpen(false)}
+        onConfirm={handleCleanMasterPatch}
+      />
     </div>
   );
 };

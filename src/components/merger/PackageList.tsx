@@ -1,0 +1,291 @@
+import React from 'react';
+import { MergedPackageInfoUI } from '../../services/tauri';
+import { Box, Download, Edit2, Eye, EyeOff, FolderOpen, Lock, Package, PackageCheck, Plus, Trash2, Upload } from 'lucide-react';
+
+interface PackageListProps {
+  packages: MergedPackageInfoUI[];
+  selectedFolder: string;
+  onSelect: (folderName: string) => void;
+  onOpen: (folderName: string) => void;
+  onRename: (pkg: MergedPackageInfoUI) => void;
+  onDelete: (folderName: string) => void;
+  onToggleInModlist: (pkg: MergedPackageInfoUI) => void;
+  onExport: (folderName: string) => void;
+  onOpenFolder: (folderName: string) => void;
+  onImport: () => void;
+  onCreate: () => void;
+}
+
+/** Level 1 of the Merger: every package as a card, before one is opened. */
+export const PackageList: React.FC<PackageListProps> = ({
+  packages,
+  selectedFolder,
+  onSelect,
+  onOpen,
+  onRename,
+  onDelete,
+  onToggleInModlist,
+  onExport,
+  onOpenFolder,
+  onImport,
+  onCreate,
+}) => (
+  <div className="flex-1 flex flex-col overflow-hidden">
+    {/* Top Bar for Level 1 */}
+    <div className="bg-slate-900 border-b border-slate-800 p-3.5 flex items-center justify-between gap-4 shrink-0 shadow-md">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+          <Box className="w-4 h-4" />
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <span>Merge Packages</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
+              {packages.length} {packages.length === 1 ? 'Package' : 'Packages'}
+            </span>
+          </h2>
+          <p className="text-[11px] text-slate-400">
+            Select a package and enter to inspect its merged files, edit or package.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={onImport}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
+          title="Import a saved package (.pzmerge) from disk"
+        >
+          <Upload className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Load Package (.pzmerge)</span>
+        </button>
+
+        <button
+          onClick={onCreate}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>➕ New Package</span>
+        </button>
+
+        {/* Package & Publish stays greyed out until a package is open */}
+        <button
+          disabled
+          className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50 shadow shrink-0"
+          title="You must open / enter a package first to be able to scan and package"
+        >
+          <PackageCheck className="w-4 h-4 text-slate-600" />
+          <span>📦 Package & Publish</span>
+        </button>
+      </div>
+    </div>
+
+    {/* Level 1 Body: Cards or Empty State */}
+    {packages.length === 0 ? (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 shadow-inner">
+          <Box className="w-8 h-8 text-emerald-400" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-slate-200">No merge packages created</h3>
+          <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+            To scan conflicts and merge mods, create a merge package first or load an existing .pzmerge file.
+          </p>
+        </div>
+        <button
+          onClick={onCreate}
+          className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl transition shadow-lg flex items-center gap-2 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>➕ Create First Merge Package</span>
+        </button>
+      </div>
+    ) : (
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 max-w-5xl w-full mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {packages.map((pkg) => {
+            const isSelected = pkg.folder_name === selectedFolder;
+            return (
+              <div
+                key={pkg.folder_name}
+                onClick={() => onSelect(pkg.folder_name)}
+                className={`p-5 rounded-2xl border transition shadow-lg flex flex-col justify-between space-y-4 cursor-pointer ${
+                  isSelected
+                    ? 'bg-slate-900/95 border-emerald-500/70 ring-1 ring-emerald-500/30'
+                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700 hover:bg-slate-900/80'
+                }`}
+              >
+                <div className="space-y-3">
+                  {/* Row 1: Icon, Full Display Name, and Top-Right Action Icons */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${
+                        pkg.is_companion_bridge
+                          ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                          : pkg.is_packaged
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}>
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-slate-100 leading-snug break-words">
+                          {pkg.display_name}
+                        </h3>
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5 break-all">
+                          {pkg.folder_name}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Actions (Rename / Delete or Locked System Badge) */}
+                    {!pkg.is_companion_bridge ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRename(pkg);
+                          }}
+                          className="p-1.5 hover:text-cyan-300 hover:bg-slate-800 rounded-lg transition text-slate-400 cursor-pointer"
+                          title="Edit package name and description"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(pkg.folder_name);
+                          }}
+                          className="p-1.5 hover:text-red-400 hover:bg-rose-950/40 rounded-lg transition text-slate-400 cursor-pointer"
+                          title="Delete package from disk"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex items-center gap-1 px-2 py-0.5 bg-slate-950 border border-slate-800 rounded-lg text-[10px] text-cyan-400/80 font-mono select-none"
+                        title="Integrated system Companion Mod (Protected against editing or deletion)"
+                      >
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>System</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* What is actually in it. Every package the Studio makes carries the
+                      same canned description, so two of them side by side said nothing
+                      about which was which. */}
+                  {!pkg.is_companion_bridge && (
+                    <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words space-y-1">
+                      <div className="font-bold text-slate-200">
+                        {pkg.merged_files.length === 0
+                          ? 'Nothing in it yet'
+                          : `${pkg.merged_files.length} file${pkg.merged_files.length === 1 ? '' : 's'}`}
+                      </div>
+                      {pkg.merged_files.length > 0 && (
+                        <div className="text-[10px] font-mono text-slate-500 leading-snug">
+                          {pkg.merged_files
+                            .slice(0, 3)
+                            .map((f) => f.split('/').pop())
+                            .join(', ')}
+                          {pkg.merged_files.length > 3 ? `, and ${pkg.merged_files.length - 3} more` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {pkg.is_companion_bridge && pkg.description && (
+                    <p className="text-xs text-slate-300 leading-relaxed line-clamp-2 bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words">
+                      {pkg.description}
+                    </p>
+                  )}
+
+                  {/* Row 2: Status Badges and ModList Visibility */}
+                  <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-800/40">
+                    {pkg.is_companion_bridge ? (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                        Live IPC Bridge
+                      </span>
+                    ) : pkg.is_packaged ? (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title="Compiled and ready as a mod for Project Zomboid">
+                        🟢 PACKAGED / CLOSED
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title="Open package: in editing mode with draft conflict resolutions, deactivated for gameplay">
+                        🟡 OPEN (Draft)
+                      </span>
+                    )}
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleInModlist(pkg);
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition shadow cursor-pointer ${
+                        pkg.is_active_in_modlist
+                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200'
+                      }`}
+                      title={
+                        pkg.is_active_in_modlist
+                          ? "Active and visible in the game mod list (default.txt). Click to hide."
+                          : "Hidden from the game. Click to activate and show in ModList."
+                      }
+                    >
+                      {pkg.is_active_in_modlist ? <Eye className="w-3 h-3 text-emerald-400" /> : <EyeOff className="w-3 h-3 text-slate-400" />}
+                      <span>{pkg.is_active_in_modlist ? 'Visible in ModList' : 'Hidden in ModList'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {!pkg.is_companion_bridge && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExport(pkg.folder_name);
+                        }}
+                        className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition cursor-pointer"
+                        title="Export .pzmerge file"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      </button>
+                    )}
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenFolder(pkg.folder_name);
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition cursor-pointer font-medium"
+                      title="Open physical folder in Windows Explorer"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                      {pkg.is_companion_bridge && <span className="text-[11px]">View Files</span>}
+                    </button>
+                  </div>
+
+                  {!pkg.is_companion_bridge ? (
+                    <button
+                      onClick={() => onOpen(pkg.folder_name)}
+                      className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold transition shadow flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>🔍 Open / Enter Package</span>
+                    </button>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono px-2 py-1 bg-slate-950/60 rounded-lg border border-slate-800">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                      <span>IPC Link with the Game</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+  </div>
+);
