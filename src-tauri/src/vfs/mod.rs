@@ -551,6 +551,11 @@ pub fn scan_conflicts_for_package(
         }
     }
 
+    // Two mods changing the same item in differently named files never collide on disk, so the
+    // walk above cannot see them. They are the same question, so they are listed here too.
+    let definitions = crate::scripts::script_definition_conflicts(catalog, &active);
+    conflicts.extend(crate::scripts::as_merger_conflicts(&definitions, &draft_map));
+
     conflicts
 }
 

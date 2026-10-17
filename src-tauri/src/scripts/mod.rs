@@ -27,8 +27,7 @@ pub struct ScriptDef {
     /// `item`, `recipe`, `craftRecipe`, `fluid`, `vehicle`, `model`, `sound`, anything.
     pub kind: String,
     pub name: String,
-    /// The block's body with its whitespace collapsed, so two mods shipping the same definition
-    /// are not reported as disagreeing about it.
+    /// The block's body exactly as the author wrote it, between its braces.
     pub body: String,
 }
 
@@ -159,7 +158,7 @@ pub fn parse_script_defs(text: &str) -> Vec<ScriptDef> {
                                 module: if stack.is_empty() { String::new() } else { module.clone() },
                                 kind,
                                 name,
-                                body: collapse(&chars[body_from..i].iter().collect::<String>()),
+                                body: chars[body_from..i].iter().collect::<String>(),
                             });
                         }
                     }
@@ -194,9 +193,219 @@ pub struct ScriptDefConflict {
     pub mods: Vec<String>,
     /// The file each mod declares it in, in the same order.
     pub files: Vec<String>,
+    /// The module and bare name, which a merged block has to be written under.
+    pub module: String,
+    pub name: String,
+    /// Each mod's own block, as its author wrote it, in the same order.
+    pub bodies: Vec<String>,
     /// Properties more than one of them sets, to different values. Everything else they set is
     /// theirs alone and survives whatever the order.
     pub clashing: Vec<ClashingProperty>,
+}
+
+/// A value made of `;`-separated entries, as the game writes lists
+/// (`GrantedRecipes = A;B;C`, `XPBoosts = Nimble=2;Sneak=2`).
+fn entries(value: &str) -> Vec<&str> {
+    value.split(';').map(str::trim).filter(|e| !e.is_empty()).collect()
+}
+
+/// What an entry is about, so `Nimble=2` and `Nimble=3` are known to be the same setting, and
+/// `base:hemp growing season` the same recipe as `Hemp Growing Season`.
+fn entry_key(entry: &str) -> String {
+    let before_equals = entry.split('=').next().unwrap_or(entry).trim();
+    before_equals
+        .trim_start_matches("base:")
+        .trim_start_matches("Base:")
+        .to_lowercase()
+}
+
+/// Both mods' values for one property, kept together where that means something.
+///
+/// A list can hold everything both mods put in it: two mods adding recipes to the same profession
+/// both get their recipes. A single value cannot — an item has one model, and keeping two would
+/// mean nothing — and neither can a list whose same entry is set to two different numbers. Those
+/// come back as `None`, for a person to decide.
+pub fn union_of(values: &[Option<String>]) -> Option<String> {
+    let present: Vec<&String> = values.iter().flatten().collect();
+    if present.is_empty() {
+        return None;
+    }
+    if present.iter().all(|v| *v == present[0]) {
+        return Some(present[0].clone());
+    }
+    // A single value (no `;` anywhere) is a slot, not a list.
+    if present.iter().all(|v| !v.contains(';')) && present.iter().any(|v| !v.contains('=')) {
+        return None;
+    }
+
+    let mut merged: Vec<String> = Vec::new();
+    let mut seen: Vec<(String, String)> = Vec::new(); // (what it is about, how it is set)
+    for value in &present {
+        for entry in entries(value) {
+            let key = entry_key(entry);
+            match seen.iter().find(|(k, _)| *k == key) {
+                Some((_, already)) if already == entry => {}
+                // The same setting given two different values -- `Nimble=2` against `Nimble=3` --
+                // is a slot again: nobody can have both.
+                Some((_, already)) if already.contains('=') && entry.contains('=') => return None,
+                // The same thing written two ways, like `Hemp Growing Season` and
+                // `base:hemp growing season`: keep the first and do not list it twice.
+                Some(_) => {}
+                None => {
+                    seen.push((key, entry.to_string()));
+                    merged.push(entry.to_string());
+                }
+            }
+        }
+    }
+    Some(merged.join(";"))
+}
+
+/// The block the Studio would add to a package to settle a conflict: only the properties the mods
+/// set differently, merged where they can be and left at what the game does today where they
+/// cannot, so adding it changes nothing until a value is edited.
+pub fn merged_block(conflict: &ScriptDefConflict) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "/* {} is declared by {}.\n   Only what they set differently is written here; everything \
+else each of them sets still applies.\n   This package loads last, so these values win. */\n",
+        conflict.definition,
+        conflict.mods.join(" and "),
+    ));
+    let indent = if conflict.module.is_empty() { "" } else { "    " };
+    if !conflict.module.is_empty() {
+        out.push_str(&format!("module {}\n{{\n", conflict.module));
+    }
+    out.push_str(&format!("{}{} {}\n{}{{\n", indent, conflict.kind, conflict.name, indent));
+
+    for property in &conflict.clashing {
+        let last = property.values.iter().flatten().last().cloned().unwrap_or_default();
+        match union_of(&property.values) {
+            Some(merged) => {
+                out.push_str(&format!("{}    {} = {},\n", indent, property.key, merged));
+            }
+            None => {
+                // Each mod's value, with the one the game uses today active and the rest
+                // commented, which is how the Merger shows a choice everywhere else.
+                for (i, value) in property.values.iter().enumerate() {
+                    let Some(value) = value else { continue };
+                    if *value == last {
+                        continue;
+                    }
+                    out.push_str(&format!(
+                        "{}    /* {} wants: {} = {}, */\n",
+                        indent,
+                        conflict.mods.get(i).cloned().unwrap_or_default(),
+                        property.key,
+                        value
+                    ));
+                }
+                out.push_str(&format!("{}    {} = {},\n", indent, property.key, last));
+            }
+        }
+    }
+
+    out.push_str(&format!("{}}}\n", indent));
+    if !conflict.module.is_empty() {
+        out.push_str("}\n");
+    }
+    out
+}
+
+/// A file name for the package that is unmistakably about this definition and safe as a path.
+pub fn merged_file_path(conflict: &ScriptDefConflict) -> String {
+    let safe: String = conflict
+        .definition
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '_' { c } else { '_' })
+        .collect();
+    format!("media/scripts/PZModStudio_{}.txt", safe)
+}
+
+/// The same conflicts in the shape the Mod Merger resolves everything else: a path to write,
+/// what each mod says, and what the Studio proposes. A definition conflict is not a file
+/// conflict -- the two mods' files sit at different paths and never collide -- but it is the same
+/// question, so it belongs in the same place instead of a second merging tool.
+pub fn as_merger_conflicts(
+    conflicts: &[ScriptDefConflict],
+    drafts: &std::collections::HashMap<String, (String, String)>,
+) -> Vec<crate::vfs::VfsConflictRaw> {
+    conflicts
+        .iter()
+        .map(|c| {
+            let rel_path = merged_file_path(c);
+            let proposal = merged_block(c);
+            let competing: Vec<crate::vfs::CompetingModFileRaw> = c
+                .bodies
+                .iter()
+                .enumerate()
+                .map(|(i, body)| crate::vfs::CompetingModFileRaw {
+                    mod_id: c.mod_ids.get(i).cloned().unwrap_or_default(),
+                    mod_name: c.mods.get(i).cloned().unwrap_or_default(),
+                    absolute_path: c.files.get(i).cloned().unwrap_or_default(),
+                    content: if c.module.is_empty() {
+                        format!("{} {}\n{{{}}}\n", c.kind, c.name, body)
+                    } else {
+                        format!(
+                            "module {}\n{{\n    {} {}\n    {{{}}}\n}}\n",
+                            c.module, c.kind, c.name, body
+                        )
+                    },
+                })
+                .collect();
+            let undecided = c.clashing.iter().filter(|p| union_of(&p.values).is_none()).count();
+            let strategy = if c.clashing.is_empty() {
+                format!(
+                    "{} declare {} with different contents, and what differs is inside nested \
+                     blocks. Decide by hand what the package should say.",
+                    c.mods.join(" and "),
+                    c.definition
+                )
+            } else if undecided == 0 {
+                format!(
+                    "Everything {} set differently on {} is a list, so the proposal keeps all of \
+                     it: nothing either mod added is lost.",
+                    c.mods.join(" and "),
+                    c.definition
+                )
+            } else {
+                format!(
+                    "{} of the properties {} set differently on {} can only hold one value. The \
+                     proposal keeps what the game uses today and leaves the other in a comment, \
+                     to swap in a word.",
+                    undecided,
+                    c.mods.join(" and "),
+                    c.definition
+                )
+            };
+            let (merged_output, status) = match drafts.get(&rel_path) {
+                Some((saved, saved_status)) => (saved.clone(), Some(saved_status.clone())),
+                None => (proposal.clone(), None),
+            };
+            let lines = proposal.lines().count().max(1);
+            crate::vfs::VfsConflictRaw {
+                id: format!("definition_{}", rel_path),
+                relative_path: rel_path,
+                file_type: "SCRIPT_DEFINITION".to_string(),
+                start_line: 1,
+                end_line: lines,
+                conflict_line: 1,
+                total_file_lines: lines,
+                // The base game has no file here: the package adds one.
+                base_content: "-- vanilla file not present for this path".to_string(),
+                competing_files: competing,
+                merged_output,
+                auto_ast_output: proposal,
+                is_identical_noise: false,
+                status,
+                mod_changes: Vec::new(),
+                collisions: Vec::new(),
+                strategy,
+                // A list merges by itself; a single value is a decision.
+                auto_mergeable: !c.clashing.is_empty() && undecided == 0,
+            }
+        })
+        .collect()
 }
 
 /// Script files the game merges rather than overrides, where declaring the same name twice is
@@ -290,14 +499,26 @@ pub fn script_definition_conflicts(
         // cannot be compared this way: fall back to whether the text differs at all.
         let comparable = owners.iter().any(|o| !o.5.is_empty());
         if clashing.is_empty() {
-            let first_body = owners[0].4.clone();
-            if comparable || owners.iter().all(|o| o.4 == first_body) {
+            let first_body = collapse(&owners[0].4);
+            if comparable || owners.iter().all(|o| collapse(&o.4) == first_body) {
                 continue;
             }
         }
 
+        // "item Base.ModernTire1" -> item / Base / ModernTire1; a name may hold a colon
+        // ("base:burglar"), and a module-less declaration has no dot at all.
+        let mut words = definition.split_whitespace();
+        let kind = words.next().unwrap_or_default().to_string();
+        let rest = words.collect::<Vec<_>>().join(" ");
+        let (module, name) = match rest.split_once('.') {
+            Some((module, name)) => (module.to_string(), name.to_string()),
+            None => (String::new(), rest.clone()),
+        };
         out.push(ScriptDefConflict {
-            kind: definition.split_whitespace().next().unwrap_or_default().to_string(),
+            kind,
+            module,
+            name,
+            bodies: owners.iter().map(|o| o.4.clone()).collect(),
             definition,
             mod_ids: owners.iter().map(|o| o.1.clone()).collect(),
             mods: owners.iter().map(|o| o.2.clone()).collect(),
@@ -399,7 +620,11 @@ module Vehicles {
     fn whitespace_does_not_make_two_mods_disagree() {
         let a = parse_script_defs("module Base { item Axe { Weight = 3, } }");
         let b = parse_script_defs("module Base\n{\n\titem Axe\n\t{\n\t\tWeight = 3,\n\t}\n}");
-        assert_eq!(a[0].body, b[0].body);
+        // Each keeps its author's own text,
+        assert_ne!(a[0].body, b[0].body);
+        // but neither what they set nor the comparison sees a difference.
+        assert_eq!(top_level_props(&a[0].body), top_level_props(&b[0].body));
+        assert_eq!(collapse(&a[0].body), collapse(&b[0].body));
     }
 
     /// Reads every script of the installed game and reports what it found.
@@ -513,5 +738,118 @@ mod property_tests {
         assert_eq!(props.len(), 2, "{:?}", props);
         assert!(props.contains_key("mechanicType") && props.contains_key("DisplayName"));
         assert!(!props.contains_key("category"));
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn conflict(key: &str, a: &str, b: &str) -> ScriptDefConflict {
+        ScriptDefConflict {
+            definition: "item Base.Thing".into(),
+            kind: "item".into(),
+            module: "Base".into(),
+            name: "Thing".into(),
+            mod_ids: vec!["A".into(), "B".into()],
+            mods: vec!["Mod A".into(), "Mod B".into()],
+            files: vec!["a.txt".into(), "b.txt".into()],
+            bodies: vec![String::new(), String::new()],
+            clashing: vec![ClashingProperty {
+                key: key.into(),
+                values: vec![Some(a.into()), Some(b.into())],
+            }],
+        }
+    }
+
+    #[test]
+    fn two_mods_adding_to_the_same_list_both_get_what_they_added() {
+        let merged = union_of(&[
+            Some("MakeShiv;CopyBuildingKey;Hemp Growing Season".into()),
+            Some("MakeShiv;base:hemp growing season;MakeBlankID".into()),
+        ])
+        .expect("lists merge");
+        // Each recipe once, in the order they were met, and the two spellings of the same recipe
+        // are not both kept.
+        assert_eq!(merged, "MakeShiv;CopyBuildingKey;Hemp Growing Season;MakeBlankID");
+    }
+
+    #[test]
+    fn one_slot_cannot_hold_two_values() {
+        assert!(union_of(&[Some("FR_Equipped_TireSmall".into()), Some("Wheel_Hand".into())]).is_none());
+        // The same skill set to different numbers is the same slot inside a list.
+        assert!(union_of(&[Some("Nimble=2;Sneak=2".into()), Some("Nimble=3".into())]).is_none());
+        // Different skills are not.
+        assert_eq!(
+            union_of(&[Some("Nimble=2;Sneak=2".into()), Some("Nimble=2;Lockpicking=1".into())]).as_deref(),
+            Some("Nimble=2;Sneak=2;Lockpicking=1")
+        );
+    }
+
+    #[test]
+    fn the_merged_block_only_sets_what_they_disagree_about() {
+        let block = merged_block(&conflict("GrantedRecipes", "A;B", "A;C"));
+        assert!(block.contains("module Base"), "{}", block);
+        assert!(block.contains("item Thing"), "{}", block);
+        assert!(block.contains("GrantedRecipes = A;B;C,"), "{}", block);
+        // Nothing else is written: the game applies both mods for everything else.
+        assert_eq!(block.matches('=').count(), 1, "{}", block);
+    }
+
+    #[test]
+    fn a_choice_keeps_what_the_game_does_today_and_names_the_other_option() {
+        let block = merged_block(&conflict("StaticModel", "FR_Equipped_TireSmall", "Wheel_Hand"));
+        // What the game does today (the last mod's value) is what is active.
+        assert!(block.contains("StaticModel = Wheel_Hand,"), "{}", block);
+        // The other is there to switch to, in a comment, with whose it is.
+        assert!(block.contains("/* Mod A wants: StaticModel = FR_Equipped_TireSmall, */"), "{}", block);
+    }
+
+    #[test]
+    fn the_file_it_goes_in_is_named_after_the_definition_and_is_a_safe_path() {
+        let mut c = conflict("X", "1", "2");
+        c.definition = "character_profession_definition Base.base:burglar".into();
+        assert_eq!(
+            merged_file_path(&c),
+            "media/scripts/PZModStudio_character_profession_definition_Base.base_burglar.txt"
+        );
+    }
+}
+
+#[cfg(test)]
+mod live_merger_tests {
+    /// What the Mod Merger would now list for the real mod list, definitions included.
+    /// PZMS_PZ_DIR=... PZMS_WORKSHOP_DIR=... PZMS_ZOMBOID_DIR=...
+    /// cargo test --release the_real_merger_list -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn the_real_merger_list() {
+        let (Ok(pz), Ok(workshop), Ok(zomboid)) = (
+            std::env::var("PZMS_PZ_DIR"),
+            std::env::var("PZMS_WORKSHOP_DIR"),
+            std::env::var("PZMS_ZOMBOID_DIR"),
+        ) else {
+            return;
+        };
+        let paths = crate::vfs::StudioPaths {
+            pz_install_dir: pz,
+            workshop_dir: workshop.clone(),
+            mod_list_ini_path: format!("{}/mods/default.txt", zomboid),
+            user_zomboid_dir: zomboid.clone(),
+            carrier_workshop_id: None,
+            is_valid: true,
+        };
+        let catalog = crate::catalog::build_catalog(&workshop, &zomboid, None);
+        let active = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
+            .map(|d| d.active_mods)
+            .unwrap_or_default();
+        let all = crate::vfs::scan_conflicts_for_package(&paths, &catalog, &active, None);
+        let defs: Vec<_> = all.iter().filter(|c| c.file_type == "SCRIPT_DEFINITION").collect();
+        println!("{} conflicts in the Merger, {} of them definitions", all.len(), defs.len());
+        for c in defs.iter().take(3) {
+            println!("\n=== {} (auto: {})", c.relative_path, c.auto_mergeable);
+            println!("    {}", c.strategy);
+            println!("--- what the Studio proposes ---\n{}", c.merged_output);
+        }
     }
 }

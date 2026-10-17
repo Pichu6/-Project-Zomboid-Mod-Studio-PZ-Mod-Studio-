@@ -1065,6 +1065,9 @@ mod script_conflict_issue_tests {
         ScriptDefConflict {
             definition: def.to_string(),
             kind: def.split_whitespace().next().unwrap_or_default().to_string(),
+            module: "Base".to_string(),
+            name: def.split('.').next_back().unwrap_or(def).to_string(),
+            bodies: vec![String::new(), String::new()],
             mod_ids: mods.iter().map(|m| m.to_string()).collect(),
             mods: mods.iter().map(|m| m.to_string()).collect(),
             files: vec!["media/scripts/a.txt".into(), "media/scripts/b.txt".into()],
