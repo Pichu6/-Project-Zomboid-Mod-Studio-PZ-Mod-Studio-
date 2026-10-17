@@ -364,7 +364,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       const defaultFileName = `${presetToExport.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pzpack`;
       const filePath = await TauriService.pickSaveFile(defaultFileName, 'PZ Mod Studio Preset (.pzpack)', 'pzpack');
       if (filePath) {
-        await TauriService.exportPresetFile(presetToExport, filePath);
+        await TauriService.exportPresetFile(paths, presetToExport, filePath);
         setSaveToast(`✨ Collection exported to: ${filePath}`);
         setTimeout(() => setSaveToast(null), 4000);
       }
@@ -2362,6 +2362,46 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     <div>
                       <div className="font-bold">All mods in the collection are installed!</div>
                       <div className="text-[11px] text-slate-300">You can apply the order and activation immediately.</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* The same list on a different build is a different game. */}
+                {missingReport.pack_game_version &&
+                  missingReport.your_game_version &&
+                  missingReport.pack_game_version !== missingReport.your_game_version && (
+                    <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-slate-300">
+                      This list was put together on build <b className="text-slate-100">{missingReport.pack_game_version}</b>;
+                      yours is <b className="text-slate-100">{missingReport.your_game_version}</b>. Mods made for one build do
+                      not always work on the other, and saves never cross them.
+                    </div>
+                  )}
+
+                {/* Installed, but not the copy the pack was made with. */}
+                {missingReport.drift && missingReport.drift.length > 0 && (
+                  <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
+                    <div className="text-[11px] font-bold text-slate-200">
+                      {missingReport.drift.length} mod{missingReport.drift.length === 1 ? '' : 's'} differ from the copy this
+                      list was made with
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      Steam only ever gives you the newest copy, so there is nothing to fix here. It is worth knowing when a
+                      recipe or an item is not where the sender said it was.
+                    </p>
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {missingReport.drift.map((d) => (
+                        <div key={d.mod_id} className="flex items-center justify-between gap-2 p-1.5 bg-slate-950/80 rounded border border-slate-800 text-[11px]">
+                          <span className="text-slate-200 truncate">{d.name}</span>
+                          <span className="font-mono text-[10px] text-slate-400 shrink-0">
+                            {d.direction === 'older'
+                              ? 'yours is older'
+                              : d.direction === 'newer'
+                              ? 'yours is newer'
+                              : 'version differs'}
+                            {d.pack_version || d.your_version ? ` (${d.pack_version ?? '?'} \u2192 ${d.your_version ?? '?'})` : ''}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

@@ -854,8 +854,12 @@ export const TauriService = {
     }
   },
 
-  exportPresetFile: async (preset: any, filePath: string): Promise<void> => {
-    return await invoke('export_preset_file', { preset, filePath });
+  /**
+   * Writes a .pzpack. Each mod's version and the publish time of the copy on disk are filled in
+   * by the backend from this install, so the pack records what the list was really tested with.
+   */
+  exportPresetFile: async (paths: StudioPathsUI, preset: any, filePath: string): Promise<any> => {
+    return await invoke('export_preset_file', { paths, preset, filePath });
   },
 
   importPresetFile: async (filePath: string): Promise<any> => {

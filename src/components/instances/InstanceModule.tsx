@@ -160,7 +160,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       const fileName = `${inst.name.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'profile'}.pzpack`;
       const filePath = await TauriService.pickSaveFile(fileName, 'PZ Mod Studio profile (.pzpack)', 'pzpack');
       if (!filePath) return;
-      await TauriService.exportPresetFile(preset as never, filePath);
+      await TauriService.exportPresetFile(paths, preset as never, filePath);
       setStatusMessage(`Profile '${inst.name}' saved to ${filePath}. Send that file to anyone.`);
     } catch (err) {
       alert(`The profile could not be saved: ${explainError(err)}`);

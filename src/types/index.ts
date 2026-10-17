@@ -200,6 +200,10 @@ export interface PresetModEntry {
   name: string;
   workshop_id?: string;
   enabled: boolean;
+  /** What the sender's mod.info claimed. */
+  version?: string | null;
+  /** Publish time (unix seconds) of the Workshop copy the sender had. */
+  updated_at?: number | null;
 }
 
 export interface ModPreset {
@@ -210,12 +214,30 @@ export interface ModPreset {
   created_at: string;
   mods: PresetModEntry[];
   load_order: string[];
+  /** The game build the pack was made on. */
+  game_version?: string | null;
+}
+
+/** One mod whose copy here is not the copy a pack was made with. */
+export interface PresetModDrift {
+  mod_id: string;
+  name: string;
+  pack_version?: string | null;
+  your_version?: string | null;
+  pack_updated_at?: number | null;
+  your_updated_at?: number | null;
+  /** 'older' | 'newer' (by publish time) | 'different' (only the version string differs). */
+  direction: string;
 }
 
 export interface MissingModsReport {
   missing_mods: PresetModEntry[];
   installed_count: number;
   total_count: number;
+  /** Installed, but not the same copy the pack was made with. */
+  drift?: PresetModDrift[];
+  pack_game_version?: string | null;
+  your_game_version?: string | null;
 }
 
 export interface PZServerConfig {

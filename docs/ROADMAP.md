@@ -45,7 +45,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | ⬜ | Load-order rules: user rules + community rules database (GitHub, versioned, PR-based) on top of `require`/`loadModAfter`/`loadModBefore` | LOOT masterlist, RimSort rules DB |
 | 🔨 | Undo / history for every load-order change | Auto-sort is now game-exact (moves only what rules force) and can be undone; full history next |
 | ✅ | Filters and search: switched on/off, with a problem, maps, libraries, won't load on this build, updated recently — each with its count; and drag a mod to where it should load | Every manager |
-| 🔨 | Profiles export and import as `.pzpack`, with every mod's Workshop id so the other player can subscribe (done). Next: sandbox settings in the same file | r2modman, Modrinth `.mrpack` |
+| 🔨 | Profiles export and import as `.pzpack`, with every mod's Workshop id so the other player can subscribe, plus the version and publish time of each copy and the build it was made on (done). Next: sandbox settings in the same file | r2modman, Modrinth `.mrpack` |
 | 🔨 | Script-level conflicts: every active mod's scripts are parsed (brace-walking, every block kind, nested blocks) and anything two mods both declare — the same `item`, `craftRecipe`, `vehicle`, `xuiSkin` — is an Info issue naming the files and the mod the game keeps, with "move it before" to pick the other. Next: the same view per file | MO2 conflict pane |
 | ✅ | Server tools: the sync writes `Mods=`, `WorkshopItems=` **and** `Map=` from the active list, with real ids and map folder names from the catalog, the base map kept last, every other setting untouched and the old file backed up. The Servers tab also reads the `.ini` and says what will not work: a mod never downloaded, an item never loaded, a map mod missing from `Map=`, an entry not installed, a mod the Workshop cannot deliver | Top server-admin pain point |
 
@@ -109,7 +109,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | Reproducible modlists: Workshop IDs pinned to `time_updated`, warn on drift | Wabbajack |
+| ✅ | Reproducible modlists: a `.pzpack` records each mod's `mod.info` version and the publish time of the copy the sender had, read from their own install rather than taken on trust, and the build they were on. Importing says which of your copies are older, newer or just differently versioned, and when the build differs. Older packs, which say none of this, still import | Wabbajack |
 | ⬜ | Public community rules repo + in-app rule editor | RimSort |
 
 ---
