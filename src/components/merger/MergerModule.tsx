@@ -326,7 +326,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         await TauriService.clearDraftResolutions(paths.user_zomboid_dir, selectedPackageFolder);
       }
       if (currentConflict) {
-        setEditorContent(currentConflict.base_content);
+        setEditorContent(unmergedContent(currentConflict));
         setIsManuallyEdited(false);
       }
       if (onRescan) await onRescan();
@@ -336,7 +336,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
   const handleUnmergeSingleConflict = async () => {
     if (!currentConflict || !paths.user_zomboid_dir || !selectedPackageFolder) return;
-    setEditorContent(currentConflict.base_content);
+    setEditorContent(unmergedContent(currentConflict));
     setIsManuallyEdited(false);
     await TauriService.saveDraftResolution(
       paths.user_zomboid_dir,
@@ -391,6 +391,21 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       (vanillaMissing ? c.competing_mods[c.competing_mods.length - 1]?.content ?? '' : c.base_content) ||
       ''
     );
+  };
+
+  /**
+   * What "unmerged" means for a file: the game's own copy, or -- where the base game has no such
+   * file -- the copy of the mod that loads last, which is what the game reads without a package.
+   * Never the scan's "not present" note.
+   */
+  const unmergedContent = (c: VfsConflict | undefined): string => {
+    if (!c) return '';
+    const vanillaMissing =
+      c.base_content.startsWith('-- vanilla file not present') ||
+      c.base_content.startsWith('-- vanilla file unreadable');
+    return vanillaMissing
+      ? c.competing_mods[c.competing_mods.length - 1]?.content ?? ''
+      : c.base_content;
   };
 
   const [editorContent, setEditorContent] = useState<string>(startingContent(currentConflict));
