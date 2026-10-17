@@ -275,6 +275,24 @@ pub fn polyfill_sections() -> Vec<PolyfillSection> {
     sections
 }
 
+/// `media/...` as the package stores it, so the same file written two ways compares equal.
+fn normalise_media_path(path: &str) -> String {
+    let p = path.replace('\\', "/");
+    let p = p.trim_start_matches("./").to_string();
+    if p.starts_with("media/") { p } else { format!("media/{}", p.trim_start_matches('/')) }
+}
+
+/// The files the package's last publish wrote, from the metadata it left behind. Without that
+/// metadata nothing is assumed, and nothing is deleted.
+fn previously_written(patch_mod_dir: &Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(patch_mod_dir.join("patch_metadata.json")) else {
+        return Vec::new();
+    };
+    serde_json::from_str::<MasterPatchMetadata>(&text)
+        .map(|meta| meta.merged_file_paths)
+        .unwrap_or_default()
+}
+
 /// Generates a synthetic master patch mod under Zomboid/mods/<package_folder_name> and updates ModListData.ini.
 pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     let pkg_name = req.package_folder_name
@@ -319,12 +337,33 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     
     let png_256 = get_preview_png_bytes();
 
+    // What this publish will contain, so what the last one left behind can be told apart from
+    // what somebody else put in the package.
+    let now_writing: std::collections::HashSet<String> =
+        req.merged_files.iter().map(|f| normalise_media_path(&f.relative_path)).collect();
+
     for patch_mod_dir in &target_dirs {
         fs::create_dir_all(patch_mod_dir).map_err(|e| e.to_string())?;
 
-        // Purge old media and 42 directories so obsolete/removed shims never linger on disk
-        let _ = fs::remove_dir_all(patch_mod_dir.join("media"));
-        let _ = fs::remove_dir_all(patch_mod_dir.join("42"));
+        // Only what a previous publish wrote and this one does not is removed.
+        //
+        // This used to delete `media/` and `42/` whole, which also deleted files the package held
+        // for other reasons -- a mod's own file patched by hand, for instance -- without a word.
+        // A merge of two unrelated files, run from Mod Health, silently took such a patch with it.
+        for old in previously_written(patch_mod_dir) {
+            if now_writing.contains(&normalise_media_path(&old)) {
+                continue;
+            }
+            for root in [patch_mod_dir.clone(), patch_mod_dir.join("42")] {
+                let victim = root.join(old.trim_start_matches("media/").trim_start_matches("media\\"));
+                let _ = fs::remove_file(root.join(&old));
+                let _ = fs::remove_file(victim);
+            }
+        }
+        // The shim is rewritten below; an older copy must not survive under another name.
+        for root in [patch_mod_dir.join("media"), patch_mod_dir.join("42").join("media")] {
+            let _ = fs::remove_file(root.join("lua").join("shared").join("Z_PZModStudio_Polyfills.lua"));
+        }
 
         // 1. Top level mod.info and media/
         fs::write(patch_mod_dir.join("mod.info"), &mod_info_content).map_err(|e| e.to_string())?;
@@ -1634,5 +1673,68 @@ mod live_mod_fix {
         println!("package: {}", result.patch_mod_dir);
         println!("files written: {}", result.files_written);
         println!("shim: {}", result.polyfill_shim_written);
+    }
+}
+
+#[cfg(test)]
+mod publish_keeps_files {
+    use super::*;
+
+    fn package_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pzms-publish-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("mods")).unwrap();
+        dir
+    }
+
+    fn publish(zomboid: &Path, files: Vec<(&str, &str)>) -> MasterPatchResult {
+        generate_master_patch(MasterPatchRequest {
+            workshop_dir: None,
+            pz_install_dir: None,
+            user_zomboid_dir: zomboid.to_string_lossy().to_string(),
+            mod_list_ini_path: zomboid.join("mods").join("default.txt").to_string_lossy().to_string(),
+            merged_files: files
+                .into_iter()
+                .map(|(path, content)| MergedFilePayload {
+                    relative_path: path.to_string(),
+                    content: content.to_string(),
+                })
+                .collect(),
+            package_folder_name: Some("Z_PZModStudio_Test".to_string()),
+        })
+        .expect("published")
+    }
+
+    #[test]
+    fn a_second_publish_keeps_what_it_did_not_write_and_drops_what_it_did() {
+        let zomboid = package_dir("keeps");
+        publish(&zomboid, vec![("media/lua/shared/a.lua", "-- first")]);
+        let pkg = zomboid.join("mods").join("Z_PZModStudio_Test");
+
+        // Something else put a file in the package: a mod's own file, patched by hand.
+        let byhand = pkg.join("media").join("lua").join("shared").join("byhand.lua");
+        fs::create_dir_all(byhand.parent().unwrap()).unwrap();
+        fs::write(&byhand, "-- patched by hand").unwrap();
+
+        // A later publish of a different file.
+        publish(&zomboid, vec![("media/lua/shared/b.lua", "-- second")]);
+
+        // What it wrote now is there, what it wrote before is gone, and the hand-made file stays.
+        assert!(pkg.join("media/lua/shared/b.lua").is_file());
+        assert!(!pkg.join("media/lua/shared/a.lua").exists(), "the old merge should go");
+        assert!(byhand.is_file(), "a file this publish did not write must survive");
+        assert_eq!(fs::read_to_string(&byhand).unwrap(), "-- patched by hand");
+
+        let _ = fs::remove_dir_all(&zomboid);
+    }
+
+    #[test]
+    fn re_publishing_the_same_file_replaces_it() {
+        let zomboid = package_dir("replaces");
+        publish(&zomboid, vec![("media/lua/shared/a.lua", "-- first")]);
+        publish(&zomboid, vec![("media/lua/shared/a.lua", "-- second")]);
+        let pkg = zomboid.join("mods").join("Z_PZModStudio_Test");
+        assert_eq!(fs::read_to_string(pkg.join("media/lua/shared/a.lua")).unwrap(), "-- second");
+        let _ = fs::remove_dir_all(&zomboid);
     }
 }
