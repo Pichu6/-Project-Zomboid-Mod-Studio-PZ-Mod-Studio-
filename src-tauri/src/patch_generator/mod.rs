@@ -1709,6 +1709,30 @@ mod shim_tests {
 
 #[cfg(test)]
 mod shim_listing {
+    /// The shim that ships has to parse: a stray `end` in two thousand lines of Lua would take
+    /// every package down with it, silently, at the game's boot.
+    #[test]
+    fn the_shim_is_valid_lua() {
+        let check = crate::diff_engine::lua::validate_lua_syntax(super::MASTER_POLYFILL_LUA);
+        assert!(check.is_valid, "{:?}", check.error_message);
+    }
+
+    /// Parts 5, 6 and 7 are the bridge, the vanilla guards and the per-mod patches; each has to
+    /// be there, head its own code, and part 7 has to switch every patch it holds.
+    #[test]
+    fn the_shim_has_its_three_late_parts() {
+        let sections = super::polyfill_sections();
+        let find = |n: &str| sections.iter().find(|s| s.number == n).unwrap_or_else(|| panic!("part {} missing", n));
+        assert!(find("5").title.contains("Build 41"), "{}", find("5").title);
+        assert!(find("6").title.contains("Vanilla"), "{}", find("6").title);
+        assert!(find("7").title.contains("Per-mod"), "{}", find("7").title);
+        for n in ["5", "6", "7"] {
+            assert!(find(n).lines > 100, "part {} has {} lines", n, find(n).lines);
+        }
+        let switched = super::MASTER_POLYFILL_LUA.matches("Poly.patchOn(").count();
+        assert!(switched >= 13, "{} per-mod blocks are switched", switched);
+    }
+
     /// Prints the list the Settings card now shows.
     /// cargo test what_the_shim_covers -- --ignored --nocapture
     #[test]
