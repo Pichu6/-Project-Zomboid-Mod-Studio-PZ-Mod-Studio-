@@ -1051,8 +1051,28 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                           )}
                         </div>
 
-                        {/* Package Description */}
-                        {pkg.description && (
+                        {/* What is actually in it. Every package the Studio makes carries the
+                            same canned description, so two of them side by side said nothing
+                            about which was which. */}
+                        {!pkg.is_companion_bridge && (
+                          <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words space-y-1">
+                            <div className="font-bold text-slate-200">
+                              {pkg.merged_files.length === 0
+                                ? 'Nothing in it yet'
+                                : `${pkg.merged_files.length} file${pkg.merged_files.length === 1 ? '' : 's'}`}
+                            </div>
+                            {pkg.merged_files.length > 0 && (
+                              <div className="text-[10px] font-mono text-slate-500 leading-snug">
+                                {pkg.merged_files
+                                  .slice(0, 3)
+                                  .map((f) => f.split('/').pop())
+                                  .join(', ')}
+                                {pkg.merged_files.length > 3 ? `, and ${pkg.merged_files.length - 3} more` : ''}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {pkg.is_companion_bridge && pkg.description && (
                           <p className="text-xs text-slate-300 leading-relaxed line-clamp-2 bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words">
                             {pkg.description}
                           </p>
