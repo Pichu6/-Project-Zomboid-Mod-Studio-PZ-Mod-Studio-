@@ -375,6 +375,116 @@ pub fn write_file_with_backup(path: &Path, content: &str, backup_dir: &Path) -> 
     Ok(true)
 }
 
+/// One earlier version of the mod list, as it sits in `Zomboid/PZModStudio_Backups`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModListVersion {
+    /// The backup file itself, which is what `restore_mod_list_version` is given.
+    pub file: String,
+    /// When it was replaced, read from the name the writer gave it: "2026-10-16 22:01:22".
+    pub saved_at: String,
+    pub active_count: usize,
+    /// Mods this version had switched on that the current list does not.
+    pub added: Vec<String>,
+    /// Mods the current list has switched on that this version did not.
+    pub removed: Vec<String>,
+}
+
+/// "default.txt.20261016-220122.349.bak" -> "2026-10-16 22:01:22".
+fn stamp_from_backup_name(name: &str) -> Option<String> {
+    let rest = name.strip_prefix("default.txt.")?.strip_suffix(".bak")?;
+    let (date, rest) = rest.split_once('-')?;
+    if date.len() != 8 || !date.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let time: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if time.len() < 6 {
+        return None;
+    }
+    Some(format!(
+        "{}-{}-{} {}:{}:{}",
+        &date[0..4],
+        &date[4..6],
+        &date[6..8],
+        &time[0..2],
+        &time[2..4],
+        &time[4..6],
+    ))
+}
+
+/// Every earlier version of the mod list the Studio kept, newest first, each next to what it
+/// would change about the list that is active now.
+///
+/// These are not a new feature's files: every write of `default.txt` has always copied the
+/// previous one aside (twenty are kept). Until now nothing could read them back, so a mod list
+/// taken apart by hand — or by a bisect, a profile switch, an import — was gone.
+pub fn list_mod_list_history(ini_path: &str, user_zomboid_dir: &str) -> Vec<ModListVersion> {
+    let default_txt_path = resolve_default_txt_path(ini_path);
+    let current: HashSet<String> = parse_default_txt(&default_txt_path).into_iter().collect();
+    let backups = Path::new(user_zomboid_dir).join("PZModStudio_Backups");
+
+    let mut versions: Vec<(String, ModListVersion)> = Vec::new();
+    let Ok(entries) = fs::read_dir(&backups) else { return Vec::new() };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(saved_at) = stamp_from_backup_name(&name) else { continue };
+        let active = parse_default_txt(&entry.path());
+        if active.is_empty() && !entry.path().is_file() {
+            continue;
+        }
+        let was: HashSet<String> = active.iter().cloned().collect();
+        versions.push((
+            name,
+            ModListVersion {
+                file: entry.path().to_string_lossy().to_string(),
+                saved_at,
+                active_count: active.len(),
+                added: active.iter().filter(|id| !current.contains(*id)).cloned().collect(),
+                removed: current.iter().filter(|id| !was.contains(*id)).cloned().collect(),
+            },
+        ));
+    }
+    // The names sort by time, which is what the writer's stamp is for.
+    versions.sort_by(|a, b| b.0.cmp(&a.0));
+    versions.into_iter().map(|(_, v)| v).collect()
+}
+
+/// Puts an earlier version back, and returns the mods it switches on.
+///
+/// The file has to be one of the Studio's own backups in this Zomboid folder — nothing else is
+/// read, whatever path is passed — and it is written through the same backed-up, atomic writer,
+/// so going back is itself a version you can go back from.
+pub fn restore_mod_list_version(
+    ini_path: &str,
+    user_zomboid_dir: &str,
+    backup_file: &str,
+) -> Result<Vec<String>, String> {
+    let backups = Path::new(user_zomboid_dir).join("PZModStudio_Backups");
+    let file = Path::new(backup_file);
+    let inside = file
+        .canonicalize()
+        .ok()
+        .zip(backups.canonicalize().ok())
+        .map(|(f, dir)| f.starts_with(&dir))
+        .unwrap_or(false);
+    let named_right = file
+        .file_name()
+        .and_then(|n| stamp_from_backup_name(&n.to_string_lossy()))
+        .is_some();
+    if !inside || !named_right {
+        return Err(format!(
+            "{} is not one of the mod list versions the Studio saved.",
+            backup_file
+        ));
+    }
+
+    let active = parse_default_txt(file);
+    if active.is_empty() {
+        return Err("That version has no mods switched on; it would empty your list.".to_string());
+    }
+    write_mod_list_ini(ini_path, &active)?;
+    Ok(active)
+}
+
 /// Writes the active mod list to `Zomboid/mods/default.txt`, the only global mod list file the
 /// game reads (ZomboidFileSystem / ActiveModsFile). The previous file is backed up to
 /// `Zomboid/PZModStudio_Backups/`. Save folders are not touched: the game rewrites each save's
@@ -453,6 +563,72 @@ mod tests {
     }
 
     #[test]
+    fn a_backup_name_gives_the_time_it_was_replaced() {
+        assert_eq!(
+            stamp_from_backup_name("default.txt.20261016-220122.349.bak").as_deref(),
+            Some("2026-10-16 22:01:22")
+        );
+        // Anything else is not one of ours.
+        assert!(stamp_from_backup_name("default.txt.bak").is_none());
+        assert!(stamp_from_backup_name("servertest.ini.20261016-220122.349.bak").is_none());
+        assert!(stamp_from_backup_name("default.txt.notadate-220122.bak").is_none());
+    }
+
+    #[test]
+    fn the_history_says_what_each_version_would_change_and_restores_one() {
+        let dir = std::env::temp_dir().join(format!("pzms-history-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("mods")).unwrap();
+        fs::create_dir_all(dir.join("PZModStudio_Backups")).unwrap();
+        let zomboid = dir.to_string_lossy().to_string();
+        let ini = dir.join("mods").join("default.txt").to_string_lossy().to_string();
+
+        // Now: A and B are on.
+        fs::write(&ini, build_default_txt(&["A".into(), "B".into()], &[])).unwrap();
+        // Then: A and C were on.
+        fs::write(
+            dir.join("PZModStudio_Backups").join("default.txt.20261016-100000.000.bak"),
+            build_default_txt(&["A".into(), "C".into()], &[]),
+        )
+        .unwrap();
+        // Earlier still: only A.
+        fs::write(
+            dir.join("PZModStudio_Backups").join("default.txt.20261015-090000.000.bak"),
+            build_default_txt(&["A".into()], &[]),
+        )
+        .unwrap();
+        // Something else's backup, which is none of this list's business.
+        fs::write(
+            dir.join("PZModStudio_Backups").join("servertest.ini.20261016-110000.000.bak"),
+            "Mods=X",
+        )
+        .unwrap();
+
+        let history = list_mod_list_history(&ini, &zomboid);
+        assert_eq!(history.len(), 2, "{:?}", history);
+        // Newest first.
+        assert_eq!(history[0].saved_at, "2026-10-16 10:00:00");
+        assert_eq!(history[0].active_count, 2);
+        assert_eq!(history[0].added, vec!["C".to_string()]);
+        assert_eq!(history[0].removed, vec!["B".to_string()]);
+        assert_eq!(history[1].added, Vec::<String>::new());
+
+        // Going back writes the list and keeps what was there as a version of its own.
+        let restored = restore_mod_list_version(&ini, &zomboid, &history[0].file).unwrap();
+        assert_eq!(restored, vec!["A", "C"]);
+        assert_eq!(parse_default_txt(Path::new(&ini)), vec!["A", "C"]);
+        assert_eq!(list_mod_list_history(&ini, &zomboid).len(), 3);
+
+        // Nothing outside the backups folder is read, whatever the path says.
+        let elsewhere = dir.join("default.txt.20261016-120000.000.bak");
+        fs::write(&elsewhere, build_default_txt(&["Z".into()], &[])).unwrap();
+        let err = restore_mod_list_version(&ini, &zomboid, &elsewhere.to_string_lossy()).unwrap_err();
+        assert!(err.contains("not one of the mod list versions"), "{}", err);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn write_mod_list_only_touches_default_txt() {
         let dir = temp_zomboid("writer");
         let save = dir.join("Saves").join("Sandbox").join("MySave");
@@ -480,5 +656,38 @@ mod tests {
         fs::write(dir.join("mods.txt"), "Stale\nList").unwrap();
         assert!(read_mod_list_ini(&ini_path.to_string_lossy()).unwrap().active_mods.is_empty());
         let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod live_history_tests {
+    use super::*;
+
+    /// Reads the real backups on this machine. Read-only: nothing is restored.
+    /// PZMS_ZOMBOID_DIR=... cargo test the_real_mod_list_history -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn the_real_mod_list_history() {
+        let Ok(zomboid) = std::env::var("PZMS_ZOMBOID_DIR") else { return };
+        let ini = format!("{}/mods/default.txt", zomboid);
+        let history = list_mod_list_history(&ini, &zomboid);
+        println!("{} earlier version(s) of the mod list:", history.len());
+        for v in &history {
+            println!(
+                "  {}  {} mods   +{} / -{}{}",
+                v.saved_at,
+                v.active_count,
+                v.added.len(),
+                v.removed.len(),
+                if v.added.is_empty() && v.removed.is_empty() { "   (same as now)" } else { "" }
+            );
+            if !v.added.is_empty() {
+                println!("      back on: {}", v.added.join(", "));
+            }
+            if !v.removed.is_empty() {
+                println!("      would switch off: {}", v.removed.join(", "));
+            }
+        }
+        assert!(!history.is_empty(), "this machine has saved lists; the history should find them");
     }
 }

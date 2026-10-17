@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -679,6 +679,21 @@ export const TauriService = {
       // Nothing is broken if this cannot be read; the rest of the health check stands on its own.
       return [];
     }
+  },
+
+  /** Every earlier version of the mod list the Studio kept, newest first. */
+  modListHistory: async (paths: StudioPathsUI): Promise<ModListVersion[]> => {
+    try {
+      return await invoke<ModListVersion[]>('mod_list_history_cmd', { paths });
+    } catch {
+      // No history is not an error: there may simply be no saved versions yet.
+      return [];
+    }
+  },
+
+  /** Puts one back and returns the mods it switches on. Throws with the reason. */
+  restoreModListVersion: async (paths: StudioPathsUI, backupFile: string): Promise<string[]> => {
+    return await invoke<string[]>('restore_mod_list_version_cmd', { paths, backupFile });
   },
 
   /** The hunt for a culprit mod that the player left running, if there is one. */

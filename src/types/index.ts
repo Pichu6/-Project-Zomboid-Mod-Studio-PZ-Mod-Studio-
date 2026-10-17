@@ -535,6 +535,17 @@ export interface SortResult {
   cycle: string[];
 }
 
+/** One earlier version of the mod list, kept in Zomboid/PZModStudio_Backups. */
+export interface ModListVersion {
+  file: string;
+  saved_at: string;
+  active_count: number;
+  /** Mods this version had on that the current list does not. */
+  added: string[];
+  /** Mods the current list has on that this version did not. */
+  removed: string[];
+}
+
 /** The three mod lines a dedicated server reads. */
 export interface ServerLines {
   mods: string[];

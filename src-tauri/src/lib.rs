@@ -297,6 +297,22 @@ fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog:
     catalog::script_definition_issues(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
 }
 
+/// Every earlier version of the mod list the Studio kept, newest first.
+#[tauri::command(async)]
+fn mod_list_history_cmd(paths: StudioPaths) -> Vec<load_order::ini_parser::ModListVersion> {
+    load_order::ini_parser::list_mod_list_history(&paths.mod_list_ini_path, &paths.user_zomboid_dir)
+}
+
+/// Puts one of them back, and says which mods it switches on.
+#[tauri::command(async)]
+fn restore_mod_list_version_cmd(paths: StudioPaths, backup_file: String) -> Result<Vec<String>, String> {
+    load_order::ini_parser::restore_mod_list_version(
+        &paths.mod_list_ini_path,
+        &paths.user_zomboid_dir,
+        &backup_file,
+    )
+}
+
 #[tauri::command(async)]
 fn bisect_state_cmd(paths: StudioPaths) -> Option<bisect::BisectSession> {
     bisect::load(&paths.user_zomboid_dir)
@@ -613,6 +629,8 @@ pub fn run() {
             steam_client_ready_cmd,
             launch_sandbox_cmd,
             script_conflicts_cmd,
+            mod_list_history_cmd,
+            restore_mod_list_version_cmd,
             bisect_state_cmd,
             bisect_start_cmd,
             bisect_answer_cmd,
