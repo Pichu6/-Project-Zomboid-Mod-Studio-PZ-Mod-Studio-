@@ -305,6 +305,20 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "get_error_report".to_string(),
+            description: "Everything needed to fix one error from the player's last session, as Markdown: the log line, the lines around it, the installed game build, the mod the game blamed (id, version, Workshop link, folder, requirements) and the source of the file that failed. Reads console.txt and the installed mods; changes nothing. Without arguments it reports the most recent error the game attributed to a mod, and lists the others. Use `index` to walk back through them, or `raw_error` to pick one by its log line.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "index": { "type": "integer", "description": "0 is the most recent attributed error, 1 the one before it, and so on" },
+                    "raw_error": { "type": "string", "description": "Report on the attributed error whose log line contains this text" },
+                    "user_zomboid_dir": { "type": "string" },
+                    "workshop_dir": { "type": "string" },
+                    "pz_install_dir": { "type": "string" }
+                }
+            }),
+        },
+        McpTool {
             name: "scan_mod_conflicts".to_string(),
             description: "Scans active mods for Virtual File System (VFS) conflicts where multiple mods overwrite the same Lua scripts or PZ data definitions.".to_string(),
             input_schema: json!({
@@ -463,6 +477,7 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "agent_enter_game" => handle_agent_enter_game(args),
         "get_monitor_logs" => handle_get_monitor_logs(args),
         "get_crash_diagnostics" => handle_get_crash_diagnostics(args),
+        "get_error_report" => handle_get_error_report(args),
         "list_installed_mods" => handle_list_installed_mods(args),
         "sort_mod_load_order" => handle_sort_mod_load_order(args),
         "scan_mod_conflicts" => handle_scan_mod_conflicts(args),
@@ -613,6 +628,109 @@ fn handle_get_monitor_logs(args: Value) -> ToolCallResult {
             }],
             is_error: true,
         },
+    }
+}
+
+/// One error, with everything around it, written for whoever has to fix it.
+fn handle_get_error_report(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let Some(console_path) = crate::load_order::mod_info::get_all_user_zomboid_dirs(&paths.user_zomboid_dir)
+        .into_iter()
+        .map(|d| d.join("console.txt"))
+        .find(|p| p.is_file())
+    else {
+        return error_result(
+            "No console.txt yet. Start Project Zomboid once; the game writes its log there.".to_string(),
+        );
+    };
+    let Ok(text) = std::fs::read_to_string(&console_path) else {
+        return error_result(format!("{} could not be read.", console_path.display()));
+    };
+
+    // The game names the mod itself, on the line or in its "overrides" lines at startup.
+    let lines: Vec<&str> = text.lines().collect();
+    let mut blame = crate::sandbox::ModBlame::default();
+    let mut attributed: Vec<(usize, String, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (i, line) in lines.iter().enumerate() {
+        blame.observe(line);
+        if !(line.starts_with("ERROR") || line.starts_with("WARN")) {
+            continue;
+        }
+        if let Some(name) = blame.of(line) {
+            let key = format!("{}|{}", name, line.chars().take(80).collect::<String>());
+            if seen.insert(key) {
+                attributed.push((i, (*line).to_string(), name));
+            }
+        }
+    }
+    if attributed.is_empty() {
+        return error_result(format!(
+            "No error in {} was attributed to a mod. The log may be from a clean session.",
+            console_path.display()
+        ));
+    }
+
+    // Newest first, which is what someone asking about "the error" means.
+    attributed.reverse();
+    let wanted = match args.get("raw_error").and_then(|v| v.as_str()) {
+        Some(needle) if !needle.trim().is_empty() => {
+            attributed.iter().position(|(_, line, _)| line.contains(needle.trim()))
+        }
+        _ => Some(args.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize),
+    };
+    let Some(pick) = wanted.filter(|i| *i < attributed.len()) else {
+        return error_result(format!(
+            "No attributed error matches that. There are {} to choose from (index 0 to {}).",
+            attributed.len(),
+            attributed.len() - 1
+        ));
+    };
+
+    let (at, line, mod_name) = attributed[pick].clone();
+    let from = at.saturating_sub(15);
+    let to = (at + 10).min(lines.len());
+    let request = crate::error_report::ErrorReportRequest {
+        raw_error: line.clone(),
+        title: format!("{} reported a problem", mod_name),
+        explanation: line.split_once('>').map(|(_, r)| r.trim().to_string()).unwrap_or_default(),
+        mod_name: Some(mod_name),
+        source_file: line
+            .split(")).")
+            .nth(1)
+            .and_then(|r| r.split('>').next())
+            .map(|f| f.trim().to_string())
+            .filter(|f| f.ends_with(".lua")),
+        log_context: lines[from..to].iter().map(|l| l.to_string()).collect(),
+    };
+
+    let mut report = match crate::error_report::build(&paths, &request) {
+        Ok(text) => text,
+        Err(e) => return error_result(e),
+    };
+
+    if attributed.len() > 1 {
+        report.push_str(&format!(
+            "\n## The other {} attributed error(s) in this log\n\nAsk for these with `index`:\n\n",
+            attributed.len() - 1
+        ));
+        for (i, (_, other_line, other_mod)) in attributed.iter().enumerate() {
+            if i == pick {
+                continue;
+            }
+            let detail = other_line.split_once('>').map(|(_, r)| r.trim()).unwrap_or(other_line);
+            report.push_str(&format!(
+                "- index {}: {} — {}\n",
+                i,
+                other_mod,
+                detail.chars().take(110).collect::<String>()
+            ));
+        }
+    }
+
+    ToolCallResult {
+        content: vec![ToolContent { content_type: "text".to_string(), text: report }],
+        is_error: false,
     }
 }
 
