@@ -288,14 +288,46 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
 pub struct ModBlame {
     /// media path (lowercased) -> the mod that overrides it, last one winning as the game loads.
     overrides: std::collections::HashMap<String, String>,
+    /// The last `Lua((MOD:X))` seen and how many lines ago, because the game prints the failing
+    /// stack frame first and the ERROR line after it:
+    ///
+    /// ```text
+    ///     Lua((MOD:Fancy Handwork B42.20)).FHhandleKeybinds(aFancyHandwork.lua:126)
+    /// ERROR: General f:240> 20)).FHhandleKeybinds> Exception thrown
+    /// ```
+    ///
+    /// The ERROR line names nobody -- the game even truncates the mod's name to "20))" -- so
+    /// read on its own it is one more anonymous Java exception, which is how 413 of them in one
+    /// session went unattributed.
+    recent: Option<(String, usize)>,
 }
 
+/// How many lines a mod's name carries forward. The frame and its error are next to each other;
+/// a wider window would start blaming whoever happened to be mentioned earlier.
+const BLAME_WINDOW: usize = 3;
+
 impl ModBlame {
-    /// Reads `mod "X" overrides <path>` lines as they go by.
+    /// Reads `mod "X" overrides <path>` lines as they go by, and remembers a mod named in a
+    /// stack frame for the few lines that follow it.
     pub fn observe(&mut self, line: &str) {
+        self.recent = match self.recent.take() {
+            Some((name, age)) if age + 1 < BLAME_WINDOW => Some((name, age + 1)),
+            _ => None,
+        };
+        if let Some(name) = Self::named_in(line) {
+            self.recent = Some((name, 0));
+        }
         let Some(rest) = line.split("> mod \"").nth(1) else { return };
         let Some((mod_name, tail)) = rest.split_once("\" overrides ") else { return };
         self.overrides.insert(tail.trim().to_lowercase(), mod_name.to_string());
+    }
+
+    /// The mod a line names itself, in `Lua((MOD:X))`.
+    fn named_in(line: &str) -> Option<String> {
+        let rest = line.split("(MOD:").nth(1)?;
+        let (name, _) = rest.split_once(')')?;
+        let name = name.trim();
+        (!name.is_empty()).then(|| name.to_string())
     }
 
     /// The mod this line is about, if the game said.
@@ -310,13 +342,19 @@ impl ModBlame {
         }
         // Otherwise: a media path in the line, if some mod replaced that file.
         let lower = line.to_lowercase();
-        let start = lower.find("media/").or_else(|| lower.find("media\\"))?;
-        let path: String = lower[start..]
-            .chars()
-            .take_while(|c| !c.is_whitespace() && *c != '"' && *c != ')' && *c != '\'')
-            .collect();
-        let path = path.replace('\\', "/");
-        self.overrides.get(path.trim_end_matches(|c| c == ',' || c == '.')).cloned()
+        if let Some(start) = lower.find("media/").or_else(|| lower.find("media\\")) {
+            let path: String = lower[start..]
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != '"' && *c != ')' && *c != '\'')
+                .collect();
+            let path = path.replace('\\', "/");
+            if let Some(owner) = self.overrides.get(path.trim_end_matches(|c| c == ',' || c == '.')) {
+                return Some(owner.clone());
+            }
+        }
+        // Failing both: the mod named a line or two above, which for a Java exception is the
+        // Lua frame that threw it.
+        self.recent.as_ref().map(|(name, _)| name.clone())
     }
 }
 
@@ -952,5 +990,38 @@ mod live_card_tests {
             println!("          from: {}", example.1.trim().chars().take(100).collect::<String>());
         }
         println!("cards made from lines the game did not mark as trouble: {}", from_log_lines);
+    }
+}
+
+#[cfg(test)]
+mod blame_window_tests {
+    use super::ModBlame;
+
+    #[test]
+    fn a_java_exception_is_blamed_on_the_lua_frame_just_above_it() {
+        let mut blame = ModBlame::default();
+        // Exactly as the game writes it.
+        let lines = [
+            "\tLua((MOD:Fancy Handwork B42.20)).FHhandleKeybinds(aFancyHandwork.lua:126)",
+            "ERROR: General      f:240> 20)).FHhandleKeybinds> Exception thrown",
+            "\tjava.lang.NullPointerException: Cannot invoke \"zombie.input.KeybindId.getId()\"",
+        ];
+        let mut blamed = Vec::new();
+        for line in lines {
+            blame.observe(line);
+            blamed.push(blame.of(line));
+        }
+        assert_eq!(blamed[1].as_deref(), Some("Fancy Handwork B42.20"));
+        assert_eq!(blamed[2].as_deref(), Some("Fancy Handwork B42.20"));
+    }
+
+    #[test]
+    fn a_name_does_not_carry_across_the_whole_log() {
+        let mut blame = ModBlame::default();
+        blame.observe("\tLua((MOD:Some Mod)).thing(file.lua:1)");
+        for _ in 0..5 {
+            blame.observe("LOG  : General      f:0> something else entirely");
+        }
+        assert_eq!(blame.of("ERROR: General      f:9> Exception thrown"), None);
     }
 }
