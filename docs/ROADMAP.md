@@ -68,7 +68,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | | Item | Notes |
 |---|---|---|
 | ✅ | **Steam Workshop** metadata (title, B41/B42 tags, last update, size, preview): Browse Mods > Steam Workshop shows your subscriptions with live details | `ISteamRemoteStorage/GetPublishedFileDetails`, no API key |
-| 🔨 | Import a Workshop collection (URL) into a profile. Done: paste a collection link to see its items, which are installed and which are missing, and open it in Steam to subscribe. Next: turn it into a profile | `GetCollectionDetails`, no key |
+| ✅ | Import a Workshop collection (URL or browsed) into a profile: paste or open a collection to see its items and which you have, subscribe to the missing ones, then "Make a profile from this" — the mods you have installed from it, in your list's order, as a profile to switch to. Items you are not subscribed to are counted and left out rather than silently dropped | `GetCollectionDetails`, no key |
 | ✅ | In-app Workshop search (text, trending, most subscribed, updated, newest, top rated; Build 41/42 filter) with the user's own Steam Web API key, verified and kept in Windows Credential Manager |
 | ✅ | Subscribe / unsubscribe, for a mod or every mod a collection is missing | ISteamUGC through the game's own `steam_api64.dll` and the running Steam client. No API key, no login, nothing bundled |
 | ✅ | **Nexus Mods** browse and search (Browse Mods tab: search, sort, build hint, open page / Files tab) | GraphQL v2 `api.nexusmods.com/v2/graphql` works without a key (verified for game domain `projectzomboid`, id 583) |

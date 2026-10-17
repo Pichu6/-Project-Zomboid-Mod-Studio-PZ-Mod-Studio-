@@ -176,6 +176,45 @@ export const App: React.FC = () => {
     }
   };
 
+  /**
+   * Turns a Workshop collection into a profile: the mods you have installed from its items, kept
+   * in the order your list already has them, so switching to the profile is one click. Items you
+   * are not subscribed to cannot go in — there is nothing on disk to switch on — so they are
+   * counted and named instead, and the collection's own Subscribe button is the way to get them.
+   */
+  const handleMakeProfileFromCollection = async (name: string, workshopIds: string[]) => {
+    const wanted = new Set(workshopIds);
+    const included = mods.filter((m) => m.workshop_id && wanted.has(m.workshop_id));
+    const haveItem = new Set(included.map((m) => m.workshop_id as string));
+    const missing = workshopIds.filter((id) => !haveItem.has(id));
+
+    if (included.length === 0) {
+      alert(
+        `None of the ${workshopIds.length} mods in "${name}" are installed yet.\n\n` +
+          `Subscribe to them first (the button above), let Steam download them, then make the profile.`
+      );
+      return;
+    }
+    const ok = confirm(
+      `Make a profile "${name}" with ${included.length} mod${included.length === 1 ? '' : 's'}?` +
+        (missing.length > 0
+          ? `\n\n${missing.length} of the collection's mods are not installed, so they are left out. ` +
+            `Subscribe to them and make the profile again to include them.`
+          : '') +
+        `\n\nYour current list is not touched: a profile is switched to when you want it.`
+    );
+    if (!ok) return;
+
+    try {
+      const ids = included.map((m) => m.mod_id);
+      await TauriService.createInstance(paths.user_zomboid_dir, name, `From the Steam collection`, ids, ids);
+      await refreshActiveProfile();
+      setActiveTab('PROFILES');
+    } catch (err) {
+      reportBackendError('Making the profile', err);
+    }
+  };
+
   // Auto-refresh mod list when switching to MOD_LIST tab to reflect external additions/unsubscriptions
   useEffect(() => {
     if (activeTab === 'MOD_LIST' && paths.is_valid) {
@@ -550,6 +589,7 @@ export const App: React.FC = () => {
               onInstalled={handleRefreshMods}
               focusWorkshopId={browseFocusWorkshopId}
               onFocusHandled={() => setBrowseFocusWorkshopId(null)}
+              onMakeProfile={handleMakeProfileFromCollection}
             />
           )}
 

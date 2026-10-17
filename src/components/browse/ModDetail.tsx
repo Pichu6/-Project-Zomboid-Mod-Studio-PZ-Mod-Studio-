@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Download, ExternalLink, FileArchive, Heart, Loader2, Play, Plus, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Check, Download, ExternalLink, FileArchive, Heart, Layers, Loader2, Play, Plus, Trash2, Users, X } from 'lucide-react';
 import { NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, WorkshopItemDetails, WorkshopLookup } from '../../types';
 import { TauriService, reportBackendError } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -28,6 +28,8 @@ interface ModDetailProps {
   /** Nexus mod id -> installed mod ids. */
   installedByNexusId: Map<number, string[]>;
   onNexusDownload: (m: NexusMod) => void;
+  /** Makes a profile holding the mods installed from a collection's items. */
+  onMakeProfile?: (name: string, workshopIds: string[]) => void;
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -330,7 +332,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
 };
 
 /** A Workshop collection: what it holds and what you are missing. */
-const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
+const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, onMakeProfile }) => {
   // The browse list already told us which mods the collection holds, so ask Steam once.
   const known = target.preview?.children ?? [];
   const { data, loading } = useDetails<WorkshopLookup>(
@@ -394,6 +396,15 @@ const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection'
           )}
           {items.length > 0 && missing.length === 0 && (
             <SubscribeButton ids={items.map((i) => i.workshop_id)} installed steamReady={steamReady} onSubscribe={onSubscribe} allLabel="all" />
+          )}
+          {onMakeProfile && items.length > 0 && (
+            <ActionButton
+              onClick={() => onMakeProfile(info?.title ?? `Collection ${target.id}`, items.map((i) => i.workshop_id))}
+              className="bg-violet-800 hover:bg-violet-700 text-white"
+              title="Makes a profile with the mods of this collection you have installed, so you can switch your whole list to it"
+            >
+              <Layers className="w-3.5 h-3.5" aria-hidden="true" /> Make a profile from this
+            </ActionButton>
           )}
           <ActionButton onClick={() => TauriService.openExternalUrl(pageUrl)} className="bg-sky-700 hover:bg-sky-600 text-white"
             title="Opens the collection page in your browser, where Subscribe to all is">

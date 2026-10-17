@@ -357,7 +357,13 @@ pub struct BrowseQuery {
 /// Searches the Workshop through its public browse page, which embeds the same item data the
 /// Web API returns. No Steam Web API key needed.
 pub fn search_public(q: &BrowseQuery) -> Result<WorkshopSearchResult, String> {
-    let sort = q.sort.unwrap_or(WorkshopSort::Trending);
+    let mut sort = q.sort.unwrap_or(WorkshopSort::Trending);
+    // Steam answers "most subscribed" with nothing at all when asked for collections (checked
+    // against the live site: every other order returns them). Top rated is the nearest thing it
+    // will answer, and an order the caller did not expect beats an empty page.
+    if q.collections && sort == WorkshopSort::MostSubscribed {
+        sort = WorkshopSort::TopRated;
+    }
     let page = q.page.max(1);
     let per_page = if q.per_page == 0 { 30 } else { q.per_page.clamp(1, 30) };
     let mut req = agent()
@@ -793,5 +799,71 @@ mod tests {
         assert!(r.collection.is_none());
         println!("{:?}", r.items.iter().map(|i| (&i.title, &i.builds)).collect::<Vec<_>>());
         assert_eq!(r.items[0].title, "Rebalanced Prop Moving");
+    }
+}
+
+#[cfg(test)]
+mod live_collection_tests {
+    use super::*;
+
+    /// Browses real collections and reads one, which is what "Make a profile from this" needs.
+    /// PZMS_WORKSHOP_DIR=... cargo test a_real_collection_lists_its_mods -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn a_real_collection_lists_its_mods() {
+        let q = BrowseQuery {
+            text: None,
+            sort: Some(WorkshopSort::MostSubscribed),
+            build: None,
+            category: None,
+            days: None,
+            collections: true,
+            page: 1,
+            per_page: 30,
+        };
+        let found = match search_public(&q) {
+            Ok(r) => r,
+            Err(e) => {
+                println!("browsing collections failed: {}", e);
+                return;
+            }
+        };
+        println!("{} collections, page 1 has {}", found.total, found.items.len());
+        let Some(first) = found.items.iter().find(|i| !i.children.is_empty()) else {
+            println!("no collection on this page carries its children");
+            return;
+        };
+        println!("\"{}\" ({}) holds {} items", first.title, first.workshop_id, first.children.len());
+
+        let read = lookup(&page_url(&first.workshop_id)).expect("the collection reads");
+        println!("read back: {} items", read.items.len());
+        assert_eq!(read.items.len(), first.children.len());
+
+        if let Ok(dir) = std::env::var("PZMS_WORKSHOP_DIR") {
+            let installed: std::collections::HashSet<String> = std::fs::read_dir(&dir)
+                .map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect())
+                .unwrap_or_default();
+            let have = read.items.iter().filter(|i| installed.contains(&i.workshop_id)).count();
+            println!("installed here: {}, left out of a profile: {}", have, read.items.len() - have);
+
+            // What the profile dialog would say for each collection on this page.
+            let mut best = (0usize, String::new(), 0usize);
+            for c in &found.items {
+                let mine = c.children.iter().filter(|id| installed.contains(*id)).count();
+                if mine > best.0 {
+                    best = (mine, c.title.clone(), c.children.len());
+                }
+            }
+            if best.0 > 0 {
+                println!(
+                    "best overlap on this page: \"{}\" would make a profile of {} mod(s), leaving out {}",
+                    best.1,
+                    best.0,
+                    best.2 - best.0
+                );
+            } else {
+                println!("none of this page's collections overlaps what is installed here");
+            }
+        }
     }
 }
