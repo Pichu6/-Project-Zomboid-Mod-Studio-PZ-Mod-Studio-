@@ -95,6 +95,38 @@ pub fn files_requiring(
         .collect())
 }
 
+/// A file of some active mod that asks for a module.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskingFile {
+    pub mod_id: String,
+    pub mod_name: String,
+    pub file: ModFile,
+}
+
+/// Every file of every active mod that asks for one module.
+///
+/// The game's `KahluaThread.call > require("X") failed` names no file and no mod; the Studio
+/// guesses the mod from the lines just above, and the guess is wrong when files of two mods
+/// load one after the other. The module is what the line says for certain, so that is what is
+/// searched for, across the whole active list. Studio packages are skipped: their copies are
+/// the player's, and a fix goes into the mod's file.
+pub fn files_requiring_in_active_mods(
+    catalog: &crate::catalog::ModCatalog,
+    active_ids: &std::collections::HashSet<String>,
+    module: &str,
+) -> Vec<AskingFile> {
+    let mut found = Vec::new();
+    for m in catalog.mods.iter().filter(|m| m.shadowed_by.is_none()) {
+        if m.id.starts_with("Z_PZModStudio_") || !active_ids.contains(&m.id) {
+            continue;
+        }
+        for file in files_requiring(catalog, &m.id, module).unwrap_or_default() {
+            found.push(AskingFile { mod_id: m.id.clone(), mod_name: m.name.clone(), file });
+        }
+    }
+    found
+}
+
 /// Whether Lua source has a `require` of exactly this module, in any of the game's spellings.
 pub fn asks_for(lua: &str, module: &str) -> bool {
     lua.match_indices("require").any(|(at, _)| {

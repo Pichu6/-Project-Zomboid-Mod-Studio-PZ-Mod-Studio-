@@ -952,6 +952,33 @@ export const TauriService = {
     return await invoke<ModFile[]>('mod_files_requiring_cmd', { paths, modId, module });
   },
 
+  /** Every file of every active mod that `require`s this module; the log does not always say which. */
+  activeModsFilesRequiring: async (
+    paths: StudioPathsUI,
+    module: string
+  ): Promise<Array<{ mod_id: string; mod_name: string; file: ModFile }>> => {
+    return await invoke('active_mods_files_requiring_cmd', { paths, module });
+  },
+
+  /** One file out of a package, published in place: the game reads the mod's own copy again. */
+  removeFileFromPackage: async (
+    paths: StudioPathsUI,
+    packageFolderName: string,
+    file: string
+  ): Promise<MasterPatchResultUI> => {
+    try {
+      return await invoke<MasterPatchResultUI>('remove_file_from_package_cmd', {
+        userZomboidDir: paths.user_zomboid_dir,
+        modListIniPath: paths.mod_list_ini_path,
+        packageFolderName,
+        file,
+      });
+    } catch (err) {
+      reportBackendError('Removing the file from the package', err);
+      throw err;
+    }
+  },
+
   /** Opens one mod's file as something the Merger can edit and save into the package. */
   modFileToPatch: async (paths: StudioPathsUI, modId: string, relativePath: string): Promise<VfsConflict> => {
     const raw = await invoke<any>('mod_file_to_patch_cmd', { paths, modId, relativePath });

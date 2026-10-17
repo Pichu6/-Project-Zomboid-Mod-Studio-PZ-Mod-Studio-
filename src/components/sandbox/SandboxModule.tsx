@@ -431,17 +431,18 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   const [fixNotes, setFixNotes] = useState<Record<string, string>>({});
   const [fixing, setFixing] = useState<string | null>(null);
   const [fixedBanner, setFixedBanner] = useState<string | null>(null);
-  const handleFixPath = async (card: TranslatedErrorCard, modId: string, fix: { from: string; to: string }) => {
+  const handleFixPath = async (card: TranslatedErrorCard, fix: { from: string; to: string }) => {
     setFixing(card.id);
     try {
-      // The files that ask for the module. The log names the file on some lines and on others
-      // (`KahluaThread.call > require(...)`) nobody, so the mod is searched either way: a fix
-      // the log names one file for may be needed in two.
-      const files = await TauriService.modFilesRequiring(paths, modId, fix.from);
-      if (files.length === 0) {
+      // The files that ask for the module, in every active mod. The log names the file on some
+      // lines and on others (`KahluaThread.call > require(...)`) nobody -- and then the mod the
+      // card names is a guess from the lines above, which is wrong when two mods' files load one
+      // after the other. The module is the one thing the line says for certain.
+      const asking = await TauriService.activeModsFilesRequiring(paths, fix.from);
+      if (asking.length === 0) {
         setFixNotes((prev) => ({
           ...prev,
-          [card.id]: `No file of this mod asks for ${fix.from} in a way the Studio can rewrite, so there is nothing to change here.`,
+          [card.id]: `No file of any active mod asks for ${fix.from} in a way the Studio can rewrite, so there is nothing to change.`,
         }));
         return;
       }
@@ -449,12 +450,12 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       const folder = packageForPatch(packages);
       const display = packages.find((p) => p.folder_name === folder)?.display_name ?? folder;
       const done: string[] = [];
-      for (const file of files) {
-        const opened = await TauriService.modFileToPatch(paths, modId, file.relative_path);
+      for (const { mod_id, mod_name, file } of asking) {
+        const opened = await TauriService.modFileToPatch(paths, mod_id, file.relative_path);
         const fixed = applyRequireFix(opened.merged_output || opened.base_content, fix);
         if (!fixed) continue;
         await TauriService.publishFileIntoPackage(paths, folder, opened.relative_path, fixed.content);
-        done.push(`${file.relative_path.split('/').pop()} (line ${fixed.line})`);
+        done.push(`${file.relative_path.split('/').pop()} of ${mod_name} (line ${fixed.line})`);
       }
       if (done.length === 0) {
         setFixNotes((prev) => ({ ...prev, [card.id]: `Nothing to rewrite for ${fix.from}.` }));
@@ -463,6 +464,38 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       // Done: the card goes, and one line above the list says what happened and what is left.
       setFixedBanner(
         `${done.join(', ')} now ${done.length === 1 ? 'asks' : 'ask'} for ${fix.to}, published in ${display}. Relaunch the game; this warning should not come back.`
+      );
+      onDismissErrorCard?.(card.id);
+      onRefreshMods();
+    } catch (err) {
+      setFixNotes((prev) => ({ ...prev, [card.id]: explainError(err) }));
+    } finally {
+      setFixing(null);
+    }
+  };
+
+  /**
+   * Takes the package's copy of a mod file out, from the card. A copy that changed nothing only
+   * freezes the file and gets the package blamed for the mod's own lines; a copy that did change
+   * something is the player's, so they are asked first.
+   */
+  const handleRemoveCopy = async (card: TranslatedErrorCard) => {
+    const file = fileNamed(card);
+    const display = (card.mod_name ?? '').slice(STUDIO_PACKAGE_PREFIX.length);
+    if (!file || !display) return;
+    if (
+      !window.confirm(
+        `Take ${file} out of ${display}?\n\nThe package is published again without it, and the game reads the mod's own ${file} on its next launch. If you edited the copy, those edits go.`
+      )
+    )
+      return;
+    setFixing(card.id);
+    try {
+      const packages = await TauriService.listMergedPackages(paths.user_zomboid_dir || '', paths.mod_list_ini_path || '');
+      const folder = packages.find((p) => p.display_name === display)?.folder_name ?? `Z_PZModStudio_${display.replace(/ /g, '_')}`;
+      const result = await TauriService.removeFileFromPackage(paths, folder, file);
+      setFixedBanner(
+        `${file} is out of ${display} (${result.files_written} files left). Relaunch the game; it reads the mod's own copy again, and if the mod's line still warns, the card names the mod.`
       );
       onDismissErrorCard?.(card.id);
       onRefreshMods();
@@ -1066,16 +1099,20 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                             {card.mod_name ?? modFromStack(card)}
                           </span>
                           {(card.mod_name ?? '').startsWith(STUDIO_PACKAGE_PREFIX) ? (
-                            /* The package's patched copy of a mod file: the Merger is where it lives. */
-                            <button
-                              type="button"
-                              onClick={onOpenMerger}
-                              className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1"
-                              title="This line comes from the package's copy of the file. Open the Merger to change the patch or unmerge it."
-                            >
-                              <Wrench className="w-3 h-3" aria-hidden="true" />
-                              Open in the Merger
-                            </button>
+                            /* The package's patched copy of a mod file. Taking it out is done from
+                               here; the game then reads the mod's own file again. */
+                            fileNamed(card) && (
+                              <button
+                                type="button"
+                                onClick={() => void handleRemoveCopy(card)}
+                                disabled={fixing === card.id}
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                                title={`Take ${fileNamed(card)} out of ${card.mod_name!.slice(STUDIO_PACKAGE_PREFIX.length)}, published in place. The game reads the mod's own copy again on its next launch. Any edit you made to the copy goes with it.`}
+                              >
+                                <Wrench className="w-3 h-3" aria-hidden="true" />
+                                {fixing === card.id ? 'Removing…' : `Remove the copy of ${fileNamed(card)}`}
+                              </button>
+                            )
                           ) : onPatchMod &&
                             modIdNamed(card.mod_name ?? modFromStack(card)) &&
                             /* A warning the Studio has no fix for gets no button: pressing one
@@ -1088,7 +1125,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                                 const fix = knownFix(card);
                                 // A known fix is done from here, whether or not the log named the
                                 // file; only an exception with no known fix goes to the Merger.
-                                if (fix) void handleFixPath(card, modId, fix);
+                                if (fix) void handleFixPath(card, fix);
                                 else onPatchMod(modId, fileNamed(card), null);
                               }}
                               disabled={fixing === card.id}

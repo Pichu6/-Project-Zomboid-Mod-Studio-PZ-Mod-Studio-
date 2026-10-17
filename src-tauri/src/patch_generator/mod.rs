@@ -513,6 +513,50 @@ pub fn publish_file_into_package(
     })
 }
 
+/// Takes one file out of a package, published in place: its draft goes, everything else the
+/// package holds is published again without it, and the game reads the mod's own copy of that
+/// file on its next launch. `file` is the path in the package, or just the file's name.
+pub fn remove_file_from_package(
+    user_zomboid_dir: &str,
+    mod_list_ini_path: &str,
+    package_folder_name: &str,
+    file: &str,
+) -> Result<MasterPatchResult, String> {
+    let package = to_package_folder(package_folder_name)?;
+    let wanted = file.replace('\\', "/");
+    let mut drafts = get_draft_resolutions(user_zomboid_dir, &package);
+    let Some(path) = drafts
+        .keys()
+        .find(|k| **k == wanted || k.ends_with(&format!("/{}", wanted)))
+        .cloned()
+    else {
+        return Err(format!("{} holds no copy of {}.", package, file));
+    };
+    drafts.remove(&path);
+
+    let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir);
+    let Some(user_dir) = user_dirs.first() else {
+        return Err("No valid Zomboid user directories found.".to_string());
+    };
+    let draft_file = user_dir.join("mods").join(&package).join("draft_resolutions.json");
+    let json = serde_json::to_string_pretty(&drafts).map_err(|e| e.to_string())?;
+    fs::write(&draft_file, json).map_err(|e| e.to_string())?;
+
+    let merged_files = drafts
+        .into_values()
+        .filter(|d| d.status == "RESOLVED")
+        .map(|d| MergedFilePayload { relative_path: d.relative_path, content: d.resolved_content })
+        .collect();
+    generate_master_patch(MasterPatchRequest {
+        workshop_dir: None,
+        pz_install_dir: None,
+        user_zomboid_dir: user_zomboid_dir.to_string(),
+        mod_list_ini_path: mod_list_ini_path.to_string(),
+        merged_files,
+        package_folder_name: Some(package),
+    })
+}
+
 /// Safely removes synthetic patch files for a specific package from disk and removes it from active load order.
 pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
     let target_folder_name = to_package_folder(
@@ -1790,6 +1834,35 @@ mod publish_keeps_files {
         }
         let drafts = get_draft_resolutions(&zomboid.to_string_lossy(), "Z_PZModStudio_Test");
         assert_eq!(drafts.len(), 3);
+        let _ = fs::remove_dir_all(&zomboid);
+    }
+
+    /// Taking one file out by its bare name leaves the others published and the draft gone.
+    #[test]
+    fn one_file_leaves_and_the_others_stay() {
+        let zomboid = package_dir("leaves");
+        let ini = zomboid.join("mods").join("default.txt");
+        fs::write(&ini, "VERSION = 1,\n\nmods\n{\n    mod = A,\n}\n").unwrap();
+        publish(&zomboid, vec![("media/lua/shared/a.lua", "a"), ("media/lua/client/x/b.lua", "b")]);
+
+        let result = remove_file_from_package(
+            &zomboid.to_string_lossy(),
+            &ini.to_string_lossy(),
+            "Z_PZModStudio_Test",
+            "b.lua",
+        )
+        .expect("published without it");
+        assert_eq!(result.files_written, 1);
+
+        let pkg = zomboid.join("mods").join("Z_PZModStudio_Test");
+        assert!(pkg.join("42").join("media").join("lua").join("shared").join("a.lua").is_file());
+        assert!(!pkg.join("42").join("media").join("lua").join("client").join("x").join("b.lua").exists());
+        assert!(!pkg.join("media").join("lua").join("client").join("x").join("b.lua").exists());
+        let drafts = get_draft_resolutions(&zomboid.to_string_lossy(), "Z_PZModStudio_Test");
+        assert_eq!(drafts.len(), 1);
+        assert!(drafts.contains_key("media/lua/shared/a.lua"));
+
+        assert!(remove_file_from_package(&zomboid.to_string_lossy(), &ini.to_string_lossy(), "Z_PZModStudio_Test", "nope.lua").is_err());
         let _ = fs::remove_dir_all(&zomboid);
     }
 

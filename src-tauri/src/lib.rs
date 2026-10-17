@@ -332,6 +332,25 @@ fn mod_files_requiring_cmd(paths: StudioPaths, mod_id: String, module: String) -
     vfs::mod_patch::files_requiring(&catalog, &mod_id, &module)
 }
 
+/// Every file of every active mod that `require`s this module: the log does not always say which.
+#[tauri::command(async)]
+fn active_mods_files_requiring_cmd(paths: StudioPaths, module: String) -> Vec<vfs::mod_patch::AskingFile> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let active = patch_generator::get_active_mod_ids_from_disk(&paths.user_zomboid_dir, &paths.mod_list_ini_path);
+    vfs::mod_patch::files_requiring_in_active_mods(&catalog, &active, &module)
+}
+
+/// One file out of a package, published in place: the game reads the mod's own copy again.
+#[tauri::command(async)]
+fn remove_file_from_package_cmd(
+    user_zomboid_dir: String,
+    mod_list_ini_path: String,
+    package_folder_name: String,
+    file: String,
+) -> Result<MasterPatchResult, String> {
+    patch_generator::remove_file_from_package(&user_zomboid_dir, &mod_list_ini_path, &package_folder_name, &file)
+}
+
 /// One mod's file, in the shape the Merger edits and saves into the package.
 #[tauri::command(async)]
 fn mod_file_to_patch_cmd(
@@ -737,6 +756,8 @@ pub fn run() {
             resolve_failed_requires_cmd,
             mod_files_cmd,
             mod_files_requiring_cmd,
+            active_mods_files_requiring_cmd,
+            remove_file_from_package_cmd,
             mod_file_to_patch_cmd,
             sandbox_presets_cmd,
             write_sandbox_preset_cmd,
