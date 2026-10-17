@@ -363,12 +363,39 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       load_order: mods.filter((m) => m.enabled).map((m) => m.mod_id),
     };
 
+    // The same list under different sandbox settings is a different game, so they can travel
+    // with it. Asked for before the save dialog, and only when there is something to offer.
+    let sandboxName: string | null = null;
+    const mine = await TauriService.sandboxPresets(paths.user_zomboid_dir);
+    if (mine.length === 1) {
+      const only = mine[0];
+      if (
+        confirm(
+          `Include your sandbox settings "${only.name}" (${only.settings} settings, ` +
+            `${only.mod_settings} of them from mods)?\n\nWhoever opens the pack can save them as a preset ` +
+            `and pick them when starting a game.`
+        )
+      ) {
+        sandboxName = only.name;
+      }
+    } else if (mine.length > 1) {
+      const answer = prompt(
+        `Include sandbox settings in the pack? Type the name, or leave it empty for none.\n\n` +
+          mine.map((p) => `- ${p.name} (${p.settings} settings, ${p.mod_settings} from mods)`).join('\n')
+      );
+      const match = mine.find((p) => p.name.toLowerCase() === (answer ?? '').trim().toLowerCase());
+      if (answer && answer.trim() && !match) {
+        alert(`There is no sandbox preset called "${answer.trim()}". The pack will have no settings in it.`);
+      }
+      sandboxName = match?.name ?? null;
+    }
+
     setIsExportingPreset(true);
     try {
       const defaultFileName = `${presetToExport.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pzpack`;
       const filePath = await TauriService.pickSaveFile(defaultFileName, 'PZ Mod Studio Preset (.pzpack)', 'pzpack');
       if (filePath) {
-        await TauriService.exportPresetFile(paths, presetToExport, filePath);
+        await TauriService.exportPresetFile(paths, presetToExport, filePath, sandboxName);
         setSaveToast(`✨ Collection exported to: ${filePath}`);
         setTimeout(() => setSaveToast(null), 4000);
       }
@@ -2473,6 +2500,34 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       <div className="font-bold">All mods in the collection are installed!</div>
                       <div className="text-[11px] text-slate-300">You can apply the order and activation immediately.</div>
                     </div>
+                  </div>
+                )}
+
+                {/* Settings that came with the pack: saved only if the player wants them. */}
+                {importedPreset?.sandbox && (
+                  <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
+                    <div className="text-[11px] text-slate-200">
+                      This pack also carries the sandbox settings{' '}
+                      <b className="text-slate-100">{importedPreset.sandbox.name}</b> —{' '}
+                      {importedPreset.sandbox.settings} settings,{' '}
+                      {importedPreset.sandbox.mod_settings} of them from mods.
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!importedPreset?.sandbox) return;
+                        try {
+                          const name = await TauriService.writeSandboxPreset(paths.user_zomboid_dir, importedPreset.sandbox);
+                          setSaveToast(`Saved as the sandbox preset "${name}". Pick it when you start a game.`);
+                          setTimeout(() => setSaveToast(null), 5000);
+                        } catch (err) {
+                          alert(explainError(err));
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 cursor-pointer transition"
+                      title="Writes them into Zomboid/Sandbox Presets without touching any preset of your own"
+                    >
+                      Save these settings as a preset
+                    </button>
                   </div>
                 )}
 

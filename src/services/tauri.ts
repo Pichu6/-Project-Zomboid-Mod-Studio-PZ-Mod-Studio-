@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, UrlInstallPlan, SandboxPresetInfo, PresetSandbox } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -892,8 +892,27 @@ export const TauriService = {
    * Writes a .pzpack. Each mod's version and the publish time of the copy on disk are filled in
    * by the backend from this install, so the pack records what the list was really tested with.
    */
-  exportPresetFile: async (paths: StudioPathsUI, preset: any, filePath: string): Promise<any> => {
-    return await invoke('export_preset_file', { paths, preset, filePath });
+  exportPresetFile: async (
+    paths: StudioPathsUI,
+    preset: any,
+    filePath: string,
+    sandboxPreset?: string | null
+  ): Promise<any> => {
+    return await invoke('export_preset_file', { paths, preset, filePath, sandboxPreset: sandboxPreset ?? null });
+  },
+
+  /** The player's own sandbox presets, so one can be put into a pack. */
+  sandboxPresets: async (userZomboidDir: string): Promise<SandboxPresetInfo[]> => {
+    try {
+      return await invoke<SandboxPresetInfo[]>('sandbox_presets_cmd', { userZomboidDir });
+    } catch {
+      return [];
+    }
+  },
+
+  /** Saves a pack's sandbox settings, never over one of the player's own. Returns the name. */
+  writeSandboxPreset: async (userZomboidDir: string, sandbox: PresetSandbox): Promise<string> => {
+    return await invoke<string>('write_sandbox_preset_cmd', { userZomboidDir, sandbox });
   },
 
   importPresetFile: async (filePath: string): Promise<any> => {

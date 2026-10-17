@@ -10,6 +10,8 @@
 //! Nothing is downgraded or forced: Steam gives everyone the newest copy and the Studio does not
 //! fight it. The pack says what the list was tested with, and the import says where you differ.
 
+pub mod sandbox_presets;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -40,6 +42,9 @@ pub struct ModPreset {
     /// The game build the pack was made on, as `Zomboid/version.txt` spells it.
     #[serde(default)]
     pub game_version: Option<String>,
+    /// The sandbox settings the sender played this list with, when they chose to include them.
+    #[serde(default)]
+    pub sandbox: Option<sandbox_presets::PresetSandbox>,
 }
 
 /// One mod whose copy here is not the copy the pack was made with.
@@ -79,10 +84,16 @@ pub fn export_preset_file(
     paths: crate::vfs::StudioPaths,
     preset: ModPreset,
     file_path: String,
+    sandbox_preset: Option<String>,
 ) -> Result<ModPreset, String> {
     let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
     let mut stamped = preset;
     stamped.game_version = catalog.game_version.clone();
+    // The settings are read here too, so a pack cannot carry a preset the sender does not have.
+    stamped.sandbox = match sandbox_preset.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        Some(name) => Some(sandbox_presets::read_for_pack(&paths.user_zomboid_dir, name)?),
+        None => None,
+    };
     for entry in &mut stamped.mods {
         if let Some(m) = catalog.resolve(&entry.mod_id) {
             entry.version = m.info.mod_version.clone();
@@ -219,6 +230,7 @@ mod tests {
             load_order: mods.iter().map(|m| m.mod_id.clone()).collect(),
             mods,
             game_version: game.map(str::to_string),
+            sandbox: None,
         }
     }
 
@@ -327,6 +339,7 @@ mod live_tests {
             load_order: mods.iter().map(|m| m.mod_id.clone()).collect(),
             mods,
             game_version: catalog.game_version.clone(),
+            sandbox: None,
         };
         let with_version = pack.mods.iter().filter(|m| m.version.is_some()).count();
         let with_time = pack.mods.iter().filter(|m| m.updated_at.is_some()).count();

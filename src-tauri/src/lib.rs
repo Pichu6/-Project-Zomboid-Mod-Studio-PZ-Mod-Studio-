@@ -300,6 +300,24 @@ fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog:
 /// Every earlier version of the mod list the Studio kept, newest first.
 /// What the Build 42 shim covers, read from the shim that ships inside merge packages.
 /// What a link offers, worked out without downloading it.
+/// The player's own sandbox presets, so one can be put into a pack.
+#[tauri::command(async)]
+fn sandbox_presets_cmd(
+    user_zomboid_dir: String,
+) -> Vec<preset_manager::sandbox_presets::SandboxPresetInfo> {
+    preset_manager::sandbox_presets::list(&user_zomboid_dir)
+}
+
+/// Writes a pack's sandbox settings into `Zomboid/Sandbox Presets`, never over one of the
+/// player's own. Returns the name the game will show.
+#[tauri::command(async)]
+fn write_sandbox_preset_cmd(
+    user_zomboid_dir: String,
+    sandbox: preset_manager::sandbox_presets::PresetSandbox,
+) -> Result<String, String> {
+    preset_manager::sandbox_presets::write_from_pack(&user_zomboid_dir, &sandbox)
+}
+
 #[tauri::command(async)]
 fn resolve_url_install_cmd(url: String) -> Result<mod_install::from_url::UrlInstallPlan, String> {
     mod_install::from_url::resolve(&url)
@@ -656,6 +674,8 @@ pub fn run() {
             steam_client_ready_cmd,
             launch_sandbox_cmd,
             script_conflicts_cmd,
+            sandbox_presets_cmd,
+            write_sandbox_preset_cmd,
             resolve_url_install_cmd,
             install_from_url_cmd,
             polyfill_sections_cmd,

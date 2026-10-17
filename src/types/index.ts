@@ -190,6 +190,8 @@ export interface ModPreset {
   load_order: string[];
   /** The game build the pack was made on. */
   game_version?: string | null;
+  /** The sandbox settings the sender played this list with, when they included them. */
+  sandbox?: PresetSandbox | null;
 }
 
 /** One mod whose copy here is not the copy a pack was made with. */
@@ -518,6 +520,24 @@ export interface SortResult {
   order: string[];
   moved: string[];
   cycle: string[];
+}
+
+/** One of the player's own sandbox presets. */
+export interface SandboxPresetInfo {
+  name: string;
+  path: string;
+  bytes: number;
+  settings: number;
+  /** How many of those settings belong to a mod (keys like `VTB.ServerValidation`). */
+  mod_settings: number;
+}
+
+/** Sandbox settings travelling inside a pack. */
+export interface PresetSandbox {
+  name: string;
+  contents: string;
+  settings: number;
+  mod_settings: number;
 }
 
 /** One earlier version of the mod list, kept in Zomboid/PZModStudio_Backups. */
