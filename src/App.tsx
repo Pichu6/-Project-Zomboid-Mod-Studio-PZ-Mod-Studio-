@@ -689,6 +689,7 @@ export const App: React.FC = () => {
                 setActiveTab('MOD_LIST');
               }}
               onClearErrorCards={handleClearErrorCards}
+              onDismissErrorCard={(id) => setErrorCards((prev) => prev.filter((c) => c.id !== id))}
               onGoToSettings={() => setActiveTab('SETTINGS')}
             />
           )}

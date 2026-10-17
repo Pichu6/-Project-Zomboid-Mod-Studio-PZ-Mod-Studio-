@@ -52,6 +52,8 @@ interface SandboxModuleProps {
    */
   onPatchMod?: (modId: string, fileHint?: string | null, fix?: { from: string; to: string } | null) => void;
   onClearErrorCards?: () => void;
+  /** Removes one card, once what it reported has been fixed. */
+  onDismissErrorCard?: (cardId: string) => void;
   onGoToSettings: () => void;
 }
 
@@ -105,6 +107,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onSwitchOffMod,
   onPatchMod,
   onClearErrorCards,
+  onDismissErrorCard,
   onGoToSettings,
 }) => {
   // The companion bridge is a developer feature; its log filter follows the same switch.
@@ -427,6 +430,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
    */
   const [fixNotes, setFixNotes] = useState<Record<string, string>>({});
   const [fixing, setFixing] = useState<string | null>(null);
+  const [fixedBanner, setFixedBanner] = useState<string | null>(null);
   const handleFixPath = async (card: TranslatedErrorCard, modId: string, fileHint: string, fix: { from: string; to: string }) => {
     setFixing(card.id);
     try {
@@ -451,10 +455,11 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       const folder = packageForPatch(packages);
       const result = await TauriService.publishFileIntoPackage(paths, folder, opened.relative_path, fixed.content);
       const display = packages.find((p) => p.folder_name === folder)?.display_name ?? folder;
-      setFixNotes((prev) => ({
-        ...prev,
-        [card.id]: `Line ${fixed.line}: require("${fix.from}") is now require("${fix.to}"), published in ${display} (${result.files_written} files). Relaunch the game; this warning should not come back.`,
-      }));
+      // Done: the card goes, and one line above the list says what happened and what is left.
+      setFixedBanner(
+        `${fileHint} fixed — line ${fixed.line} now asks for ${fix.to} — and published in ${display} (${result.files_written} files). Relaunch the game; this warning should not come back.`
+      );
+      onDismissErrorCard?.(card.id);
       onRefreshMods();
     } catch (err) {
       setFixNotes((prev) => ({ ...prev, [card.id]: explainError(err) }));
@@ -959,6 +964,21 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             )}
           </div>
 
+          {fixedBanner && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-950/50 border border-emerald-700/60 text-[11px] text-emerald-200 leading-relaxed shrink-0">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+              <span className="flex-1">{fixedBanner}</span>
+              <button
+                type="button"
+                onClick={() => setFixedBanner(null)}
+                className="text-emerald-400 hover:text-emerald-200 cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+
           {/* For what the log cannot name: halve the list until one mod is left. */}
           <BisectPanel
             paths={paths}
@@ -1051,7 +1071,11 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                               <Wrench className="w-3 h-3" aria-hidden="true" />
                               Open in the Merger
                             </button>
-                          ) : onPatchMod && modIdNamed(card.mod_name ?? modFromStack(card)) && (
+                          ) : onPatchMod &&
+                            modIdNamed(card.mod_name ?? modFromStack(card)) &&
+                            /* A warning the Studio has no fix for gets no button: pressing one
+                               led to saving an unchanged copy, which fixes nothing. */
+                            (!isWarning(card) || knownFix(card)) && (
                             <button
                               type="button"
                               onClick={() => {
