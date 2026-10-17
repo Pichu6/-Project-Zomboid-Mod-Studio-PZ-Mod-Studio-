@@ -8,6 +8,7 @@ import { findInstalledDependencyInMods, normalizeModId } from './modLookup';
 import { ModPresets } from './ModPresets';
 import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
+import { RowHealthChips } from './RowHealth';
 import {
   BookOpen,
   Copy,
@@ -52,6 +53,10 @@ interface LoadOrderModuleProps {
   catalogById?: Map<string, CatalogModSummary>;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
   onOpenInBrowser?: (workshopId: string) => void;
+  /** Opens the Mod Merger on this conflicting file (a row chip's fix). */
+  onOpenMerger?: (relativePath: string) => void;
+  /** Opens Mod Health, for a fix a row cannot apply by itself. */
+  onGoToHealth?: () => void;
   /** Every saved profile, so the list can show which of them a mod belongs to. */
   profiles?: AppInstance[];
   activeProfileId?: string | null;
@@ -95,6 +100,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   healthIssues = null,
   catalogById,
   onOpenInBrowser,
+  onOpenMerger,
+  onGoToHealth,
   profiles = [],
   activeProfileId = null,
 }) => {
@@ -179,6 +186,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   // The maps below keep the shapes this screen's badges and buttons already use.
   // Position of each mod in the full list (rows use it instead of scanning the list each time).
   const modIndexById = useMemo(() => new Map(mods.map((m, idx) => [m.mod_id, idx])), [mods]);
+
+  /** The health check's issues by mod, for the row chips; an incompatible pair is on both rows. */
+  const issuesByMod = useMemo(() => {
+    const map = new Map<string, HealthIssue[]>();
+    const add = (id: string, issue: HealthIssue) => {
+      const list = map.get(id) ?? [];
+      list.push(issue);
+      map.set(id, list);
+    };
+    for (const issue of healthIssues ?? []) {
+      if (issue.mod_id) add(issue.mod_id, issue);
+      if (issue.code === 'incompatible') issue.related.forEach((other) => add(other, issue));
+    }
+    return map;
+  }, [healthIssues]);
 
   const {
     activeConflictsMap,
@@ -998,6 +1020,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               </div>
             ) : (
               filteredMods.map((mod) => {
+                // The row's colour follows the worst thing the health check found for it.
+                const rowIssues = issuesByMod.get(mod.mod_id) ?? [];
+                const worstIssue = rowIssues.some((i) => i.severity === 'error') ? 'error' : rowIssues.some((i) => i.severity === 'warning') ? 'warning' : null;
                 const originalIndex = modIndexById.get(mod.mod_id) ?? -1;
                 const isSelected = mod.mod_id === selectedModId;
                 const isHighlighted = mod.mod_id === highlightedModId;
@@ -1006,17 +1031,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const isMultiPackage = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? multiModPackageMap[mod.workshop_id] : false;
                 const packageColor = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? workshopColorMap[mod.workshop_id] : null;
 
-                const disabledDependencies = missingActiveDependenciesMap[mod.mod_id];
-                const hasDisabledDependency = disabledDependencies && disabledDependencies.length > 0;
-
-                const uninstalledDependencies = missingUninstalledDependenciesMap[mod.mod_id];
-                const hasMissingUninstalledDep = uninstalledDependencies && uninstalledDependencies.length > 0;
-
-                const orderViolationsForThisMod = loadOrderViolationsMap[mod.mod_id];
-                const hasOrderViolation = orderViolationsForThisMod && orderViolationsForThisMod.length > 0;
-
-                const conflictsForThisMod = activeConflictsMap[mod.mod_id];
-                const hasExclusivityConflict = conflictsForThisMod && conflictsForThisMod.length > 0;
 
                 const isConflictPartner =
                   selectedMod &&
@@ -1072,11 +1086,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                     className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
                       isOpenedPackage
                         ? 'border-2 border-amber-500/80 bg-amber-950/25 shadow-md shadow-amber-950/30'
-                        : hasMissingUninstalledDep || hasDisabledDependency
+                        : worstIssue === 'error'
                         ? 'border-2 border-red-500 bg-red-950/40 shadow-md shadow-red-950/40'
                         : isConflictPartner
                         ? 'border-2 border-amber-400 bg-amber-950/90 shadow-xl shadow-amber-900/60 ring-2 ring-amber-400/50 animate-pulse'
-                        : hasExclusivityConflict || hasOrderViolation
+                        : worstIssue === 'warning'
                         ? 'border-2 border-amber-500 bg-amber-950/40 shadow-md shadow-amber-950/30'
                         : isMultiPackage && packageColor
                         ? `border-l-4 ${packageColor.border}`
@@ -1232,7 +1246,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </span>
                           )}
 
-                          {mod.loadable_on_installed_build === false && (
+                          {mod.loadable_on_installed_build === false && !mod.enabled && (
                             <span
                               className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
                               title="This mod has no mod.info the installed game build reads (B41-only, or only folders for newer builds). The game will not load it."
@@ -1241,69 +1255,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                             </span>
                           )}
 
-                          {/* Grave 1: Dependencies missing (Red) */}
-                          {hasMissingUninstalledDep && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleJumpToDependency(uninstalledDependencies[0]);
-                              }}
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ MISSING DEPENDENCIES\n\nThis mod requires [${uninstalledDependencies[0]}], which is not installed.`}
-                            >
-                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
-                              <span>Dependencies missing</span>
-                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
-                            </button>
-                          )}
-
-                          {/* Grave 2: Dependencies off (Red) */}
-                          {hasDisabledDependency && !hasMissingUninstalledDep && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleJumpToMod(disabledDependencies[0].mod_id);
-                              }}
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ DISABLED DEPENDENCIES\n\nThis mod requires [${disabledDependencies[0].name}], which is disabled.`}
-                            >
-                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
-                              <span>Dependencies off</span>
-                              <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
-                            </button>
-                          )}
-
-                          {/* Medio 1: Incompatibility (Yellow) */}
-                          {hasExclusivityConflict && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleJumpToMod(conflictsForThisMod[0].conflictingModId);
-                              }}
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ INCOMPATIBILITY DETECTED\n\nMutually exclusive with: [${conflictsForThisMod[0].conflictingModName}].`}
-                            >
-                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>Incompatibility</span>
-                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                            </button>
-                          )}
-
-                          {/* Medio 2: List Order (Yellow) */}
-                          {hasOrderViolation && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleJumpToMod(orderViolationsForThisMod[0].requiredModId);
-                              }}
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/60 shrink-0 transition cursor-pointer shadow-sm"
-                              title={`⚠️ INCORRECT LOAD ORDER\n\nLoads before [${orderViolationsForThisMod[0].requiredModName}]. Must go AFTER.`}
-                            >
-                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>List Order</span>
-                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                            </button>
-                          )}
+                          {/* Every problem the health check found for this mod, with its fix. */}
+                          <RowHealthChips
+                            issues={rowIssues}
+                            mods={mods}
+                            onApplyList={triggerReorder}
+                            onJumpToMod={handleJumpToMod}
+                            onOpenMerger={onOpenMerger}
+                            onGoToHealth={onGoToHealth}
+                          />
                         </div>
                         <div className={`text-[10px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
                           ID: {mod.mod_id}

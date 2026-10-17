@@ -41,7 +41,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 
 | | Item | Inspired by |
 |---|---|---|
-| 🔨 | Health report UI with one-click fixes: enable missing dependency, move library up, disable mod not for this build, search Workshop for missing mods (done); next: show issues inline in the Mod List | Skyve compatibility report |
+| ✅ | Health report UI with one-click fixes: enable missing dependency, move library up, disable mod not for this build, search Workshop for missing mods. In the Mod List every issue the check raised for a mod is a chip on its row (worst first, the check's own message as the tooltip, `RowHealth.tsx`), with the fix beside it when the row can apply it — switch on / move before / switch off / remove, Workshop search, open in the Merger — and a jump to the other mod involved, or to Mod Health for a merge or a compatible copy. The row's colour follows its worst issue | Skyve compatibility report |
 | ⬜ | Load-order rules: user rules + community rules database (GitHub, versioned, PR-based) on top of `require`/`loadModAfter`/`loadModBefore` | LOOT masterlist, RimSort rules DB |
 | ✅ | Undo / history for every change to the list: Mod List > History lists the last twenty saved versions (the backups every write has always kept), each with when it was saved, how many mods it had and what it would switch on or off, and goes back to one through the same backed-up writer — so going back can be undone too. It also covers changes made outside the Studio, by a profile switch, an import, a bisect or the game itself | LOOT/MO2 keep a way back |
 | ✅ | Filters and search: switched on/off, with a problem, maps, libraries, won't load on this build, updated recently — each with its count; and drag a mod to where it should load | Every manager |

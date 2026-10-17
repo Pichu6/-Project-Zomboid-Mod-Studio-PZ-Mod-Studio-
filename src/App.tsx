@@ -592,6 +592,11 @@ export const App: React.FC = () => {
               openedPackageFolder={openedPackageFolder}
               healthIssues={health.report?.issues ?? null}
               catalogById={health.catalogById}
+              onOpenMerger={(relativePath) => {
+                setMergerFocusPath(relativePath);
+                setActiveTab('MERGER');
+              }}
+              onGoToHealth={() => setActiveTab('HEALTH')}
               profiles={profiles}
               activeProfileId={activeProfile?.id ?? null}
               onOpenInBrowser={(workshopId) => {
