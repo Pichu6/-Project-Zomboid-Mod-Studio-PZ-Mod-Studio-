@@ -1,3 +1,4 @@
+pub mod bisect;
 pub mod catalog;
 pub mod claude_agent;
 pub mod compat;
@@ -286,6 +287,41 @@ fn launch_sandbox_cmd<R: tauri::Runtime>(
     launch_sandbox_and_watch(app_handle, config)
 }
 
+/// The hunt in progress, if the player left one running.
+#[tauri::command(async)]
+fn bisect_state_cmd(paths: StudioPaths) -> Option<bisect::BisectSession> {
+    bisect::load(&paths.user_zomboid_dir)
+}
+
+/// Starts halving the list. The mods switched on now are the suspects; the list is replaced by
+/// the first trial and kept in the session to be put back at the end.
+#[tauri::command(async)]
+fn bisect_start_cmd(
+    paths: StudioPaths,
+    mods: Vec<bisect::BisectMod>,
+) -> Result<bisect::BisectSession, String> {
+    bisect::start(&paths.mod_list_ini_path, &paths.user_zomboid_dir, &mods)
+}
+
+/// Did it still happen? Narrows the suspects and switches the next trial on.
+#[tauri::command(async)]
+fn bisect_answer_cmd(
+    paths: StudioPaths,
+    still_happens: bool,
+) -> Result<bisect::BisectSession, String> {
+    bisect::answer(&paths.mod_list_ini_path, &paths.user_zomboid_dir, still_happens)
+}
+
+/// Gives up and puts the player's own list back, optionally without one mod.
+#[tauri::command(async)]
+fn bisect_stop_cmd(paths: StudioPaths, switch_off: Option<String>) -> Result<Vec<String>, String> {
+    bisect::stop(
+        &paths.mod_list_ini_path,
+        &paths.user_zomboid_dir,
+        switch_off.as_deref(),
+    )
+}
+
 #[tauri::command(async)]
 fn generate_master_patch_cmd(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     generate_master_patch(req)
@@ -567,6 +603,10 @@ pub fn run() {
             workshop_subscribe_cmd,
             steam_client_ready_cmd,
             launch_sandbox_cmd,
+            bisect_state_cmd,
+            bisect_start_cmd,
+            bisect_answer_cmd,
+            bisect_stop_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,
             get_master_patch_status_cmd,

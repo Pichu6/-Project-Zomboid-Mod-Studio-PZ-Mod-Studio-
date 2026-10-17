@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { TranslatedErrorCard, LogFileInfoUI } from '../../types';
+import { TranslatedErrorCard, LogFileInfoUI, ModInfo } from '../../types';
+import { BisectPanel } from './BisectPanel';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import {
@@ -24,6 +25,10 @@ import {
 
 interface SandboxModuleProps {
   paths: StudioPathsUI;
+  /** The installed mods, for the hunt: its suspects and their requirements. */
+  mods: ModInfo[];
+  /** Re-reads the Mod List after the hunt has written a trial to disk. */
+  onRefreshMods: () => void;
   errorCards: TranslatedErrorCard[];
   /** The Build 42 shim travels inside a merge package, so repairs start in the Merger. */
   onOpenMerger: () => void;
@@ -76,6 +81,8 @@ export const formatLogDisplayName = (file: LogFileInfoUI): string => {
 
 export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
+  mods,
+  onRefreshMods,
   errorCards,
   onOpenMerger,
   onSwitchOffMod,
@@ -764,6 +771,9 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               </span>
             )}
           </div>
+
+          {/* For what the log cannot name: halve the list until one mod is left. */}
+          <BisectPanel paths={paths} mods={mods} onRefreshMods={onRefreshMods} />
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
             {errorCards.length === 0 ? (

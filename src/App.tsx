@@ -594,6 +594,8 @@ export const App: React.FC = () => {
           {activeTab === 'MONITOR' && (
             <SandboxModule
               paths={paths}
+              mods={mods}
+              onRefreshMods={handleRefreshMods}
               errorCards={errorCards}
               onOpenMerger={() => setActiveTab('MERGER')}
               onSwitchOffMod={(modName) => {

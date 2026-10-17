@@ -513,6 +513,29 @@ export interface SortResult {
   cycle: string[];
 }
 
+/** One answered launch of a hunt. */
+export interface BisectRound {
+  round: number;
+  tried: number;
+  suspects: number;
+  answer: string;
+}
+
+/** Halving the mod list to find the one that breaks the game (src-tauri/src/bisect). */
+export interface BisectSession {
+  started_at: string;
+  phase: 'Narrowing' | 'Confirming' | 'Done';
+  original_active: string[];
+  always_on: string[];
+  candidates: string[];
+  trial: string[];
+  round: number;
+  launches_left: number;
+  history: BisectRound[];
+  culprit: string | null;
+  note: string | null;
+}
+
 export interface ModHealth {
   catalog: { game_version: string | null; mods: CatalogModSummary[] };
   report: HealthReport;

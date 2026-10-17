@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -666,6 +666,38 @@ export const TauriService = {
       reportBackendError('Importing the package', err);
       throw err;
     }
+  },
+
+  /** The hunt for a culprit mod that the player left running, if there is one. */
+  bisectState: async (paths: StudioPathsUI): Promise<BisectSession | null> => {
+    try {
+      return await invoke<BisectSession | null>('bisect_state_cmd', { paths });
+    } catch {
+      // A hunt that cannot be read is simply no hunt; the Monitor offers to start one.
+      return null;
+    }
+  },
+
+  /** Starts halving the list. The mods switched on now are the suspects. Throws with the reason. */
+  bisectStart: async (paths: StudioPathsUI, mods: ModInfo[]): Promise<BisectSession> => {
+    return await invoke<BisectSession>('bisect_start_cmd', {
+      paths,
+      mods: mods.map((m) => ({
+        mod_id: m.mod_id,
+        dependencies: m.dependencies ?? [],
+        enabled: m.enabled,
+      })),
+    });
+  },
+
+  /** Answers the trial and switches the next one on. Throws with the reason. */
+  bisectAnswer: async (paths: StudioPathsUI, stillHappens: boolean): Promise<BisectSession> => {
+    return await invoke<BisectSession>('bisect_answer_cmd', { paths, stillHappens });
+  },
+
+  /** Ends the hunt and puts the player's list back, optionally without one mod. */
+  bisectStop: async (paths: StudioPathsUI, switchOff: string | null): Promise<string[]> => {
+    return await invoke<string[]>('bisect_stop_cmd', { paths, switchOff });
   },
 
   /**
