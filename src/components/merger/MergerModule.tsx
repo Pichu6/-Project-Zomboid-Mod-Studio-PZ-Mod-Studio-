@@ -133,7 +133,20 @@ const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (baseLine:
       <div className="flex items-start gap-2 text-slate-200">
         <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
         <span>
-          {conflict.competing_mods.length} mods ship this file. Without merging, the game uses only <b>{lastLoaded?.mod_name}</b>'s copy (it loads last).{' '}
+          {conflict.file_type === 'SCRIPT_DEFINITION' ? (
+            <>
+              {conflict.competing_mods.length} mods declare this, each in a file of its own — nothing collides on
+              disk. The game applies all of them to the same thing, so what one sets and the others do not is
+              kept whatever happens; only what they set differently is decided by the load order, today in{' '}
+              <b>{lastLoaded?.mod_name}</b>'s favour. Saving this writes a small script into your package, which
+              loads last.{' '}
+            </>
+          ) : (
+            <>
+              {conflict.competing_mods.length} mods ship this file. Without merging, the game uses only{' '}
+              <b>{lastLoaded?.mod_name}</b>'s copy (it loads last).{' '}
+            </>
+          )}
           {conflict.strategy}
         </span>
       </div>
@@ -603,12 +616,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       currentConflict.base_content.startsWith('-- vanilla file not present') ||
       currentConflict.base_content.startsWith('-- vanilla file unreadable');
     const merged = currentConflict.auto_ast_output || currentConflict.merged_output || '';
+    const isDefinition = currentConflict.file_type === 'SCRIPT_DEFINITION';
     const choices: Choice[] = [];
     if (merged) {
       choices.push({
         key: 'merged',
-        label: 'Keep both',
-        help: 'Each mod\u2019s changes applied together. Where two change the same lines, the one that loads last wins and the other is kept in a comment.',
+        label: isDefinition ? 'Merge them' : 'Keep both',
+        help: isDefinition
+          ? 'Everything the mods set differently that can hold both values keeps both; where only one value fits, what the game does today stays active and the other is left in a comment, one word away.'
+          : 'Each mod\u2019s changes applied together. Where two change the same lines, the one that loads last wins and the other is kept in a comment.',
         content: merged,
       });
     }
@@ -616,7 +632,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       choices.push({
         key: `mod:${mod.mod_id}`,
         label: `Only ${mod.mod_name}`,
-        help: `Use ${mod.mod_name}\u2019s file as it is. The other mods\u2019 changes to this file are dropped.`,
+        help: isDefinition
+          ? `Write ${mod.mod_name}\u2019s values into the package. What the other mods set and ${mod.mod_name} does not still applies \u2014 the game adds every declaration up \u2014 so this only settles what they disagree about.`
+          : `Use ${mod.mod_name}\u2019s file as it is. The other mods\u2019 changes to this file are dropped.`,
         content: mod.content,
       });
     }
