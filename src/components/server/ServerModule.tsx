@@ -27,6 +27,7 @@ import {
   DedicatedServerStatus,
   ConnectedPlayer,
   ServerQuickSettings,
+  ServerModReport,
 } from '../../types';
 import { TauriService, explainError } from '../../services/tauri';
 
@@ -70,6 +71,8 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
   // Quick Settings State
   const [quickSettings, setQuickSettings] = useState<ServerQuickSettings | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  /** What the selected .ini says about mods, and what does not add up. */
+  const [modReport, setModReport] = useState<ServerModReport | null>(null);
 
   const activeMods = mods.filter((m) => m.enabled);
   const activeWorkshopIds = Array.from(
@@ -184,15 +187,35 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
     }
   };
 
+  const checkSelectedServer = useCallback(async () => {
+    if (!selectedServer) {
+      setModReport(null);
+      return;
+    }
+    setModReport(await TauriService.checkServerMods(paths, selectedServer.file_path));
+  }, [paths, selectedServer]);
+
+  // The three lines are only right together, so they are checked whenever the file or the list
+  // changes rather than only after a sync.
+  useEffect(() => {
+    void checkSelectedServer();
+  }, [checkSelectedServer, mods]);
+
   const handleSyncToServer = async () => {
     if (!selectedServer) return;
     try {
-      const activeModIds = activeMods.map((m) => m.mod_id);
-      await TauriService.syncClientToServer(selectedServer.file_path, activeModIds, activeWorkshopIds);
+      const written = await TauriService.syncClientToServer(
+        paths,
+        selectedServer.file_path,
+        activeMods.map((m) => m.mod_id)
+      );
       setStatusMessage(
-        `🚀 Server '${selectedServer.name}.ini' synchronized! Mods: ${activeModIds.length}, Workshop: ${activeWorkshopIds.length}`
+        `${selectedServer.name}.ini now has ${written.mods.length} mods, ` +
+          `${written.workshop_items.length} Workshop items and ${written.maps.length} maps ` +
+          `(${written.maps.join(', ')}). The previous file is in Zomboid/PZModStudio_Backups.`
       );
       await loadServerConfigs();
+      await checkSelectedServer();
     } catch (err: any) {
       alert(`Error synchronizing: ${explainError(err)}`);
     }
@@ -670,6 +693,49 @@ Invite made with Project Zomboid Mod Studio`;
                       </div>
                     </div>
 
+                    {/* What the .ini gets wrong: the three lines only work together. */}
+                    {modReport && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+                        <div className="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-300">
+                            This .ini: {modReport.mods.length} Mods, {modReport.workshop_items.length} WorkshopItems,{' '}
+                            {modReport.maps.length} Map
+                          </span>
+                          {modReport.issues.length === 0 ? (
+                            <span className="text-[10px] text-emerald-400 font-mono">nothing to fix</span>
+                          ) : (
+                            <span className="text-[10px] text-amber-300 font-mono">
+                              {modReport.issues.length} thing(s) to look at
+                            </span>
+                          )}
+                        </div>
+                        {modReport.issues.length > 0 && (
+                          <div className="divide-y divide-slate-800 max-h-56 overflow-y-auto">
+                            {modReport.issues.map((issue, i) => (
+                              <div key={i} className="px-3 py-2 flex items-start gap-2 text-[11px] leading-relaxed">
+                                <span
+                                  className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    issue.severity === 'error'
+                                      ? 'bg-red-400'
+                                      : issue.severity === 'warning'
+                                      ? 'bg-amber-400'
+                                      : 'bg-slate-500'
+                                  }`}
+                                  aria-hidden="true"
+                                />
+                                <span className="text-slate-300">{issue.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {modReport.maps.length > 0 && (
+                          <div className="px-3 py-2 border-t border-slate-800 text-[10px] font-mono text-slate-500">
+                            Map= {modReport.maps.join(' ; ')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Warning / Master Patch Inclusion */}
                     <div className="p-3 bg-indigo-950/50 border border-indigo-700/60 rounded-xl text-xs text-indigo-300 flex items-center gap-2.5">
                       <Shield className="w-5 h-5 text-indigo-400 shrink-0" />
@@ -685,7 +751,7 @@ Invite made with Project Zomboid Mod Studio`;
                     className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2 mt-4"
                   >
                     <Zap className="w-4 h-4 fill-white" />
-                    <span>Sync Client ➔ Server (1-Click)</span>
+                    <span>Write my list into this server (Mods, WorkshopItems and Map)</span>
                   </button>
                 </div>
               )}

@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -873,8 +873,27 @@ export const TauriService = {
     return await invoke('list_server_configs', { userZomboidDir });
   },
 
-  syncClientToServer: async (filePath: string, activeModIds: string[], activeWorkshopIds: string[]): Promise<void> => {
-    return await invoke('sync_client_to_server', { filePath, activeModIds, activeWorkshopIds });
+  /**
+   * Writes this mod list into a server's .ini: Mods=, WorkshopItems= and Map=. The Workshop ids
+   * and map names come from the installed mods, so the caller does not have to work them out.
+   * Returns what was written; throws with the reason.
+   */
+  syncClientToServer: async (
+    paths: StudioPathsUI,
+    filePath: string,
+    activeModIds: string[]
+  ): Promise<ServerLines> => {
+    return await invoke<ServerLines>('sync_client_to_server', { paths, filePath, activeModIds });
+  },
+
+  /** Everything in a server's .ini that will not do what the admin meant. */
+  checkServerMods: async (paths: StudioPathsUI, filePath: string): Promise<ServerModReport | null> => {
+    try {
+      return await invoke<ServerModReport>('check_server_mods', { paths, filePath });
+    } catch {
+      // An .ini that cannot be read is reported by the list itself; no need to shout twice.
+      return null;
+    }
   },
 
   createNewServerConfig: async (

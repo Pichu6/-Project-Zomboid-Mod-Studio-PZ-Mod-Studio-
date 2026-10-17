@@ -513,6 +513,18 @@ export interface SortResult {
   cycle: string[];
 }
 
+/** The three mod lines a dedicated server reads. */
+export interface ServerLines {
+  mods: string[];
+  workshop_items: string[];
+  maps: string[];
+}
+
+/** What a server's .ini says about mods, and what does not add up. */
+export interface ServerModReport extends ServerLines {
+  issues: HealthIssue[];
+}
+
 /** One answered launch of a hunt. */
 export interface BisectRound {
   round: number;

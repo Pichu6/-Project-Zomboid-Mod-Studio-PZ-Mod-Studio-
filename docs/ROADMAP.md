@@ -47,7 +47,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | ✅ | Filters and search: switched on/off, with a problem, maps, libraries, won't load on this build, updated recently — each with its count; and drag a mod to where it should load | Every manager |
 | 🔨 | Profiles export and import as `.pzpack`, with every mod's Workshop id so the other player can subscribe (done). Next: sandbox settings in the same file | r2modman, Modrinth `.mrpack` |
 | 🔨 | Script-level conflicts: every active mod's scripts are parsed (brace-walking, every block kind, nested blocks) and anything two mods both declare — the same `item`, `craftRecipe`, `vehicle`, `xuiSkin` — is an Info issue naming the files and the mod the game keeps, with "move it before" to pick the other. Next: the same view per file | MO2 conflict pane |
-| ⬜ | Server tools: build `WorkshopItems=` / `Mods=` / `Map=` from a profile using real IDs from `mod.info`; detect client/server mismatches | Top server-admin pain point |
+| ✅ | Server tools: the sync writes `Mods=`, `WorkshopItems=` **and** `Map=` from the active list, with real ids and map folder names from the catalog, the base map kept last, every other setting untouched and the old file backed up. The Servers tab also reads the `.ini` and says what will not work: a mod never downloaded, an item never loaded, a map mod missing from `Map=`, an entry not installed, a mod the Workshop cannot deliver | Top server-admin pain point |
 
 ## Phase 2: Every mod source in one place (a "Modrinth for Project Zomboid")
 

@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use crate::load_order::mod_info::get_all_user_zomboid_dirs;
 
+pub mod mod_sync;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PZServerConfig {
     pub name: String,
@@ -98,49 +100,48 @@ pub fn list_server_configs(user_zomboid_dir: String) -> Result<Vec<PZServerConfi
     Ok(configs)
 }
 
-#[tauri::command]
+/// Writes this mod list into a server's `.ini`: `Mods=`, `WorkshopItems=` **and** `Map=`, the
+/// third of which the old sync left alone, which is why map mods never showed up on servers set
+/// up with it. The ids come from the catalog of what is really installed, not from the caller, so
+/// a mod held by several Workshop items (or an item holding several mods) lands in both lines
+/// correctly. Everything else in the file keeps its place, and the previous file is backed up.
+#[tauri::command(async)]
 pub fn sync_client_to_server(
+    paths: crate::vfs::StudioPaths,
     file_path: String,
     active_mod_ids: Vec<String>,
-    active_workshop_ids: Vec<String>,
-) -> Result<(), String> {
+) -> Result<mod_sync::ServerLines, String> {
     let path = Path::new(&file_path);
-    if !path.exists() {
-        return Err("Server .ini file does not exist.".to_string());
+    if !path.is_file() {
+        return Err(format!("{} does not exist.", file_path));
     }
+    let content = fs::read_to_string(path).map_err(|e| format!("Cannot read {}: {}", file_path, e))?;
 
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let lines = mod_sync::lines_for(
+        &catalog,
+        &active_mod_ids,
+        &mod_sync::ini_list(&content, "Map"),
+        &paths.pz_install_dir,
+    );
+    let updated = mod_sync::with_mod_lines(&content, &lines);
 
-    let mods_str = format!("Mods={}", active_mod_ids.join(";"));
-    let ws_str = format!("WorkshopItems={}", active_workshop_ids.join(";"));
+    let backups = Path::new(&paths.user_zomboid_dir).join("PZModStudio_Backups");
+    crate::load_order::ini_parser::write_file_with_backup(path, &updated, &backups)?;
+    Ok(lines)
+}
 
-    let mut new_lines = Vec::new();
-    let mut mods_found = false;
-    let mut ws_found = false;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("Mods=") {
-            new_lines.push(mods_str.clone());
-            mods_found = true;
-        } else if trimmed.starts_with("WorkshopItems=") {
-            new_lines.push(ws_str.clone());
-            ws_found = true;
-        } else {
-            new_lines.push(line.to_string());
-        }
-    }
-
-    if !mods_found {
-        new_lines.push(mods_str);
-    }
-    if !ws_found {
-        new_lines.push(ws_str);
-    }
-
-    fs::write(path, new_lines.join("\r\n")).map_err(|e| e.to_string())?;
-
-    Ok(())
+/// What the server's `.ini` says about mods, and everything in it that will not do what the admin
+/// meant: a mod that is never downloaded, an item that is never loaded, a map that is ignored.
+#[tauri::command(async)]
+pub fn check_server_mods(
+    paths: crate::vfs::StudioPaths,
+    file_path: String,
+) -> Result<mod_sync::ServerModReport, String> {
+    let content = fs::read_to_string(Path::new(&file_path))
+        .map_err(|e| format!("Cannot read {}: {}", file_path, e))?;
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    Ok(mod_sync::check(&catalog, &content, &paths.pz_install_dir))
 }
 
 #[tauri::command]
