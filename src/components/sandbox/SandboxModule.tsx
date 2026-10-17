@@ -3,6 +3,12 @@ import { TranslatedErrorCard, LogFileInfoUI, ModInfo, RequireAnswer } from '../.
 import { BisectPanel } from './BisectPanel';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
+import { liveConsoleLines, startLiveConsole, subscribeLiveConsole } from '../../services/liveConsole';
+
+const LIVE_CONSOLE_HEADER = [
+  '[PZ Monitor Center] Realtime client session monitor ready.',
+  '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-debug) and stream live output here.',
+];
 import {
   AlertCircle,
   AlertTriangle,
@@ -39,7 +45,7 @@ interface SandboxModuleProps {
    * Opens the Merger on this mod's files to patch one; with a file name from the log, that file.
    * The mod stays on: the package loads last and the game reads the patched copy.
    */
-  onPatchMod?: (modId: string, fileHint?: string | null) => void;
+  onPatchMod?: (modId: string, fileHint?: string | null, fix?: { from: string; to: string } | null) => void;
   onClearErrorCards?: () => void;
   onGoToSettings: () => void;
 }
@@ -197,10 +203,8 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       id: 'live_console',
       title: '🔴 console.txt (Client)',
       isLive: true,
-      lines: [
-        '[PZ Monitor Center] Realtime client session monitor ready.',
-        '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-debug) and stream live output here.',
-      ],
+      // What the app has streamed so far: leaving this tab and coming back loses nothing.
+      lines: [...LIVE_CONSOLE_HEADER, ...liveConsoleLines()],
     },
     {
       id: 'live_server',
@@ -275,22 +279,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     };
   }, [paths.user_zomboid_dir]);
 
-  // Subscribe to real log streaming from Rust backend for the client live tab
+  // The live tab mirrors the app-wide console store, which keeps streaming while this tab is away.
   useEffect(() => {
-    let unlistenLogs: (() => void) | undefined;
-
-    TauriService.listenSandboxLogs((payload) => {
-      const line = payload.line;
+    startLiveConsole();
+    return subscribeLiveConsole(() => {
       setTabs((prev) =>
-        prev.map((t) => (t.id === 'live_console' ? { ...t, lines: [...t.lines.slice(-1500), line] } : t))
+        prev.map((t) =>
+          t.id === 'live_console' ? { ...t, lines: [...LIVE_CONSOLE_HEADER, ...liveConsoleLines()] } : t
+        )
       );
-    }).then((unlisten) => {
-      unlistenLogs = unlisten;
     });
-
-    return () => {
-      if (unlistenLogs) unlistenLogs();
-    };
   }, []);
 
   // Fetch available log files when opening dropdown
@@ -427,6 +425,12 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   const moduleWanted = (card: TranslatedErrorCard): string | null => {
     const found = card.raw_error.match(/require\(\s*["']([^"']+)["']\s*\)/);
     return found ? found[1] : null;
+  };
+  /** A `require` the Studio found at another path: the fix is known before the file is opened. */
+  const knownFix = (card: TranslatedErrorCard): { from: string; to: string } | null => {
+    const wanted = moduleWanted(card);
+    const best = wanted ? requireAnswers[wanted]?.candidates[0] : undefined;
+    return wanted && best && !best.same_path ? { from: wanted, to: best.module_path } : null;
   };
 
   useEffect(() => {
@@ -1003,17 +1007,27 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                             <button
                               type="button"
                               onClick={() =>
-                                onPatchMod(modIdNamed(card.mod_name ?? modFromStack(card))!, fileNamed(card))
+                                onPatchMod(
+                                  modIdNamed(card.mod_name ?? modFromStack(card))!,
+                                  fileNamed(card),
+                                  fileNamed(card) ? knownFix(card) : null
+                                )
                               }
                               className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1"
                               title={
-                                fileNamed(card)
+                                fileNamed(card) && knownFix(card)
+                                  ? `Change the require in ${fileNamed(card)} to the path the module has now, save it in the package and open it in the Merger. Then Package & Publish. The mod stays on.`
+                                  : fileNamed(card)
                                   ? `Open ${fileNamed(card)} from this mod in the Merger and patch it. The mod stays on; the package loads last, so the game reads your copy of that one file.`
                                   : 'Open this mod in the Merger and pick a file to patch. The mod stays on; the package loads last.'
                               }
                             >
                               <Wrench className="w-3 h-3" aria-hidden="true" />
-                              {fileNamed(card) ? `Patch ${fileNamed(card)}` : 'Patch a file of it'}
+                              {fileNamed(card) && knownFix(card)
+                                ? `Fix the path in ${fileNamed(card)}`
+                                : fileNamed(card)
+                                ? `Patch ${fileNamed(card)}`
+                                : 'Patch a file of it'}
                             </button>
                           )}
                           {onSwitchOffMod && (

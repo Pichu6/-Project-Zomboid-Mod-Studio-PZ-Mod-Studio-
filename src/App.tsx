@@ -6,6 +6,7 @@ import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
 import { TauriService, reportBackendError } from './services/tauri';
+import { startLiveConsole } from './services/liveConsole';
 
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
@@ -32,7 +33,11 @@ export const App: React.FC = () => {
   /** Conflicting file the Merger should open on (set from Mod Health). */
   const [mergerFocusPath, setMergerFocusPath] = useState<string | null>(null);
   /** A mod (and maybe the file the log named) the Monitor sends to the Merger to patch. */
-  const [mergerPatchFocus, setMergerPatchFocus] = useState<{ modId: string; fileHint?: string | null } | null>(null);
+  const [mergerPatchFocus, setMergerPatchFocus] = useState<{
+    modId: string;
+    fileHint?: string | null;
+    fix?: { from: string; to: string } | null;
+  } | null>(null);
   /** Workshop item Browse Mods should open on (set from the Mod List). */
   const [browseFocusWorkshopId, setBrowseFocusWorkshopId] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
@@ -127,6 +132,8 @@ export const App: React.FC = () => {
       }
     };
     initPaths();
+    // The console keeps streaming from the start, whichever tab is in front.
+    startLiveConsole();
   }, []);
 
 
@@ -364,22 +371,32 @@ export const App: React.FC = () => {
     await executeLaunch(mode);
   };
 
-  const handleResolveConflict = async (conflictId: string, resolvedCode: string, packageFolderName?: string) => {
+  const handleResolveConflict = async (
+    conflictId: string,
+    resolvedCode: string,
+    packageFolderName?: string,
+    relativePath?: string
+  ) => {
     setConflicts((prev) =>
       prev.map((c) =>
         c.id === conflictId ? { ...c, merged_output: resolvedCode, status: 'RESOLVED' as const } : c
       )
     );
 
+    // A mod's own file opened to patch is not in this list -- only one mod ships it, so the scan
+    // never listed it -- and its Save used to find nothing here and write nothing to disk. The
+    // Merger says which path it is; once the package holds the decision the scan lists it too.
     const targetConflict = conflicts.find((c) => c.id === conflictId);
-    if (targetConflict && paths.user_zomboid_dir) {
+    const path = targetConflict?.relative_path ?? relativePath;
+    if (path && paths.user_zomboid_dir) {
       await TauriService.saveDraftResolution(
         paths.user_zomboid_dir,
         packageFolderName || 'Z_PZModStudio_MergedPatch',
-        targetConflict.relative_path,
+        path,
         resolvedCode,
         'RESOLVED'
       );
+      if (!targetConflict) await handleRescan(packageFolderName);
     }
   };
 
@@ -638,8 +655,8 @@ export const App: React.FC = () => {
               onRefreshMods={handleRefreshMods}
               errorCards={errorCards}
               onOpenMerger={() => setActiveTab('MERGER')}
-              onPatchMod={(modId, fileHint) => {
-                setMergerPatchFocus({ modId, fileHint: fileHint ?? null });
+              onPatchMod={(modId, fileHint, fix) => {
+                setMergerPatchFocus({ modId, fileHint: fileHint ?? null, fix: fix ?? null });
                 setActiveTab('MERGER');
               }}
               onSwitchOffMod={(modName) => {

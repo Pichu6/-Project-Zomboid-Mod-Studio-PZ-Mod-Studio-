@@ -46,7 +46,8 @@ interface MergerModuleProps {
   /** Installed mods, to pick one whose file you want to patch. */
   mods: ModInfo[];
   paths: StudioPathsUI;
-  onResolveConflict: (conflictId: string, resolvedCode: string, packageFolderName?: string) => void;
+  /** Saves the decision for one file into the package; the path is for files the scan never listed. */
+  onResolveConflict: (conflictId: string, resolvedCode: string, packageFolderName?: string, relativePath?: string) => void;
   onAutoMergeAll?: (packageFolderName?: string) => Promise<boolean>;
   onOptimizeAndResolve: (packageFolderName?: string) => Promise<boolean>;
   onGoToSettings: () => void;
@@ -65,8 +66,34 @@ interface MergerModuleProps {
    * Open a package and this mod's files to patch (from the Monitor: a card that names the mod, or
    * the hunt that ended on it). With a file name from the log, that file opens straight away.
    */
-  patchFocus?: { modId: string; fileHint?: string | null } | null;
+  patchFocus?: { modId: string; fileHint?: string | null; fix?: RequireFix | null } | null;
   onPatchFocusHandled?: () => void;
+}
+
+/** A `require` path the Studio already knows the answer to: the module moved. */
+export interface RequireFix {
+  from: string;
+  to: string;
+}
+
+/**
+ * `require("Vehicle/ISVehiclePartMenu")` -> `require("Vehicles/ISUI/ISVehiclePartMenu")`, in any
+ * quoting the file uses. Returns the new text and the first line changed, or null if the file
+ * does not contain that require.
+ */
+export function applyRequireFix(content: string, fix: RequireFix): { content: string; line: number } | null {
+  const escaped = fix.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(require\\s*\\(?\\s*)(["'])${escaped}\\2`, 'g');
+  if (!re.test(content)) return null;
+  re.lastIndex = 0;
+  let firstAt = -1;
+  const out = content.replace(re, (whole, head: string, quote: string, offset: number) => {
+    if (firstAt < 0) firstAt = offset;
+    void whole;
+    return `${head}${quote}${fix.to}${quote}`;
+  });
+  const line = content.slice(0, firstAt).split('\n').length;
+  return { content: out, line };
 }
 
 /** Lines shown around the point of interest; big vanilla files have tens of thousands. */
@@ -365,15 +392,30 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
    * Opens one of a mod's own files for patching. It joins the list like a conflict and is edited
    * and saved the same way; the package, loading last, is then what the game reads for it.
    */
-  const openModFileToPatch = async (modId: string, relativePath: string) => {
+  const openModFileToPatch = async (modId: string, relativePath: string, fix?: RequireFix | null) => {
     try {
-      const entry = await TauriService.modFileToPatch(paths, modId, relativePath);
+      const opened = await TauriService.modFileToPatch(paths, modId, relativePath);
+      // A fix the Studio already knows is applied and saved on the way in: the file lands in the
+      // package resolved, and what is left to do is publish.
+      const fixed = fix ? applyRequireFix(opened.merged_output || opened.base_content, fix) : null;
+      const entry = fixed ? { ...opened, merged_output: fixed.content, status: 'RESOLVED' as const } : opened;
       setPatchTargets((current) => [...current.filter((c) => c.relative_path !== entry.relative_path), entry]);
       setSelectedConflictId(entry.id);
+      setEditorContent(entry.merged_output || entry.base_content);
+      setIsManuallyEdited(false);
       setIsPatchPickerOpen(false);
       setPatchModId(null);
       setPatchFiles(null);
-      showToast(`${relativePath} opened. Edit it and press Save to put it in the package.`);
+      if (fixed) {
+        onResolveConflict(entry.id, fixed.content, selectedPackageFolder, entry.relative_path);
+        showToast(
+          `Line ${fixed.line}: require("${fix!.from}") is now require("${fix!.to}"), saved in the package. Press Package & Publish to put it in the game.`
+        );
+      } else if (fix) {
+        showToast(`${relativePath} opened, but it has no require("${fix.from}") to change; look for the path by hand.`);
+      } else {
+        showToast(`${relativePath} opened. Edit it and press Save to put it in the package.`);
+      }
     } catch (err) {
       alert(explainError(err));
     }
@@ -679,7 +721,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   // Step 2: Save Individual Conflict File Edit
   const handleSaveSingleConflict = () => {
     if (!currentConflict) return;
-    onResolveConflict(currentConflict.id, editorContent, selectedPackageFolder);
+    onResolveConflict(currentConflict.id, editorContent, selectedPackageFolder, currentConflict.relative_path);
     setIsManuallyEdited(false);
     showToast(`✓ Merge saved for "${currentConflict.relative_path}". Status marked as Resolved.`);
   };
@@ -941,7 +983,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       packages.find((p) => !p.is_companion_bridge);
     (async () => {
       try {
-        if (!isPackageOpened) await handleOpenPackage(target?.folder_name ?? 'Z_PZModStudio_MergedPatch');
+        // The package is opened at once and the file right after; the scan that an opened
+        // package starts runs behind them, so the editor is in front of you before it ends.
+        const folder = target?.folder_name ?? 'Z_PZModStudio_MergedPatch';
+        if (!isPackageOpened) {
+          setSelectedPackageFolder(folder);
+          setIsPackageOpened(true);
+          onPackageOpened?.(folder);
+          void handleOpenPackage(folder);
+        }
         const files = await TauriService.modFiles(paths, patchFocus.modId);
         const hint = (patchFocus.fileHint ?? '').toLowerCase();
         const named = hint
@@ -951,7 +1001,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             })
           : undefined;
         if (named) {
-          await openModFileToPatch(patchFocus.modId, named.relative_path);
+          await openModFileToPatch(patchFocus.modId, named.relative_path, patchFocus.fix);
         } else {
           setPatchModId(patchFocus.modId);
           setPatchFiles(files);
