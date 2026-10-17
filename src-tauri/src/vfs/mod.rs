@@ -90,7 +90,9 @@ pub fn file_conflict_states(paths: &StudioPaths, catalog: &crate::catalog::ModCa
     let package = active_package_dir(catalog, active);
     scan_conflicts_with(paths, catalog, active)
         .into_iter()
-        .filter(|c| !c.is_identical_noise)
+        // A definition conflict gets a row of its own, which says what the two mods disagree
+        // about; reported here as well it would be the same thing twice, in worse words.
+        .filter(|c| !c.is_identical_noise && c.file_type != "SCRIPT_DEFINITION")
         .map(|c| {
             let in_package = package.as_ref().and_then(|(_, root)| {
                 [root.join("42").join(&c.relative_path), root.join(&c.relative_path)].into_iter().find(|p| p.is_file())
@@ -111,6 +113,35 @@ pub fn file_conflict_states(paths: &StudioPaths, catalog: &crate::catalog::ModCa
                 strategy: c.strategy.clone(),
                 collisions: c.collisions.len(),
                 relative_path: c.relative_path,
+            }
+        })
+        .collect()
+}
+
+/// For each definition conflict, whether the active package already settles it ("merged"), does
+/// but was made before one of the mods changed ("stale"), or does not ("pending").
+pub fn definition_merge_states(
+    catalog: &crate::catalog::ModCatalog,
+    active: &[String],
+    conflicts: &[crate::scripts::ScriptDefConflict],
+) -> Vec<String> {
+    let package = active_package_dir(catalog, active);
+    conflicts
+        .iter()
+        .map(|c| {
+            let rel = crate::scripts::merged_file_path(c);
+            let in_package = package.as_ref().and_then(|(_, root)| {
+                [root.join("42").join(&rel), root.join(&rel)].into_iter().find(|p| p.is_file())
+            });
+            match in_package {
+                None => "pending".to_string(),
+                Some(merged) => {
+                    let merged_at = modified(&merged);
+                    let newer = c.absolute_files.iter().any(|f| {
+                        matches!((modified(Path::new(f)), merged_at), (Some(a), Some(b)) if a > b)
+                    });
+                    if newer { "stale".to_string() } else { "merged".to_string() }
+                }
             }
         })
         .collect()

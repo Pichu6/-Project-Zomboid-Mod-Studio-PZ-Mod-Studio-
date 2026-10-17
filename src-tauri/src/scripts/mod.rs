@@ -193,6 +193,8 @@ pub struct ScriptDefConflict {
     pub mods: Vec<String>,
     /// The file each mod declares it in, in the same order.
     pub files: Vec<String>,
+    /// Those files on disk, for telling whether a mod changed after a merge was made.
+    pub absolute_files: Vec<String>,
     /// The module and bare name, which a merged block has to be written under.
     pub module: String,
     pub name: String,
@@ -422,7 +424,7 @@ pub fn script_definition_conflicts(
 ) -> Vec<ScriptDefConflict> {
     let game = catalog.game_version_int();
     // definition -> the mods declaring it, in load order.
-    type Declaration = (usize, String, String, String, String, BTreeMap<String, String>);
+    type Declaration = (usize, String, String, String, String, BTreeMap<String, String>, String);
     let mut by_def: HashMap<String, Vec<Declaration>> = HashMap::new();
     let mut seen_mods = std::collections::HashSet::new();
 
@@ -465,6 +467,7 @@ pub fn script_definition_conflicts(
                     rel.clone(),
                     def.body,
                     props,
+                    abs.to_string_lossy().to_string(),
                 ));
             }
         }
@@ -523,6 +526,7 @@ pub fn script_definition_conflicts(
             mod_ids: owners.iter().map(|o| o.1.clone()).collect(),
             mods: owners.iter().map(|o| o.2.clone()).collect(),
             files: owners.iter().map(|o| o.3.clone()).collect(),
+            absolute_files: owners.iter().map(|o| o.6.clone()).collect(),
             clashing,
         });
     }
@@ -754,6 +758,7 @@ mod merge_tests {
             mod_ids: vec!["A".into(), "B".into()],
             mods: vec!["Mod A".into(), "Mod B".into()],
             files: vec!["a.txt".into(), "b.txt".into()],
+            absolute_files: vec!["a.txt".into(), "b.txt".into()],
             bodies: vec![String::new(), String::new()],
             clashing: vec![ClashingProperty {
                 key: key.into(),

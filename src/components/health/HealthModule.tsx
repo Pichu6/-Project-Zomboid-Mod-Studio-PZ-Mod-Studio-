@@ -33,7 +33,7 @@ const SAFE_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'move_befor
  * row and is kept out of the one-click button, which is for what the game itself would complain
  * about.
  */
-const YOUR_CALL_CODES = new Set(['script_definition_conflict']);
+const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definition_stale']);
 
 const isStudioDraftPackage = (m: ModInfo) =>
   m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && m.is_packaged === false;

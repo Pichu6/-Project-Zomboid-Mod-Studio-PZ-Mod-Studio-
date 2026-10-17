@@ -294,7 +294,7 @@ fn launch_sandbox_cmd<R: tauri::Runtime>(
 /// Read-only, and asked for on its own because it reads every script of every active mod.
 #[tauri::command(async)]
 fn script_conflicts_cmd(paths: StudioPaths, active: Vec<String>) -> Vec<catalog::HealthIssue> {
-    catalog::script_definition_issues(&paths.workshop_dir, &paths.user_zomboid_dir, &active)
+    catalog::script_definition_issues(&paths, &active)
 }
 
 /// Every earlier version of the mod list the Studio kept, newest first.

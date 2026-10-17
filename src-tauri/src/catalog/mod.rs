@@ -276,41 +276,53 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
 /// The quiet conflict: two mods defining the same item, recipe or vehicle in differently named
 /// files, which collide nowhere on disk. The game keeps whichever was read last, so the earlier
 /// mod's version of that one thing is simply gone, and nothing says so.
-pub fn script_definition_issues(
-    workshop_dir: &str,
-    user_zomboid_dir: &str,
-    active: &[String],
-) -> Vec<HealthIssue> {
-    let catalog = build_catalog(workshop_dir, user_zomboid_dir, None);
+pub fn script_definition_issues(paths: &crate::vfs::StudioPaths, active: &[String]) -> Vec<HealthIssue> {
+    let catalog = build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
     let conflicts = crate::scripts::script_definition_conflicts(&catalog, active);
-    issues_for_script_conflicts(&conflicts)
+    let states = crate::vfs::definition_merge_states(&catalog, active, &conflicts);
+    issues_for_script_conflicts_with_state(&conflicts, &states)
+}
+
+/// Whether each conflict is already settled in the active package, and whether a mod has changed
+/// since it was. Same three words the file conflicts use: pending, merged, stale.
+pub fn issues_for_script_conflicts(conflicts: &[crate::scripts::ScriptDefConflict]) -> Vec<HealthIssue> {
+    let states = vec!["pending".to_string(); conflicts.len()];
+    issues_for_script_conflicts_with_state(conflicts, &states)
 }
 
 /// Turns what two mods both declare into issues, newest first, capped so one messy list cannot
 /// bury the problems that stop the game loading.
-pub fn issues_for_script_conflicts(
+pub fn issues_for_script_conflicts_with_state(
     conflicts: &[crate::scripts::ScriptDefConflict],
+    states: &[String],
 ) -> Vec<HealthIssue> {
     const SHOWN: usize = 30;
     let mut list = IssueList(Vec::new());
 
     // Two mods that disagree about one item usually disagree about twenty: the same pair, the
     // same files, the same decision. Grouped by the mods involved, in the order they were found.
-    let mut groups: Vec<(Vec<String>, Vec<&crate::scripts::ScriptDefConflict>)> = Vec::new();
-    for c in conflicts {
+    let mut groups: Vec<(Vec<String>, Vec<(&crate::scripts::ScriptDefConflict, &str)>)> = Vec::new();
+    for (i, c) in conflicts.iter().enumerate() {
+        let state = states.get(i).map(String::as_str).unwrap_or("pending");
         match groups.iter_mut().find(|(ids, _)| ids == &c.mod_ids) {
-            Some((_, list)) => list.push(c),
-            None => groups.push((c.mod_ids.clone(), vec![c])),
+            Some((_, list)) => list.push((c, state)),
+            None => groups.push((c.mod_ids.clone(), vec![(c, state)])),
         }
     }
 
     for (_, group) in groups.iter().take(SHOWN) {
-        let c = group[0];
+        let c = group[0].0;
+        // A group is settled only when every definition in it is, and stale if any mod changed
+        // after the merge was made.
+        let pending: Vec<&crate::scripts::ScriptDefConflict> =
+            group.iter().filter(|(_, s)| *s != "merged").map(|(c, _)| *c).collect();
+        let stale = group.iter().any(|(_, s)| *s == "stale");
+        let settled = pending.is_empty();
         let winner = c.mods.last().cloned().unwrap_or_default();
         let winner_id = c.mod_ids.last().cloned().unwrap_or_default();
         let losers: Vec<&str> = c.mods[..c.mods.len().saturating_sub(1)].iter().map(String::as_str).collect();
         // What they disagree about, with a few named so it is recognisable.
-        let named: Vec<&str> = group.iter().take(3).map(|x| x.definition.as_str()).collect();
+        let named: Vec<&str> = group.iter().take(3).map(|(x, _)| x.definition.as_str()).collect();
         let what = if group.len() == 1 {
             named[0].to_string()
         } else {
@@ -325,7 +337,7 @@ pub fn issues_for_script_conflicts(
         // not the whole definition but the handful of properties two mods set differently.
         let mut keys: Vec<&str> = group
             .iter()
-            .flat_map(|x| x.clashing.iter().map(|p| p.key.as_str()))
+            .flat_map(|(x, _)| x.clashing.iter().map(|p| p.key.as_str()))
             .collect();
         keys.sort_unstable();
         keys.dedup();
@@ -345,7 +357,7 @@ pub fn issues_for_script_conflicts(
         };
         let example = group
             .iter()
-            .find_map(|x| x.clashing.first().map(|p| (x, p)))
+            .find_map(|(x, _)| x.clashing.first().map(|p| (x, p)))
             .map(|(x, p)| {
                 let values: Vec<String> = p
                     .values
@@ -389,17 +401,48 @@ pub fn issues_for_script_conflicts(
                 example,
             )
         };
-        // The last mod to load decides a clashing property, so the only way to pick the other
-        // value is to load that mod later.
-        let fixes = if c.mod_ids.len() == 2 {
-            vec![SuggestedFix::MoveBefore {
+
+        // What has already been done about it, which is the difference between a decision to
+        // make and one that only needs making again because a mod changed underneath it.
+        let settled_note = if settled {
+            " Your package already settles this; it loads last, so what is in it wins.".to_string()
+        } else if stale {
+            format!(
+                " {} of these were merged into your package before one of the mods changed, so \
+                 the package no longer matches them: merge them again.",
+                group.len() - pending.len() + pending.len()
+            )
+        } else {
+            String::new()
+        };
+        let message = format!("{}{}", message, settled_note);
+        // Settling it properly means a small file in the package, which is the Merger's job:
+        // it keeps what both mods added where that is possible and leaves one word to choose
+        // where it is not. Swapping the load order is still offered, as the blunt way to the
+        // same answer, but it comes last.
+        let mergeable: Vec<String> = pending
+            .iter()
+            .filter(|x| !x.clashing.is_empty() && x.clashing.iter().all(|p| crate::scripts::union_of(&p.values).is_some()))
+            .map(|x| crate::scripts::merged_file_path(x))
+            .collect();
+        let mut fixes: Vec<SuggestedFix> = Vec::new();
+        if !mergeable.is_empty() {
+            fixes.push(SuggestedFix::MergeFiles { relative_paths: mergeable });
+        }
+        if let Some(first) = pending.first() {
+            fixes.push(SuggestedFix::OpenInMerger {
+                relative_path: crate::scripts::merged_file_path(first),
+            });
+        }
+        if c.mod_ids.len() == 2 && !settled {
+            fixes.push(SuggestedFix::MoveBefore {
                 mod_id: winner_id.clone(),
                 before: c.mod_ids[0].clone(),
-            }]
-        } else {
-            Vec::new()
-        };
-        list.push(Severity::Info, "script_definition_conflict", Some(&winner_id), message, fixes);
+            });
+        }
+        let severity = if stale { Severity::Warning } else { Severity::Info };
+        let code = if stale { "script_definition_stale" } else { "script_definition_conflict" };
+        list.push(severity, code, Some(&winner_id), message, fixes);
         if let Some(last) = list.0.last_mut() {
             last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
         }
@@ -1071,6 +1114,7 @@ mod script_conflict_issue_tests {
             mod_ids: mods.iter().map(|m| m.to_string()).collect(),
             mods: mods.iter().map(|m| m.to_string()).collect(),
             files: vec!["media/scripts/a.txt".into(), "media/scripts/b.txt".into()],
+            absolute_files: vec!["a.txt".into(), "b.txt".into()],
             clashing: vec![crate::scripts::ClashingProperty {
                 key: "StaticModel".to_string(),
                 values: vec![Some("One".to_string()), Some("Other".to_string())],
@@ -1097,8 +1141,10 @@ mod script_conflict_issue_tests {
         assert!(issues[0].message.contains("..."), "{}", issues[0].message);
         // The second pair is named in full, since it is about one thing.
         assert!(issues[1].message.contains("base:burglar"), "{}", issues[1].message);
-        // Each still offers the one move that would flip the decision.
-        assert_eq!(issues[0].fixes.len(), 1);
+        // Settling it in the package comes first; swapping the load order is the blunt way and
+        // comes last. (These mock values cannot be merged into one, so there is no auto-merge.)
+        assert!(matches!(issues[0].fixes[0], SuggestedFix::OpenInMerger { .. }), "{:?}", issues[0].fixes);
+        assert!(matches!(issues[0].fixes[1], SuggestedFix::MoveBefore { .. }), "{:?}", issues[0].fixes);
     }
 }
 
@@ -1117,11 +1163,18 @@ mod live_script_issue_tests {
         ) else {
             return;
         };
-        let _ = pz;
         let active = crate::load_order::ini_parser::read_mod_list_ini(&format!("{}/mods/default.txt", zomboid))
             .map(|d| d.active_mods)
             .unwrap_or_default();
-        let issues = super::script_definition_issues(&workshop, &zomboid, &active);
+        let paths = crate::vfs::StudioPaths {
+            pz_install_dir: pz,
+            workshop_dir: workshop.clone(),
+            mod_list_ini_path: format!("{}/mods/default.txt", zomboid),
+            user_zomboid_dir: zomboid.clone(),
+            carrier_workshop_id: None,
+            is_valid: true,
+        };
+        let issues = super::script_definition_issues(&paths, &active);
         println!("{} row(s) in Mod Health:", issues.len());
         for i in &issues {
             println!("  - {}", i.message);
