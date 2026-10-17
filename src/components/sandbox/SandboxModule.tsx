@@ -35,6 +35,11 @@ interface SandboxModuleProps {
   onOpenMerger: () => void;
   /** Switches a mod off by name, for when the game blames it for an error. */
   onSwitchOffMod?: (modName: string) => void;
+  /**
+   * Opens the Merger on this mod's files to patch one; with a file name from the log, that file.
+   * The mod stays on: the package loads last and the game reads the patched copy.
+   */
+  onPatchMod?: (modId: string, fileHint?: string | null) => void;
   onClearErrorCards?: () => void;
   onGoToSettings: () => void;
 }
@@ -99,6 +104,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   errorCards,
   onOpenMerger,
   onSwitchOffMod,
+  onPatchMod,
   onClearErrorCards,
   onGoToSettings,
 }) => {
@@ -396,6 +402,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
    * line at is the measure, and the cards that threw come first.
    */
   const isWarning = (card: TranslatedErrorCard) => card.severity === 'WARNING';
+
+  /** The log names a mod by its display name; the Merger needs its id. */
+  const modIdNamed = (name: string | null | undefined): string | null => {
+    if (!name) return null;
+    const hit = mods.find((m) => m.name === name || m.mod_id === name);
+    return hit ? hit.mod_id : null;
+  };
+  /** `ZombiesAmputation.lua` from a card's source file, for the Merger to find in the mod. */
+  const fileNamed = (card: TranslatedErrorCard): string | null =>
+    card.source_file ? card.source_file.split(/[/\\]/).pop() || null : null;
   const exceptionCards = useMemo(() => errorCards.filter((c) => !isWarning(c)), [errorCards]);
   const warningCards = useMemo(() => errorCards.filter(isWarning), [errorCards]);
   const orderedCards = useMemo(() => [...exceptionCards, ...warningCards], [exceptionCards, warningCards]);
@@ -903,7 +919,17 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
           </div>
 
           {/* For what the log cannot name: halve the list until one mod is left. */}
-          <BisectPanel paths={paths} mods={mods} onRefreshMods={onRefreshMods} />
+          <BisectPanel
+            paths={paths}
+            mods={mods}
+            onRefreshMods={onRefreshMods}
+            cards={errorCards}
+            onInspect={(term) => {
+              setSearchQuery(term);
+              setSeverityFilter('ALL');
+            }}
+            onPatchMod={onPatchMod}
+          />
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
             {errorCards.length === 0 ? (
@@ -973,6 +999,23 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                           >
                             {card.mod_name ?? modFromStack(card)}
                           </span>
+                          {onPatchMod && modIdNamed(card.mod_name ?? modFromStack(card)) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onPatchMod(modIdNamed(card.mod_name ?? modFromStack(card))!, fileNamed(card))
+                              }
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1"
+                              title={
+                                fileNamed(card)
+                                  ? `Open ${fileNamed(card)} from this mod in the Merger and patch it. The mod stays on; the package loads last, so the game reads your copy of that one file.`
+                                  : 'Open this mod in the Merger and pick a file to patch. The mod stays on; the package loads last.'
+                              }
+                            >
+                              <Wrench className="w-3 h-3" aria-hidden="true" />
+                              {fileNamed(card) ? `Patch ${fileNamed(card)}` : 'Patch a file of it'}
+                            </button>
+                          )}
                           {onSwitchOffMod && (
                             <button
                               type="button"

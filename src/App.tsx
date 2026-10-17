@@ -31,6 +31,8 @@ export const App: React.FC = () => {
   const [openedPackageFolder, setOpenedPackageFolder] = useState<string | null>(null);
   /** Conflicting file the Merger should open on (set from Mod Health). */
   const [mergerFocusPath, setMergerFocusPath] = useState<string | null>(null);
+  /** A mod (and maybe the file the log named) the Monitor sends to the Merger to patch. */
+  const [mergerPatchFocus, setMergerPatchFocus] = useState<{ modId: string; fileHint?: string | null } | null>(null);
   /** Workshop item Browse Mods should open on (set from the Mod List). */
   const [browseFocusWorkshopId, setBrowseFocusWorkshopId] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
@@ -623,6 +625,8 @@ export const App: React.FC = () => {
               onPackageClosed={() => setOpenedPackageFolder(null)}
               focusRelativePath={mergerFocusPath}
               onFocusHandled={() => setMergerFocusPath(null)}
+              patchFocus={mergerPatchFocus}
+              onPatchFocusHandled={() => setMergerPatchFocus(null)}
             />
             </Suspense>
           )}
@@ -634,6 +638,10 @@ export const App: React.FC = () => {
               onRefreshMods={handleRefreshMods}
               errorCards={errorCards}
               onOpenMerger={() => setActiveTab('MERGER')}
+              onPatchMod={(modId, fileHint) => {
+                setMergerPatchFocus({ modId, fileHint: fileHint ?? null });
+                setActiveTab('MERGER');
+              }}
               onSwitchOffMod={(modName) => {
                 // The log gives a display name, which is what the Mod List shows too.
                 const target = mods.find((m) => m.name === modName || m.mod_id === modName);

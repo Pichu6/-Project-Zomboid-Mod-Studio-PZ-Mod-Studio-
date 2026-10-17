@@ -61,6 +61,12 @@ interface MergerModuleProps {
   /** Open a package and select this conflicting file (from Mod Health). */
   focusRelativePath?: string | null;
   onFocusHandled?: () => void;
+  /**
+   * Open a package and this mod's files to patch (from the Monitor: a card that names the mod, or
+   * the hunt that ended on it). With a file name from the log, that file opens straight away.
+   */
+  patchFocus?: { modId: string; fileHint?: string | null } | null;
+  onPatchFocusHandled?: () => void;
 }
 
 /** Lines shown around the point of interest; big vanilla files have tens of thousands. */
@@ -220,6 +226,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   onPackageClosed,
   focusRelativePath,
   onFocusHandled,
+  patchFocus,
+  onPatchFocusHandled,
 }) => {
   /**
    * Files opened to patch a mod's own bug. They are not conflicts -- only one mod ships them --
@@ -912,6 +920,53 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRelativePath, conflicts, isPackageOpened, focusScanDone, packagesLoaded]);
+
+  /**
+   * The Monitor sends a mod to patch: the package it goes into is opened (the same choice as a
+   * conflict sent from Mod Health), then either the file the log named opens in the editor, or
+   * the mod's files are listed to pick from.
+   */
+  const patchFocusStartedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!patchFocus) {
+      patchFocusStartedRef.current = null;
+      return;
+    }
+    const key = `${patchFocus.modId}|${patchFocus.fileHint ?? ''}`;
+    if (patchFocusStartedRef.current === key) return;
+    if (!packagesLoaded) return;
+    patchFocusStartedRef.current = key;
+    const target =
+      packages.find((p) => !p.is_companion_bridge && p.is_active_in_modlist && p.is_packaged) ??
+      packages.find((p) => !p.is_companion_bridge);
+    (async () => {
+      try {
+        if (!isPackageOpened) await handleOpenPackage(target?.folder_name ?? 'Z_PZModStudio_MergedPatch');
+        const files = await TauriService.modFiles(paths, patchFocus.modId);
+        const hint = (patchFocus.fileHint ?? '').toLowerCase();
+        const named = hint
+          ? files.find((f) => {
+              const p = f.relative_path.toLowerCase();
+              return p === hint || p.endsWith('/' + hint);
+            })
+          : undefined;
+        if (named) {
+          await openModFileToPatch(patchFocus.modId, named.relative_path);
+        } else {
+          setPatchModId(patchFocus.modId);
+          setPatchFiles(files);
+          setPatchFileSearch('');
+          setIsPatchPickerOpen(true);
+          if (hint) showToast(`${patchFocus.fileHint} is not a file this build reads from the mod; pick one.`);
+        }
+      } catch (err) {
+        alert(explainError(err));
+      } finally {
+        onPatchFocusHandled?.();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patchFocus, packagesLoaded, isPackageOpened]);
 
   if (!paths.is_valid) {
     return (
