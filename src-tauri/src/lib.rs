@@ -325,6 +325,13 @@ fn mod_files_cmd(paths: StudioPaths, mod_id: String) -> Result<Vec<vfs::mod_patc
     vfs::mod_patch::files_of_mod(&catalog, &mod_id)
 }
 
+/// The files of a mod that `require` this module: where a known path fix has to go.
+#[tauri::command(async)]
+fn mod_files_requiring_cmd(paths: StudioPaths, mod_id: String, module: String) -> Result<Vec<vfs::mod_patch::ModFile>, String> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    vfs::mod_patch::files_requiring(&catalog, &mod_id, &module)
+}
+
 /// One mod's file, in the shape the Merger edits and saves into the package.
 #[tauri::command(async)]
 fn mod_file_to_patch_cmd(
@@ -729,6 +736,7 @@ pub fn run() {
             script_conflicts_cmd,
             resolve_failed_requires_cmd,
             mod_files_cmd,
+            mod_files_requiring_cmd,
             mod_file_to_patch_cmd,
             sandbox_presets_cmd,
             write_sandbox_preset_cmd,

@@ -431,33 +431,38 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   const [fixNotes, setFixNotes] = useState<Record<string, string>>({});
   const [fixing, setFixing] = useState<string | null>(null);
   const [fixedBanner, setFixedBanner] = useState<string | null>(null);
-  const handleFixPath = async (card: TranslatedErrorCard, modId: string, fileHint: string, fix: { from: string; to: string }) => {
+  const handleFixPath = async (card: TranslatedErrorCard, modId: string, fix: { from: string; to: string }) => {
     setFixing(card.id);
     try {
-      const files = await TauriService.modFiles(paths, modId);
-      const hint = fileHint.toLowerCase();
-      const named = files.find((f) => {
-        const p = f.relative_path.toLowerCase();
-        return p === hint || p.endsWith('/' + hint);
-      });
-      if (!named) {
-        // Not a file this build reads from the mod: the Merger's picker is the place to look.
-        onPatchMod?.(modId, fileHint, fix);
-        return;
-      }
-      const opened = await TauriService.modFileToPatch(paths, modId, named.relative_path);
-      const fixed = applyRequireFix(opened.merged_output || opened.base_content, fix);
-      if (!fixed) {
-        onPatchMod?.(modId, fileHint, fix);
+      // The files that ask for the module. The log names the file on some lines and on others
+      // (`KahluaThread.call > require(...)`) nobody, so the mod is searched either way: a fix
+      // the log names one file for may be needed in two.
+      const files = await TauriService.modFilesRequiring(paths, modId, fix.from);
+      if (files.length === 0) {
+        setFixNotes((prev) => ({
+          ...prev,
+          [card.id]: `No file of this mod asks for ${fix.from} in a way the Studio can rewrite, so there is nothing to change here.`,
+        }));
         return;
       }
       const packages = await TauriService.listMergedPackages(paths.user_zomboid_dir || '', paths.mod_list_ini_path || '');
       const folder = packageForPatch(packages);
-      const result = await TauriService.publishFileIntoPackage(paths, folder, opened.relative_path, fixed.content);
       const display = packages.find((p) => p.folder_name === folder)?.display_name ?? folder;
+      const done: string[] = [];
+      for (const file of files) {
+        const opened = await TauriService.modFileToPatch(paths, modId, file.relative_path);
+        const fixed = applyRequireFix(opened.merged_output || opened.base_content, fix);
+        if (!fixed) continue;
+        await TauriService.publishFileIntoPackage(paths, folder, opened.relative_path, fixed.content);
+        done.push(`${file.relative_path.split('/').pop()} (line ${fixed.line})`);
+      }
+      if (done.length === 0) {
+        setFixNotes((prev) => ({ ...prev, [card.id]: `Nothing to rewrite for ${fix.from}.` }));
+        return;
+      }
       // Done: the card goes, and one line above the list says what happened and what is left.
       setFixedBanner(
-        `${fileHint} fixed — line ${fixed.line} now asks for ${fix.to} — and published in ${display} (${result.files_written} files). Relaunch the game; this warning should not come back.`
+        `${done.join(', ')} now ${done.length === 1 ? 'asks' : 'ask'} for ${fix.to}, published in ${display}. Relaunch the game; this warning should not come back.`
       );
       onDismissErrorCard?.(card.id);
       onRefreshMods();
@@ -1080,16 +1085,17 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                               type="button"
                               onClick={() => {
                                 const modId = modIdNamed(card.mod_name ?? modFromStack(card))!;
-                                const file = fileNamed(card);
-                                const fix = file ? knownFix(card) : null;
-                                if (file && fix) void handleFixPath(card, modId, file, fix);
-                                else onPatchMod(modId, file, null);
+                                const fix = knownFix(card);
+                                // A known fix is done from here, whether or not the log named the
+                                // file; only an exception with no known fix goes to the Merger.
+                                if (fix) void handleFixPath(card, modId, fix);
+                                else onPatchMod(modId, fileNamed(card), null);
                               }}
                               disabled={fixing === card.id}
                               className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1 disabled:opacity-50"
                               title={
-                                fileNamed(card) && knownFix(card)
-                                  ? `Change the require in ${fileNamed(card)} to the path the module has now and publish it into the package, in place. The mod stays on; relaunch the game afterwards.`
+                                knownFix(card)
+                                  ? `Rewrite the require in every file of this mod that asks for ${knownFix(card)!.from}, to the path the module has now, and publish them into the package in place. The mod stays on; relaunch the game afterwards.`
                                   : fileNamed(card)
                                   ? `Open ${fileNamed(card)} from this mod in the Merger and patch it. The mod stays on; the package loads last, so the game reads your copy of that one file.`
                                   : 'Open this mod in the Merger and pick a file to patch. The mod stays on; the package loads last.'
@@ -1098,8 +1104,10 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                               <Wrench className="w-3 h-3" aria-hidden="true" />
                               {fixing === card.id
                                 ? 'Fixing…'
-                                : fileNamed(card) && knownFix(card)
-                                ? `Fix the path in ${fileNamed(card)}`
+                                : knownFix(card)
+                                ? fileNamed(card)
+                                  ? `Fix the path in ${fileNamed(card)}`
+                                  : 'Fix the path'
                                 : fileNamed(card)
                                 ? `Patch ${fileNamed(card)}`
                                 : 'Patch a file of it'}

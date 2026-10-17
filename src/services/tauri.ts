@@ -947,6 +947,11 @@ export const TauriService = {
     return await invoke<ModFile[]>('mod_files_cmd', { paths, modId });
   },
 
+  /** The files of a mod that `require` this module: where a known path fix has to go. */
+  modFilesRequiring: async (paths: StudioPathsUI, modId: string, module: string): Promise<ModFile[]> => {
+    return await invoke<ModFile[]>('mod_files_requiring_cmd', { paths, modId, module });
+  },
+
   /** Opens one mod's file as something the Merger can edit and save into the package. */
   modFileToPatch: async (paths: StudioPathsUI, modId: string, relativePath: string): Promise<VfsConflict> => {
     const raw = await invoke<any>('mod_file_to_patch_cmd', { paths, modId, relativePath });

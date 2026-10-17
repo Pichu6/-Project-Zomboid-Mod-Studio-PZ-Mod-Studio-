@@ -70,6 +70,41 @@ pub fn files_of_mod(
     Ok(found.into_values().collect())
 }
 
+/// The Lua files of a mod that ask for one module: `require("X")`, `require "X"`, `require 'X'`.
+///
+/// The game's `require("X") failed` line does not always say which file asked -- a
+/// `KahluaThread.call` line names nobody -- and a fix that knows the new path still needs the
+/// file to put it in. A mod ships a few hundred files; the ones that ask for X are the answer.
+pub fn files_requiring(
+    catalog: &crate::catalog::ModCatalog,
+    mod_id: &str,
+    module: &str,
+) -> Result<Vec<ModFile>, String> {
+    let wanted = module.trim();
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(files_of_mod(catalog, mod_id)?
+        .into_iter()
+        .filter(|f| f.kind == "LUA")
+        .filter(|f| {
+            std::fs::read_to_string(&f.absolute_path)
+                .map(|text| asks_for(&text, wanted))
+                .unwrap_or(false)
+        })
+        .collect())
+}
+
+/// Whether Lua source has a `require` of exactly this module, in any of the game's spellings.
+pub fn asks_for(lua: &str, module: &str) -> bool {
+    lua.match_indices("require").any(|(at, _)| {
+        let rest = lua[at + "require".len()..].trim_start();
+        let rest = rest.strip_prefix('(').map(str::trim_start).unwrap_or(rest);
+        let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') else { return false };
+        rest[1..].strip_prefix(module).and_then(|after| after.chars().next()) == Some(quote)
+    })
+}
+
 /// One mod's file as something the Merger can edit and save into the package.
 ///
 /// It is the same shape as a conflict between two mods, with one of them: what the mod says on
@@ -135,6 +170,16 @@ pub fn conflict_for_mod_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_require_is_found_in_every_spelling_and_not_in_a_longer_name() {
+        assert!(asks_for("require \"TimedActions/ISPathFindAction\"", "TimedActions/ISPathFindAction"));
+        assert!(asks_for("local a = require('TimedActions/ISPathFindAction')", "TimedActions/ISPathFindAction"));
+        assert!(asks_for("require( \"TimedActions/ISPathFindAction\" )", "TimedActions/ISPathFindAction"));
+        assert!(!asks_for("require \"TimedActions/ISPathFindActionX\"", "TimedActions/ISPathFindAction"));
+        assert!(!asks_for("-- nothing here", "TimedActions/ISPathFindAction"));
+        assert!(!asks_for("require \"Other\"", "TimedActions/ISPathFindAction"));
+    }
 
     /// Lists a real mod's files and opens one, which is what the Merger's picker does.
     /// PZMS_WORKSHOP_DIR=... PZMS_ZOMBOID_DIR=... PZMS_PZ_DIR=... PZMS_MOD_ID=FancyHandworkB42_19
