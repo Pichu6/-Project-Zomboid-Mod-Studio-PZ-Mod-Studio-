@@ -348,6 +348,18 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
 
 /// Translates raw Java stacktraces & Lua errors into actionable cards.
 pub fn translate_log_error(line: &str, counter: usize) -> Option<TranslatedErrorPayload> {
+    // A card says something went wrong. The rules below match on names a mod puts in the log --
+    // "FancyHandwork", "SaucedCarts", "dSAG" -- and the game writes those names when the mod
+    // merely loads, so without this the Monitor reported `LOG : Mod f:0> loading FancyHandwork`
+    // as an uncaught error on tick. Nothing but a line the game itself marked as trouble.
+    let is_trouble = line.starts_with("ERROR")
+        || line.starts_with("WARN")
+        || line.contains("Exception")
+        || line.contains("stack trace")
+        || line.contains("Error:");
+    if !is_trouble {
+        return None;
+    }
     if line.contains("isLocalPlayer()") || line.contains("ToggleDoorActual") || line.contains("ToggleWindow") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
@@ -884,5 +896,61 @@ mod blame_tests {
         assert!(card.title.contains("Nature's Call"));
         assert_eq!(card.explanation, "require(\"NCUtils\") failed");
         assert!(card.line_number.is_none(), "no line number is invented");
+    }
+}
+
+#[cfg(test)]
+mod card_gate_tests {
+    use super::translate_log_error;
+
+    #[test]
+    fn a_mod_merely_loading_is_not_an_error() {
+        // The line that produced a card claiming Fancy Handwork threw on tick.
+        assert!(translate_log_error("LOG  : Mod          f:0> loading FancyHandworkB42_19", 1).is_none());
+        assert!(translate_log_error("LOG  : Mod          f:0> loading SaucedCarts", 1).is_none());
+        assert!(translate_log_error("LOG  : General      f:0> mod \"dSAG\" overrides media/x.lua", 1).is_none());
+    }
+
+    #[test]
+    fn a_real_error_line_still_makes_its_card() {
+        let card = translate_log_error(
+            "ERROR: General      f:304> 20)).FHhandleKeybinds> Exception thrown aFancyHandwork.lua:126",
+            1,
+        );
+        assert!(card.is_some());
+        assert!(card.unwrap().title.contains("Fancy Handwork"));
+    }
+}
+
+#[cfg(test)]
+mod live_card_tests {
+    /// How many cards the real log makes, and which lines they come from.
+    /// PZMS_CONSOLE=... cargo test --release the_real_cards -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn the_real_cards() {
+        let Ok(path) = std::env::var("PZMS_CONSOLE") else { return };
+        let text = std::fs::read_to_string(&path).expect("console.txt");
+        let mut cards = Vec::new();
+        let mut from_log_lines = 0;
+        for (i, line) in text.lines().enumerate() {
+            if let Some(card) = super::translate_log_error(line, i) {
+                if !line.starts_with("ERROR") && !line.starts_with("WARN") {
+                    from_log_lines += 1;
+                }
+                cards.push((card.title, line.to_string()));
+            }
+        }
+        let mut titles: Vec<&String> = cards.iter().map(|(t, _)| t).collect();
+        titles.sort();
+        titles.dedup();
+        println!("{} matching lines, {} distinct cards", cards.len(), titles.len());
+        for t in &titles {
+            let n = cards.iter().filter(|(title, _)| &title == t).count();
+            let example = cards.iter().find(|(title, _)| &title == t).unwrap();
+            println!("  {:>5}x {}", n, t);
+            println!("          from: {}", example.1.trim().chars().take(100).collect::<String>());
+        }
+        println!("cards made from lines the game did not mark as trouble: {}", from_log_lines);
     }
 }

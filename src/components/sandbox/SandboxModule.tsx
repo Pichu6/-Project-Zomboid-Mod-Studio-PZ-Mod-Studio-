@@ -79,6 +79,18 @@ export const formatLogDisplayName = (file: LogFileInfoUI): string => {
   return file.file_name;
 };
 
+/**
+ * An error with its line number, frame and other numbers blurred, so the same thing happening
+ * six hundred times collapses to one shape. The game writes the same failure once per frame,
+ * which is why a log of a thousand error lines is usually a handful of problems.
+ */
+const errorShape = (line: string): string =>
+  line
+    .replace(/^(ERROR|WARN)\s*:\s*\w+\s*f:\d+\s*(at [\w.]+\s*)?>?\s*/, '')
+    .replace(/\d+/g, 'N')
+    .trim()
+    .slice(0, 90);
+
 export const SandboxModule: React.FC<SandboxModuleProps> = ({
   paths,
   mods,
@@ -357,6 +369,44 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   };
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  /**
+   * How many error lines of each shape the log in front of you holds, so a card can say whether
+   * it happened once or six hundred times. Counted from the log itself rather than remembered as
+   * cards arrive, so it is the same for a live session and a log loaded from disk.
+   */
+  const errorCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    let total = 0;
+    for (const line of activeTab?.lines ?? []) {
+      if (!line.startsWith('ERROR')) continue;
+      total += 1;
+      const shape = errorShape(line);
+      counts.set(shape, (counts.get(shape) ?? 0) + 1);
+    }
+    return { counts, total, distinct: counts.size };
+  }, [activeTab?.lines]);
+
+  const timesSeen = (card: TranslatedErrorCard) => errorCounts.counts.get(errorShape(card.raw_error)) ?? 0;
+
+  /**
+   * The mod a card belongs to when the error line itself does not say.
+   *
+   * The game writes `ERROR ... Exception thrown` first and the stack trace after it, and it is
+   * the frames that carry `Lua((MOD:Name))`. The backend only sees one line at a time, so it
+   * cannot look ahead; here the whole log is in front of us, so the frames just below the error
+   * are read for the name.
+   */
+  const modFromStack = (card: TranslatedErrorCard): string | null => {
+    const lines = activeTab?.lines ?? [];
+    const at = lines.findIndex((l) => l.includes(card.raw_error.trim()));
+    if (at < 0) return null;
+    for (const line of lines.slice(at, at + 30)) {
+      const found = line.match(/Lua\(\(MOD:(.+?)\)\)/);
+      if (found) return found[1];
+    }
+    return null;
+  };
 
   // Filter lines dynamically
   const filteredLines = useMemo(() => {
@@ -752,7 +802,15 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                 )}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Fatal Java/Lua exceptions detected with automatic patch.
+                {errorCounts.total > 0 ? (
+                  <>
+                    {errorCounts.total.toLocaleString()} error lines in this log are{' '}
+                    {errorCounts.distinct} different problems: the game writes the same failure
+                    again every time it happens.
+                  </>
+                ) : (
+                  <>Fatal Java/Lua exceptions detected with automatic patch.</>
+                )}
               </p>
             </div>
 
@@ -797,21 +855,39 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                   <div className="flex items-start gap-2.5">
                     <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-100">{card.title}</h4>
-                      {card.mod_name && (
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="text-xs font-bold text-slate-100">{card.title}</h4>
+                        {timesSeen(card) > 1 && (
+                          <span
+                            className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded border border-red-800/70 bg-red-950/50 text-red-300"
+                            title={`This error is in the log ${timesSeen(card)} times${
+                              errorCounts.total > 0
+                                ? ` \u2014 ${Math.round((timesSeen(card) / errorCounts.total) * 100)}% of every error line`
+                                : ''
+                            }. The ones that repeat are the ones worth fixing first.`}
+                          >
+                            {timesSeen(card).toLocaleString()}\u00d7
+                          </span>
+                        )}
+                      </div>
+                      {(card.mod_name ?? modFromStack(card)) && (
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           <span
                             className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-300"
-                            title="The game named this mod on the log line"
+                            title={
+                              card.mod_name
+                                ? 'The game named this mod on the log line'
+                                : 'The game named this mod in the stack trace under the error'
+                            }
                           >
-                            {card.mod_name}
+                            {card.mod_name ?? modFromStack(card)}
                           </span>
                           {onSwitchOffMod && (
                             <button
                               type="button"
-                              onClick={() => onSwitchOffMod(card.mod_name!)}
+                              onClick={() => onSwitchOffMod((card.mod_name ?? modFromStack(card))!)}
                               className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
-                              title={`Switch ${card.mod_name} off in the Mod List, to see whether it is the cause`}
+                              title={`Switch ${card.mod_name ?? modFromStack(card)} off in the Mod List, to see whether it is the cause`}
                             >
                               Switch it off
                             </button>
