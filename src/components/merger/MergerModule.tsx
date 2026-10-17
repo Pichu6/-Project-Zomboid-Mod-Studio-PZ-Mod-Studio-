@@ -610,11 +610,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
    */
   type Choice = { key: string; label: string; help: string; content: string };
 
+  /** False when the scan put a note in place of a file the base game does not have. */
+  const hasVanillaBase =
+    !!currentConflict &&
+    !currentConflict.base_content.startsWith('-- vanilla file not present') &&
+    !currentConflict.base_content.startsWith('-- vanilla file unreadable');
+
   const fileChoices = useMemo<Choice[]>(() => {
     if (!currentConflict) return [];
-    const vanillaMissing =
-      currentConflict.base_content.startsWith('-- vanilla file not present') ||
-      currentConflict.base_content.startsWith('-- vanilla file unreadable');
+    const vanillaMissing = !hasVanillaBase;
     const merged = currentConflict.auto_ast_output || currentConflict.merged_output || '';
     const isDefinition = currentConflict.file_type === 'SCRIPT_DEFINITION';
     const choices: Choice[] = [];
@@ -1468,20 +1472,35 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                             <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
                               {totalFileLines} lines
                             </span>
+                            {/* With no vanilla file there is nothing to load: the button used to put
+                                the "not present" note itself into the editor, one Save away from
+                                shipping a one-line comment in place of the mods' code. */}
                             <button
+                              disabled={!hasVanillaBase}
                               onClick={() => {
+                                if (!hasVanillaBase) return;
                                 setEditorContent(currentConflict.base_content);
                                 setIsManuallyEdited(false);
                                 showToast(`Vanilla base code restored in editor.`);
                               }}
-                              className={`px-2 py-1 text-[10px] font-semibold rounded border transition cursor-pointer shadow-sm ${
-                                editorContent === currentConflict.base_content && !isManuallyEdited
-                                  ? 'bg-slate-800 text-emerald-300 border-emerald-700/80 font-bold'
-                                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                              className={`px-2 py-1 text-[10px] font-semibold rounded border transition shadow-sm ${
+                                !hasVanillaBase
+                                  ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
+                                  : editorContent === currentConflict.base_content && !isManuallyEdited
+                                  ? 'bg-slate-800 text-emerald-300 border-emerald-700/80 font-bold cursor-pointer'
+                                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white cursor-pointer'
                               }`}
-                              title="Load original Vanilla base code in the lower editor"
+                              title={
+                                hasVanillaBase
+                                  ? 'Load original Vanilla base code in the lower editor'
+                                  : 'The base game has no file here, so there is nothing to go back to'
+                              }
                             >
-                              {editorContent === currentConflict.base_content && !isManuallyEdited ? '✓ Base Active' : 'Load Base'}
+                              {!hasVanillaBase
+                                ? 'No base'
+                                : editorContent === currentConflict.base_content && !isManuallyEdited
+                                ? '\u2713 Base Active'
+                                : 'Load Base'}
                             </button>
                           </div>
                         </div>
