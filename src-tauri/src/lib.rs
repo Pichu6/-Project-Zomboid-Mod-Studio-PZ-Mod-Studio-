@@ -592,6 +592,24 @@ fn clean_master_patch_cmd(req: MasterPatchRequest) -> Result<bool, String> {
     patch_generator::clean_master_patch(req)
 }
 
+/// One more file into a package, published in place: what it held stays, packaged stays packaged.
+#[tauri::command(async)]
+fn publish_file_into_package_cmd(
+    user_zomboid_dir: String,
+    mod_list_ini_path: String,
+    package_folder_name: String,
+    relative_path: String,
+    content: String,
+) -> Result<MasterPatchResult, String> {
+    patch_generator::publish_file_into_package(
+        &user_zomboid_dir,
+        &mod_list_ini_path,
+        &package_folder_name,
+        &relative_path,
+        &content,
+    )
+}
+
 #[tauri::command(async)]
 fn get_master_patch_status_cmd(user_zomboid_dir: String, mod_list_ini_path: String, package_folder_name: Option<String>) -> patch_generator::MasterPatchStatusInfo {
     patch_generator::get_master_patch_status(&user_zomboid_dir, &mod_list_ini_path, package_folder_name)
@@ -725,6 +743,7 @@ pub fn run() {
             bisect_stop_cmd,
             generate_master_patch_cmd,
             clean_master_patch_cmd,
+            publish_file_into_package_cmd,
             get_master_patch_status_cmd,
             list_merged_packages_cmd,
             create_merged_package_cmd,

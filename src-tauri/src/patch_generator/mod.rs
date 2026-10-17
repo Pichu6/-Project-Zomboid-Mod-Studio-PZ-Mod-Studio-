@@ -482,6 +482,37 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
     })
 }
 
+/// Puts one more file into a package the user already has, by the same publish the Merger runs:
+/// every resolved draft the package holds is published again, plus this one. Nothing the package
+/// held is dropped, and a packaged package stays packaged.
+///
+/// This is how one file gets into a published package without unpacking it: unpacking deletes
+/// every published file from the game until the next publish, which is a lot to pay for one
+/// corrected `require`.
+pub fn publish_file_into_package(
+    user_zomboid_dir: &str,
+    mod_list_ini_path: &str,
+    package_folder_name: &str,
+    relative_path: &str,
+    content: &str,
+) -> Result<MasterPatchResult, String> {
+    let package = to_package_folder(package_folder_name)?;
+    let mut merged_files: Vec<MergedFilePayload> = get_draft_resolutions(user_zomboid_dir, &package)
+        .into_values()
+        .filter(|d| d.status == "RESOLVED" && d.relative_path != relative_path)
+        .map(|d| MergedFilePayload { relative_path: d.relative_path, content: d.resolved_content })
+        .collect();
+    merged_files.push(MergedFilePayload { relative_path: relative_path.to_string(), content: content.to_string() });
+    generate_master_patch(MasterPatchRequest {
+        workshop_dir: None,
+        pz_install_dir: None,
+        user_zomboid_dir: user_zomboid_dir.to_string(),
+        mod_list_ini_path: mod_list_ini_path.to_string(),
+        merged_files,
+        package_folder_name: Some(package),
+    })
+}
+
 /// Safely removes synthetic patch files for a specific package from disk and removes it from active load order.
 pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
     let target_folder_name = to_package_folder(
@@ -1692,25 +1723,13 @@ mod live_mod_fix {
             return;
         };
         let content = std::fs::read_to_string(&file).expect("the corrected file");
-        let mut merged_files: Vec<super::MergedFilePayload> =
-            super::get_draft_resolutions(&zomboid, &package)
-                .into_values()
-                .filter(|d| d.status == "RESOLVED" && d.relative_path != rel)
-                .map(|d| super::MergedFilePayload {
-                    relative_path: d.relative_path,
-                    content: d.resolved_content,
-                })
-                .collect();
-        println!("{} already holds {} resolved files", package, merged_files.len());
-        merged_files.push(super::MergedFilePayload { relative_path: rel.clone(), content });
-        let result = super::generate_master_patch(super::MasterPatchRequest {
-            workshop_dir: std::env::var("PZMS_WORKSHOP_DIR").ok(),
-            pz_install_dir: std::env::var("PZMS_PZ_DIR").ok(),
-            user_zomboid_dir: zomboid.clone(),
-            mod_list_ini_path: format!("{}/mods/default.txt", zomboid),
-            merged_files,
-            package_folder_name: Some(package),
-        })
+        let result = super::publish_file_into_package(
+            &zomboid,
+            &format!("{}/mods/default.txt", zomboid),
+            &package,
+            &rel,
+            &content,
+        )
         .expect("the package is written");
         println!("package: {}", result.patch_mod_dir);
         println!("files written: {}", result.files_written);
@@ -1744,6 +1763,34 @@ mod publish_keeps_files {
             package_folder_name: Some("Z_PZModStudio_Test".to_string()),
         })
         .expect("published")
+    }
+
+    /// One file into a package that already holds two: three come out, none lost.
+    #[test]
+    fn one_more_file_joins_what_the_package_already_holds() {
+        let zomboid = package_dir("joins");
+        let ini = zomboid.join("mods").join("default.txt");
+        fs::write(&ini, "VERSION = 1,\n\nmods\n{\n    mod = A,\n}\n").unwrap();
+        publish(&zomboid, vec![("media/lua/shared/a.lua", "a"), ("media/lua/shared/b.lua", "b")]);
+
+        let result = publish_file_into_package(
+            &zomboid.to_string_lossy(),
+            &ini.to_string_lossy(),
+            "Z_PZModStudio_Test",
+            "media/lua/shared/c.lua",
+            "c",
+        )
+        .expect("published");
+        assert_eq!(result.files_written, 3);
+
+        let pkg = zomboid.join("mods").join("Z_PZModStudio_Test");
+        for name in ["a", "b", "c"] {
+            let path = pkg.join("42").join("media").join("lua").join("shared").join(format!("{}.lua", name));
+            assert_eq!(fs::read_to_string(&path).unwrap(), name, "{} is there", name);
+        }
+        let drafts = get_draft_resolutions(&zomboid.to_string_lossy(), "Z_PZModStudio_Test");
+        assert_eq!(drafts.len(), 3);
+        let _ = fs::remove_dir_all(&zomboid);
     }
 
     #[test]

@@ -4,6 +4,7 @@ import { BisectPanel } from './BisectPanel';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import { liveConsoleLines, startLiveConsole, subscribeLiveConsole } from '../../services/liveConsole';
+import { applyRequireFix, packageForPatch } from '../../utils/requireFix';
 
 const LIVE_CONSOLE_HEADER = [
   '[PZ Monitor Center] Realtime client session monitor ready.',
@@ -426,6 +427,50 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     const found = card.raw_error.match(/require\(\s*["']([^"']+)["']\s*\)/);
     return found ? found[1] : null;
   };
+  /**
+   * "Fix the path" from the card, with no trip to the Merger: the file is read from the mod, the
+   * require rewritten, and the result published into the package in place -- the package stays
+   * packaged, nothing is unpacked. What the card then says is what happened, and what is left
+   * (relaunch the game) is the only step the Studio cannot take.
+   */
+  const [fixNotes, setFixNotes] = useState<Record<string, string>>({});
+  const [fixing, setFixing] = useState<string | null>(null);
+  const handleFixPath = async (card: TranslatedErrorCard, modId: string, fileHint: string, fix: { from: string; to: string }) => {
+    setFixing(card.id);
+    try {
+      const files = await TauriService.modFiles(paths, modId);
+      const hint = fileHint.toLowerCase();
+      const named = files.find((f) => {
+        const p = f.relative_path.toLowerCase();
+        return p === hint || p.endsWith('/' + hint);
+      });
+      if (!named) {
+        // Not a file this build reads from the mod: the Merger's picker is the place to look.
+        onPatchMod?.(modId, fileHint, fix);
+        return;
+      }
+      const opened = await TauriService.modFileToPatch(paths, modId, named.relative_path);
+      const fixed = applyRequireFix(opened.merged_output || opened.base_content, fix);
+      if (!fixed) {
+        onPatchMod?.(modId, fileHint, fix);
+        return;
+      }
+      const packages = await TauriService.listMergedPackages(paths.user_zomboid_dir || '', paths.mod_list_ini_path || '');
+      const folder = packageForPatch(packages);
+      const result = await TauriService.publishFileIntoPackage(paths, folder, opened.relative_path, fixed.content);
+      const display = packages.find((p) => p.folder_name === folder)?.display_name ?? folder;
+      setFixNotes((prev) => ({
+        ...prev,
+        [card.id]: `Line ${fixed.line}: require("${fix.from}") is now require("${fix.to}"), published in ${display} (${result.files_written} files). Relaunch the game; this warning should not come back.`,
+      }));
+      onRefreshMods();
+    } catch (err) {
+      setFixNotes((prev) => ({ ...prev, [card.id]: explainError(err) }));
+    } finally {
+      setFixing(null);
+    }
+  };
+
   /** A `require` the Studio found at another path: the fix is known before the file is opened. */
   const knownFix = (card: TranslatedErrorCard): { from: string; to: string } | null => {
     const wanted = moduleWanted(card);
@@ -1006,29 +1051,37 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                           {onPatchMod && modIdNamed(card.mod_name ?? modFromStack(card)) && (
                             <button
                               type="button"
-                              onClick={() =>
-                                onPatchMod(
-                                  modIdNamed(card.mod_name ?? modFromStack(card))!,
-                                  fileNamed(card),
-                                  fileNamed(card) ? knownFix(card) : null
-                                )
-                              }
-                              className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1"
+                              onClick={() => {
+                                const modId = modIdNamed(card.mod_name ?? modFromStack(card))!;
+                                const file = fileNamed(card);
+                                const fix = file ? knownFix(card) : null;
+                                if (file && fix) void handleFixPath(card, modId, file, fix);
+                                else onPatchMod(modId, file, null);
+                              }}
+                              disabled={fixing === card.id}
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1 disabled:opacity-50"
                               title={
                                 fileNamed(card) && knownFix(card)
-                                  ? `Change the require in ${fileNamed(card)} to the path the module has now, save it in the package and open it in the Merger. Then Package & Publish. The mod stays on.`
+                                  ? `Change the require in ${fileNamed(card)} to the path the module has now and publish it into the package, in place. The mod stays on; relaunch the game afterwards.`
                                   : fileNamed(card)
                                   ? `Open ${fileNamed(card)} from this mod in the Merger and patch it. The mod stays on; the package loads last, so the game reads your copy of that one file.`
                                   : 'Open this mod in the Merger and pick a file to patch. The mod stays on; the package loads last.'
                               }
                             >
                               <Wrench className="w-3 h-3" aria-hidden="true" />
-                              {fileNamed(card) && knownFix(card)
+                              {fixing === card.id
+                                ? 'Fixing…'
+                                : fileNamed(card) && knownFix(card)
                                 ? `Fix the path in ${fileNamed(card)}`
                                 : fileNamed(card)
                                 ? `Patch ${fileNamed(card)}`
                                 : 'Patch a file of it'}
                             </button>
+                          )}
+                          {fixNotes[card.id] && (
+                            <div className="basis-full text-[10px] text-emerald-300 bg-emerald-950/40 border border-emerald-800/50 rounded px-2 py-1 leading-relaxed">
+                              {fixNotes[card.id]}
+                            </div>
                           )}
                           {onSwitchOffMod && (
                             <button

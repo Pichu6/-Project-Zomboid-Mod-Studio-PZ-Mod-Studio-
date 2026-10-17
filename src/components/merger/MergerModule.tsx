@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { VfsConflict, ChangeRegion, ModChangeSummary, ModInfo, ModFile } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
+import { RequireFix, applyRequireFix, packageForPatch } from '../../utils/requireFix';
 import {
   GitCompare,
   CheckCircle2,
@@ -70,31 +71,8 @@ interface MergerModuleProps {
   onPatchFocusHandled?: () => void;
 }
 
-/** A `require` path the Studio already knows the answer to: the module moved. */
-export interface RequireFix {
-  from: string;
-  to: string;
-}
-
-/**
- * `require("Vehicle/ISVehiclePartMenu")` -> `require("Vehicles/ISUI/ISVehiclePartMenu")`, in any
- * quoting the file uses. Returns the new text and the first line changed, or null if the file
- * does not contain that require.
- */
-export function applyRequireFix(content: string, fix: RequireFix): { content: string; line: number } | null {
-  const escaped = fix.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(require\\s*\\(?\\s*)(["'])${escaped}\\2`, 'g');
-  if (!re.test(content)) return null;
-  re.lastIndex = 0;
-  let firstAt = -1;
-  const out = content.replace(re, (whole, head: string, quote: string, offset: number) => {
-    if (firstAt < 0) firstAt = offset;
-    void whole;
-    return `${head}${quote}${fix.to}${quote}`;
-  });
-  const line = content.slice(0, firstAt).split('\n').length;
-  return { content: out, line };
-}
+/** A mod's own file opened to patch, as opposed to a conflict the scan found. */
+const isPatchTarget = (c: VfsConflict | null | undefined) => !!c && c.id.startsWith('modfile_');
 
 /** Lines shown around the point of interest; big vanilla files have tens of thousands. */
 const VIEW_WINDOW = 200;
@@ -392,6 +370,24 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
    * Opens one of a mod's own files for patching. It joins the list like a conflict and is edited
    * and saved the same way; the package, loading last, is then what the game reads for it.
    */
+  /**
+   * Saves a patched mod file into the package. While the package is packaged it is published in
+   * place as well -- the package stays packaged and the game reads the new file on its next
+   * launch -- because unpacking would take every published file away until the next publish.
+   * Returns whether it was published.
+   */
+  const savePatchTarget = async (id: string, relativePath: string, content: string): Promise<boolean> => {
+    if (isCurrentlyPackaged) {
+      await TauriService.publishFileIntoPackage(paths, selectedPackageFolder, relativePath, content);
+      await fetchPatchStatus();
+      await fetchPackages();
+      if (onRefreshMods) await onRefreshMods();
+      return true;
+    }
+    onResolveConflict(id, content, selectedPackageFolder, relativePath);
+    return false;
+  };
+
   const openModFileToPatch = async (modId: string, relativePath: string, fix?: RequireFix | null) => {
     try {
       const opened = await TauriService.modFileToPatch(paths, modId, relativePath);
@@ -407,9 +403,11 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setPatchModId(null);
       setPatchFiles(null);
       if (fixed) {
-        onResolveConflict(entry.id, fixed.content, selectedPackageFolder, entry.relative_path);
+        const published = await savePatchTarget(entry.id, entry.relative_path, fixed.content);
         showToast(
-          `Line ${fixed.line}: require("${fix!.from}") is now require("${fix!.to}"), saved in the package. Press Package & Publish to put it in the game.`
+          published
+            ? `Line ${fixed.line}: require("${fix!.from}") is now require("${fix!.to}"), published in the package. Relaunch the game.`
+            : `Line ${fixed.line}: require("${fix!.from}") is now require("${fix!.to}"), saved in the package. Press Package & Publish to put it in the game.`
         );
       } else if (fix) {
         showToast(`${relativePath} opened, but it has no require("${fix.from}") to change; look for the path by hand.`);
@@ -719,8 +717,22 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   };
 
   // Step 2: Save Individual Conflict File Edit
-  const handleSaveSingleConflict = () => {
+  const handleSaveSingleConflict = async () => {
     if (!currentConflict) return;
+    if (isPatchTarget(currentConflict)) {
+      try {
+        const published = await savePatchTarget(currentConflict.id, currentConflict.relative_path, editorContent);
+        setIsManuallyEdited(false);
+        showToast(
+          published
+            ? `✓ "${currentConflict.relative_path}" published in the package. Relaunch the game to read it.`
+            : `✓ "${currentConflict.relative_path}" saved. Press Package & Publish to put it in the game.`
+        );
+      } catch {
+        // Already shown by TauriService.
+      }
+      return;
+    }
     onResolveConflict(currentConflict.id, editorContent, selectedPackageFolder, currentConflict.relative_path);
     setIsManuallyEdited(false);
     showToast(`✓ Merge saved for "${currentConflict.relative_path}". Status marked as Resolved.`);
@@ -978,14 +990,11 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     if (patchFocusStartedRef.current === key) return;
     if (!packagesLoaded) return;
     patchFocusStartedRef.current = key;
-    const target =
-      packages.find((p) => !p.is_companion_bridge && p.is_active_in_modlist && p.is_packaged) ??
-      packages.find((p) => !p.is_companion_bridge);
     (async () => {
       try {
         // The package is opened at once and the file right after; the scan that an opened
         // package starts runs behind them, so the editor is in front of you before it ends.
-        const folder = target?.folder_name ?? 'Z_PZModStudio_MergedPatch';
+        const folder = packageForPatch(packages);
         if (!isPackageOpened) {
           setSelectedPackageFolder(folder);
           setIsPackageOpened(true);
@@ -1046,6 +1055,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const currentPackage = packages.find((p) => p.folder_name === selectedPackageFolder) || packages[0];
   const allResolved = conflicts.length > 0 && conflicts.every((c) => isSettled(c.status));
   const isCurrentlyPackaged = patchStatus?.is_packaged ?? currentPackage?.is_packaged ?? false;
+  // A packaged package is read-only, except for a mod's own file opened to patch: that one is
+  // edited and published in place, since unpacking for it would empty the package in the game.
+  const editorLocked = isCurrentlyPackaged && !isPatchTarget(currentConflict);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">
@@ -1644,7 +1656,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           )}
 
           {/* Main Body: If package is closed/packaged, hide editor content until unlocked */}
-          {isCurrentlyPackaged ? (
+          {editorLocked ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950/80 overflow-y-auto text-slate-200 animate-fade-in">
               <div className="max-w-xl w-full bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-8 shadow-2xl space-y-6 text-center">
                 <div className="w-20 h-20 mx-auto rounded-3xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner">
@@ -1999,9 +2011,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         <Code2 className="w-4 h-4 text-emerald-400" />
                         <span>Merge Result (Master Patch)</span>
                       </span>
-                      {isCurrentlyPackaged ? (
+                      {editorLocked ? (
                         <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80 font-mono font-bold">
                           🔒 Published (Read Only)
+                        </span>
+                      ) : isCurrentlyPackaged ? (
+                        <span
+                          className="px-2 py-0.5 text-[10px] rounded bg-amber-950 text-amber-300 border border-amber-800/80 font-mono"
+                          title="This is a mod's own file: Save publishes it into the packaged package in place, nothing is unpacked"
+                        >
+                          {isManuallyEdited ? '✏️ Edited · Save publishes in place' : 'Patch · Save publishes in place'}
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 text-[10px] rounded bg-amber-950 text-amber-300 border border-amber-800/80 font-mono">
@@ -2011,7 +2030,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {isCurrentlyPackaged ? (
+                      {editorLocked ? (
                         <button
                           onClick={() => setIsUnpackageModalOpen(true)}
                           disabled={isCleaning}
@@ -2077,7 +2096,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       theme="vs-dark"
                       value={editorContent}
                       onChange={(val) => {
-                        if (!isCurrentlyPackaged) {
+                        if (!editorLocked) {
                           setEditorContent(val || '');
                           setIsManuallyEdited(true);
                         }
@@ -2090,7 +2109,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         smoothScrolling: true,
                         tabSize: 4,
                         wordWrap: 'on',
-                        readOnly: isCurrentlyPackaged,
+                        readOnly: editorLocked,
                       }}
                     />
                   </div>

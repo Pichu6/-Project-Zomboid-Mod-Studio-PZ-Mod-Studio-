@@ -463,6 +463,30 @@ export const TauriService = {
   /**
    * Generates the synthetic master patch mod under Zomboid/mods/Z_PZModStudio_MergedPatch
    */
+  /**
+   * One more file into a package, published in place: everything the package holds is published
+   * again with it, and a packaged package stays packaged -- no unpacking, nothing leaves the game.
+   */
+  publishFileIntoPackage: async (
+    paths: StudioPathsUI,
+    packageFolderName: string,
+    relativePath: string,
+    content: string
+  ): Promise<MasterPatchResultUI> => {
+    try {
+      return await invoke<MasterPatchResultUI>('publish_file_into_package_cmd', {
+        userZomboidDir: paths.user_zomboid_dir,
+        modListIniPath: paths.mod_list_ini_path,
+        packageFolderName,
+        relativePath,
+        content,
+      });
+    } catch (err) {
+      reportBackendError('Publishing the patched file', err);
+      throw err;
+    }
+  },
+
   generateMasterPatch: async (req: {
     workshop_dir?: string;
     pz_install_dir?: string;
