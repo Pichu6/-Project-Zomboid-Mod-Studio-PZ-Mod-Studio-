@@ -371,14 +371,34 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Editor content state
-  const [editorContent, setEditorContent] = useState<string>(
-    currentConflict?.merged_output || currentConflict?.base_content || ''
-  );
+  /**
+   * What the editor starts with for a file: the decision the package holds, failing that what
+   * the Studio proposes, failing that the copy of the mod that loads last.
+   *
+   * Never the base when the base game has no such file. The scan puts a note there --
+   * "-- vanilla file not present for this path" -- and falling back to it put that note in the
+   * editor as if it were the file, marked "Your own edit", one Save away from publishing a
+   * one-line comment in place of two mods' code.
+   */
+  const startingContent = (c: VfsConflict | undefined): string => {
+    if (!c) return '';
+    const vanillaMissing =
+      c.base_content.startsWith('-- vanilla file not present') ||
+      c.base_content.startsWith('-- vanilla file unreadable');
+    return (
+      c.merged_output ||
+      c.auto_ast_output ||
+      (vanillaMissing ? c.competing_mods[c.competing_mods.length - 1]?.content ?? '' : c.base_content) ||
+      ''
+    );
+  };
+
+  const [editorContent, setEditorContent] = useState<string>(startingContent(currentConflict));
   const [isManuallyEdited, setIsManuallyEdited] = useState<boolean>(false);
 
   useEffect(() => {
     if (currentConflict) {
-      setEditorContent(currentConflict.merged_output || currentConflict.base_content || '');
+      setEditorContent(startingContent(currentConflict));
       setIsManuallyEdited(false);
     }
   }, [currentConflict?.id, currentConflict?.merged_output]);

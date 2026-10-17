@@ -754,12 +754,30 @@ fn handle_get_crash_diagnostics(args: Value) -> ToolCallResult {
             let mut error_cards: Vec<TranslatedErrorPayload> = Vec::new();
             let mut raw_error_snippets: Vec<String> = Vec::new();
             let mut counter = 1;
+            // The game writes the same failure once per frame: a session's log holds a thousand
+            // error lines and a handful of problems. One card each, with how often it happened,
+            // and the mod named a line or two above where the error itself names nobody.
+            let mut times: Vec<usize> = Vec::new();
+            let mut blame = crate::sandbox::ModBlame::default();
 
             for line_res in reader.lines() {
                 if let Ok(line) = line_res {
-                    if let Some(card) = translate_log_error(&line, counter) {
-                        error_cards.push(card);
-                        counter += 1;
+                    blame.observe(&line);
+                    if let Some(mut card) = translate_log_error(&line, counter) {
+                        if card.mod_name.is_none() {
+                            card.mod_name = blame.of(&line);
+                        }
+                        let shape = error_shape(&card.raw_error);
+                        match error_cards.iter().position(|c: &TranslatedErrorPayload| {
+                            c.title == card.title && error_shape(&c.raw_error) == shape
+                        }) {
+                            Some(at) => times[at] += 1,
+                            None => {
+                                error_cards.push(card);
+                                times.push(1);
+                                counter += 1;
+                            }
+                        }
                     } else if line.contains("Exception") || line.contains("ERROR:") {
                         if raw_error_snippets.len() < 30 {
                             raw_error_snippets.push(line);
@@ -768,12 +786,26 @@ fn handle_get_crash_diagnostics(args: Value) -> ToolCallResult {
                 }
             }
 
+            let cards: Vec<Value> = error_cards
+                .iter()
+                .enumerate()
+                .map(|(i, card)| {
+                    let mut value = serde_json::to_value(card).unwrap_or_else(|_| json!({}));
+                    if let Some(object) = value.as_object_mut() {
+                        object.insert("occurrences".to_string(), json!(times[i]));
+                    }
+                    value
+                })
+                .collect();
+            let total: usize = times.iter().sum();
+
             let pid_opt = find_running_pz_pid();
             let result = json!({
                 "game_running": pid_opt.is_some(),
                 "pid": pid_opt,
-                "diagnosed_error_cards_count": error_cards.len(),
-                "diagnosed_error_cards": error_cards,
+                "diagnosed_error_cards_count": cards.len(),
+                "diagnosed_error_lines": total,
+                "diagnosed_error_cards": cards,
                 "raw_error_sample_lines": raw_error_snippets
             });
 
@@ -793,6 +825,20 @@ fn handle_get_crash_diagnostics(args: Value) -> ToolCallResult {
             is_error: true,
         },
     }
+}
+
+/// An error with its numbers blurred, so the same failure on a hundred frames is one problem.
+fn error_shape(line: &str) -> String {
+    let body = line
+        .split_once('>')
+        .map(|(_, rest)| rest)
+        .unwrap_or(line)
+        .trim();
+    let blurred: String = body
+        .chars()
+        .map(|c| if c.is_ascii_digit() { 'N' } else { c })
+        .collect();
+    blurred.chars().take(90).collect()
 }
 
 fn handle_list_installed_mods(args: Value) -> ToolCallResult {
