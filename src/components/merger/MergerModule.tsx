@@ -387,13 +387,24 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     return conflicts.some((c) => c.status === 'RESOLVED' || c.status === 'AUTO_MERGED');
   }, [conflicts]);
 
+  /**
+   * A file is settled when the package holds a decision for it. Anything else -- including the
+   * `MANUAL_CONFLICT` the scan's empty status becomes on the way in -- still needs one, which is
+   * what each row says with "Needs Review".
+   *
+   * Asking for `PENDING` instead meant "Merge All" switched itself off while twelve rows said
+   * Needs Review, telling the user everything was already resolved: disabled exactly when it was
+   * the thing to press.
+   */
+  const isSettled = (status?: string) => status === 'RESOLVED' || status === 'AUTO_MERGED';
+
   const hasPendingConflicts = useMemo(() => {
-    return conflicts.some((c) => c.status === 'PENDING' || !c.status);
+    return conflicts.some((c) => !isSettled(c.status));
   }, [conflicts]);
 
   const isCurrentConflictUnmerged = useMemo(() => {
     if (!currentConflict) return true;
-    const isPending = currentConflict.status === 'PENDING';
+    const isPending = !isSettled(currentConflict.status);
     const isBaseCode = !currentConflict.merged_output || editorContent === currentConflict.base_content;
     return isPending && isBaseCode && !isManuallyEdited;
   }, [currentConflict, editorContent, isManuallyEdited]);
@@ -837,7 +848,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
 
   const currentPackage = packages.find((p) => p.folder_name === selectedPackageFolder) || packages[0];
-  const allResolved = conflicts.length > 0 && conflicts.every((c) => c.status === 'RESOLVED' || c.status === 'AUTO_MERGED');
+  const allResolved = conflicts.length > 0 && conflicts.every((c) => isSettled(c.status));
   const isCurrentlyPackaged = patchStatus?.is_packaged ?? currentPackage?.is_packaged ?? false;
 
   return (
