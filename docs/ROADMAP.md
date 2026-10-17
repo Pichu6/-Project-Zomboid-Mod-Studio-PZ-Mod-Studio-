@@ -44,7 +44,7 @@ Status legend: ✅ done · 🔨 in progress · ⬜ planned
 | 🔨 | Health report UI with one-click fixes: enable missing dependency, move library up, disable mod not for this build, search Workshop for missing mods (done); next: show issues inline in the Mod List | Skyve compatibility report |
 | ⬜ | Load-order rules: user rules + community rules database (GitHub, versioned, PR-based) on top of `require`/`loadModAfter`/`loadModBefore` | LOOT masterlist, RimSort rules DB |
 | 🔨 | Undo / history for every load-order change | Auto-sort is now game-exact (moves only what rules force) and can be undone; full history next |
-| ⬜ | Filters and search (enabled, broken, maps, libraries, not for this build, updated recently), drag and drop | Every manager |
+| ✅ | Filters and search: switched on/off, with a problem, maps, libraries, won't load on this build, updated recently — each with its count; and drag a mod to where it should load | Every manager |
 | 🔨 | Profiles export and import as `.pzpack`, with every mod's Workshop id so the other player can subscribe (done). Next: sandbox settings in the same file | r2modman, Modrinth `.mrpack` |
 | ⬜ | Per-file conflict view: which mod's file the game actually uses, plus script-level conflicts (same item/recipe defined twice) | MO2 conflict pane |
 | ⬜ | Server tools: build `WorkshopItems=` / `Mods=` / `Map=` from a profile using real IDs from `mod.info`; detect client/server mismatches | Top server-admin pain point |

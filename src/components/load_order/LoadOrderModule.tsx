@@ -75,6 +75,20 @@ const PACKAGE_COLOR_PALETTES = [
   { border: 'border-l-teal-400', bgMatch: 'bg-teal-950/25 hover:bg-teal-950/40 border-teal-900/40', badge: 'bg-teal-950/90 text-teal-300 border-teal-700/60' },
 ];
 
+/** The questions worth asking of a long mod list. */
+const MOD_FILTERS = [
+  { id: 'all', label: 'Every mod', hint: 'No filter' },
+  { id: 'enabled', label: 'Switched on', hint: 'The mods the game will load' },
+  { id: 'disabled', label: 'Switched off', hint: 'Installed, but not in the list the game reads' },
+  { id: 'problems', label: 'With a problem', hint: 'Missing or disabled requirements, load order, incompatible pairs' },
+  { id: 'maps', label: 'Maps', hint: 'Mods that add map tiles' },
+  { id: 'libraries', label: 'Libraries', hint: 'Mods other mods require' },
+  { id: 'unloadable', label: "Won't load on this build", hint: 'No folder for the installed build, or outside its version range' },
+  { id: 'updated', label: 'Updated recently', hint: 'Changed on the Workshop since you last played, or waiting to download' },
+] as const;
+
+type ModFilterId = (typeof MOD_FILTERS)[number]['id'];
+
 const normalizeModId = (id: string): string => {
   return id
     .trim()
@@ -611,6 +625,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  /** What you are looking for in a list of a hundred mods. See MOD_FILTERS. */
+  const [stateFilter, setStateFilter] = useState<ModFilterId>('all');
   /**
    * With a profile active the list is about that profile, so the rest of the library is out of
    * the way until asked for. "Show everything" then labels each mod with the profiles using it,
@@ -633,11 +649,65 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     }
     return map;
   }, [profiles]);
+  /**
+   * Whether a mod belongs in each filter. The answers come from what the game and the health
+   * check already told us, so a filter never claims more than the Studio knows.
+   */
+  const matchesFilter = (m: ModInfo, id: ModFilterId): boolean => {
+    const catalog = catalogById?.get(m.mod_id);
+    switch (id) {
+      case 'all':
+        return true;
+      case 'enabled':
+        return m.enabled;
+      case 'disabled':
+        return !m.enabled;
+      case 'problems':
+        return Boolean(
+          missingActiveDependenciesMap[m.mod_id] ||
+            missingUninstalledDependenciesMap[m.mod_id] ||
+            loadOrderViolationsMap[m.mod_id] ||
+            activeConflictsMap[m.mod_id]
+        );
+      case 'maps':
+        return Boolean(m.is_map_mod);
+      case 'libraries':
+        return Boolean(m.is_library);
+      case 'unloadable':
+        return (
+          m.loadable_on_installed_build === false ||
+          (catalog ? catalog.loadability.status !== 'loadable' : false)
+        );
+      case 'updated':
+        return Boolean(
+          catalog?.workshop_state?.updated_since_last_play || catalog?.workshop_state?.update_pending
+        );
+    }
+  };
+
+  /** How many mods each filter would show, so an empty filter is visibly empty before you click. */
+  const filterCounts = useMemo(() => {
+    const counts = {} as Record<ModFilterId, number>;
+    for (const { id } of MOD_FILTERS) counts[id] = 0;
+    for (const m of mods) {
+      for (const { id } of MOD_FILTERS) if (matchesFilter(m, id)) counts[id] += 1;
+    }
+    return counts;
+  }, [
+    mods,
+    catalogById,
+    missingActiveDependenciesMap,
+    missingUninstalledDependenciesMap,
+    loadOrderViolationsMap,
+    activeConflictsMap,
+  ]);
+
   const filteredMods = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     return mods.filter((m) => {
       if (activeProfile && !showEveryMod && !inActiveProfile.has(m.mod_id) && !m.enabled) return false;
       if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
+      if (!matchesFilter(m, stateFilter)) return false;
       if (!query) return true;
       return (
         m.name.toLowerCase().includes(query) ||
@@ -645,7 +715,43 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
       );
     });
-  }, [mods, searchQuery, sourceFilter, catalogById, activeProfile, showEveryMod, inActiveProfile]);
+  }, [
+    mods,
+    searchQuery,
+    sourceFilter,
+    stateFilter,
+    catalogById,
+    activeProfile,
+    showEveryMod,
+    inActiveProfile,
+    filterCounts,
+  ]);
+
+  /**
+   * Dragging a mod to where it should load. The position is read from the full list, not the
+   * filtered one, so a mod dropped between two visible rows lands between those two mods even
+   * when the rows in between are hidden.
+   */
+  const [dragModId, setDragModId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ modId: string; after: boolean } | null>(null);
+
+  const handleDropOnMod = (targetModId: string, after: boolean) => {
+    const dragged = dragModId;
+    setDragModId(null);
+    setDropTarget(null);
+    if (!dragged || dragged === targetModId) return;
+
+    const from = mods.findIndex((m) => m.mod_id === dragged);
+    if (from === -1) return;
+    const next = [...mods];
+    const [moved] = next.splice(from, 1);
+    const at = next.findIndex((m) => m.mod_id === targetModId);
+    if (at === -1) return;
+    next.splice(after ? at + 1 : at, 0, moved);
+    triggerReorder(next);
+    setHighlightedModId(dragged);
+    setTimeout(() => setHighlightedModId(null), 1200);
+  };
 
   const reverseDependents = useMemo(() => {
     if (!selectedMod) return [];
@@ -1175,6 +1281,20 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           )}
 
           <select
+            value={stateFilter}
+            onChange={(e) => setStateFilter(e.target.value as ModFilterId)}
+            aria-label="Filter the list"
+            title="Show only the mods you are looking for"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 cursor-pointer"
+          >
+            {MOD_FILTERS.map(({ id, label, hint }) => (
+              <option key={id} value={id} title={hint}>
+                {label} ({filterCounts[id] ?? 0})
+              </option>
+            ))}
+          </select>
+
+          <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
             aria-label="Filter by source"
@@ -1302,7 +1422,28 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-2 space-y-1">
             {filteredMods.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
-                No mods match your search query "<b className="text-slate-400">{searchQuery}</b>".
+                {searchQuery ? (
+                  <>No mod matches "<b className="text-slate-400">{searchQuery}</b>"</>
+                ) : (
+                  <>
+                    No mod is{' '}
+                    <b className="text-slate-400">
+                      {MOD_FILTERS.find((f) => f.id === stateFilter)?.label.toLowerCase()}
+                    </b>
+                  </>
+                )}
+                {(stateFilter !== 'all' || sourceFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setStateFilter('all');
+                      setSourceFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="ml-2 underline text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                  >
+                    show everything
+                  </button>
+                )}
               </div>
             ) : (
               filteredMods.map((mod) => {
@@ -1336,12 +1477,42 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 const isOpenedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === false);
                 const isClosedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === true);
 
+                const isDragging = dragModId === mod.mod_id;
+                const dropEdge = dropTarget?.modId === mod.mod_id ? dropTarget.after : null;
+
                 return (
                   <div
                     key={mod.mod_id}
                     ref={(el) => {
                       modRowRefs.current[mod.mod_id] = el;
                     }}
+                    draggable={!isAssigningThis}
+                    onDragStart={(e) => {
+                      setDragModId(mod.mod_id);
+                      e.dataTransfer.effectAllowed = 'move';
+                      // Firefox refuses to start a drag without data on it.
+                      e.dataTransfer.setData('text/plain', mod.mod_id);
+                    }}
+                    onDragEnd={() => {
+                      setDragModId(null);
+                      setDropTarget(null);
+                    }}
+                    onDragOver={(e) => {
+                      if (!dragModId || dragModId === mod.mod_id) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      const box = e.currentTarget.getBoundingClientRect();
+                      const after = e.clientY > box.top + box.height / 2;
+                      if (dropTarget?.modId !== mod.mod_id || dropTarget.after !== after) {
+                        setDropTarget({ modId: mod.mod_id, after });
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const box = e.currentTarget.getBoundingClientRect();
+                      handleDropOnMod(mod.mod_id, e.clientY > box.top + box.height / 2);
+                    }}
+                    title={isAssigningThis ? undefined : 'Drag to move this mod in the load order'}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     onContextMenu={(e) => {
                       setSelectedModId(mod.mod_id);
@@ -1359,6 +1530,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         : isMultiPackage && packageColor
                         ? `border-l-4 ${packageColor.border}`
                         : 'border-l border-l-transparent'
+                    } ${isDragging ? 'opacity-40' : ''} ${
+                      dropEdge === false
+                        ? 'border-t-2 border-t-emerald-400'
+                        : dropEdge === true
+                        ? 'border-b-2 border-b-emerald-400'
+                        : ''
                     } ${
                       isHighlighted
                         ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
