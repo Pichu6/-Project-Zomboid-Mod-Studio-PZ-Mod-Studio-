@@ -32,7 +32,11 @@ jobs:
           cp site/index.html _site/
           cp community/index.json community/rules.json _site/
 
+      # Asks GitHub to switch Pages on for the repository when it is not yet, which the token
+      # may or may not be allowed to do; the settings page is the sure way.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
