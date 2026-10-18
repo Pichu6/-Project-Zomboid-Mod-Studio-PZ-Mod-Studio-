@@ -86,3 +86,12 @@ add what you tested. A GitHub account is needed to propose, none to receive. The
 (`.github/workflows/community.yml`) refuses a registry that is malformed, names a shim patch that
 does not exist, or has an entry with neither a source nor a build, so a person reviews only what
 a machine could not.
+
+## The web view
+
+`site/index.html` shows the same data in a browser: search, a build filter, a card per mod, the
+detail with its issues and fixes, the rules table, and links to propose. `.github/workflows/pages.yml`
+publishes it as GitHub Pages with `index.json` and `rules.json` beside it, on every push that touches
+them; it needs Pages enabled once in the repository settings (Settings → Pages → Source: GitHub
+Actions). Locally: serve the repository root (`python -m http.server 8765`) and open `/site/`.
+Reports without git go through the issue form (`.github/ISSUE_TEMPLATE/mod-report.yml`).
