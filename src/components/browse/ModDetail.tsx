@@ -5,6 +5,7 @@ import { TauriService, reportBackendError } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { BBCode } from './BBCode';
 import { CommunityIndexSection } from './CommunityIndexSection';
+import { KeepActions, StarButton } from '../common/keep';
 import { registriesForItem, useCommunityIndex } from '../../services/communityIndex';
 import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
 
@@ -34,6 +35,8 @@ interface ModDetailProps {
   onMakeProfile?: (name: string, workshopIds: string[]) => void;
   /** The game build installed, so the index's lines read as "reported on 42.19" when it differs. */
   installedBuild?: string | null;
+  /** Favorite, lists, profiles: the star in the header. */
+  keep?: KeepActions;
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -167,7 +170,7 @@ function useDetails<T>(load: () => Promise<T>, key: string, what: string) {
   return { data, loading };
 }
 
-const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, paths, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, installedBuild = null }) => {
+const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, paths, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, installedBuild = null, keep }) => {
   const { data, loading } = useDetails<WorkshopItemDetails>(() => TauriService.workshopItemDetails(target.id), target.id, 'Loading the Workshop item');
   const index = useCommunityIndex(paths);
   const item = data?.item ?? target.preview;
@@ -180,7 +183,7 @@ const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } &
     <DetailLayout
       title={item?.title ?? `Workshop item ${target.id}`}
       subtitle={data?.author ? `by ${data.author}` : undefined}
-      chips={<>{installed.length > 0 && <InstalledChip />}<UpdateChips state={stateByItem.get(target.id)} />{item && <BuildChips builds={item.builds} source="The Workshop page" />}</>}
+      chips={<>{keep && <StarButton keep={keep} target={{ workshop_id: target.id, name: item?.title ?? `Workshop item ${target.id}`, installedModIds: installed }} />}{installed.length > 0 && <InstalledChip />}<UpdateChips state={stateByItem.get(target.id)} />{item && <BuildChips builds={item.builds} source="The Workshop page" />}</>}
       loading={loading}
       main={
         <>
@@ -245,7 +248,7 @@ const FILE_STYLE: Record<string, string> = {
   OPTIONAL: 'border-violet-600/60 text-violet-300',
 };
 
-const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & DetailTarget }> = ({ target, installedByNexusId, onNexusDownload, onOpen }) => {
+const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & DetailTarget }> = ({ target, installedByNexusId, onNexusDownload, onOpen, keep }) => {
   const { data, loading } = useDetails<NexusModDetails>(() => TauriService.nexusModDetails(target.modId), String(target.modId), 'Loading the Nexus mod');
   const m = data?.mod ?? target.preview;
   const installed = installedByNexusId.get(target.modId) ?? [];
@@ -256,7 +259,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
     <DetailLayout
       title={m?.name ?? `Nexus mod ${target.modId}`}
       subtitle={m ? `by ${m.author || m.uploader || 'unknown'}${m.version ? ` · v${m.version}` : ''}` : undefined}
-      chips={<>{installed.length > 0 && <InstalledChip />}{m && <BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source="The Nexus name/summary" />}{m?.category && <Chip className="border-orange-700/60 text-orange-300">{m.category}</Chip>}</>}
+      chips={<>{keep && <StarButton keep={keep} target={{ nexus_id: target.modId, name: m?.name ?? `Nexus mod ${target.modId}`, installedModIds: installed }} />}{installed.length > 0 && <InstalledChip />}{m && <BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source="The Nexus name/summary" />}{m?.category && <Chip className="border-orange-700/60 text-orange-300">{m.category}</Chip>}</>}
       loading={loading}
       main={
         <>

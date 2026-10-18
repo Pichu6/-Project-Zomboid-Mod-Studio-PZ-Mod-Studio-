@@ -83,6 +83,24 @@ export interface ModErrorStat {
   last_warning: string | null;
 }
 
+/** One entry of a player's list: a Workshop item by id, or any mod by its mod id. */
+export interface ModListItem {
+  workshop_id?: string | null;
+  mod_id?: string | null;
+  /** A Nexus mod not installed yet, by its id on Nexus. */
+  nexus_id?: number | null;
+  name: string;
+  added_at?: string;
+}
+
+/** A list of the player's own (Favorites is always first), kept in Zomboid/PZModStudio_Lists.json. */
+export interface ModList {
+  id: string;
+  name: string;
+  created_at: string;
+  items: ModListItem[];
+}
+
 /** How long each mod's files took to load in the last session, from the game's DebugLog. */
 export interface LoadTimes {
   log_file: string | null;

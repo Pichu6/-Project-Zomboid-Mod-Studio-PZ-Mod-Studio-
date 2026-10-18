@@ -655,6 +655,7 @@ Start the game anyway?`
               onRulesChanged={health.recheck}
               profiles={profiles}
               activeProfileId={activeProfile?.id ?? null}
+              onProfilesChanged={() => void refreshActiveProfile()}
               onOpenInBrowser={(workshopId) => {
                 setBrowseFocusWorkshopId(workshopId);
                 setActiveTab('BROWSE');
@@ -680,6 +681,8 @@ Start the game anyway?`
               onFocusHandled={() => setBrowseFocusWorkshopId(null)}
               onMakeProfile={handleMakeProfileFromCollection}
               installedBuild={health.report?.game_version ?? null}
+              profiles={profiles}
+              onProfilesChanged={() => void refreshActiveProfile()}
             />
           )}
 

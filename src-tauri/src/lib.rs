@@ -6,6 +6,7 @@ pub mod diff_engine;
 pub mod error_report;
 pub mod images;
 pub mod instance_manager;
+pub mod lists;
 pub mod load_order;
 pub mod mcp;
 pub mod mod_install;
@@ -343,6 +344,37 @@ fn keep_mod_version_cmd(paths: StudioPaths, mod_id: String) -> Result<snapshots:
 #[tauri::command(async)]
 fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
     sandbox::error_stats_from_console(&paths.user_zomboid_dir)
+}
+
+/// The player's lists of mods (Favorites first), from Zomboid/PZModStudio_Lists.json.
+#[tauri::command(async)]
+fn mod_lists_cmd(user_zomboid_dir: String) -> Vec<lists::ModList> {
+    lists::load_lists(&user_zomboid_dir)
+}
+
+#[tauri::command(async)]
+fn create_mod_list_cmd(user_zomboid_dir: String, name: String) -> Result<lists::ModList, String> {
+    lists::create_list(&user_zomboid_dir, &name)
+}
+
+#[tauri::command(async)]
+fn rename_mod_list_cmd(user_zomboid_dir: String, list_id: String, name: String) -> Result<lists::ModList, String> {
+    lists::rename_list(&user_zomboid_dir, &list_id, &name)
+}
+
+#[tauri::command(async)]
+fn delete_mod_list_cmd(user_zomboid_dir: String, list_id: String) -> Result<Vec<lists::ModList>, String> {
+    lists::delete_list(&user_zomboid_dir, &list_id)
+}
+
+#[tauri::command(async)]
+fn add_to_mod_list_cmd(user_zomboid_dir: String, list_id: String, item: lists::ListItem) -> Result<lists::ModList, String> {
+    lists::add_to_list(&user_zomboid_dir, &list_id, item)
+}
+
+#[tauri::command(async)]
+fn remove_from_mod_list_cmd(user_zomboid_dir: String, list_id: String, key: String) -> Result<lists::ModList, String> {
+    lists::remove_from_list(&user_zomboid_dir, &list_id, &key)
 }
 
 /// How long each mod's files took to load in the last session, from the game's DebugLog.
@@ -913,6 +945,12 @@ pub fn run() {
             mark_profile_played_cmd,
             mod_error_stats_cmd,
             mod_load_times_cmd,
+            mod_lists_cmd,
+            create_mod_list_cmd,
+            rename_mod_list_cmd,
+            delete_mod_list_cmd,
+            add_to_mod_list_cmd,
+            remove_from_mod_list_cmd,
             restore_kept_version_cmd,
             delete_kept_version_cmd,
             nexus_search_cmd,

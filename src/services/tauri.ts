@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -420,6 +420,60 @@ export const TauriService = {
   },
 
   /** What each mod did to the last session's log, from console.txt as it is now. */
+  /** The player's lists of mods, Favorites first. */
+  modLists: async (userZomboidDir: string): Promise<ModList[]> => {
+    try {
+      return await invoke<ModList[]>('mod_lists_cmd', { userZomboidDir });
+    } catch {
+      return [];
+    }
+  },
+
+  createModList: async (userZomboidDir: string, name: string): Promise<ModList> => {
+    try {
+      return await invoke<ModList>('create_mod_list_cmd', { userZomboidDir, name });
+    } catch (err) {
+      reportBackendError('Making a list', err);
+      throw err;
+    }
+  },
+
+  renameModList: async (userZomboidDir: string, listId: string, name: string): Promise<ModList> => {
+    try {
+      return await invoke<ModList>('rename_mod_list_cmd', { userZomboidDir, listId, name });
+    } catch (err) {
+      reportBackendError('Renaming a list', err);
+      throw err;
+    }
+  },
+
+  deleteModList: async (userZomboidDir: string, listId: string): Promise<ModList[]> => {
+    try {
+      return await invoke<ModList[]>('delete_mod_list_cmd', { userZomboidDir, listId });
+    } catch (err) {
+      reportBackendError('Deleting a list', err);
+      throw err;
+    }
+  },
+
+  addToModList: async (userZomboidDir: string, listId: string, item: ModListItem): Promise<ModList> => {
+    try {
+      return await invoke<ModList>('add_to_mod_list_cmd', { userZomboidDir, listId, item });
+    } catch (err) {
+      reportBackendError('Adding to a list', err);
+      throw err;
+    }
+  },
+
+  removeFromModList: async (userZomboidDir: string, listId: string, key: string): Promise<ModList> => {
+    try {
+      return await invoke<ModList>('remove_from_mod_list_cmd', { userZomboidDir, listId, key });
+    } catch (err) {
+      reportBackendError('Taking out of a list', err);
+      throw err;
+    }
+  },
+
   /** How long each mod's files took to load in the last session (the game's DebugLog); empty when there is none. */
   modLoadTimes: async (paths: StudioPathsUI): Promise<LoadTimes> => {
     try {

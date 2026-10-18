@@ -112,8 +112,8 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | **Favorites and lists** (~3 h): a star on a Browse card, in the detail page and on a Mod List row; "Add to a list…" with lists of the player's own (by Workshop id and mod id, kept in `Zomboid/PZModStudio_Lists.json`); a **My lists** tab in Browse beside My mods, each list with Subscribe all and Make a profile | What a Workshop collection is, but the player's, offline, mixing sources. Later: import a Workshop collection into a list, export a list as one |
-| ⬜ | **Add to a profile…** (~1 h) from a Browse card (when installed) and a Mod List row: pick a profile, the mod is appended to its list, switched on | Today a profile is edited only from inside it |
+| ✅ | **Favorites and lists** (shipped 2026-10-18; `lists.rs`, `Zomboid/PZModStudio_Lists.json`, `services/modLists.ts`, `common/keep.tsx`, `browse/ListsTab.tsx`): a star on a Browse card, in the detail page and on a Mod List row; "Add to a list…" with lists of the player's own (by Workshop id and mod id, kept in `Zomboid/PZModStudio_Lists.json`); a **My lists** tab in Browse beside My mods, each list with Subscribe all and Make a profile | What a Workshop collection is, but the player's, offline, mixing sources. Later: import a Workshop collection into a list, export a list as one |
+| ✅ | **Add to a profile…** from a Browse card (when installed) and a Mod List row: pick a profile, the mod is appended to its list, switched on | Shipped 2026-10-18 with the lists: the same three items (Favorite, Add to a list…, Add to a profile…) on every card, the detail page's star, and the row's menu |
 | ⬜ | Other people's lists | Later, through the community repository, the way the index works: a list is a file, by pull request |
 
 ## Phase 7: For mod developers too

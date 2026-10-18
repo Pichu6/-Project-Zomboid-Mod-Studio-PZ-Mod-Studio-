@@ -4,7 +4,10 @@ import {
 } from 'lucide-react';
 import {
   CatalogModSummary, InstallResult, ModOrigin, NexusCategory, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort,
+  AppInstance,
 } from '../../types';
+import { KeepActions, useKeepActions } from '../common/keep';
+import { ListsTab } from './ListsTab';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 import {
@@ -24,11 +27,14 @@ interface BrowseModuleProps {
   onInstalled: () => void;
   /** Makes a profile from a collection: the Studio's mod list and profiles live above here. */
   onMakeProfile?: (name: string, workshopIds: string[]) => void;
+  /** The player's profiles, for "Add to a profile…", and what to call after one changed. */
+  profiles?: AppInstance[];
+  onProfilesChanged?: () => void;
   /** The game build installed, for the community index's lines on the detail page. */
   installedBuild?: string | null;
 }
 
-type SourceTab = 'workshop' | 'nexus' | 'mine';
+type SourceTab = 'workshop' | 'nexus' | 'mine' | 'lists';
 
 const CONFLICT_PREFIX = 'INSTALL_CONFLICT:';
 
@@ -292,7 +298,8 @@ const WorkshopTab: React.FC<{
   onOpen: (t: DetailTarget) => void;
   steamReady: boolean;
   onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
-}> = ({ installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
+  keep: KeepActions;
+}> = ({ installedByItem, stateByItem, onOpen, steamReady, onSubscribe, keep }) => {
   const showContextMenu = useContextMenu();
   const [text, setText] = useState('');
   const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '', days: 7, collections: false });
@@ -385,6 +392,7 @@ const WorkshopTab: React.FC<{
         onSelect: () => TauriService.openExternalUrl(item.page_url) },
       { label: 'Copy the link', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
       { label: 'Copy the Workshop id', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+      ...keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedByItem.get(item.workshop_id) ?? [] }),
     ]);
 
   const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)).length : 0;
@@ -512,7 +520,7 @@ const NEXUS_SORTS: { id: NexusSort; label: string }[] = [
   { id: 'newest', label: 'Newest' },
 ];
 
-const nexusCard = (m: NexusMod, installed: boolean, onOpen: (t: DetailTarget) => void) => (
+const nexusCard = (m: NexusMod, installed: boolean, onOpen: (t: DetailTarget) => void, menu?: (e: React.MouseEvent, m: NexusMod) => void) => (
   <ModCard
     key={m.mod_id}
     image={m.thumbnail_url}
@@ -527,10 +535,14 @@ const nexusCard = (m: NexusMod, installed: boolean, onOpen: (t: DetailTarget) =>
       </>
     }
     onOpen={() => onOpen({ kind: 'nexus', modId: m.mod_id, preview: m })}
+    onContextMenu={menu ? (e) => menu(e, m) : undefined}
   />
 );
 
-const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t: DetailTarget) => void }> = ({ installedByNexusId, onOpen }) => {
+const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t: DetailTarget) => void; keep: KeepActions }> = ({ installedByNexusId, onOpen, keep }) => {
+  const showContextMenu = useContextMenu();
+  const nexusMenu = (e: React.MouseEvent, m: NexusMod) =>
+    showContextMenu(e, keep.menuItems({ nexus_id: m.mod_id, name: m.name, installedModIds: installedByNexusId.get(m.mod_id) ?? [] }));
   const [text, setText] = useState('');
   const [query, setQuery] = useState({ text: '', category: '', sort: 'updated' as NexusSort });
   const [showAdult, setShowAdult] = useState(false);
@@ -607,7 +619,7 @@ const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t
         <span>page {page} of {pageCountOf(total)}</span>
       </div>
       <Pagination page={page} pageCount={pageCountOf(total)} onPage={load} disabled={loading} />
-      <CardGrid>{visible.map((m) => nexusCard(m, installedByNexusId.has(m.mod_id), onOpen))}</CardGrid>
+      <CardGrid>{visible.map((m) => nexusCard(m, installedByNexusId.has(m.mod_id), onOpen, nexusMenu))}</CardGrid>
       <Pagination page={page} pageCount={pageCountOf(total)} onPage={load} disabled={loading} />
     </div>
   );
@@ -634,7 +646,8 @@ const MyModsTab: React.FC<{
   onOpen: (t: DetailTarget) => void;
   steamReady: boolean;
   onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
-}> = ({ catalog, installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
+  keep: KeepActions;
+}> = ({ catalog, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, keep }) => {
   const showContextMenu = useContextMenu();
   const [details, setDetails] = useState<WorkshopItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -717,6 +730,7 @@ const MyModsTab: React.FC<{
       { label: 'Open its Workshop page', icon: ExternalLink, separatorBefore: true,
         onSelect: () => TauriService.openExternalUrl(item.page_url) },
       { label: 'Copy the Workshop id', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+      ...keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedByItem.get(item.workshop_id) ?? [] }),
     ]);
 
   useEffect(() => {
@@ -779,6 +793,7 @@ const MyModsTab: React.FC<{
               chips={<Chip className={nexusId !== null ? 'border-orange-700/60 text-orange-300' : 'border-slate-600 text-slate-300'}>{localLabel(r.mod)}</Chip>}
               summary={r.mod.loadability.status !== 'loadable' ? 'Your game build does not load this mod as it is (see Mod Health).' : null}
               onOpen={nexusId !== null ? () => onOpen({ kind: 'nexus', modId: nexusId }) : undefined}
+              onContextMenu={(e) => showContextMenu(e, keep.menuItems({ mod_id: r.mod.id, nexus_id: nexusId, name: r.mod.name, installedModIds: [r.mod.id] }).map((i, n) => ({ ...i, separatorBefore: n === 0 ? false : i.separatorBefore })))}
             />
           );
         })}
@@ -794,9 +809,11 @@ const TABS: { id: SourceTab; label: string; active: string }[] = [
   { id: 'workshop', label: 'Steam Workshop', active: 'bg-sky-950/80 text-sky-200 border-sky-700' },
   { id: 'nexus', label: 'Nexus Mods', active: 'bg-orange-950/80 text-orange-200 border-orange-700' },
   { id: 'mine', label: 'My mods', active: 'bg-emerald-950/80 text-emerald-200 border-emerald-700' },
+  { id: 'lists', label: 'My lists', active: 'bg-amber-950/80 text-amber-200 border-amber-700' },
 ];
 
-export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null }) => {
+export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null, profiles = [], onProfilesChanged }) => {
+  const keep = useKeepActions(paths, profiles, onProfilesChanged);
   const [tab, setTab] = useState<SourceTab>('workshop');
   // Tabs stay mounted once visited, so switching keeps their page and filters.
   const [visited, setVisited] = useState<Set<SourceTab>>(() => new Set(['workshop']));
@@ -946,11 +963,12 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
               onOpen={openDetail}
               steamReady={steamReady}
               onSubscribe={handleSubscribe}
+              keep={keep}
             />
           )}
         </div>
         <div hidden={tab !== 'nexus'}>
-          {visited.has('nexus') && <NexusTab installedByNexusId={installedByNexusId} onOpen={openDetail} />}
+          {visited.has('nexus') && <NexusTab installedByNexusId={installedByNexusId} onOpen={openDetail} keep={keep} />}
         </div>
         <div hidden={tab !== 'mine'}>
           {visited.has('mine') && (
@@ -961,10 +979,26 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
               onOpen={openDetail}
               steamReady={steamReady}
               onSubscribe={handleSubscribe}
+              keep={keep}
+            />
+          )}
+        </div>
+        <div hidden={tab !== 'lists'}>
+          {visited.has('lists') && (
+            <ListsTab
+              paths={paths}
+              catalog={catalog}
+              installedByItem={installedByItem}
+              stateByItem={stateByItem}
+              onOpen={openDetail}
+              steamReady={steamReady}
+              onSubscribe={handleSubscribe}
+              onMakeProfile={onMakeProfile}
             />
           )}
         </div>
       </div>
+      {keep.node}
 
       {detailStack.length > 0 && (
         <ModDetail
@@ -982,6 +1016,7 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
           onNexusDownload={handleNexusDownload}
           onMakeProfile={onMakeProfile}
           installedBuild={installedBuild}
+          keep={keep}
         />
       )}
     </div>

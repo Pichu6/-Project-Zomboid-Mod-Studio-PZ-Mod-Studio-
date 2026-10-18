@@ -9,6 +9,7 @@ import { ModPresets } from './ModPresets';
 import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
 import { ModRowBody } from './ModRow';
+import { useKeepActions } from '../common/keep';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
 import { draftRegistry, knownIssues, proposeUrl } from '../../utils/communityIndex';
@@ -70,6 +71,8 @@ interface LoadOrderModuleProps {
   /** Every saved profile, so the list can show which of them a mod belongs to. */
   profiles?: AppInstance[];
   activeProfileId?: string | null;
+  /** After "Add to a profile…": the profiles are read again. */
+  onProfilesChanged?: () => void;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -118,6 +121,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onRulesChanged,
   profiles = [],
   activeProfileId = null,
+  onProfilesChanged,
 }) => {
   const showContextMenu = useContextMenu();
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
@@ -340,6 +344,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [showEveryMod, setShowEveryMod] = useState<boolean>(false);
 
   const activeProfile = profiles.find((p) => p.id === activeProfileId) ?? null;
+  const keep = useKeepActions(paths, profiles, onProfilesChanged, showToast);
   const inActiveProfile = useMemo(
     () => new Set(activeProfile ? activeProfile.active_mod_ids : []),
     [activeProfile]
@@ -541,6 +546,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       icon: Archive,
       onSelect: () => setKeptVersionsOf(mod),
     },
+    ...(mod.mod_id.startsWith('Z_PZModStudio_') ? [] : keep.menuItems({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })),
     {
       label: 'Share what the Studio saw of this mod…',
       icon: Globe,
@@ -978,6 +984,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
           <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
           <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
+          {keep.node}
           <LoadRules paths={paths} mod={rulesOf} mods={mods} installedBuild={installedBuild} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
 
           <button
@@ -1203,6 +1210,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       catalogById={catalogById}
                       errorStats={errorStats}
                       loadTimes={loadTimes}
+                      isFavorite={keep.isFavorite({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })}
                       showEveryMod={showEveryMod}
                       activeProfile={activeProfile}
                       profilesByMod={profilesByMod}

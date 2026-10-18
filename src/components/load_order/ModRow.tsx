@@ -3,7 +3,7 @@ import { AppInstance, CatalogModSummary, HealthIssue, ModErrorStat, ModInfo } fr
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { SourceBadge } from '../common/SourceBadge';
 import { RowHealthChips } from './RowHealth';
-import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered, MapPin, Package } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered, MapPin, Package, Star } from 'lucide-react';
 
 export interface ModRowBodyProps {
   paths: StudioPathsUI;
@@ -17,6 +17,8 @@ export interface ModRowBodyProps {
   catalogById?: Map<string, CatalogModSummary>;
   errorStats?: Map<string, ModErrorStat>;
   loadTimes?: Map<string, number>;
+  /** In the player's Favorites list. */
+  isFavorite?: boolean;
   /** Showing everything: say which profiles each mod belongs to. */
   showEveryMod: boolean;
   activeProfile: AppInstance | null;
@@ -58,6 +60,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   catalogById,
   errorStats,
   loadTimes,
+  isFavorite = false,
   showEveryMod,
   activeProfile,
   profilesByMod,
@@ -148,6 +151,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
           <span className={`truncate min-w-0 flex-1 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
             {mod.name}
           </span>
+          {isFavorite && <Star className="w-3 h-3 shrink-0 text-amber-400 fill-amber-400" aria-label="In Favorites" />}
 
           {isBridge && (
             <span
