@@ -650,7 +650,7 @@ The file the game reads to know which mods are on and in what order. Found autom
               <div className="text-xs font-bold text-slate-200">Remember the launch mode</div>
               <p className="text-[11px] text-slate-400 max-w-2xl">
                 The Launch button starts on the mode you used last time (Debug, Windowed, Normal...). Off: it
-                always starts on Debug (Windowed).
+                always starts on Debug Mode (Fullscreen), the recommended one.
               </p>
             </div>
             <button
