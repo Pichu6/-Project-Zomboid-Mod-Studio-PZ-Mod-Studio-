@@ -389,6 +389,23 @@ export const App: React.FC = () => {
   };
 
   const handleRunSandbox = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN') => {
+    // A profile last played on another major build: its saves will not open on this one, and the
+    // player may be about to find that out the hard way. One question before the game starts.
+    const installed = health.report?.game_version ?? null;
+    const played = activeProfile?.last_played_build ?? null;
+    if (installed && played && played.split('.')[0] !== installed.split('.')[0]) {
+      const ok = window.confirm(
+        `${activeProfile!.name} was last played on build ${played}; the game installed now is ${installed}.
+
+` +
+          `Saves never cross a major build: a ${played.split('.')[0]} save will not open on ${installed.split('.')[0]}. ` +
+          `To play that save, switch Steam's beta branch back first.
+
+Start the game anyway?`
+      );
+      if (!ok) return;
+    }
+
     // Check if there is an active CLOSED/PACKAGED synthetic merge package (excluding Carrier and Bridge)
     const hasActiveClosedMergePackage = mods.some(
       (m) => m.enabled && m.mod_id.startsWith('Z_PZModStudio_') && m.is_packaged === true && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier')
