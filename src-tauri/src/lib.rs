@@ -380,6 +380,18 @@ fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: 
     devtools::open_in_editor(&target, line, col)
 }
 
+/// Where TileZed and WorldEd are, if anywhere: the named folder first, then the usual places.
+#[tauri::command(async)]
+fn map_tools_cmd(configured: Option<String>) -> devtools::MapTools {
+    devtools::find_map_tools(configured.as_deref())
+}
+
+/// Starts TileZed or WorldEd (only those) from its own folder.
+#[tauri::command(async)]
+fn launch_map_tool_cmd(exe: String) -> Result<(), String> {
+    devtools::launch_map_tool(&exe)
+}
+
 /// A new mod under Zomboid/mods, laid out the way Build 42 reads it.
 #[tauri::command(async)]
 fn create_mod_cmd(user_zomboid_dir: String, new_mod: devtools::NewMod) -> Result<devtools::CreatedMod, String> {
@@ -1014,6 +1026,8 @@ pub fn run() {
             open_in_editor_cmd,
             game_status_cmd,
             create_mod_cmd,
+            map_tools_cmd,
+            launch_map_tool_cmd,
             changed_lua_files_cmd,
             reload_lua_in_game_cmd,
             reload_result_cmd,

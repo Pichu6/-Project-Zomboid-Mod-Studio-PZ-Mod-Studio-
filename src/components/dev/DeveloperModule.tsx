@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Play, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
-import { CatalogModSummary, FileProblem, ModInfo, ModValidation } from '../../types';
+import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Map as MapIcon, Play, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
+import { CatalogModSummary, FileProblem, MapTools, ModInfo, ModValidation } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 
@@ -152,6 +152,21 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
     } finally {
       setCreating(false);
     }
+  };
+
+  /** TileZed and WorldEd: where they are, and a folder of the player's to look in. */
+  const [mapToolsDir, setMapToolsDir] = useState<string>(() => localStorage.getItem('pz_map_tools_dir') ?? '');
+  const [mapTools, setMapTools] = useState<MapTools | null>(null);
+  useEffect(() => {
+    let live = true;
+    void TauriService.mapTools(mapToolsDir || null).then((t) => live && setMapTools(t));
+    return () => {
+      live = false;
+    };
+  }, [mapToolsDir]);
+  const setMapDir = (dir: string) => {
+    setMapToolsDir(dir);
+    localStorage.setItem('pz_map_tools_dir', dir);
   };
 
   const byFile = useMemo(() => {
@@ -356,6 +371,55 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
                 <div key={i} className={l.includes('  failed ') ? 'text-red-300' : l.includes('  ok ') ? 'text-emerald-300' : ''}>{l}</div>
               ))}
             </div>
+          )}
+        </div>
+
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+          <div className="space-y-1">
+            <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+              <MapIcon className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Map tools: TileZed and WorldEd
+            </div>
+            <p className="text-[11px] text-slate-400 max-w-2xl">
+              The Indie Stone's own editors for tiles, buildings and world cells. They come as a zip you put anywhere;
+              the Studio looks in the usual places and in the folder you name here, and starts them from their own folder.
+              A map mod's cells go in <code>media/maps/&lt;name&gt;</code> of the mod.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={mapToolsDir}
+              onChange={(e) => setMapDir(e.target.value)}
+              placeholder="Folder where TileZed.exe and WorldEd.exe are (optional)"
+              spellCheck={false}
+              className="flex-1 min-w-[280px] bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              type="button"
+              disabled={!mapTools?.tilezed}
+              onClick={() => mapTools?.tilezed && void TauriService.launchMapTool(mapTools.tilezed).catch(() => undefined)}
+              title={mapTools?.tilezed ?? 'TileZed.exe was not found'}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50"
+            >
+              <Play className="w-3.5 h-3.5" aria-hidden="true" /> TileZed
+            </button>
+            <button
+              type="button"
+              disabled={!mapTools?.worlded}
+              onClick={() => mapTools?.worlded && void TauriService.launchMapTool(mapTools.worlded).catch(() => undefined)}
+              title={mapTools?.worlded ?? 'WorldEd.exe was not found'}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50"
+            >
+              <Play className="w-3.5 h-3.5" aria-hidden="true" /> WorldEd
+            </button>
+          </div>
+          {mapTools && !mapTools.tilezed && !mapTools.worlded && (
+            <p className="text-[11px] text-slate-500">
+              Not found. Looked in {mapTools.searched.length} places (your folder above first, then TileZed under your user folder, Documents, Desktop, Downloads and C:\). Unzip the tools anywhere and name the folder above.
+            </p>
+          )}
+          {mapTools && (mapTools.tilezed || mapTools.worlded) && (
+            <p className="text-[10px] font-mono text-slate-500 break-all">{mapTools.tilezed ?? mapTools.worlded}</p>
           )}
         </div>
 

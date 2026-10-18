@@ -359,6 +359,13 @@ export interface FileProblem {
   kind: 'lua' | 'script';
 }
 
+/** TileZed and WorldEd, where they were found, and where the Studio looked. */
+export interface MapTools {
+  tilezed: string | null;
+  worlded: string | null;
+  searched: string[];
+}
+
 /** What a new mod is made from. */
 export interface NewMod {
   id: string;

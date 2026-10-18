@@ -515,3 +515,99 @@ mod template_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+// ------------------------------------------------------------------------------------------
+// TileZed and WorldEd, The Indie Stone's own map editors. They come as a zip the modder puts
+// anywhere, so the Studio looks in the usual places and in a folder the player names, and only
+// ever starts those two programs.
+// ------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MapTools {
+    pub tilezed: Option<String>,
+    pub worlded: Option<String>,
+    /// Where the Studio looked, for the screen to say when nothing was found.
+    pub searched: Vec<String>,
+}
+
+const MAP_TOOL_EXES: [&str; 2] = ["TileZed.exe", "WorldEd.exe"];
+
+/// The folders worth a look: the one named, then the usual unzip spots.
+fn map_tool_dirs(configured: Option<&str>) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(c) = configured.map(str::trim).filter(|c| !c.is_empty()) {
+        dirs.push(PathBuf::from(c));
+    }
+    let homes: Vec<PathBuf> = [std::env::var_os("USERPROFILE"), std::env::var_os("HOME")].into_iter().flatten().map(PathBuf::from).collect();
+    for home in &homes {
+        for sub in ["TileZed", "Tools/TileZed", "Documents/TileZed", "Desktop/TileZed", "Downloads/TileZed"] {
+            dirs.push(home.join(sub));
+        }
+    }
+    for root in ["C:\\TileZed", "D:\\TileZed", "C:\\Tools\\TileZed", "C:\\Program Files\\TileZed", "C:\\Program Files (x86)\\TileZed"] {
+        dirs.push(PathBuf::from(root));
+    }
+    dirs
+}
+
+/// Looks for the two programs: in each folder and one level down (the zip unpacks into a
+/// folder of its own more often than not).
+pub fn find_map_tools(configured: Option<&str>) -> MapTools {
+    let mut tools = MapTools::default();
+    for dir in map_tool_dirs(configured) {
+        tools.searched.push(dir.to_string_lossy().to_string());
+        let mut candidates = vec![dir.clone()];
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            candidates.extend(entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()));
+        }
+        for c in candidates {
+            if tools.tilezed.is_none() && c.join(MAP_TOOL_EXES[0]).is_file() {
+                tools.tilezed = Some(c.join(MAP_TOOL_EXES[0]).to_string_lossy().to_string());
+            }
+            if tools.worlded.is_none() && c.join(MAP_TOOL_EXES[1]).is_file() {
+                tools.worlded = Some(c.join(MAP_TOOL_EXES[1]).to_string_lossy().to_string());
+            }
+        }
+        if tools.tilezed.is_some() && tools.worlded.is_some() {
+            break;
+        }
+    }
+    tools
+}
+
+/// Starts TileZed or WorldEd — nothing else — from its own folder, so it finds its settings.
+pub fn launch_map_tool(exe: &str) -> Result<(), String> {
+    let path = Path::new(exe);
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !MAP_TOOL_EXES.iter().any(|e| e.eq_ignore_ascii_case(name)) {
+        return Err("Only TileZed.exe and WorldEd.exe are started from here.".to_string());
+    }
+    if !path.is_file() {
+        return Err(format!("{} is not there.", exe));
+    }
+    let mut cmd = std::process::Command::new(path);
+    if let Some(dir) = path.parent() {
+        cmd.current_dir(dir);
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| format!("{} would not start: {}", name, e))
+}
+
+#[cfg(test)]
+mod map_tool_tests {
+    use super::*;
+
+    #[test]
+    fn the_named_folder_is_looked_in_first_and_one_level_down_and_only_the_two_exes_start() {
+        let dir = std::env::temp_dir().join(format!("pzms-maptools-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("TileZed-2024")).unwrap();
+        std::fs::write(dir.join("TileZed-2024/TileZed.exe"), b"").unwrap();
+        let found = find_map_tools(Some(&dir.to_string_lossy()));
+        assert!(found.tilezed.as_deref().map(|p| p.ends_with("TileZed.exe")).unwrap_or(false), "{:?}", found);
+        assert!(found.worlded.is_none());
+        assert_eq!(found.searched[0], dir.to_string_lossy());
+        assert!(launch_map_tool(&dir.join("TileZed-2024/notepad.exe").to_string_lossy()).is_err());
+        assert!(launch_map_tool(&dir.join("nowhere/WorldEd.exe").to_string_lossy()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
