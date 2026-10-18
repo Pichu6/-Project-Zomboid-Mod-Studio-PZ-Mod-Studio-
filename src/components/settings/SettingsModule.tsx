@@ -78,6 +78,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [noMergeWarningSilenced, setNoMergeWarningSilenced] = useState<boolean>(
     localStorage.getItem('pz_skip_no_merge_warning') === 'true'
   );
+  /** Whether the launch button starts on the mode used last time (on) or always on Debug (off). */
+  const [rememberLaunchMode, setRememberLaunchMode] = useState<boolean>(
+    localStorage.getItem('pz_remember_launch_mode') !== 'false'
+  );
+  const toggleRememberLaunchMode = (on: boolean) => {
+    setRememberLaunchMode(on);
+    localStorage.setItem('pz_remember_launch_mode', String(on));
+  };
   const [startupBehavior, setStartupBehavior] = useState<'SHOW_STARTUP_SCREEN' | 'OPEN_LAST_PROFILE'>(() => {
     return (localStorage.getItem('pz_startup_behavior') as any) || 'SHOW_STARTUP_SCREEN';
   });
@@ -587,6 +595,30 @@ The file the game reads to know which mods are on and in what order. Found autom
         )}
 
         {/* SUB-TAB 2: what the Build 42 compatibility shim covers */}
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200">Remember the launch mode</div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">
+                The Launch button starts on the mode you used last time (Debug, Windowed, Normal...). Off: it
+                always starts on Debug (Windowed).
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={rememberLaunchMode}
+              aria-label="Remember the launch mode"
+              onClick={() => toggleRememberLaunchMode(!rememberLaunchMode)}
+              className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
+                rememberLaunchMode ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-full bg-white shadow-md" />
+            </button>
+          </div>
+        )}
+
         {activeSubTab === 'PATHS' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
             <div className="space-y-1">

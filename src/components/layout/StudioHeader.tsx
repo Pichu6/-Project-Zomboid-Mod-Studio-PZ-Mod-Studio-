@@ -77,7 +77,17 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   onNavigateToProfiles,
   onRunSandbox,
 }) => {
-  const [selectedMode, setSelectedMode] = useState<GameLaunchMode>('DEBUG_FULLSCREEN');
+  // The launch mode last used, when the player wants it remembered (Settings; on by default).
+  // Without it every start of the Studio went back to Debug and the player changed it each time.
+  const [selectedMode, setSelectedModeRaw] = useState<GameLaunchMode>(() => {
+    if (localStorage.getItem('pz_remember_launch_mode') === 'false') return 'DEBUG_FULLSCREEN';
+    const saved = localStorage.getItem('pz_last_launch_mode') as GameLaunchMode | null;
+    return saved && LAUNCH_MODES.some((m) => m.id === saved) ? saved : 'DEBUG_FULLSCREEN';
+  });
+  const setSelectedMode = (mode: GameLaunchMode) => {
+    setSelectedModeRaw(mode);
+    localStorage.setItem('pz_last_launch_mode', mode);
+  };
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
