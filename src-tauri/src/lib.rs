@@ -11,6 +11,7 @@ pub mod lists;
 pub mod load_order;
 pub mod mcp;
 pub mod mod_install;
+pub mod mplint;
 pub mod nexus;
 pub mod origins;
 pub mod patch_generator;
@@ -379,6 +380,40 @@ fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: 
         return Err("That file is outside your game and Zomboid folders.".to_string());
     }
     devtools::open_in_editor(&target, line, col)
+}
+
+/// The multiplayer check of one mod folder.
+#[tauri::command(async)]
+fn mp_check_mod_cmd(paths: StudioPaths, root_dir: String) -> Result<mplint::MpReport, String> {
+    let root = std::fs::canonicalize(&root_dir).map_err(|_| format!("{} is not there any more.", root_dir))?;
+    let allowed = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
+        .iter()
+        .filter(|d| !d.is_empty())
+        .filter_map(|d| std::fs::canonicalize(d).ok())
+        .any(|r| root.starts_with(r));
+    if !allowed {
+        return Err("That folder is outside your game and Zomboid folders.".to_string());
+    }
+    mplint::check_mod(&root)
+}
+
+/// One report per mod, by id, for the mods named (the active list, usually).
+#[derive(serde::Serialize)]
+struct MpModReport {
+    mod_id: String,
+    name: String,
+    report: mplint::MpReport,
+}
+
+#[tauri::command(async)]
+fn mp_check_mods_cmd(paths: StudioPaths, mod_ids: Vec<String>) -> Vec<MpModReport> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    mod_ids
+        .iter()
+        .filter(|id| !id.starts_with("Z_PZModStudio_"))
+        .filter_map(|id| catalog.resolve(id.trim()))
+        .filter_map(|m| mplint::check_mod(std::path::Path::new(&m.root_dir)).ok().map(|report| MpModReport { mod_id: m.id.clone(), name: m.name.clone(), report }))
+        .collect()
 }
 
 /// Where TileZed and WorldEd are, if anywhere: the named folder first, then the usual places.
@@ -1028,6 +1063,8 @@ pub fn run() {
             game_status_cmd,
             create_mod_cmd,
             map_tools_cmd,
+            mp_check_mod_cmd,
+            mp_check_mods_cmd,
             launch_map_tool_cmd,
             changed_lua_files_cmd,
             reload_lua_in_game_cmd,

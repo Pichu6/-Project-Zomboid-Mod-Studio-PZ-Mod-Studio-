@@ -30,6 +30,8 @@ import {
   ServerModReport,
 } from '../../types';
 import { TauriService, explainError } from '../../services/tauri';
+import { MpCheckPanel } from '../common/MpCheckPanel';
+import { MpModReport } from '../../types';
 
 interface ServerModuleProps {
   paths: StudioPathsUI;
@@ -73,6 +75,9 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   /** What the selected .ini says about mods, and what does not add up. */
   const [modReport, setModReport] = useState<ServerModReport | null>(null);
+  /** The multiplayer check over the active list: what client code does that only the server should. */
+  const [mpReports, setMpReports] = useState<MpModReport[] | null>(null);
+  const [mpBusy, setMpBusy] = useState(false);
 
   const activeMods = mods.filter((m) => m.enabled);
   const activeWorkshopIds = Array.from(
@@ -735,6 +740,32 @@ Invite made with Project Zomboid Mod Studio`;
                         )}
                       </div>
                     )}
+
+                    {/* What the active mods' client code does that only the server should, in multiplayer. */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[11px] font-bold text-slate-300">Multiplayer check of the active mods</div>
+                        <button
+                          type="button"
+                          disabled={mpBusy}
+                          onClick={() => {
+                            setMpBusy(true);
+                            void TauriService.mpCheckMods(paths, activeMods.map((m) => m.mod_id))
+                              .then((r) => setMpReports(r.filter((x) => x.report.findings.length > 0)))
+                              .finally(() => setMpBusy(false));
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
+                          title="Lists the calls the game routes through the server (server/ClientCommands.lua, VehicleCommands.lua) that a mod's client or shared Lua makes directly: in multiplayer they change only that client's world, or are refused. The Developer screen opens each at its line."
+                        >
+                          {mpBusy ? 'Checking…' : mpReports ? 'Check again' : 'Check'}
+                        </button>
+                      </div>
+                      {mpReports && (
+                        mpReports.length === 0
+                          ? <div className="text-[11px] text-slate-500">Nothing the game keeps server-side is called directly by any active mod's client code. (It checks only those calls.)</div>
+                          : <MpCheckPanel reports={mpReports} />
+                      )}
+                    </div>
 
                     {/* Warning / Master Patch Inclusion */}
                     <div className="p-3 bg-indigo-950/50 border border-indigo-700/60 rounded-xl text-xs text-indigo-300 flex items-center gap-2.5">

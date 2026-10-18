@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -437,6 +437,25 @@ export const TauriService = {
     } catch (err) {
       reportBackendError('Opening the file', err);
       throw err;
+    }
+  },
+
+  /** The multiplayer check of one mod folder; throws with the reason. */
+  mpCheckMod: async (paths: StudioPathsUI, rootDir: string): Promise<MpReport> => {
+    try {
+      return await invoke<MpReport>('mp_check_mod_cmd', { paths, rootDir });
+    } catch (err) {
+      reportBackendError('Checking the mod for multiplayer', err);
+      throw err;
+    }
+  },
+
+  /** The multiplayer check of several mods by id (the active list, usually). */
+  mpCheckMods: async (paths: StudioPathsUI, modIds: string[]): Promise<MpModReport[]> => {
+    try {
+      return await invoke<MpModReport[]>('mp_check_mods_cmd', { paths, modIds });
+    } catch {
+      return [];
     }
   },
 

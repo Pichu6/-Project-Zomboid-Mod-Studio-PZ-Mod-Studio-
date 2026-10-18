@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Map as MapIcon, Play, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
-import { CatalogModSummary, FileProblem, MapTools, ModInfo, ModValidation } from '../../types';
+import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Map as MapIcon, Play, RefreshCw, RotateCcw, Users, Wrench } from 'lucide-react';
+import { CatalogModSummary, FileProblem, MapTools, ModInfo, ModValidation, MpReport } from '../../types';
+import { MpCheckPanel } from '../common/MpCheckPanel';
 import { TauriService } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 
@@ -167,6 +168,21 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
   const setMapDir = (dir: string) => {
     setMapToolsDir(dir);
     localStorage.setItem('pz_map_tools_dir', dir);
+  };
+
+  /** The multiplayer check of the chosen mod. */
+  const [mp, setMp] = useState<MpReport | null>(null);
+  const [mpBusy, setMpBusy] = useState(false);
+  const checkMp = async () => {
+    if (!root) return;
+    setMpBusy(true);
+    try {
+      setMp(await TauriService.mpCheckMod(paths, root));
+    } catch {
+      // Already shown by TauriService.
+    } finally {
+      setMpBusy(false);
+    }
   };
 
   const byFile = useMemo(() => {
@@ -371,6 +387,41 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
                 <div key={i} className={l.includes('  failed ') ? 'text-red-300' : l.includes('  ok ') ? 'text-emerald-300' : ''}>{l}</div>
               ))}
             </div>
+          )}
+        </div>
+
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+          <div className="space-y-1">
+            <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Multiplayer check
+            </div>
+            <p className="text-[11px] text-slate-400 max-w-2xl">
+              Where the game's own client code would change the world, a vehicle, an animal or the map, it asks the server
+              (<code>sendClientCommand</code>) and <code>media/lua/server/ClientCommands.lua</code> does it. This lists
+              the same calls made directly from this mod's client or shared Lua, with the game's handler as evidence. A
+              call inside an <code>if isClient()</code> branch counts as handled. It checks only those calls; a mod that
+              only touches its own UI or the player's own inventory has nothing here and may still misbehave in
+              multiplayer in ways this cannot see.
+            </p>
+          </div>
+          <div>
+            <button
+              type="button"
+              disabled={!root || mpBusy}
+              onClick={() => void checkMp()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
+            >
+              {mpBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Users className="w-3.5 h-3.5" aria-hidden="true" />} Check this mod for multiplayer
+            </button>
+          </div>
+          {mp && mod && (
+            <>
+              <div className="text-[11px] text-slate-500">{mp.files_checked} client and shared Lua file{mp.files_checked === 1 ? '' : 's'} checked{mp.has_server_lua ? '; the mod ships server Lua too' : ''}.</div>
+              <MpCheckPanel
+                reports={[{ mod_id: mod.mod_id, name: mod.name, report: mp }]}
+                onOpen={(r, f) => void TauriService.openInEditor(paths, `${r}/${f.path}`, f.line, null).catch(() => undefined)}
+              />
+            </>
           )}
         </div>
 

@@ -421,6 +421,18 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "mp_check_mods".to_string(),
+            description: "The multiplayer check: the calls a mod's client or shared Lua makes directly that the game, in multiplayer, only does on the server (the handlers of media/lua/server/ClientCommands.lua and Vehicles/VehicleCommands.lua, 42.21), one row per call with file, line, the game's handler as evidence, whether it sits in an isClient() branch (guarded) and whether the file mentions isClient() at all (aware). Checks only those calls. Default: every active mod.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "mod_ids": { "type": "array", "items": { "type": "string" }, "description": "Mod ids to check; default: the active list" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "workshop_dir": { "type": "string" }
+                }
+            }),
+        },
+        McpTool {
             name: "community_index_lookup".to_string(),
             description: "What the community mod index says about one mod (or every mod, without mod_id): builds it runs on, requires, incompatible with, load after, its Build 42 successor, and known issues each with the fix the Studio can apply (shim_patch, require_path, compatible_copy, none), every entry with the build it was seen on and whether it was verified or reported. Fetched once a day from the Studio's repository (community/index.json), cached beside the mod list; null when none is at hand.".to_string(),
             input_schema: json!({
@@ -606,6 +618,7 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "remove_file_from_package" => handle_remove_file_from_package(args),
         "keep_mod_version" => handle_keep_mod_version(args),
         "community_index_lookup" => handle_community_index_lookup(args),
+        "mp_check_mods" => handle_mp_check_mods(args),
         "refresh_community" => handle_refresh_community(args),
         "set_community_downloads" => handle_set_community_downloads(args),
         "list_load_rules" => handle_list_load_rules(args),
@@ -1770,6 +1783,23 @@ fn handle_keep_mod_version(args: Value) -> ToolCallResult {
             crate::snapshots::keep_version(&paths.user_zomboid_dir, &m.id, &m.name, Path::new(&m.root_dir), m.info.mod_version.clone(), workshop_id)
         });
     json_result(result)
+}
+
+fn handle_mp_check_mods(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let ids: Vec<String> = match args.get("mod_ids").and_then(|v| v.as_array()) {
+        Some(list) if !list.is_empty() => list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+        _ => crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path).map(|d| d.active_mods).unwrap_or_default(),
+    };
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let reports: Vec<Value> = ids
+        .iter()
+        .filter(|id| !id.starts_with("Z_PZModStudio_"))
+        .filter_map(|id| catalog.resolve(id.trim()))
+        .filter_map(|m| crate::mplint::check_mod(std::path::Path::new(&m.root_dir)).ok().map(|r| json!({ "mod_id": m.id, "name": m.name, "files_checked": r.files_checked, "has_server_lua": r.has_server_lua, "findings": r.findings })))
+        .filter(|r| r["findings"].as_array().map(|a| !a.is_empty()).unwrap_or(false))
+        .collect();
+    json_result(Ok(json!({ "mods_checked": ids.len(), "mods_with_findings": reports.len(), "reports": reports })))
 }
 
 fn handle_community_index_lookup(args: Value) -> ToolCallResult {

@@ -359,6 +359,32 @@ export interface FileProblem {
   kind: 'lua' | 'script';
 }
 
+/** One call a mod's client code makes that the game routes through the server in multiplayer. */
+export interface MpFinding {
+  path: string;
+  line: number;
+  method: string;
+  what: string;
+  handler: string;
+  evidence: string;
+  snippet: string;
+  guarded: boolean;
+  aware: boolean;
+}
+
+export interface MpReport {
+  root: string;
+  files_checked: number;
+  has_server_lua: boolean;
+  findings: MpFinding[];
+}
+
+export interface MpModReport {
+  mod_id: string;
+  name: string;
+  report: MpReport;
+}
+
 /** TileZed and WorldEd, where they were found, and where the Studio looked. */
 export interface MapTools {
   tilezed: string | null;
