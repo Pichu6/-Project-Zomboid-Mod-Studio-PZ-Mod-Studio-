@@ -359,6 +359,20 @@ export interface FileProblem {
   kind: 'lua' | 'script';
 }
 
+/** What a new mod is made from. */
+export interface NewMod {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  builds: string[];
+}
+
+export interface CreatedMod {
+  folder: string;
+  files: string[];
+}
+
 /** A Lua file of a mod changed since the last look. */
 export interface ChangedFile {
   path: string;

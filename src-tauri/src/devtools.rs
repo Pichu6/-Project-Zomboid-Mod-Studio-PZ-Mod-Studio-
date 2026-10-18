@@ -365,3 +365,153 @@ mod reload_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+// ------------------------------------------------------------------------------------------
+// A new mod, laid out the way Build 42 reads it.
+//
+// `Zomboid/mods/<folder>/42/mod.info` is what the installed game reads; `common/` holds what
+// every build shares; a root `mod.info` is only there when Build 41 is wanted too. The poster
+// is a plain PNG to replace. One Lua file prints the mod's name when the game loads it, so the
+// Monitor shows it is alive on the first launch.
+// ------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewMod {
+    /// The `id=` line: letters, digits, `_` and `-` only, since the game writes it into paths and the list.
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub description: String,
+    /// "42" always; "41" too when the root mod.info is wanted.
+    #[serde(default)]
+    pub builds: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatedMod {
+    pub folder: String,
+    pub files: Vec<String>,
+}
+
+/// The mod.info lines the game reads, in the order modders write them.
+pub fn mod_info_text(m: &NewMod, build: &str) -> String {
+    let mut lines = vec![format!("name={}", m.name.trim()), format!("id={}", m.id.trim())];
+    for d in m.description.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        lines.push(format!("description={}", d));
+    }
+    lines.push("modversion=0.1".to_string());
+    if !m.author.trim().is_empty() {
+        lines.push(format!("authors={}", m.author.trim()));
+    }
+    lines.push("poster=poster.png".to_string());
+    if build == "42" {
+        lines.push("versionMin=42.0.0".to_string());
+    }
+    lines.join("\r\n") + "\r\n"
+}
+
+/// A plain dark PNG, `w` by `h`, for the poster until the modder has one.
+fn plain_png(path: &Path, w: u32, h: u32) -> Result<(), String> {
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w, h);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    let mut data = Vec::with_capacity((w * h * 3) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            // A frame of green around slate, so it reads as "a poster goes here" in the list.
+            let edge = x < 8 || y < 8 || x + 8 >= w || y + 8 >= h;
+            data.extend_from_slice(if edge { &[16, 185, 129] } else { &[15, 23, 42] });
+        }
+    }
+    writer.write_image_data(&data).map_err(|e| e.to_string())
+}
+
+/// Makes the mod under `Zomboid/mods`, refusing an id that is not a plain name or a folder that exists.
+pub fn create_mod(user_zomboid_dir: &str, m: &NewMod) -> Result<CreatedMod, String> {
+    let id = m.id.trim();
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err("The id is the folder and the list entry: letters, digits, _ and - only.".to_string());
+    }
+    if m.name.trim().is_empty() {
+        return Err("The mod needs a name.".to_string());
+    }
+    let mods_dir = crate::load_order::mod_info::get_existing_user_zomboid_dirs(user_zomboid_dir)
+        .into_iter()
+        .next()
+        .map(|d| d.join("mods"))
+        .ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
+    let root = mods_dir.join(id);
+    if root.exists() {
+        return Err(format!("There is already a folder {} in Zomboid/mods.", id));
+    }
+    let want_41 = m.builds.iter().any(|b| b == "41");
+    let mut files = Vec::new();
+    let mut put = |rel: &str, text: &str| -> Result<(), String> {
+        let path = root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&path, text).map_err(|e| format!("{}: {}", path.display(), e))?;
+        files.push(rel.replace('\\', "/"));
+        Ok(())
+    };
+    put("42/mod.info", &mod_info_text(m, "42"))?;
+    let hello = format!(
+        "-- {name}: loaded on every client (and in single player). Shared code goes in\r\n\
+         -- common/media/lua/shared, server-side code in 42/media/lua/server.\r\n\
+         print(\"[{id}] {name} loaded\")\r\n",
+        name = m.name.trim(),
+        id = id
+    );
+    put(&format!("42/media/lua/client/{}_Client.lua", id), &hello)?;
+    put("42/media/scripts/README.txt", "Item, recipe and vehicle scripts go here, as <name>.txt files in `module Base { ... }` blocks.\r\n")?;
+    put("common/media/lua/shared/README.txt", "What every build shares: Lua loaded before client and server code, translations under translate/.\r\n")?;
+    if want_41 {
+        put("mod.info", &mod_info_text(m, "41"))?;
+        put(&format!("media/lua/client/{}_Client.lua", id), &hello)?;
+    }
+    for dir in ["42/media/lua/shared", "42/media/lua/server", "common/media/lua/client", "common/media/lua/server"] {
+        std::fs::create_dir_all(root.join(dir)).map_err(|e| e.to_string())?;
+    }
+    for rel in ["42/poster.png", "poster.png"] {
+        plain_png(&root.join(rel), 256, 256)?;
+        files.push(rel.to_string());
+    }
+    Ok(CreatedMod { folder: root.to_string_lossy().to_string(), files })
+}
+
+#[cfg(test)]
+mod template_tests {
+    use super::*;
+
+    #[test]
+    fn a_new_mod_has_the_build_42_layout_and_a_root_mod_info_only_with_41() {
+        let dir = std::env::temp_dir().join(format!("pzms-template-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("mods")).unwrap();
+        let z = dir.to_string_lossy().to_string();
+        let m = NewMod { id: "MyMod".into(), name: "My Mod".into(), author: "Me".into(), description: "Line one\n\nLine two".into(), builds: vec!["42".into()] };
+        let made = create_mod(&z, &m).unwrap();
+        let root = dir.join("mods/MyMod");
+        let info = std::fs::read_to_string(root.join("42/mod.info")).unwrap();
+        assert!(info.starts_with("name=My Mod\r\nid=MyMod\r\ndescription=Line one\r\ndescription=Line two\r\n"), "{}", info);
+        assert!(info.contains("authors=Me\r\n") && info.contains("versionMin=42.0.0\r\n"));
+        assert!(!root.join("mod.info").exists(), "no root mod.info for a 42-only mod");
+        assert!(root.join("42/media/lua/client/MyMod_Client.lua").is_file());
+        assert!(root.join("common/media/lua/shared").is_dir());
+        assert!(root.join("42/poster.png").metadata().unwrap().len() > 100);
+        assert!(made.files.contains(&"42/mod.info".to_string()));
+        assert!(looks_like_a_mod(&root));
+        assert!(create_mod(&z, &m).is_err(), "the same folder twice is refused");
+        assert!(create_mod(&z, &NewMod { id: "bad id".into(), ..m.clone() }).is_err());
+        let both = NewMod { id: "Both".into(), builds: vec!["41".into(), "42".into()], ..m.clone() };
+        create_mod(&z, &both).unwrap();
+        let root41 = std::fs::read_to_string(dir.join("mods/Both/mod.info")).unwrap();
+        assert!(!root41.contains("versionMin"), "the Build 41 mod.info carries no versionMin");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

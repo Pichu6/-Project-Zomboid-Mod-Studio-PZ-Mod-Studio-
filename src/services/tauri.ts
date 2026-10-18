@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -436,6 +436,16 @@ export const TauriService = {
       return await invoke<string>('open_in_editor_cmd', { paths, file, line, col });
     } catch (err) {
       reportBackendError('Opening the file', err);
+      throw err;
+    }
+  },
+
+  /** Makes a new mod under Zomboid/mods; throws with the reason. */
+  createMod: async (userZomboidDir: string, newMod: NewMod): Promise<CreatedMod> => {
+    try {
+      return await invoke<CreatedMod>('create_mod_cmd', { userZomboidDir, newMod });
+    } catch (err) {
+      reportBackendError('Making the mod', err);
       throw err;
     }
   },

@@ -380,6 +380,12 @@ fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: 
     devtools::open_in_editor(&target, line, col)
 }
 
+/// A new mod under Zomboid/mods, laid out the way Build 42 reads it.
+#[tauri::command(async)]
+fn create_mod_cmd(user_zomboid_dir: String, new_mod: devtools::NewMod) -> Result<devtools::CreatedMod, String> {
+    devtools::create_mod(&user_zomboid_dir, &new_mod)
+}
+
 /// The mod's Lua files changed after a moment (unix ms); all of them for 0.
 #[tauri::command(async)]
 fn changed_lua_files_cmd(root_dir: String, since_ms: u64) -> Vec<devtools::ChangedFile> {
@@ -1007,6 +1013,7 @@ pub fn run() {
             validate_mod_cmd,
             open_in_editor_cmd,
             game_status_cmd,
+            create_mod_cmd,
             changed_lua_files_cmd,
             reload_lua_in_game_cmd,
             reload_result_cmd,

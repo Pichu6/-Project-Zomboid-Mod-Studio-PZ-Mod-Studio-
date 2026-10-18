@@ -810,6 +810,7 @@ Start the game anyway?`
               onLaunchOnly={(modId) => void launchOnly(modId)}
               devLaunch={devLaunch ? { modId: devLaunch.modId, since: devLaunch.since } : null}
               onRestoreList={restoreDevList}
+              onRefreshMods={handleRefreshMods}
             />
           )}
 

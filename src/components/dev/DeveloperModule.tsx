@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, ExternalLink, FolderOpen, Loader2, Play, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
+import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Play, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
 import { CatalogModSummary, FileProblem, ModInfo, ModValidation } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -13,6 +13,8 @@ interface DeveloperModuleProps {
   /** The list set aside by such a launch, when one is; and the way to put it back now. */
   devLaunch: { modId: string; since: string } | null;
   onRestoreList: () => void;
+  /** After a new mod is made: the installed mods are read again, so it can be picked. */
+  onRefreshMods: () => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface DeveloperModuleProps {
  * every Lua and script file of it before the game does, open the wrong line in your editor, and
  * start the game with only that mod on.
  */
-export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, catalogById, onLaunchOnly, devLaunch, onRestoreList }) => {
+export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, catalogById, onLaunchOnly, devLaunch, onRestoreList, onRefreshMods }) => {
   const [modId, setModId] = useState<string>(() => localStorage.getItem('pz_dev_mod') ?? '');
   const [validation, setValidation] = useState<ModValidation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -125,6 +127,33 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
     await reloadFiles(all.map((c) => c.absolute));
   };
 
+  /** A new mod: the form, and what came of it. */
+  const [newMod, setNewMod] = useState<{ id: string; name: string; author: string; description: string; also41: boolean } | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState<{ folder: string; files: string[]; id: string } | null>(null);
+  const idFromName = (name: string) => name.replace(/[^A-Za-z0-9_-]+/g, '');
+  const createMod = async () => {
+    if (!newMod) return;
+    setCreating(true);
+    try {
+      const made = await TauriService.createMod(paths.user_zomboid_dir, {
+        id: newMod.id.trim(),
+        name: newMod.name.trim(),
+        author: newMod.author.trim(),
+        description: newMod.description,
+        builds: newMod.also41 ? ['41', '42'] : ['42'],
+      });
+      setCreated({ ...made, id: newMod.id.trim() });
+      setNewMod(null);
+      onRefreshMods();
+      pick(newMod.id.trim());
+    } catch {
+      // Already shown by TauriService.
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const byFile = useMemo(() => {
     const map = new Map<string, FileProblem[]>();
     for (const p of validation?.problems ?? []) map.set(p.path, [...(map.get(p.path) ?? []), p]);
@@ -153,6 +182,84 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
             </button>
           </div>
         )}
+
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <FolderPlus className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> A new mod
+              </div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">
+                Made in Zomboid/mods the way Build 42 reads it: <code>42/mod.info</code> (name, id, description, author,
+                poster, versionMin), <code>42/media/lua/client|server|shared</code> and <code>42/media/scripts</code>,
+                <code>common/media/lua</code> for what every build shares, a poster to replace, and one Lua file that prints
+                the mod's name when the game loads it. The game lists it after the next scan.
+              </p>
+            </div>
+            {!newMod && (
+              <button type="button" onClick={() => setNewMod({ id: '', name: '', author: '', description: '', also41: false })}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shrink-0">
+                <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" /> New mod…
+              </button>
+            )}
+          </div>
+          {newMod && (
+            <form
+              className="grid grid-cols-1 md:grid-cols-2 gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void createMod();
+              }}
+            >
+              <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                Name
+                <input type="text" value={newMod.name} autoFocus
+                  onChange={(e) => setNewMod({ ...newMod, name: e.target.value, id: newMod.id === idFromName(newMod.name) ? idFromName(e.target.value) : newMod.id })}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                Id (the folder and the list entry: letters, digits, _ and -)
+                <input type="text" value={newMod.id} onChange={(e) => setNewMod({ ...newMod, id: e.target.value })} spellCheck={false}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500" />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                Author
+                <input type="text" value={newMod.author} onChange={(e) => setNewMod({ ...newMod, author: e.target.value })}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                Description (one line per paragraph)
+                <textarea rows={2} value={newMod.description} onChange={(e) => setNewMod({ ...newMod, description: e.target.value })}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-slate-300 md:col-span-2">
+                <input type="checkbox" checked={newMod.also41} onChange={(e) => setNewMod({ ...newMod, also41: e.target.checked })} />
+                Build 41 too (a root mod.info and media/ beside the 42/ folder)
+              </label>
+              <div className="flex gap-2 md:col-span-2">
+                <button type="submit" disabled={creating || !newMod.name.trim() || !newMod.id.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
+                  {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" />} Make it
+                </button>
+                <button type="button" onClick={() => setNewMod(null)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+          {created && (
+            <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-[11px] text-emerald-200 flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span>Made <b>{created.id}</b> in <span className="font-mono">{created.folder}</span>.</span>
+                <button type="button" onClick={() => TauriService.openModFolder(paths, created.folder)} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer shrink-0">
+                  <FolderOpen className="w-3 h-3" aria-hidden="true" /> Open the folder
+                </button>
+              </div>
+              <div className="font-mono text-[10px] text-emerald-300/80">{created.files.join(' · ')}</div>
+              <div className="text-emerald-300/80">Switch it on in the Mod List when it is ready; "Start the game with only this mod" here works as soon as the scan lists it.</div>
+            </div>
+          )}
+        </div>
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
           <div className="text-xs font-bold text-slate-200">The mod you are working on</div>
