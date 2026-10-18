@@ -31,7 +31,11 @@ const LABELS: Record<string, string> = {
   script_definition_conflict: 'Same definition as another mod',
   script_definition_conflict_more: 'Same definition as other mods',
   script_definition_stale: 'Merge out of date',
+  script_definition_settled: 'Settled in your package',
 };
+
+/** Issues about a group of files and mods, which only Mod Health shows whole. */
+const HEALTH_ONLY_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'script_definition_conflict_more']);
 
 const labelFor = (issue: HealthIssue) => LABELS[issue.code] ?? issue.code.replace(/_/g, ' ');
 
@@ -143,7 +147,10 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
       {shown.map((issue) => {
         const style = STYLE[issue.severity];
         const Icon = style.icon;
-        const other = issue.related.find((id) => mods.some((m) => m.mod_id === id));
+        // The chip goes to the other mod only when there is exactly one (a dependency, an order
+        // pair); a group of mods and files is Mod Health's to show whole.
+        const others = issue.related.filter((id) => mods.some((m) => m.mod_id === id));
+        const other = others.length === 1 && !HEALTH_ONLY_CODES.has(issue.code) ? others[0] : undefined;
         const fix = issue.fixes[0];
         return (
           <span key={issue.code} className="flex items-center shrink-0">
@@ -157,7 +164,13 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
               className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 border transition cursor-pointer shadow-sm ${style.chip} ${
                 fix ? 'rounded-l' : 'rounded'
               }`}
-              title={`${issue.message}${other ? `\n\nClick: go to ${nameOf(other)}` : '\n\nClick: open Mod Health'}`}
+              title={`${issue.message}${
+                other
+                  ? `\n\nClick: go to ${nameOf(other)}`
+                  : others.length > 1
+                    ? `\n\nClick: open Mod Health, which shows all ${others.length + 1} mods, the files and the fixes`
+                    : '\n\nClick: open Mod Health'
+              }`}
             >
               <Icon className={`w-3 h-3 shrink-0 ${style.iconColor}`} aria-hidden="true" />
               <span>{labelFor(issue)}</span>

@@ -458,7 +458,14 @@ pub fn issues_for_script_conflicts_with_state(
             });
         }
         let severity = if stale { Severity::Warning } else { Severity::Info };
-        let code = if stale { "script_definition_stale" } else { "script_definition_conflict" };
+        // A settled group has its own code, so a row can say "settled" instead of "conflict".
+        let code = if stale {
+            "script_definition_stale"
+        } else if settled {
+            "script_definition_settled"
+        } else {
+            "script_definition_conflict"
+        };
         list.push(severity, code, Some(&winner_id), message, fixes);
         if let Some(last) = list.0.last_mut() {
             last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();

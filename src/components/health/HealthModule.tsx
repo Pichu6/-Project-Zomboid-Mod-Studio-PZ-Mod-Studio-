@@ -35,7 +35,7 @@ const SAFE_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'move_befor
  * row and is kept out of the one-click button, which is for what the game itself would complain
  * about.
  */
-const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definition_stale']);
+const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled']);
 
 
 const fixLabel = (fix: HealthFix): string => {
