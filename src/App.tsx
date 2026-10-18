@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat } from './types';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, profileBuildMajor } from './types';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
@@ -392,14 +392,17 @@ export const App: React.FC = () => {
     // A profile last played on another major build: its saves will not open on this one, and the
     // player may be about to find that out the hard way. One question before the game starts.
     const installed = health.report?.game_version ?? null;
-    const played = activeProfile?.last_played_build ?? null;
-    if (installed && played && played.split('.')[0] !== installed.split('.')[0]) {
+    const profileMajor = profileBuildMajor(activeProfile);
+    if (installed && profileMajor && profileMajor !== installed.split('.')[0]) {
+      const why = activeProfile?.target_build
+        ? `${activeProfile.name} is set for build ${profileMajor}`
+        : `${activeProfile!.name} was last played on build ${activeProfile!.last_played_build}`;
       const ok = window.confirm(
-        `${activeProfile!.name} was last played on build ${played}; the game installed now is ${installed}.
+        `${why}; the game installed now is ${installed}.
 
 ` +
-          `Saves never cross a major build: a ${played.split('.')[0]} save will not open on ${installed.split('.')[0]}. ` +
-          `To play that save, switch Steam's beta branch back first.
+          `Saves never cross a major build: a ${profileMajor} save will not open on ${installed.split('.')[0]}. ` +
+          `To play it, switch Steam's beta branch first.
 
 Start the game anyway?`
       );
@@ -585,6 +588,7 @@ Start the game anyway?`
         installedBuild={health.report?.game_version ?? null}
         install={health.report?.install ?? null}
         profileBuild={activeProfile?.last_played_build ?? null}
+        profileTarget={activeProfile?.target_build ?? null}
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
       />

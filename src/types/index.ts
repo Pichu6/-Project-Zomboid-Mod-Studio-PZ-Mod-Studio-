@@ -313,7 +313,13 @@ export interface AppInstance {
   load_order: string[];
   /** The game build this profile was last played on from the Studio ("42.21"), if ever. */
   last_played_build?: string | null;
+  /** The major build this profile is meant for ("41", "42"), set by hand; null = as last played. */
+  target_build?: string | null;
 }
+
+/** The major build a profile is for: set by hand, else the one it was last played on. */
+export const profileBuildMajor = (p: AppInstance | null | undefined): string | null =>
+  p?.target_build ?? (p?.last_played_build ? p.last_played_build.split('.')[0] : null);
 
 export type AppProfile = AppInstance;
 

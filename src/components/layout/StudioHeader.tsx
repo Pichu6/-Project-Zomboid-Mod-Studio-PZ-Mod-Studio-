@@ -13,6 +13,8 @@ interface StudioHeaderProps {
   installedBuild?: string | null;
   /** The build the active profile was last played on from the Studio. */
   profileBuild?: string | null;
+  /** The major build the active profile is set for by hand, when it is. */
+  profileTarget?: string | null;
   /** Steam's view of the install: the branch and when it last updated. */
   install?: GameInstall | null;
   onNavigateToProfiles?: () => void;
@@ -73,6 +75,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   activeProfileName,
   installedBuild = null,
   profileBuild = null,
+  profileTarget = null,
   install = null,
   onNavigateToProfiles,
   onRunSandbox,
@@ -154,8 +157,10 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         {/* The installed build, and whether this profile was last played on it: saves do not cross builds. */}
         {installedBuild && (() => {
           const major = (v: string) => v.split('.')[0];
-          const other = profileBuild && profileBuild !== installedBuild;
-          const crossed = other && major(profileBuild!) !== major(installedBuild);
+          // A build set by hand speaks for the profile; else the one it was last played on.
+          const targetCrossed = !!profileTarget && profileTarget !== major(installedBuild);
+          const other = targetCrossed || (!profileTarget && profileBuild && profileBuild !== installedBuild);
+          const crossed = targetCrossed || (!profileTarget && other && major(profileBuild!) !== major(installedBuild));
           return (
             <span
               className={`flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-[11px] shadow-inner ${
@@ -166,7 +171,9 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                   : 'bg-slate-950 border-slate-800 text-slate-300'
               }`}
               title={
-                crossed
+                targetCrossed
+                  ? `This profile is set for build ${profileTarget}; the game installed now is ${installedBuild}. Saves never cross a major build. Switch Steam's beta branch to play it, or change the profile's build in Profiles.`
+                  : crossed
                   ? `This profile was last played on build ${profileBuild}; the game installed now is ${installedBuild}. Saves never cross a major build: a ${major(profileBuild!)} save will not open on ${major(installedBuild)}. Switch Steam's beta branch back to play it.`
                   : other
                   ? `This profile was last played on build ${profileBuild}; the game installed now is ${installedBuild}. A save from an earlier build usually opens on a later one of the same major; the other way round it does not.`

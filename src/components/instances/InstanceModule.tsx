@@ -41,6 +41,8 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
   // Edit Modal State
   const [editingInstance, setEditingInstance] = useState<AppInstance | null>(null);
+  /** The build the profile is for, as edited: '' = as last played. */
+  const [editBuild, setEditBuild] = useState<string>('');
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
 
@@ -131,6 +133,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
     setEditingInstance(inst);
     setEditName(inst.name);
     setEditDesc(inst.description || '');
+    setEditBuild(inst.target_build ?? '');
   };
 
   const handleSaveEdit = async () => {
@@ -141,6 +144,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
         ...editingInstance,
         name: editName.trim(),
         description: editDesc.trim() || undefined,
+        target_build: editBuild || null,
       };
 
       await TauriService.updateInstance(paths.user_zomboid_dir, updated);
@@ -463,6 +467,17 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                       <span className="text-emerald-400 font-bold">{inst.active_mod_ids.length} Active Mods</span>
                       <span>•</span>
                       <span>Total: {inst.load_order.length}</span>
+                      {inst.target_build ? (
+                        <>
+                          <span>•</span>
+                          <span className="text-sky-300" title="Set by hand (Edit): the launch check and the header's Build badge go by it">Build {inst.target_build}</span>
+                        </>
+                      ) : inst.last_played_build ? (
+                        <>
+                          <span>•</span>
+                          <span title="The build this profile was last played on from the Studio">Played on {inst.last_played_build}</span>
+                        </>
+                      ) : null}
                     </div>
                   </div>
 
@@ -563,6 +578,28 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
                   onChange={(e) => setEditDesc(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
                 />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Game build
+                </label>
+                <select
+                  value={editBuild}
+                  onChange={(e) => setEditBuild(e.target.value)}
+                  aria-label="Game build this profile is for"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">
+                    {editingInstance.last_played_build ? `As last played (${editingInstance.last_played_build})` : 'As last played (not played yet)'}
+                  </option>
+                  <option value="41">Build 41</option>
+                  <option value="42">Build 42</option>
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Saves never cross a major build. With a build set here, the Studio asks before launching this profile on
+                  another build, even before it has been played.
+                </p>
               </div>
             </div>
 

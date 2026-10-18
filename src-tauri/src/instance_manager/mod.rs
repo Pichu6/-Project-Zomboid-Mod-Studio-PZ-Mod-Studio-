@@ -16,6 +16,19 @@ pub struct AppInstance {
     /// installed game is another.
     #[serde(default)]
     pub last_played_build: Option<String>,
+    /// The major build this profile is meant for ("41", "42"), set by hand for a profile not yet
+    /// played; None means "whatever it was last played on".
+    #[serde(default)]
+    pub target_build: Option<String>,
+}
+
+impl AppInstance {
+    /// The major build the profile is for: the one set by hand, else the one it was last played on.
+    pub fn build_major(&self) -> Option<String> {
+        self.target_build
+            .clone()
+            .or_else(|| self.last_played_build.as_ref().map(|b| b.split('.').next().unwrap_or(b).to_string()))
+    }
 }
 
 /// Path of a profile's JSON file. Profile IDs come from the UI and are joined onto a folder
@@ -93,6 +106,7 @@ pub fn create_instance(
         active_mod_ids,
         load_order,
         last_played_build: None,
+        target_build: None,
     };
 
     let file_path = dir.join(format!("{}.json", id));
@@ -244,6 +258,11 @@ pub fn update_instance(
     if !instance_file.exists() {
         return Err("The instance to update does not exist.".to_string());
     }
+    if let Some(b) = instance.target_build.as_deref() {
+        if b.len() != 2 || !b.chars().all(|c| c.is_ascii_digit()) {
+            return Err(format!("A target build is a major build like 41 or 42, not \"{}\".", b));
+        }
+    }
 
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
     fs::write(&instance_file, json).map_err(|e| e.to_string())?;
@@ -269,4 +288,22 @@ pub fn mark_instance_played(user_zomboid_dir: String, instance_id: String) -> Re
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
     fs::write(&instance_file, json).map_err(|e| e.to_string())?;
     Ok(build)
+}
+
+#[cfg(test)]
+mod build_tests {
+    use super::*;
+
+    #[test]
+    fn a_profile_file_without_the_new_field_still_reads_and_the_build_is_target_or_played() {
+        let text = r#"{"id":"a","name":"A","created_at":"","is_active":false,"active_mod_ids":[],"load_order":[],"last_played_build":"42.21"}"#;
+        let mut p: AppInstance = serde_json::from_str(text).unwrap();
+        assert_eq!(p.target_build, None);
+        assert_eq!(p.build_major().as_deref(), Some("42"));
+        p.target_build = Some("41".into());
+        assert_eq!(p.build_major().as_deref(), Some("41"), "set by hand wins over played");
+        p.last_played_build = None;
+        p.target_build = None;
+        assert_eq!(p.build_major(), None);
+    }
 }
