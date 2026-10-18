@@ -11,6 +11,11 @@ pub struct AppInstance {
     pub is_active: bool,
     pub active_mod_ids: Vec<String>,
     pub load_order: Vec<String>,
+    /// The game build this profile was last played on from the Studio ("42.21"), if ever.
+    /// Saves do not cross builds, so a profile played on one build is worth a word when the
+    /// installed game is another.
+    #[serde(default)]
+    pub last_played_build: Option<String>,
 }
 
 /// Path of a profile's JSON file. Profile IDs come from the UI and are joined onto a folder
@@ -87,6 +92,7 @@ pub fn create_instance(
         is_active: false,
         active_mod_ids,
         load_order,
+        last_played_build: None,
     };
 
     let file_path = dir.join(format!("{}.json", id));
@@ -248,4 +254,19 @@ pub fn update_instance(
     }
 
     Ok(instance)
+}
+
+
+/// Notes the build a profile was just played on: the one in Zomboid/version.txt now.
+pub fn mark_instance_played(user_zomboid_dir: String, instance_id: String) -> Result<Option<String>, String> {
+    let dir = get_instances_dir(&user_zomboid_dir);
+    let instance_file = instance_file_path(&dir, &instance_id)?;
+    let text = fs::read_to_string(&instance_file).map_err(|e| e.to_string())?;
+    let mut instance: AppInstance = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let build = crate::load_order::mod_info::read_installed_game_version(&user_zomboid_dir)
+        .map(crate::catalog::modinfo::format_game_version);
+    instance.last_played_build = build.clone();
+    let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
+    fs::write(&instance_file, json).map_err(|e| e.to_string())?;
+    Ok(build)
 }

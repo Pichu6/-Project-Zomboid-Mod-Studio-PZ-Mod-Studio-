@@ -9,6 +9,10 @@ interface StudioHeaderProps {
   resolvedConflictCount?: number;
   onNavigateToMerger?: () => void;
   activeProfileName?: string;
+  /** The game build installed now, from Zomboid/version.txt ("42.21"). */
+  installedBuild?: string | null;
+  /** The build the active profile was last played on from the Studio. */
+  profileBuild?: string | null;
   onNavigateToProfiles?: () => void;
   onRunSandbox: (mode: GameLaunchMode) => void;
 }
@@ -65,6 +69,8 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   resolvedConflictCount = 0,
   onNavigateToMerger,
   activeProfileName,
+  installedBuild = null,
+  profileBuild = null,
   onNavigateToProfiles,
   onRunSandbox,
 }) => {
@@ -131,6 +137,37 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             {activeProfileName || 'None'}
           </span>
         </button>
+
+        {/* The installed build, and whether this profile was last played on it: saves do not cross builds. */}
+        {installedBuild && (() => {
+          const major = (v: string) => v.split('.')[0];
+          const other = profileBuild && profileBuild !== installedBuild;
+          const crossed = other && major(profileBuild!) !== major(installedBuild);
+          return (
+            <span
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-[11px] shadow-inner ${
+                crossed
+                  ? 'bg-red-950/60 border-red-700/70 text-red-200'
+                  : other
+                  ? 'bg-amber-950/50 border-amber-700/60 text-amber-200'
+                  : 'bg-slate-950 border-slate-800 text-slate-300'
+              }`}
+              title={
+                crossed
+                  ? `This profile was last played on build ${profileBuild}; the game installed now is ${installedBuild}. Saves never cross a major build: a ${major(profileBuild!)} save will not open on ${major(installedBuild)}. Switch Steam's beta branch back to play it.`
+                  : other
+                  ? `This profile was last played on build ${profileBuild}; the game installed now is ${installedBuild}. A save from an earlier build usually opens on a later one of the same major; the other way round it does not.`
+                  : profileBuild
+                  ? `Installed build ${installedBuild}; this profile was last played on it.`
+                  : `Installed build ${installedBuild}, from Zomboid/version.txt. Play this profile from the Studio once and it remembers the build.`
+              }
+            >
+              <span className="text-slate-400">Build</span>
+              <span className="font-bold">{installedBuild}</span>
+              {other && <span className="text-[10px]">· profile on {profileBuild}</span>}
+            </span>
+          );
+        })()}
 
         <button
           type="button"

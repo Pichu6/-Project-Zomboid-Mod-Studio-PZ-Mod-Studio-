@@ -364,6 +364,15 @@ export const TauriService = {
     }
   },
 
+  /** The active profile was just played: the Studio notes the installed build on it. */
+  markProfilePlayed: async (userZomboidDir: string, instanceId: string): Promise<string | null> => {
+    try {
+      return await invoke<string | null>('mark_profile_played_cmd', { userZomboidDir, instanceId });
+    } catch {
+      return null;
+    }
+  },
+
   listKeptVersions: async (paths: StudioPathsUI): Promise<KeptVersion[]> => {
     try {
       return await invoke<KeptVersion[]>('list_kept_versions_cmd', { paths });

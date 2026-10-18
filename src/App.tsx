@@ -373,6 +373,12 @@ export const App: React.FC = () => {
         test_mode: mode,
       });
 
+      // The profile now carries the build it was played on, for the day the game is updated.
+      if (activeProfile) {
+        await TauriService.markProfilePlayed(paths.user_zomboid_dir, activeProfile.id);
+        void refreshActiveProfile();
+      }
+
       if (mode.includes('DEBUG') || mode === 'MONITORED' || mode === 'WINDOWED') {
         setActiveTab('MONITOR');
       }
@@ -559,6 +565,8 @@ export const App: React.FC = () => {
         resolvedConflictCount={conflicts.filter((c) => c.status === 'RESOLVED' || c.status === 'AUTO_MERGED').length}
         onNavigateToMerger={() => setActiveTab('MERGER')}
         activeProfileName={activeProfile?.name}
+        installedBuild={health.report?.game_version ?? null}
+        profileBuild={activeProfile?.last_played_build ?? null}
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
       />

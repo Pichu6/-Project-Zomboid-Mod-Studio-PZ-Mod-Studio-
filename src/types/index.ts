@@ -311,6 +311,8 @@ export interface AppInstance {
   is_active: boolean;
   active_mod_ids: string[];
   load_order: string[];
+  /** The game build this profile was last played on from the Studio ("42.21"), if ever. */
+  last_played_build?: string | null;
 }
 
 export type AppProfile = AppInstance;
