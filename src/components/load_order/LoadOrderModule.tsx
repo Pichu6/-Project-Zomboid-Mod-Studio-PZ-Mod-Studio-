@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { ModInfo, HealthIssue, CatalogModSummary, AppInstance } from '../../types';
+import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat } from '../../types';
 import { SourceBadge, sourceOf } from '../common/SourceBadge';
 import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -53,6 +53,8 @@ interface LoadOrderModuleProps {
   healthIssues?: HealthIssue[] | null;
   /** Installed mods as the game sees them (source, origin), from useModHealth. */
   catalogById?: Map<string, CatalogModSummary>;
+  /** What each mod did to the last session's log, by the name the game writes. */
+  errorStats?: Map<string, ModErrorStat>;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
   onOpenInBrowser?: (workshopId: string) => void;
   /** Opens the Mod Merger on this conflicting file (a row chip's fix). */
@@ -101,6 +103,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   openedPackageFolder,
   healthIssues = null,
   catalogById,
+  errorStats,
   onOpenInBrowser,
   onOpenMerger,
   onGoToHealth,
@@ -1237,6 +1240,28 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                           )}
 
                           <SourceBadge modId={mod.mod_id} entry={catalogById?.get(mod.mod_id)} />
+
+                          {/* What the game laid at this mod's door last session, counted from console.txt. */}
+                          {(() => {
+                            const stat = errorStats?.get(mod.name);
+                            if (!stat || (stat.exceptions === 0 && stat.warnings === 0)) return null;
+                            const threw = stat.exceptions > 0;
+                            return (
+                              <span
+                                className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                                  threw ? 'bg-red-950/60 text-red-300 border-red-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
+                                }`}
+                                title={
+                                  (threw ? `Threw ${stat.exceptions} time${stat.exceptions === 1 ? '' : 's'} last session` : '') +
+                                  (threw && stat.warnings > 0 ? ', and ' : '') +
+                                  (stat.warnings > 0 ? `${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} last session` : '') +
+                                  `.\n\n${stat.last_exception ?? stat.last_warning ?? ''}\n\nFrom console.txt as it is now; the Monitor has the cards.`
+                                }
+                              >
+                                {threw ? `${stat.exceptions}× threw` : `${stat.warnings} warn`}
+                              </span>
+                            );
+                          })()}
 
                           {/* Showing everything: say which profiles each mod belongs to. */}
                           {showEveryMod && activeProfile && (() => {

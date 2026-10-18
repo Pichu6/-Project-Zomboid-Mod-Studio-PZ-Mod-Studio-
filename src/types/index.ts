@@ -74,6 +74,15 @@ export interface CollisionRegion {
 // ==========================================
 
 /** One numbered part of the Build 42 shim, as the shim itself heads it. */
+/** What one mod did to the last session's log. */
+export interface ModErrorStat {
+  mod_name: string;
+  exceptions: number;
+  warnings: number;
+  last_exception: string | null;
+  last_warning: string | null;
+}
+
 /** A copy of a mod as it was installed on a day, kept so an update can be undone. */
 export interface KeptVersion {
   mod_id: string;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile } from './types';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat } from './types';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
@@ -65,6 +65,21 @@ export const App: React.FC = () => {
 
   // Game-exact health check of the active list, shared by Mod List, Mod Health and the sidebar.
   const health = useModHealth(paths, mods);
+
+  /**
+   * What each mod did to the last session's log, by the name the game writes. Read when the
+   * paths are known and again when the game starts a new session, so the Mod List's row can say
+   * "threw 413 times last session" without the Monitor open.
+   */
+  const [errorStats, setErrorStats] = useState<Map<string, ModErrorStat>>(new Map());
+  const loadErrorStats = useCallback(async () => {
+    if (!paths.is_valid) return;
+    const list = await TauriService.modErrorStats(paths);
+    setErrorStats(new Map(list.map((s) => [s.mod_name, s])));
+  }, [paths]);
+  useEffect(() => {
+    void loadErrorStats();
+  }, [loadErrorStats]);
 
   const refreshActiveProfile = useCallback(async (customUserDir?: string): Promise<AppProfile | null> => {
     const userDir = customUserDir || paths.user_zomboid_dir;
@@ -162,7 +177,10 @@ export const App: React.FC = () => {
 
     // A relaunch writes a fresh console.txt: the cards are this session's, so the last one's go.
     let unlistenSession: (() => void) | undefined;
-    TauriService.listenSandboxSessionStarted(() => setErrorCards([])).then((unlisten) => {
+    TauriService.listenSandboxSessionStarted(() => {
+      setErrorCards([]);
+      void loadErrorStats();
+    }).then((unlisten) => {
       unlistenSession = unlisten;
     });
 
@@ -592,6 +610,7 @@ export const App: React.FC = () => {
               openedPackageFolder={openedPackageFolder}
               healthIssues={health.report?.issues ?? null}
               catalogById={health.catalogById}
+              errorStats={errorStats}
               onOpenMerger={(relativePath) => {
                 setMergerFocusPath(relativePath);
                 setActiveTab('MERGER');

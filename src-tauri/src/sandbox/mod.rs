@@ -396,6 +396,67 @@ impl ModBlame {
 /// The display name every Studio package gets in `generate_master_patch`: `name=PZ Mod Studio Patch: <x>`.
 pub const STUDIO_PACKAGE_PREFIX: &str = "PZ Mod Studio Patch: ";
 
+/// What one mod did to the last session's log: how many times it threw, how many times the game
+/// warned about it, and the last line of each.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModErrorStat {
+    /// The name the game wrote, which is the mod's display name.
+    pub mod_name: String,
+    pub exceptions: usize,
+    pub warnings: usize,
+    pub last_exception: Option<String>,
+    pub last_warning: Option<String>,
+}
+
+/// Every mod the last session's log named on a line of trouble, with its counts.
+///
+/// The same attribution as the Monitor's cards: the name on the line, the mod that overrides the
+/// path, or the mod in the frame a few lines above. Only lines the game marked as trouble count;
+/// a mod that merely loaded is not here. Studio packages are counted under their own name, which
+/// is what the game writes.
+pub fn error_stats_per_mod(lines: impl Iterator<Item = String>) -> Vec<ModErrorStat> {
+    let mut blame = ModBlame::default();
+    let mut stats: std::collections::BTreeMap<String, ModErrorStat> = Default::default();
+    for line in lines {
+        blame.observe(&line);
+        let trimmed = line.trim();
+        // Only the game's own level lines count: the Java frames under an ERROR would count the
+        // same throw three or four times over.
+        let is_trouble = trimmed.starts_with("ERROR") || trimmed.starts_with("WARN");
+        if !is_trouble {
+            continue;
+        }
+        let Some(name) = blame.of(trimmed) else { continue };
+        let entry = stats.entry(name.clone()).or_insert_with(|| ModErrorStat { mod_name: name, ..Default::default() });
+        match Severity::of_line(trimmed) {
+            Severity::Exception => {
+                entry.exceptions += 1;
+                entry.last_exception = Some(trimmed.chars().take(200).collect());
+            }
+            Severity::Warning => {
+                entry.warnings += 1;
+                entry.last_warning = Some(trimmed.chars().take(200).collect());
+            }
+        }
+    }
+    let mut out: Vec<ModErrorStat> = stats.into_values().collect();
+    out.sort_by(|a, b| (b.exceptions, b.warnings).cmp(&(a.exceptions, a.warnings)));
+    out
+}
+
+/// The per-mod counts of the session in `console.txt` now.
+pub fn error_stats_from_console(user_zomboid_dir: &str) -> Vec<ModErrorStat> {
+    let Some(path) = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir)
+        .into_iter()
+        .map(|d| d.join("console.txt"))
+        .find(|p| p.is_file())
+    else {
+        return Vec::new();
+    };
+    let Ok(file) = File::open(&path) else { return Vec::new() };
+    error_stats_per_mod(BufReader::new(file).lines().map_while(Result::ok))
+}
+
 /// A line worth showing even though it matches no known pattern, because the game named a mod.
 fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayload {
     let severity = Severity::of_line(line);
@@ -1103,6 +1164,37 @@ mod live_card_tests {
             println!("          from: {}", example.1.trim().chars().take(100).collect::<String>());
         }
         println!("cards made from lines the game did not mark as trouble: {}", from_log_lines);
+    }
+}
+
+#[cfg(test)]
+mod error_stats_tests {
+    use super::*;
+
+    #[test]
+    fn a_session_is_counted_per_mod_by_what_the_game_did() {
+        let lines = [
+            "LOG  : Mod          f:0> loading FancyHandworkB42_19",
+            "WARN : Lua          f:0 at Lua((MOD:The Only Cure)).ZombiesAmputation.lua> require(\"TOC/Controllers/ItemsController\") failed",
+            "\tLua((MOD:Fancy Handwork B42.20)).FHhandleKeybinds(aFancyHandwork.lua:126)",
+            "ERROR: General      f:240> 20)).FHhandleKeybinds> Exception thrown",
+            "\tLua((MOD:Fancy Handwork B42.20)).FHhandleKeybinds(aFancyHandwork.lua:126)",
+            "ERROR: General      f:241> 20)).FHhandleKeybinds> Exception thrown",
+            "	java.lang.NullPointerException: Cannot invoke \"zombie.input.KeybindId.getId()\"",
+            "	at zombie.core.Core.getKey(Core.java:3023)",
+            "LOG  : General      f:242> something else",
+            "LOG  : General      f:243> and more",
+            "LOG  : General      f:244> and more",
+            "ERROR: General      f:0 at ImportedSkeleton.collectBoneFrames  > Could not find bone index for node name: \"Root\"",
+        ];
+        let stats = error_stats_per_mod(lines.iter().map(|s| s.to_string()));
+        assert_eq!(stats.len(), 2, "{:?}", stats);
+        assert_eq!(stats[0].mod_name, "Fancy Handwork B42.20");
+        assert_eq!(stats[0].exceptions, 2);
+        assert_eq!(stats[0].warnings, 0);
+        assert_eq!(stats[1].mod_name, "The Only Cure");
+        assert_eq!(stats[1].warnings, 1);
+        assert_eq!(stats[1].exceptions, 0);
     }
 }
 

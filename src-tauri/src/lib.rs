@@ -286,6 +286,12 @@ fn keep_mod_version_cmd(paths: StudioPaths, mod_id: String) -> Result<snapshots:
     snapshots::keep_version(&paths.user_zomboid_dir, &m.id, &m.name, std::path::Path::new(&m.root_dir), m.info.mod_version.clone(), workshop_id)
 }
 
+/// What each mod did to the last session's log: exceptions and warnings the game laid at its door.
+#[tauri::command(async)]
+fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
+    sandbox::error_stats_from_console(&paths.user_zomboid_dir)
+}
+
 #[tauri::command(async)]
 fn list_kept_versions_cmd(paths: StudioPaths) -> Vec<snapshots::KeptVersion> {
     snapshots::list_kept_versions(&paths.user_zomboid_dir)
@@ -780,6 +786,7 @@ pub fn run() {
             remove_compatible_copy_cmd,
             keep_mod_version_cmd,
             list_kept_versions_cmd,
+            mod_error_stats_cmd,
             restore_kept_version_cmd,
             delete_kept_version_cmd,
             nexus_search_cmd,
