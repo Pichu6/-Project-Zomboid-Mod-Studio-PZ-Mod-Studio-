@@ -542,7 +542,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       onSelect: () => setKeptVersionsOf(mod),
     },
     {
-      label: 'Propose to the community index…',
+      label: 'Share what you know about this mod…',
       icon: Globe,
       onSelect: () => {
         void (async () => {
@@ -568,6 +568,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       },
       disabled: mod.mod_id.startsWith('Z_PZModStudio_'),
       disabledReason: 'A Studio package is not a mod of the community',
+      title: 'Sends nothing by itself: opens a note about this mod (builds it runs on, what it clashes with, known issues) for the community index on GitHub, for you to complete',
     },
     {
       label: 'Copy the mod id',

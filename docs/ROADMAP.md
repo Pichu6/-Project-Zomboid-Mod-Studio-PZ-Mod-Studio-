@@ -108,6 +108,14 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | ✅ | The old block merger, which dropped every kind it did not know and ended a definition at the first nested `}`, was dead code and is gone. `src-tauri/src/scripts` parses scripts properly instead; merging a script file is diff3 over its text, as for Lua | It truncated nested blocks |
 | ⬜ | Translation merge (JSON) | B42.15+ format |
 
+## Phase 8: Keeping mods you like (asked 2026-10-18)
+
+| | Item | Notes |
+|---|---|---|
+| ⬜ | **Favorites and lists** (~3 h): a star on a Browse card, in the detail page and on a Mod List row; "Add to a list…" with lists of the player's own (by Workshop id and mod id, kept in `Zomboid/PZModStudio_Lists.json`); a **My lists** tab in Browse beside My mods, each list with Subscribe all and Make a profile | What a Workshop collection is, but the player's, offline, mixing sources. Later: import a Workshop collection into a list, export a list as one |
+| ⬜ | **Add to a profile…** (~1 h) from a Browse card (when installed) and a Mod List row: pick a profile, the mod is appended to its list, switched on | Today a profile is edited only from inside it |
+| ⬜ | Other people's lists | Later, through the community repository, the way the index works: a list is a file, by pull request |
+
 ## Phase 7: For mod developers too
 
 Asked 2026-10-18: the Studio already carries developer tools (the MCP server, the Claude Agent mod, the bridge, the Lua validator, the Merger); a Developer tab would make the app useful to the people who make the mods, not only to the people who play them. What a Project Zomboid modder actually uses, and what the Studio can do about each:

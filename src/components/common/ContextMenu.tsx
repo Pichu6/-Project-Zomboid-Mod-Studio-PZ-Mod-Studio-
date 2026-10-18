@@ -15,6 +15,8 @@ export interface MenuItem {
   /** Shown greyed out, with the reason on hover. */
   disabled?: boolean;
   disabledReason?: string;
+  /** A line on hover saying what the item does, when the label alone is not enough. */
+  title?: string;
   /** Draws a line above this item. */
   separatorBefore?: boolean;
   /** Red, for anything that removes or undoes something. */
@@ -113,7 +115,7 @@ export const ContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ c
                   type="button"
                   role="menuitem"
                   disabled={item.disabled}
-                  title={item.disabled ? item.disabledReason : undefined}
+                  title={item.disabled ? item.disabledReason : item.title}
                   onClick={() => {
                     setMenu(null);
                     item.onSelect();

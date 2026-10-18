@@ -122,9 +122,9 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
         <button
           onClick={() => void propose(rule)}
           className="px-2 py-1 rounded-lg text-[11px] text-cyan-300 hover:text-cyan-200 border border-slate-800 hover:border-cyan-900 cursor-pointer transition"
-          title="Copies this rule as JSON and opens community/rules.json in the Studio's repository on GitHub, where a pull request adds it for everyone"
+          title="Offers this rule to every player of the Studio: opens it on GitHub (community/rules.json), where a pull request adds it. Sends nothing by itself."
         >
-          Propose to the community
+          Share this rule
         </button>
         <button
           onClick={() => void remove(rule)}
