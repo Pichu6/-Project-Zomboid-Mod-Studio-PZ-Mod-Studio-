@@ -59,7 +59,7 @@ fn module_path_of(file: &Path) -> Option<(String, String)> {
     Some((original[start..original.len() - 4].to_string(), phase.to_string()))
 }
 
-fn index_lua(root: &Path, owner: &str, into: &mut Vec<(String, ModuleCandidate)>) {
+pub(crate) fn index_lua(root: &Path, owner: &str, into: &mut Vec<(String, ModuleCandidate)>) {
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         if !entry.file_type().is_file() {
             continue;

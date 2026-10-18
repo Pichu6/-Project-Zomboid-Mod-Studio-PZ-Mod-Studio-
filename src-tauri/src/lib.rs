@@ -267,7 +267,13 @@ fn make_compatible_copy_cmd(paths: StudioPaths, mod_id: String, replace_existing
         catalog::ModSource::Workshop { workshop_id } => Some(workshop_id.clone()),
         _ => None,
     };
-    compat::make_compatible_copy(std::path::Path::new(&original.root_dir), &paths.user_zomboid_dir, game, workshop_id, replace_existing)
+    // The module index of the game and the active mods, so the copy's moved require paths are
+    // rewritten up front instead of failing at boot.
+    let active: Vec<String> = load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path)
+        .map(|d| d.active_mods)
+        .unwrap_or_default();
+    let index = sandbox::requires::index_modules(&paths, &catalog, &active);
+    compat::make_compatible_copy_with_index(std::path::Path::new(&original.root_dir), &paths.user_zomboid_dir, game, workshop_id, replace_existing, &index)
 }
 
 #[tauri::command(async)]

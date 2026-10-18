@@ -320,6 +320,19 @@ pub fn make_compatible_copy(
     workshop_id: Option<String>,
     replace_existing: bool,
 ) -> Result<CompatResult, String> {
+    make_compatible_copy_with_index(source_root, user_zomboid_dir, game_version, workshop_id, replace_existing, &[])
+}
+
+/// As `make_compatible_copy`, with the module index of the game and the active mods, so the
+/// copy's `require` paths that Build 42 moved are rewritten up front instead of failing at boot.
+pub fn make_compatible_copy_with_index(
+    source_root: &Path,
+    user_zomboid_dir: &str,
+    game_version: u32,
+    workshop_id: Option<String>,
+    replace_existing: bool,
+    index: &[(String, crate::sandbox::requires::ModuleCandidate)],
+) -> Result<CompatResult, String> {
     let zomboid = get_existing_user_zomboid_dirs(user_zomboid_dir)
         .into_iter()
         .next()
@@ -349,7 +362,7 @@ pub fn make_compatible_copy(
         format!("Copying the mod failed: {}", e)
     })?;
 
-    let result = adapt(&dest, game_version);
+    let result = adapt(&dest, game_version, index);
     let (changes, warnings, mod_id) = match result {
         Ok(v) => v,
         Err(e) => {
@@ -510,8 +523,105 @@ fn convert_translations(roots: &[PathBuf]) -> (Vec<String>, Vec<String>) {
     (changes, warnings)
 }
 
+/// Every `require` in a Lua file, as (module, the literal span to replace).
+fn requires_in(lua: &str) -> Vec<(String, std::ops::Range<usize>)> {
+    let mut found = Vec::new();
+    for (at, _) in lua.match_indices("require") {
+        let after = &lua[at + "require".len()..];
+        let trimmed = after.trim_start();
+        let mut skip = after.len() - trimmed.len();
+        let trimmed = match trimmed.strip_prefix('(') {
+            Some(rest) => {
+                skip += 1 + (rest.len() - rest.trim_start().len());
+                rest.trim_start()
+            }
+            None => trimmed,
+        };
+        let Some(quote) = trimmed.chars().next().filter(|c| *c == '"' || *c == '\'') else { continue };
+        let body = &trimmed[1..];
+        let Some(end) = body.find(quote) else { continue };
+        let module = &body[..end];
+        if module.is_empty() || module.contains('\n') {
+            continue;
+        }
+        let start = at + "require".len() + skip + 1;
+        found.push((module.to_string(), start..start + end));
+    }
+    found
+}
+
+/// Rewrites `require` paths that Build 42 moved, in every Lua file of the copy, when the module
+/// index knows exactly one other place for the module. A module at the asked path is left (the
+/// failure, if any, is about load order, not the path); one found nowhere is named in a warning;
+/// one found at several paths is left and named, since a guess would be a lie.
+fn fix_require_paths(roots: &[PathBuf], index: &[(String, crate::sandbox::requires::ModuleCandidate)]) -> (Vec<String>, Vec<String>) {
+    use crate::sandbox::requires::answer_for;
+    let mut rewritten: Vec<String> = Vec::new();
+    let mut nowhere: std::collections::BTreeSet<String> = Default::default();
+    let mut several: std::collections::BTreeSet<String> = Default::default();
+    let mut files = 0usize;
+    for root in roots {
+        for lua in files_under(&root.join("media").join("lua"), "lua") {
+            let Ok(text) = fs::read_to_string(&lua) else { continue };
+            let mut edits: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+            for (module, span) in requires_in(&text) {
+                let answer = answer_for(&module, index);
+                let Some(first) = answer.candidates.first() else {
+                    nowhere.insert(module.clone());
+                    continue;
+                };
+                if first.same_path {
+                    continue;
+                }
+                let mut paths: Vec<&str> = answer.candidates.iter().map(|c| c.module_path.as_str()).collect();
+                paths.sort();
+                paths.dedup();
+                if paths.len() != 1 {
+                    several.insert(module.clone());
+                    continue;
+                }
+                rewritten.push(format!("{} -> {}", module, paths[0]));
+                edits.push((span, paths[0].to_string()));
+            }
+            if edits.is_empty() {
+                continue;
+            }
+            let mut out = text.clone();
+            for (span, to) in edits.into_iter().rev() {
+                out.replace_range(span, &to);
+            }
+            if fs::write(&lua, out).is_ok() {
+                files += 1;
+            }
+        }
+    }
+    let mut changes = Vec::new();
+    if !rewritten.is_empty() {
+        rewritten.sort();
+        rewritten.dedup();
+        changes.push(format!(
+            "Rewrote {} require path(s) Build 42 moved, in {} file(s): {}.",
+            rewritten.len(), files, rewritten.join(", ")
+        ));
+    }
+    let mut warnings = Vec::new();
+    if !nowhere.is_empty() {
+        warnings.push(format!(
+            "require() of a module that is nowhere (game or active mods), left as is: {}. The mod may need another mod, or this is a bug for its author.",
+            nowhere.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if !several.is_empty() {
+        warnings.push(format!(
+            "require() of a module found at several paths, left as is: {}.",
+            several.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    (changes, warnings)
+}
+
 /// Adapts the copied folder in place. Returns (changes, warnings, mod id).
-fn adapt(dest: &Path, game_version: u32) -> Result<(Vec<String>, Vec<String>, String), String> {
+fn adapt(dest: &Path, game_version: u32, index: &[(String, crate::sandbox::requires::ModuleCandidate)]) -> Result<(Vec<String>, Vec<String>, String), String> {
     let mut changes = Vec::new();
     let target = format_game_version(game_version);
     let is_b42 = game_version >= 42_000;
@@ -596,6 +706,16 @@ fn adapt(dest: &Path, game_version: u32) -> Result<(Vec<String>, Vec<String>, St
         let (made, trouble) = convert_translations(&roots);
         changes.extend(made);
         warnings.extend(trouble);
+        if !index.is_empty() {
+            // The copy's own modules count too: a mod requires its own files as often as the game's.
+            let mut own = index.to_vec();
+            for root in &roots {
+                crate::sandbox::requires::index_lua(&root.join("media").join("lua"), &mod_id, &mut own);
+            }
+            let (moved, nowhere) = fix_require_paths(&roots, &own);
+            changes.extend(moved);
+            warnings.extend(nowhere);
+        }
     }
 
     // 4. What may still break.
@@ -641,6 +761,37 @@ mod tests {
         fs::create_dir_all(t.0.join("Zomboid/mods")).unwrap();
         let z = t.0.join("Zomboid").to_string_lossy().to_string();
         (t, ws, z)
+    }
+
+    #[test]
+    fn moved_require_paths_are_rewritten_and_the_rest_left_alone() {
+        let (_t, ws, z) = setup("requires");
+        let src = ws.join("Asker");
+        fs::create_dir_all(src.join("media/lua/client")).unwrap();
+        fs::write(src.join("mod.info"), "name=Asker\nid=Asker\n").unwrap();
+        fs::write(
+            src.join("media/lua/client/Asker.lua"),
+            "require \"Vehicle/ISVehiclePartMenu\"\nlocal u = require('Vehicles/VehicleUtils')\nrequire(\"ISUI/ISPanel\")\nrequire \"AskerHelper\"\n",
+        )
+        .unwrap();
+        fs::write(src.join("media/lua/client/AskerHelper.lua"), "return {}").unwrap();
+        let cand = |path: &str| crate::sandbox::requires::ModuleCandidate {
+            module_path: path.to_string(), phase: "client".to_string(), owner: "the game".to_string(), same_path: false,
+        };
+        // Build 42 keeps ISPanel where it was and moved ISVehiclePartMenu; VehicleUtils is gone.
+        let index = vec![
+            ("isvehiclepartmenu".to_string(), cand("Vehicles/ISUI/ISVehiclePartMenu")),
+            ("ispanel".to_string(), cand("ISUI/ISPanel")),
+        ];
+        let result = make_compatible_copy_with_index(&src, &z, 42_021, None, false, &index).expect("copied");
+        let lua = fs::read_to_string(Path::new(&result.destination).join("42/media/lua/client/Asker.lua")).unwrap();
+        assert!(lua.contains("require \"Vehicles/ISUI/ISVehiclePartMenu\""), "{}", lua);
+        assert!(lua.contains("require(\"ISUI/ISPanel\")"), "a module at its path is left: {}", lua);
+        assert!(lua.contains("require \"AskerHelper\""), "the mod's own module is found in the copy: {}", lua);
+        assert!(lua.contains("require('Vehicles/VehicleUtils')"), "a module nowhere is left: {}", lua);
+        let joined = result.changes.join(" ");
+        assert!(joined.contains("Vehicle/ISVehiclePartMenu -> Vehicles/ISUI/ISVehiclePartMenu"), "{}", joined);
+        assert!(result.warnings.iter().any(|w| w.contains("Vehicles/VehicleUtils")), "{:?}", result.warnings);
     }
 
     #[test]
