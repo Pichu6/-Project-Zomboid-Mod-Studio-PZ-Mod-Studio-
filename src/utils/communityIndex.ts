@@ -1,4 +1,4 @@
-import { CatalogModSummary, CommunityRegistry, ModInfo } from '../types';
+import { CatalogModSummary, CommunityIssue, CommunityRegistry, ModErrorStat, ModInfo } from '../types';
 
 /** The Studio's repository, where the index lives. */
 export const COMMUNITY_REPO = 'https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-';
@@ -7,11 +7,38 @@ export const COMMUNITY_REPO = 'https://github.com/Pichu6/-Project-Zomboid-Mod-St
 export const registryFileName = (modId: string) => `${modId.replace(/\//g, '__')}.json`;
 
 /**
- * A registry filled with what the Studio already knows about an installed mod (mod.info, where
- * it came from, the build it runs on here), so a person proposing it adds only what they tested:
- * the mods it clashes with, the issues they saw. Every empty list is left in, as a prompt.
+ * What the Studio itself saw of a mod on this machine, worth telling the community: the errors
+ * and warnings the Monitor counted for it in the last session, and the compatible copy it needed
+ * (with what the copy changed). Each is a known issue, verified, on the installed build. Nothing
+ * seen means nothing to share, and the menu says so instead of opening an empty note.
  */
-export function draftRegistry(mod: ModInfo, catalog: CatalogModSummary | undefined, installedBuild: string | null): CommunityRegistry {
+export function knownIssues(catalog: CatalogModSummary | undefined, stat: ModErrorStat | undefined, installedBuild: string | null): CommunityIssue[] {
+  const seen = { build: installedBuild ?? undefined, date: new Date().toISOString().slice(0, 10), source: "PZ Mod Studio, from the game's console.txt", status: 'verified' as const };
+  const issues: CommunityIssue[] = [];
+  if (stat && stat.exceptions > 0) {
+    issues.push({ title: `Threw ${stat.exceptions} error${stat.exceptions === 1 ? '' : 's'} in the last session`, log: stat.last_exception ?? undefined, fix: { kind: 'none' }, ...seen });
+  }
+  if (stat && stat.warnings > 0) {
+    issues.push({ title: `${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} in the last session (the game carried on)`, log: stat.last_warning ?? undefined, fix: { kind: 'none' }, ...seen });
+  }
+  if (catalog?.origin?.kind === 'compat') {
+    issues.push({
+      title: 'Needed a compatible copy on this build',
+      note: catalog.origin.changes.length ? `The copy changed: ${catalog.origin.changes.join('; ')}` : undefined,
+      fix: { kind: 'compatible_copy' },
+      ...seen,
+      source: 'PZ Mod Studio, the compatible copy it made',
+    });
+  }
+  return issues;
+}
+
+/**
+ * A registry filled with what the Studio already knows about an installed mod (mod.info, where
+ * it came from, the build it runs on here, and what it saw of it: `issues`), so a person
+ * proposing it adds only what they tested. Every empty list is left in, as a prompt.
+ */
+export function draftRegistry(mod: ModInfo, catalog: CatalogModSummary | undefined, installedBuild: string | null, issues: CommunityIssue[] = []): CommunityRegistry {
   const workshopId = mod.workshop_id ?? (catalog?.source.kind === 'workshop' ? catalog.source.workshop_id : undefined);
   const major = installedBuild?.match(/^\d{2}/)?.[0];
   const builds = mod.loadable_on_installed_build !== false && major ? [major] : [];
@@ -24,7 +51,7 @@ export function draftRegistry(mod: ModInfo, catalog: CatalogModSummary | undefin
     requires: mod.dependencies ?? [],
     incompatible: (mod.incompatible ?? []).map((id) => ({ id, note: 'per its mod.info', status: 'verified' as const })),
     load_after: [],
-    issues: [],
+    issues,
   };
 }
 

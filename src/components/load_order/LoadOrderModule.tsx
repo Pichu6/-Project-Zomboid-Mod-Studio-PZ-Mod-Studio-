@@ -11,7 +11,7 @@ import { ModInspector } from './ModInspector';
 import { RowHealthChips } from './RowHealth';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
-import { draftRegistry, proposeUrl } from '../../utils/communityIndex';
+import { draftRegistry, knownIssues, proposeUrl } from '../../utils/communityIndex';
 import {
   BookOpen,
   Copy,
@@ -542,11 +542,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       onSelect: () => setKeptVersionsOf(mod),
     },
     {
-      label: 'Share what you know about this mod…',
+      label: 'Share what the Studio saw of this mod…',
       icon: Globe,
       onSelect: () => {
         void (async () => {
-          const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild);
+          const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild, knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild));
           if (await TauriService.githubTokenStatus()) {
             // With a token: the Studio forks, writes the file on a branch and opens the pull request.
             showToast(`Opening a pull request with ${mod.name}'s registry…`, 20000);
@@ -566,9 +566,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           TauriService.openExternalUrl(proposeUrl(registry));
         })();
       },
-      disabled: mod.mod_id.startsWith('Z_PZModStudio_'),
-      disabledReason: 'A Studio package is not a mod of the community',
-      title: 'Sends nothing by itself: opens a note about this mod (builds it runs on, what it clashes with, known issues) for the community index on GitHub, for you to complete',
+      disabled: mod.mod_id.startsWith('Z_PZModStudio_') || knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild).length === 0,
+      disabledReason: mod.mod_id.startsWith('Z_PZModStudio_')
+        ? 'A Studio package is not a mod of the community'
+        : 'Nothing seen of this mod yet: the errors and warnings the Monitor counts for it, or a compatible copy it needed, would go here',
+      title: (() => {
+        const facts = knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild);
+        return `Sends nothing by itself: opens a note for the community index on GitHub with what was seen here (${facts.map((f) => f.title.toLowerCase()).join('; ')}), for you to complete`;
+      })(),
     },
     {
       label: 'Copy the mod id',
