@@ -381,6 +381,83 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "publish_file_into_package".to_string(),
+            description: "Puts one corrected file into a Studio package and publishes it in place: everything the package already holds is published again beside it, a packaged package stays packaged, and the game reads the file on its next launch. This is how a mod's own file is patched without touching the mod: the package loads last, so the game reads the package's copy of that path. Prefer this over save_draft_resolution + a manual publish.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "package_folder_name": { "type": "string", "description": "Package folder (default: Z_PZModStudio_MergedPatch)" },
+                    "relative_path": { "type": "string", "description": "The path the game reads, e.g. media/lua/shared/aFancyHandwork.lua" },
+                    "content": { "type": "string", "description": "The whole corrected file" }
+                },
+                "required": ["relative_path", "content"]
+            }),
+        },
+        McpTool {
+            name: "remove_file_from_package".to_string(),
+            description: "Takes one file out of a Studio package and publishes it again without it; the game reads the mod's own copy of that path on its next launch. `file` is the path in the package or just the file's name.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "package_folder_name": { "type": "string", "description": "Package folder (default: Z_PZModStudio_MergedPatch)" },
+                    "file": { "type": "string", "description": "media/lua/client/MoodlesIn.lua, or MoodlesIn.lua" }
+                },
+                "required": ["file"]
+            }),
+        },
+        McpTool {
+            name: "keep_mod_version".to_string(),
+            description: "Keeps a copy of a mod as it is installed today under Zomboid/PZModStudio_Snapshots, for when a Workshop update breaks a save. Returns the kept version (path, date, modversion). The Studio's Mod List can put it back as a local copy that wins over the Workshop one.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "workshop_dir": { "type": "string", "description": "Optional Workshop content directory" },
+                    "mod_id": { "type": "string", "description": "The mod id as in mod.info" }
+                },
+                "required": ["mod_id"]
+            }),
+        },
+        McpTool {
+            name: "list_load_rules".to_string(),
+            description: "The player's own load-order rules (\"mod_id loads after after\", with a note), from Zomboid/PZModStudio_Rules.json. Auto-Sort follows them like loadModAfter; Mod Health reports a broken one as user_rule_order.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                }
+            }),
+        },
+        McpTool {
+            name: "add_load_rule".to_string(),
+            description: "Adds a load-order rule of the player's own: mod_id must load after `after`. Say why in `note`. Refused when the pair exists the other way round.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "mod_id": { "type": "string" },
+                    "after": { "type": "string" },
+                    "note": { "type": "string", "description": "Why, in a few words" }
+                },
+                "required": ["mod_id", "after"]
+            }),
+        },
+        McpTool {
+            name: "remove_load_rule".to_string(),
+            description: "Removes the rule that mod_id loads after `after`.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "mod_id": { "type": "string" },
+                    "after": { "type": "string" }
+                },
+                "required": ["mod_id", "after"]
+            }),
+        },
+        McpTool {
             name: "list_mod_profiles".to_string(),
             description: "Lists all saved mod profiles/instances, their enabled mod IDs, custom load orders, and active status.".to_string(),
             input_schema: json!({
@@ -492,6 +569,12 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "list_available_logs" => handle_list_available_logs(args),
         "read_log_file" => handle_read_log_file(args),
         "list_merged_packages" => handle_list_merged_packages(args),
+        "publish_file_into_package" => handle_publish_file_into_package(args),
+        "remove_file_from_package" => handle_remove_file_from_package(args),
+        "keep_mod_version" => handle_keep_mod_version(args),
+        "list_load_rules" => handle_list_load_rules(args),
+        "add_load_rule" => handle_add_load_rule(args),
+        "remove_load_rule" => handle_remove_load_rule(args),
         _ => ToolCallResult {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
@@ -514,7 +597,7 @@ fn resolve_paths(args: &Value) -> StudioPaths {
             paths.user_zomboid_dir = uz.to_string();
             paths.mod_list_ini_path = Path::new(uz)
                 .join("mods")
-                .join("ModListData.ini")
+                .join("default.txt")
                 .to_string_lossy()
                 .to_string();
         }
@@ -1590,6 +1673,83 @@ fn handle_read_log_file(args: Value) -> ToolCallResult {
             is_error: true,
         },
     }
+}
+
+/// One result shape for the tools below: JSON on success, the reason with `isError` on failure.
+fn json_result<T: serde::Serialize>(result: Result<T, String>) -> ToolCallResult {
+    match result {
+        Ok(value) => ToolCallResult {
+            content: vec![ToolContent {
+                content_type: "text".to_string(),
+                text: serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {}", e)),
+            }],
+            is_error: false,
+        },
+        Err(e) => ToolCallResult {
+            content: vec![ToolContent { content_type: "text".to_string(), text: e }],
+            is_error: true,
+        },
+    }
+}
+
+fn arg_str<'a>(args: &'a Value, key: &str) -> &'a str {
+    args.get(key).and_then(|v| v.as_str()).unwrap_or("")
+}
+
+fn handle_publish_file_into_package(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let package = args.get("package_folder_name").and_then(|v| v.as_str()).unwrap_or("Z_PZModStudio_MergedPatch");
+    let (relative_path, content) = (arg_str(&args, "relative_path"), arg_str(&args, "content"));
+    if relative_path.is_empty() || content.is_empty() {
+        return json_result::<()>(Err("Both 'relative_path' and 'content' are required.".to_string()));
+    }
+    json_result(crate::patch_generator::publish_file_into_package(&paths.user_zomboid_dir, &paths.mod_list_ini_path, package, relative_path, content))
+}
+
+fn handle_remove_file_from_package(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let package = args.get("package_folder_name").and_then(|v| v.as_str()).unwrap_or("Z_PZModStudio_MergedPatch");
+    let file = arg_str(&args, "file");
+    if file.is_empty() {
+        return json_result::<()>(Err("'file' is required.".to_string()));
+    }
+    json_result(crate::patch_generator::remove_file_from_package(&paths.user_zomboid_dir, &paths.mod_list_ini_path, package, file))
+}
+
+fn handle_keep_mod_version(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let mod_id = arg_str(&args, "mod_id");
+    if mod_id.is_empty() {
+        return json_result::<()>(Err("'mod_id' is required.".to_string()));
+    }
+    let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let result = catalog
+        .resolve(mod_id)
+        .ok_or_else(|| format!("{} is not installed.", mod_id))
+        .and_then(|m| {
+            let workshop_id = match &m.source {
+                crate::catalog::ModSource::Workshop { workshop_id } => Some(workshop_id.clone()),
+                _ => None,
+            };
+            crate::snapshots::keep_version(&paths.user_zomboid_dir, &m.id, &m.name, Path::new(&m.root_dir), m.info.mod_version.clone(), workshop_id)
+        });
+    json_result(result)
+}
+
+fn handle_list_load_rules(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    json_result::<Vec<crate::rules::UserRule>>(Ok(crate::rules::load_rules(&paths.user_zomboid_dir)))
+}
+
+fn handle_add_load_rule(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let note = args.get("note").and_then(|v| v.as_str()).map(str::to_string).filter(|n| !n.trim().is_empty());
+    json_result(crate::rules::add_rule(&paths.user_zomboid_dir, arg_str(&args, "mod_id"), arg_str(&args, "after"), note))
+}
+
+fn handle_remove_load_rule(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    json_result(crate::rules::remove_rule(&paths.user_zomboid_dir, arg_str(&args, "mod_id"), arg_str(&args, "after")))
 }
 
 fn handle_list_merged_packages(args: Value) -> ToolCallResult {

@@ -161,6 +161,10 @@ Uses the `Z_ClaudeAgent` companion mod (source: `mods/Z_ClaudeAgent/`). Unlike t
 | `list_merged_packages` | `user_zomboid_dir`, `mod_list_ini_path` (optional) | Lists all patch and merged packages (`Z_PZModStudio_*`) registered in the system. |
 | `get_master_patch_status` | `user_zomboid_dir`, `package_folder_name` (optional) | Queries the status of the `Z_PZModStudio_MasterPatch` package and saved resolutions. |
 | `save_draft_resolution` | `relative_path`, `resolved_content` (required)<br>`package_folder_name`, `status` (optional) | Saves a resolved code draft directly into the master patch package. |
+| `publish_file_into_package` | `relative_path`, `content` (required)<br>`package_folder_name` (default `Z_PZModStudio_MergedPatch`) | Puts one corrected file into a package and publishes it **in place**: everything the package holds is published again beside it, a packaged package stays packaged, the game reads it on its next launch. The way to patch a mod's own file without touching the mod (the package loads last). |
+| `remove_file_from_package` | `file` (required; a path in the package or just the file name)<br>`package_folder_name` | Takes a file out of a package and publishes it again without it; the game reads the mod's own copy again. |
+| `keep_mod_version` | `mod_id` (required), path parameters | Copies the mod as installed today to `Zomboid/PZModStudio_Snapshots/<folder>/<when>/`, for when a Workshop update breaks a save. The Mod List can put it back as a local copy that wins over the Workshop one. |
+| `list_load_rules` / `add_load_rule` / `remove_load_rule` | `mod_id`, `after` (required for add/remove), `note` (add) | The player's own load-order rules ("mod_id loads after after"), in `Zomboid/PZModStudio_Rules.json`. Auto-Sort follows them like `loadModAfter`; Mod Health reports a broken one as `user_rule_order`. |
 
 ---
 
