@@ -328,7 +328,16 @@ fn sort_load_order_cmd(paths: StudioPaths, order: Vec<String>) -> catalog::SortR
     let mut catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
     // The player's own rules, as if each mod had written loadModAfter itself.
     rules::apply_to_catalog(&mut catalog, &rules::load_rules(&paths.user_zomboid_dir));
+    if let Some(community) = rules::community::current(&paths.user_zomboid_dir) {
+        rules::apply_to_catalog(&mut catalog, &community.as_user_rules());
+    }
     catalog::sort_load_order(&catalog, &order)
+}
+
+/// Fetches the community rules now, whatever the age of the cached copy.
+#[tauri::command(async)]
+fn refresh_community_rules_cmd(paths: StudioPaths) -> Result<rules::community::CommunitySummary, String> {
+    rules::community::refresh(&paths.user_zomboid_dir).map(|r| r.summary())
 }
 
 #[tauri::command(async)]
@@ -815,6 +824,7 @@ pub fn run() {
             auto_merge_conflicts_cmd,
             sort_load_order_cmd,
             list_load_rules_cmd,
+            refresh_community_rules_cmd,
             add_load_rule_cmd,
             remove_load_rule_cmd,
             make_compatible_copy_cmd,

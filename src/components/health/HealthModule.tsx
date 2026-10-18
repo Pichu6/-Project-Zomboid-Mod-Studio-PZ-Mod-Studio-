@@ -284,6 +284,28 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                 <span className={`px-2 py-0.5 rounded border ${report.warnings ? 'border-amber-500/50 text-amber-300' : 'border-slate-700 text-slate-400'}`}>
                   {report.warnings} warnings
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const c = await TauriService.refreshCommunityRules(paths);
+                        say(`Community rules fetched: ${c.rules} load-order rule${c.rules === 1 ? '' : 's'}, ${c.pairs} incompatible pair${c.pairs === 1 ? '' : 's'}${c.updated ? `, updated ${c.updated}` : ''}.`);
+                        onRecheck();
+                      } catch {
+                        // Already shown by TauriService.
+                      }
+                    })();
+                  }}
+                  className="px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                  title={
+                    report.community
+                      ? `Community rules in use: ${report.community.rules} load-order, ${report.community.pairs} incompatible pairs${report.community.updated ? `, updated ${report.community.updated}` : ''}. Fetched once a day from the Studio's repository (community/rules.json); click to fetch now.`
+                      : 'No community rules at hand yet (fetched once a day from the Studio\'s repository, community/rules.json). Click to fetch now.'
+                  }
+                >
+                  community rules: {report.community ? `${report.community.rules + report.community.pairs}` : 'none yet'} ↻
+                </button>
               </div>
             )}
           </div>

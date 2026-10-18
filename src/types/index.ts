@@ -367,9 +367,18 @@ export interface GameInstall {
   last_updated: string | null;
 }
 
+/** The community rules in use: how many, and when the copy was fetched. */
+export interface CommunitySummary {
+  rules: number;
+  pairs: number;
+  updated: string | null;
+  fetched_at: number | null;
+}
+
 export interface HealthReport {
   game_version: string | null;
   install?: GameInstall | null;
+  community?: CommunitySummary | null;
   active_count: number;
   errors: number;
   warnings: number;

@@ -13,6 +13,8 @@ const LABELS: Record<string, string> = {
   dependency_after: 'Loads before what it needs',
   load_after_order: 'Loads too early',
   user_rule_order: 'Before a mod you said it must follow',
+  community_rule_order: 'Before a mod the community says it must follow',
+  community_incompatible: 'The community says these clash',
   load_before_order: 'Loads too late',
   incompatible: 'Incompatible',
   not_for_build: 'Not for this build',

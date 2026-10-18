@@ -270,6 +270,10 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
     let mut report = health_report(&catalog, active);
     report.install = read_game_install(&paths.pz_install_dir);
     add_user_rule_issues(&mut report, &catalog, active, &crate::rules::load_rules(&paths.user_zomboid_dir));
+    if let Some(community) = crate::rules::community::current(&paths.user_zomboid_dir) {
+        add_community_rule_issues(&mut report, &catalog, active, &community);
+        report.community = Some(community.summary());
+    }
     let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
     add_file_conflict_issues(&mut report, &conflicts);
     ModHealth { catalog, report }
@@ -590,6 +594,9 @@ pub struct HealthReport {
     /// What Steam says about the installed game: the branch and when it last updated.
     #[serde(default)]
     pub install: Option<GameInstall>,
+    /// The community rules in use, when a copy is at hand.
+    #[serde(default)]
+    pub community: Option<crate::rules::community::CommunitySummary>,
     pub active_count: usize,
     pub errors: usize,
     pub warnings: usize,
@@ -647,7 +654,7 @@ mod user_rule_tests {
         }
         let rules = vec![crate::rules::UserRule { mod_id: "Overhaul".into(), after: "Library".into(), note: Some("recipes vanish".into()) }];
         let active = vec!["Overhaul".to_string(), "Library".to_string()];
-        let mut report = HealthReport { game_version: None, install: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        let mut report = HealthReport { game_version: None, install: None, community: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
         add_user_rule_issues(&mut report, &catalog, &active, &rules);
         assert_eq!(report.warnings, 1);
         let issue = &report.issues[0];
@@ -656,11 +663,58 @@ mod user_rule_tests {
         assert!(matches!(&issue.fixes[0], SuggestedFix::MoveBefore { mod_id, before } if mod_id == "Library" && before == "Overhaul"));
 
         // In order: nothing to say. A mod that is off: nothing either.
-        let mut ok = HealthReport { game_version: None, install: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        let mut ok = HealthReport { game_version: None, install: None, community: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
         add_user_rule_issues(&mut ok, &catalog, &["Library".to_string(), "Overhaul".to_string()], &rules);
         assert!(ok.issues.is_empty());
         add_user_rule_issues(&mut ok, &catalog, &["Overhaul".to_string()], &rules);
         assert!(ok.issues.is_empty());
+    }
+}
+
+/// The community's rules against the active list: a broken load-after rule and an incompatible
+/// pair both on, each named as the community's with its note and source.
+pub fn add_community_rule_issues(report: &mut HealthReport, catalog: &ModCatalog, active: &[String], community: &crate::rules::community::CommunityRules) {
+    let active_ids: Vec<String> = active
+        .iter()
+        .map(|e| resolve_entry(catalog, e.trim()).map(|m| m.id.clone()).unwrap_or_else(|| e.trim().to_string()))
+        .collect();
+    let position: HashMap<&str, usize> = active_ids.iter().enumerate().rev().map(|(i, id)| (id.as_str(), i)).collect();
+    let name = |id: &str| catalog.get(id).map(describe).unwrap_or_else(|| id.to_string());
+    let why = |note: &Option<String>, source: &Option<String>| {
+        let mut s = String::new();
+        if let Some(n) = note {
+            s.push_str(&format!(" ({})", n));
+        }
+        if let Some(src) = source {
+            s.push_str(&format!(" [source: {}]", src));
+        }
+        s
+    };
+    let mut list = IssueList(Vec::new());
+    for rule in &community.load_after {
+        let (Some(&at), Some(&after_at)) = (position.get(rule.mod_id.as_str()), position.get(rule.after.as_str())) else { continue };
+        if at < after_at {
+            list.push(Severity::Warning, "community_rule_order", Some(&rule.mod_id),
+                format!("The community has it that {} loads after {}{}, and it comes before it in the list",
+                    name(&rule.mod_id), name(&rule.after), why(&rule.note, &rule.source)),
+                vec![SuggestedFix::MoveBefore { mod_id: rule.after.clone(), before: rule.mod_id.clone() }]);
+        }
+    }
+    for pair in &community.incompatible {
+        if position.contains_key(pair.a.as_str()) && position.contains_key(pair.b.as_str()) {
+            list.push(Severity::Warning, "community_incompatible", Some(&pair.a),
+                format!("The community has it that {} and {} do not go together{}, and both are on",
+                    name(&pair.a), name(&pair.b), why(&pair.note, &pair.source)),
+                vec![SuggestedFix::DisableMod { mod_id: pair.b.clone() }, SuggestedFix::DisableMod { mod_id: pair.a.clone() }]);
+        }
+    }
+    for issue in list.0 {
+        match issue.severity {
+            Severity::Error => report.errors += 1,
+            Severity::Warning => report.warnings += 1,
+            Severity::Info => {}
+        }
+        report.issues.push(issue);
     }
 }
 
@@ -946,7 +1000,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
     issues.sort_by(|a, b| a.severity.cmp(&b.severity));
     let errors = issues.iter().filter(|i| i.severity == Severity::Error).count();
     let warnings = issues.iter().filter(|i| i.severity == Severity::Warning).count();
-    HealthReport { game_version: catalog.game_version.clone(), install: None, active_count: active.len(), errors, warnings, issues }
+    HealthReport { game_version: catalog.game_version.clone(), install: None, community: None, active_count: active.len(), errors, warnings, issues }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1216,7 +1270,7 @@ mod tests {
             strategy: String::new(),
             collisions: if auto { 0 } else { 1 },
         };
-        let mut report = HealthReport { game_version: None, install: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        let mut report = HealthReport { game_version: None, install: None, community: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
         add_file_conflict_issues(
             &mut report,
             &[state("a.lua", "pending", true), state("b.lua", "pending", false), state("c.lua", "merged", true), state("d.lua", "stale", true)],

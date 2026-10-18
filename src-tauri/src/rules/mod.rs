@@ -6,6 +6,8 @@
 //! A rule here is honoured by the sort as if the mod had written `loadModAfter` itself, and the
 //! health check says when the list breaks one, in the player's own words.
 
+pub mod community;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
