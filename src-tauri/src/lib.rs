@@ -148,6 +148,52 @@ fn delete_steam_key_cmd() -> Result<(), String> {
     secrets::delete(secrets::STEAM_WEB_API_KEY)
 }
 
+/// Whether a GitHub token is saved (the token itself never goes back to the UI).
+#[tauri::command(async)]
+fn github_token_status_cmd() -> Result<bool, String> {
+    Ok(secrets::get(rules::propose::GITHUB_TOKEN)?.is_some())
+}
+
+/// Checks the token with GitHub (GET /user), saves it in Windows Credential Manager; returns the login.
+#[tauri::command(async)]
+fn set_github_token_cmd(token: String) -> Result<String, String> {
+    rules::propose::save_token(&token)
+}
+
+#[tauri::command(async)]
+fn delete_github_token_cmd() -> Result<(), String> {
+    secrets::delete(rules::propose::GITHUB_TOKEN)
+}
+
+/// Opens the pull request that adds or replaces one mod's registry in the community index.
+#[tauri::command(async)]
+fn propose_registry_cmd(mod_id: String, content: String) -> Result<rules::propose::ProposeResult, String> {
+    let registry: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("The registry is not JSON: {}", e))?;
+    if registry.get("id").and_then(|v| v.as_str()) != Some(mod_id.as_str()) {
+        return Err("The registry's id does not match the mod.".to_string());
+    }
+    let pretty = serde_json::to_string_pretty(&registry).map_err(|e| e.to_string())? + "\n";
+    let path = format!("community/index/{}.json", mod_id.replace('/', "__"));
+    let name = registry.get("name").and_then(|v| v.as_str()).unwrap_or(&mod_id).to_string();
+    let title = format!("Community index: {}", name);
+    let body = format!("A registry for `{}`, proposed from PZ Mod Studio.\n\nWhat was tested, on which build, is in the file; the repository's check has run on it.", mod_id);
+    rules::propose::propose_file(&path, &title, &body, &|_existing| Ok(pretty.clone()))
+}
+
+/// Opens the pull request that adds one load-order rule to community/rules.json.
+#[tauri::command(async)]
+fn propose_rule_cmd(rule: serde_json::Value) -> Result<rules::propose::ProposeResult, String> {
+    let (Some(mod_id), Some(after)) = (rule.get("mod_id").and_then(|v| v.as_str()), rule.get("after").and_then(|v| v.as_str())) else {
+        return Err("A rule needs mod_id and after.".to_string());
+    };
+    let title = format!("Community rule: {} loads after {}", mod_id, after);
+    let body = format!("`{}` has to load after `{}`{}, proposed from PZ Mod Studio.", mod_id, after,
+        rule.get("note").and_then(|v| v.as_str()).map(|n| format!(": {}", n)).unwrap_or_default());
+    rules::propose::propose_file("community/rules.json", &title, &body, &|existing| {
+        rules::propose::merge_rule_into(existing.ok_or_else(|| "community/rules.json is not on GitHub".to_string())?, &rule)
+    })
+}
+
 /// Searches the Project Zomboid Workshop with the saved key.
 #[tauri::command(async)]
 fn workshop_search_cmd(query: workshop::BrowseQuery) -> Result<workshop::WorkshopSearchResult, String> {
@@ -872,6 +918,11 @@ pub fn run() {
             steam_key_status_cmd,
             set_steam_key_cmd,
             delete_steam_key_cmd,
+            github_token_status_cmd,
+            set_github_token_cmd,
+            delete_github_token_cmd,
+            propose_registry_cmd,
+            propose_rule_cmd,
             workshop_search_cmd,
             read_mod_image_cmd,
             workshop_subscribe_cmd,

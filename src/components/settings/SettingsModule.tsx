@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb } from 'lucide-react';
+import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb, KeyRound, ExternalLink, Loader2 } from 'lucide-react';
 import { PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
 
@@ -98,6 +98,41 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       setCommunityDownloads(on);
     } catch {
       // Already shown by TauriService.
+    }
+  };
+  /** A personal GitHub token, kept in Windows Credential Manager; only whether one is saved comes back. */
+  const [githubTokenSaved, setGithubTokenSaved] = useState(false);
+  const [githubLogin, setGithubLogin] = useState<string | null>(() => localStorage.getItem('pz_github_login'));
+  const [githubTokenInput, setGithubTokenInput] = useState('');
+  const [githubBusy, setGithubBusy] = useState(false);
+  const [githubError, setGithubError] = useState<string | null>(null);
+  useEffect(() => {
+    void TauriService.githubTokenStatus().then(setGithubTokenSaved);
+  }, []);
+  const saveGithubToken = async () => {
+    setGithubBusy(true);
+    setGithubError(null);
+    try {
+      const login = await TauriService.setGithubToken(githubTokenInput);
+      setGithubTokenSaved(true);
+      setGithubLogin(login);
+      localStorage.setItem('pz_github_login', login);
+      setGithubTokenInput('');
+    } catch (err) {
+      setGithubError(String(err));
+    } finally {
+      setGithubBusy(false);
+    }
+  };
+  const removeGithubToken = async () => {
+    if (!confirm('Remove the saved GitHub token from this PC?')) return;
+    try {
+      await TauriService.deleteGithubToken();
+      setGithubTokenSaved(false);
+      setGithubLogin(null);
+      localStorage.removeItem('pz_github_login');
+    } catch (err) {
+      setGithubError(String(err));
     }
   };
   const [startupBehavior, setStartupBehavior] = useState<'SHOW_STARTUP_SCREEN' | 'OPEN_LAST_PROFILE'>(() => {
@@ -656,6 +691,54 @@ The file the game reads to know which mods are on and in what order. Found autom
             >
               <span className="w-4 h-4 rounded-full bg-white shadow-md" />
             </button>
+          </div>
+        )}
+
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" /> GitHub token, for "Propose" in one click
+              </div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">
+                Optional. With a personal token saved, "Propose to the community" (a load-order rule, a mod's registry) forks
+                the Studio's repository on your account once, writes the file on a branch and opens the pull request by itself.
+                Without one, the same buttons open GitHub's page with the JSON filled in and you press "Propose changes"
+                there. Receiving the community files needs no account at all. The token is checked with GitHub and kept in
+                Windows Credential Manager on this PC only; nothing else is ever sent.
+              </p>
+              <p className="text-[11px] text-slate-500 max-w-2xl">
+                Make a fine-grained token on GitHub (Settings → Developer settings → Personal access tokens) for your own
+                repositories with "Contents" and "Pull requests" read and write; it is used only on your fork and to open the
+                pull request.
+              </p>
+            </div>
+            {githubTokenSaved ? (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="flex items-center gap-1.5 text-emerald-300">
+                  <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" /> A token is saved{githubLogin ? ` (GitHub account ${githubLogin})` : ''}.
+                </span>
+                <button type="button" onClick={() => void removeGithubToken()}
+                  className="px-2.5 py-1 rounded-lg text-[11px] text-slate-300 hover:text-red-300 border border-slate-800 hover:border-red-900 cursor-pointer transition">
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void saveGithubToken(); }}>
+                <button type="button" onClick={() => TauriService.openExternalUrl('https://github.com/settings/personal-access-tokens/new')}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
+                  <ExternalLink className="w-3 h-3" aria-hidden="true" /> Make a token
+                </button>
+                <input type="password" autoComplete="off" spellCheck={false} value={githubTokenInput} onChange={(e) => setGithubTokenInput(e.target.value)}
+                  placeholder="Paste your GitHub token" aria-label="GitHub token"
+                  className="flex-1 min-w-[220px] px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-[11px] text-slate-100 outline-none placeholder:text-slate-600 font-mono" />
+                <button type="submit" disabled={githubBusy || !githubTokenInput.trim()}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
+                  {githubBusy && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} Check and save
+                </button>
+              </form>
+            )}
+            {githubError && <p className="text-[11px] text-red-300">{githubError}</p>}
           </div>
         )}
 

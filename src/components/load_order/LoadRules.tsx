@@ -95,6 +95,18 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
       note: rule.note ?? `${nameOf(rule.mod_id)} has to load after ${nameOf(rule.after)}`,
       source: `tested on ${installedBuild ?? 'build ?'}`,
     };
+    if (await TauriService.githubTokenStatus()) {
+      // With a token: the Studio adds the rule to the file on a branch of the fork and opens the pull request.
+      toast('Opening a pull request with the rule…', 20000);
+      try {
+        const r = await TauriService.proposeRule(entry);
+        toast(`Pull request opened: ${r.pr_url}`, 10000);
+        TauriService.openExternalUrl(r.pr_url);
+      } catch {
+        // Already shown by TauriService.
+      }
+      return;
+    }
     await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
     toast('The rule is on the clipboard as JSON. On GitHub, add it under "load_after" in community/rules.json and open a pull request.', 8000);
     TauriService.openExternalUrl('https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/edit/main/community/rules.json');

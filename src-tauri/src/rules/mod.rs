@@ -8,6 +8,7 @@
 
 pub mod community;
 pub mod index;
+pub mod propose;
 
 use serde::{Deserialize, Serialize};
 use std::fs;

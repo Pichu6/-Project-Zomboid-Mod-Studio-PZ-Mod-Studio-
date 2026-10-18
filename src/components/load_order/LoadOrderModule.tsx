@@ -545,12 +545,26 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       label: 'Propose to the community index…',
       icon: Globe,
       onSelect: () => {
-        // GitHub's new-file page, with the registry the Studio can fill in already there; the
-        // person adds what they tested and GitHub opens the pull request. Nothing is sent from here.
-        const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild);
-        void navigator.clipboard.writeText(JSON.stringify(registry, null, 2));
-        showToast(`Opening GitHub with ${mod.name}'s registry filled in (also on the clipboard). Add what you tested, then "Propose changes" opens the pull request.`, 8000);
-        TauriService.openExternalUrl(proposeUrl(registry));
+        void (async () => {
+          const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild);
+          if (await TauriService.githubTokenStatus()) {
+            // With a token: the Studio forks, writes the file on a branch and opens the pull request.
+            showToast(`Opening a pull request with ${mod.name}'s registry…`, 20000);
+            try {
+              const r = await TauriService.proposeRegistry(mod.mod_id, JSON.stringify(registry, null, 2));
+              showToast(`Pull request opened: ${r.pr_url} (opening it in your browser so you can add what you tested).`, 10000);
+              TauriService.openExternalUrl(r.pr_url);
+            } catch {
+              // Already shown by TauriService.
+            }
+            return;
+          }
+          // Without one: GitHub's new-file page, with the registry the Studio can fill in already
+          // there; the person adds what they tested and GitHub opens the pull request. Nothing is sent from here.
+          void navigator.clipboard.writeText(JSON.stringify(registry, null, 2));
+          showToast(`Opening GitHub with ${mod.name}'s registry filled in (also on the clipboard). Add what you tested, then "Propose changes" opens the pull request.`, 8000);
+          TauriService.openExternalUrl(proposeUrl(registry));
+        })();
       },
       disabled: mod.mod_id.startsWith('Z_PZModStudio_'),
       disabledReason: 'A Studio package is not a mod of the community',

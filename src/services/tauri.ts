@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -476,6 +476,44 @@ export const TauriService = {
 
   deleteSteamKey: async (): Promise<void> => {
     await invoke('delete_steam_key_cmd');
+  },
+
+  /** Whether a GitHub token is saved on this PC (the token never comes back). */
+  githubTokenStatus: async (): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('github_token_status_cmd');
+    } catch {
+      return false;
+    }
+  },
+
+  /** Checks the token with GitHub and saves it; resolves to the account's login. Throws with the reason. */
+  setGithubToken: async (token: string): Promise<string> => {
+    return await invoke<string>('set_github_token_cmd', { token });
+  },
+
+  deleteGithubToken: async (): Promise<void> => {
+    await invoke('delete_github_token_cmd');
+  },
+
+  /** With the saved token: forks, writes the registry on a branch and opens the pull request. */
+  proposeRegistry: async (modId: string, content: string): Promise<ProposeResult> => {
+    try {
+      return await invoke<ProposeResult>('propose_registry_cmd', { modId, content });
+    } catch (err) {
+      reportBackendError('Proposing to the community index', err);
+      throw err;
+    }
+  },
+
+  /** With the saved token: adds the rule to community/rules.json on a branch and opens the pull request. */
+  proposeRule: async (rule: { mod_id: string; after: string; note: string; source: string }): Promise<ProposeResult> => {
+    try {
+      return await invoke<ProposeResult>('propose_rule_cmd', { rule });
+    } catch (err) {
+      reportBackendError('Proposing a community rule', err);
+      throw err;
+    }
   },
 
   /** Workshop search with the saved key. Throws on failure (no key, rejected key, offline). */

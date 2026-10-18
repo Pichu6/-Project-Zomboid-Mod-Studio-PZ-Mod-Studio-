@@ -79,8 +79,10 @@ the registry before anything is installed. The player's own rules win over the i
 
 **Proposing one:** Mod List → right-click a mod → *Propose to the community index…* opens
 GitHub's new-file page with the registry the Studio can fill in (mod.info, build) already there;
-add what you tested and press *Propose changes* — GitHub forks and opens the pull request. A
-GitHub account is needed to propose, none to receive. The repository's check
+add what you tested and press *Propose changes* — GitHub forks and opens the pull request. With a
+personal GitHub token saved in Settings, the Studio does that itself: it forks this repository on
+your account once, writes the file on a branch and opens the pull request, then shows it to you to
+add what you tested. A GitHub account is needed to propose, none to receive. The repository's check
 (`.github/workflows/community.yml`) refuses a registry that is malformed, names a shim patch that
 does not exist, or has an entry with neither a source nor a build, so a person reviews only what
 a machine could not.

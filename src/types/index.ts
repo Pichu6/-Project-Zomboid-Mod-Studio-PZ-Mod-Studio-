@@ -426,6 +426,13 @@ export interface CommunityRegistry {
   issues: CommunityIssue[];
 }
 
+/** The pull request "Propose" opened with the saved GitHub token. */
+export interface ProposeResult {
+  pr_url: string;
+  fork: string;
+  branch: string;
+}
+
 export interface CommunityIndex {
   version: number;
   updated: string | null;
