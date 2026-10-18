@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat } from '../../types';
-import { SourceBadge, sourceOf } from '../common/SourceBadge';
+import { sourceOf } from '../common/SourceBadge';
 import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
@@ -8,37 +8,34 @@ import { findInstalledDependencyInMods, normalizeModId } from './modLookup';
 import { ModPresets } from './ModPresets';
 import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
-import { RowHealthChips } from './RowHealth';
+import { ModRowBody } from './ModRow';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
 import { draftRegistry, knownIssues, proposeUrl } from '../../utils/communityIndex';
 import {
+  AlertTriangle,
+  Archive,
+  ArrowDownCircle,
+  ArrowUpCircle,
   BookOpen,
+  Check,
+  CheckSquare,
+  ChevronsDown,
+  ChevronsUp,
   Copy,
   EyeOff,
   FolderOpen,
+  FolderX,
   Globe,
+  HelpCircle,
   ListOrdered,
+  MapPin,
+  Package,
   RefreshCw,
   Search,
-  Wand2,
-  CheckSquare,
-  Square,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  ArrowUp,
-  ArrowDown,
-  ChevronsUp,
-  ChevronsDown,
-  Hash,
-  Archive,
-  Check,
-  Package,
-  MapPin,
-  FolderX,
   ShieldCheck,
-  HelpCircle,
-  AlertTriangle,
+  Square,
+  Wand2,
   X,
 } from 'lucide-react';
 
@@ -1192,256 +1189,37 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                         : 'bg-slate-950/40 opacity-60 hover:opacity-100 border border-slate-900/60'
                     }`}
                   >
-                    {/* Fixed Line Number (Original Load Order Index) */}
-                    <div className={`col-span-1 text-center font-mono text-[11px] ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
-                      #{originalIndex + 1}
-                    </div>
-
-                    {/* Enable/Disable Toggle Checkbox */}
-                    <div className="col-span-1 flex justify-center">
-                      <button
-                        disabled={isOpenedPackage}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!isOpenedPackage) {
-                            handleToggleSingleMod(mod.mod_id);
-                          }
-                        }}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center transition ${
-                          isOpenedPackage
-                            ? 'cursor-not-allowed opacity-40 bg-slate-900 text-slate-600 border border-amber-800/50'
-                            : 'cursor-pointer'
-                        } ${
-                          mod.enabled && !isOpenedPackage
-                            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 border border-emerald-400 font-bold'
-                            : !isOpenedPackage
-                            ? 'bg-slate-950 text-slate-700 border border-slate-700 hover:border-slate-500'
-                            : ''
-                        }`}
-                        title={
-                          isOpenedPackage
-                            ? 'This package is open in draft mode and deactivated. It cannot be enabled until it is packaged/published in Mod Merger.'
-                            : mod.enabled
-                            ? 'Click to disable mod'
-                            : 'Click to enable mod'
-                        }
-                      >
-                        {mod.enabled && !isOpenedPackage && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                      </button>
-                    </div>
-
-                    {/* Mod Title, Type Icon & Compact Dual Warning Badges */}
-                    <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
-                      <div
-                        className={`w-6 h-6 rounded border flex items-center justify-center shrink-0 ${
-                          mod.enabled
-                            ? 'bg-slate-900 border-slate-800'
-                            : 'bg-slate-950/80 border-slate-900 opacity-60'
-                        }`}
-                        title={
-                          mod.is_map_mod
-                            ? 'Map Mod (Adds custom tiles/towns)'
-                            : mod.is_library
-                            ? 'Base Library / Framework'
-                            : 'Script / Feature Mod'
-                        }
-                      >
-                        {mod.is_map_mod ? (
-                          <MapPin className={`w-3.5 h-3.5 ${mod.enabled ? 'text-amber-400' : 'text-amber-700'}`} />
-                        ) : mod.is_library ? (
-                          <Package className={`w-3.5 h-3.5 ${mod.enabled ? 'text-purple-400' : 'text-purple-700'}`} />
-                        ) : (
-                          <ListOrdered className={`w-3.5 h-3.5 ${mod.enabled ? 'text-cyan-400' : 'text-cyan-700'}`} />
-                        )}
-                      </div>
-
-                      <div className="overflow-hidden flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className={`truncate min-w-0 flex-1 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
-                            {mod.name}
-                          </span>
-
-                          {isBridge && (
-                            <span
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-700 shrink-0 shadow-sm"
-                              title="PZ Mod Studio Live Bridge Companion Mod"
-                            >
-                              <Package className="w-3 h-3 text-cyan-400" />
-                              <span>COMPANION BRIDGE</span>
-                            </span>
-                          )}
-
-                          {isOpenedPackage && (
-                            <span
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shrink-0 shadow-sm cursor-help animate-pulse"
-                              title={`Open Package (Draft): ${mod.mod_id}\nThis package is in editing mode and deactivated. Package / publish it in Mod Merger to use it in-game.`}
-                            >
-                              <Package className="w-3 h-3 text-amber-400" />
-                              <span>OPEN (Draft)</span>
-                            </span>
-                          )}
-
-                          {isClosedPackage && (
-                            <span
-                              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shrink-0 shadow-sm cursor-help"
-                              title={`Packaged Mod (Closed): ${mod.mod_id}\nContains compiled compatibility patches ready for Project Zomboid.`}
-                            >
-                              <Package className="w-3 h-3 text-emerald-400" />
-                              <span>PACKAGED</span>
-                            </span>
-                          )}
-
-                          <SourceBadge modId={mod.mod_id} entry={catalogById?.get(mod.mod_id)} />
-
-                          {/* What the game laid at this mod's door last session, counted from console.txt. */}
-                          {(() => {
-                            const stat = errorStats?.get(mod.name);
-                            if (!stat || (stat.exceptions === 0 && stat.warnings === 0)) return null;
-                            const threw = stat.exceptions > 0;
-                            return (
-                              <span
-                                className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                                  threw ? 'bg-red-950/60 text-red-300 border-red-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
-                                }`}
-                                title={
-                                  (threw ? `Threw ${stat.exceptions} time${stat.exceptions === 1 ? '' : 's'} last session` : '') +
-                                  (threw && stat.warnings > 0 ? ', and ' : '') +
-                                  (stat.warnings > 0 ? `${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} last session` : '') +
-                                  `.\n\n${stat.last_exception ?? stat.last_warning ?? ''}\n\nFrom console.txt as it is now; the Monitor has the cards.`
-                                }
-                              >
-                                {threw ? `${stat.exceptions}× threw` : `${stat.warnings} warn`}
-                              </span>
-                            );
-                          })()}
-
-                          {/* Showing everything: say which profiles each mod belongs to. */}
-                          {showEveryMod && activeProfile && (() => {
-                            const usedBy = profilesByMod.get(mod.mod_id) ?? [];
-                            const others = usedBy.filter((name) => name !== activeProfile.name);
-                            if (inActiveProfile.has(mod.mod_id)) {
-                              return (
-                                <span
-                                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-700/60 text-emerald-300 shrink-0"
-                                  title={`In this profile${others.length ? `, and in ${others.join(', ')}` : ''}`}
-                                >
-                                  in {activeProfile.name}
-                                </span>
-                              );
-                            }
-                            return (
-                              <span
-                                className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 shrink-0"
-                                title={others.length ? `Used by: ${others.join(', ')}` : 'Not in any profile yet'}
-                              >
-                                {others.length ? `in ${others.join(', ')}` : 'no profile'}
-                              </span>
-                            );
-                          })()}
-
-                          {!mod.enabled && (
-                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
-                              OFF
-                            </span>
-                          )}
-
-                          {mod.loadable_on_installed_build === false && !mod.enabled && (
-                            <span
-                              className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
-                              title="This mod has no mod.info the installed game build reads (B41-only, or only folders for newer builds). The game will not load it."
-                            >
-                              NOT FOR THIS BUILD
-                            </span>
-                          )}
-
-                          {/* Every problem the health check found for this mod, with its fix. */}
-                          <RowHealthChips
-                            paths={paths}
-                            issues={rowIssues}
-                            onNote={showToast}
-                            mods={mods}
-                            onApplyList={triggerReorder}
-                            onJumpToMod={handleJumpToMod}
-                            onOpenMerger={onOpenMerger}
-                            onGoToHealth={onGoToHealth}
-                          />
-                        </div>
-                        <div className={`text-[10px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
-                          ID: {mod.mod_id}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="col-span-5 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                      {isAssigningThis ? (
-                        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded border border-emerald-500">
-                          <input
-                            type="number"
-                            placeholder="#"
-                            value={targetPosInput}
-                            onChange={(e) => setTargetPosInput(e.target.value)}
-                            className="w-12 bg-slate-900 border border-slate-700 px-1 py-0.5 text-xs text-emerald-300 font-mono text-center rounded"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAssignPosition(mod.mod_id, parseInt(targetPosInput) || 1);
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => handleAssignPosition(mod.mod_id, parseInt(targetPosInput) || 1)}
-                            className="px-1.5 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-bold"
-                          >
-                            Go
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setAssigningModId(mod.mod_id);
-                            setTargetPosInput(String(originalIndex + 1));
-                          }}
-                          className="px-1.5 py-1 text-[10px] font-mono font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer flex items-center gap-0.5"
-                          title="Assign Position #"
-                        >
-                          <Hash className="w-3 h-3 text-emerald-400" />
-                          <span>Pos #</span>
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => moveToTop(originalIndex)}
-                        disabled={originalIndex === 0}
-                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-                        title="Move to Top (🔝)"
-                      >
-                        <ChevronsUp className="w-3.5 h-3.5 text-emerald-400" />
-                      </button>
-                      <button
-                        onClick={() => moveUp(originalIndex)}
-                        disabled={originalIndex === 0}
-                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-                        title="Move Up"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => moveDown(originalIndex)}
-                        disabled={originalIndex === mods.length - 1}
-                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-                        title="Move Down"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => moveToBottom(originalIndex)}
-                        disabled={originalIndex === mods.length - 1}
-                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-                        title="Move to Bottom (🔻)"
-                      >
-                        <ChevronsDown className="w-3.5 h-3.5 text-amber-400" />
-                      </button>
-                    </div>
+                    <ModRowBody
+                      paths={paths}
+                      mod={mod}
+                      originalIndex={originalIndex}
+                      mods={mods}
+                      isOpenedPackage={isOpenedPackage}
+                      isClosedPackage={isClosedPackage}
+                      isBridge={isBridge}
+                      catalogById={catalogById}
+                      errorStats={errorStats}
+                      showEveryMod={showEveryMod}
+                      activeProfile={activeProfile}
+                      profilesByMod={profilesByMod}
+                      inActiveProfile={inActiveProfile}
+                      rowIssues={rowIssues}
+                      isAssigningThis={isAssigningThis}
+                      targetPosInput={targetPosInput}
+                      setTargetPosInput={setTargetPosInput}
+                      setAssigningModId={setAssigningModId}
+                      handleToggleSingleMod={handleToggleSingleMod}
+                      showToast={showToast}
+                      triggerReorder={triggerReorder}
+                      handleJumpToMod={handleJumpToMod}
+                      onOpenMerger={onOpenMerger}
+                      onGoToHealth={onGoToHealth}
+                      moveToTop={moveToTop}
+                      moveUp={moveUp}
+                      moveDown={moveDown}
+                      moveToBottom={moveToBottom}
+                      handleAssignPosition={handleAssignPosition}
+                    />
                   </div>
                 );
               })

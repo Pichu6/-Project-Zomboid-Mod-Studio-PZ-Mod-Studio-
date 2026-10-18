@@ -1,18 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { VfsConflict, ChangeRegion, ModInfo } from '../../types';
+import { VfsConflict, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
 import { RequireFix, applyRequireFix, packageForPatch } from '../../utils/requireFix';
-import { LinedCodeSnippet, ConflictSummaryCard, modLineFor } from './CodeView';
+import { ConflictSummaryCard } from './CodeView';
 import { PatchFilePicker } from './PatchFilePicker';
 import { PackageList } from './PackageList';
+import { CodePanels } from './CodePanels';
+import { Choice, EditorPanel } from './EditorPanel';
 import { CreatePackageModal, RenamePackageModal, UnpackageModal } from './PackageModals';
 import {
   GitCompare,
   CheckCircle2,
   AlertTriangle,
   FileCode,
-  Check,
   EyeOff,
   Eye,
   Layers,
@@ -26,18 +27,12 @@ import {
   Package,
   Unlock,
   RefreshCw,
-  Plus,
-  RotateCcw,
-  Code2,
   Download,
   FolderOpen,
   ArrowLeft,
   Undo2,
-  Minus,
   Wrench,
 } from 'lucide-react';
-import Editor from '@monaco-editor/react';
-import '../../monacoSetup';
 
 interface MergerModuleProps {
   conflicts: VfsConflict[];
@@ -595,8 +590,6 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
    * What this file will contain. The editor is still there for anything else, but the four
    * answers people actually want are one click each, and the active one is obvious.
    */
-  type Choice = { key: string; label: string; help: string; content: string };
-
   /** False when the scan put a note in place of a file the base game does not have. */
   const hasVanillaBase =
     !!currentConflict &&
@@ -1292,137 +1285,21 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     {/* What each mod does to this file */}
                     <ConflictSummaryCard conflict={currentConflict} onFocus={setFocusBaseLine} />
 
-                    {/* Horizontal Code Panels Carousel */}
-                    <div className="flex-1 flex gap-3 overflow-x-auto min-h-0">
-                      {/* Panel A: Vanilla Base */}
-                      <div className="w-96 min-w-96 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
-                        <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-slate-300">Vanilla Base Game</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
-                              {totalFileLines} lines
-                            </span>
-                            {/* With no vanilla file there is nothing to load: the button used to put
-                                the "not present" note itself into the editor, one Save away from
-                                shipping a one-line comment in place of the mods' code. */}
-                            <button
-                              disabled={!hasVanillaBase}
-                              onClick={() => {
-                                if (!hasVanillaBase) return;
-                                setEditorContent(currentConflict.base_content);
-                                setIsManuallyEdited(false);
-                                showToast(`Vanilla base code restored in editor.`);
-                              }}
-                              className={`px-2 py-1 text-[10px] font-semibold rounded border transition shadow-sm ${
-                                !hasVanillaBase
-                                  ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
-                                  : editorContent === currentConflict.base_content && !isManuallyEdited
-                                  ? 'bg-slate-800 text-emerald-300 border-emerald-700/80 font-bold cursor-pointer'
-                                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white cursor-pointer'
-                              }`}
-                              title={
-                                hasVanillaBase
-                                  ? 'Load original Vanilla base code in the lower editor'
-                                  : 'The base game has no file here, so there is nothing to go back to'
-                              }
-                            >
-                              {!hasVanillaBase
-                                ? 'No base'
-                                : editorContent === currentConflict.base_content && !isManuallyEdited
-                                ? '\u2713 Base Active'
-                                : 'Load Base'}
-                            </button>
-                          </div>
-                        </div>
-                        <LinedCodeSnippet
-                          content={currentConflict.base_content}
-                          targetLine={focusLine}
-                          highlightRanges={changedBaseRanges}
-                          collisionRanges={collisionBaseRanges}
-                        />
-                      </div>
-
-                    {/* Competing Mod Panels */}
-                    {currentConflict.competing_mods.map((mod, idx) => {
-                      const modUid = mod.mod_id && mod.mod_id !== mod.mod_name
-                        ? `${mod.mod_name} (${mod.mod_id})`
-                        : `${mod.mod_name}${currentConflict.competing_mods.filter(m => m.mod_name === mod.mod_name).length > 1 ? ` #${idx + 1}` : ''}`;
-
-                      const isModAdded = editorContent.includes(`-- === MOD: [${modUid}] ===`);
-                      const isModExclusive = editorContent === mod.content;
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`w-[450px] min-w-[450px] bg-slate-950 border rounded-lg flex flex-col shadow group transition ${
-                            isModExclusive
-                              ? 'border-emerald-500 ring-1 ring-emerald-500/40'
-                              : isModAdded
-                              ? 'border-cyan-500/80 ring-1 ring-cyan-500/30'
-                              : 'border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-2">
-                            <span className="text-xs font-bold text-emerald-400 truncate max-w-[150px]" title={modUid}>
-                              {mod.mod_name}
-                            </span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {/* Toggle Agregar / Quitar Mod */}
-                              <button
-                                onClick={() => !isCurrentlyPackaged && handleToggleAddMod(mod.content, modUid)}
-                                disabled={isCurrentlyPackaged || isModExclusive}
-                                className={`px-2 py-1 text-[10px] font-semibold rounded border transition shadow-sm flex items-center gap-1 ${
-                                  isCurrentlyPackaged
-                                    ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
-                                    : isModExclusive
-                                    ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
-                                    : isModAdded
-                                    ? 'bg-rose-950/90 text-rose-300 border-rose-700 hover:bg-rose-900 hover:text-white cursor-pointer'
-                                    : 'bg-cyan-950/80 text-cyan-300 border-cyan-800 hover:bg-cyan-700 hover:text-white cursor-pointer'
-                                }`}
-                                title={
-                                  isCurrentlyPackaged
-                                    ? 'The package is packaged (read-only). Unpack to modify.'
-                                    : isModExclusive
-                                    ? 'This mod is already loaded exclusively in the editor'
-                                    : isModAdded
-                                    ? `Take ${mod.mod_name}'s appended block back out`
-                                    : `Append ${mod.mod_name}'s version below what is in the editor`
-                                }
-                              >
-                                {isModAdded ? (
-                                  <>
-                                    <Minus className="w-3 h-3 text-rose-400" />
-                                    <span>Remove</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Plus className="w-3 h-3 text-cyan-400" />
-                                    <span>Append</span>
-                                  </>
-                                )}
-                              </button>
-
-                            </div>
-                          </div>
-                          {(() => {
-                            const summary = currentConflict.mod_changes?.find((m) => m.mod_id === mod.mod_id);
-                            const own = (summary?.regions ?? []).filter((r) => r.kind !== 'removed');
-                            const overlapsCollision = (r: ChangeRegion) =>
-                              collisionBaseRanges.some(([a, b]) => r.base_start <= b && a <= Math.max(r.base_start, r.base_end));
-                            return (
-                              <LinedCodeSnippet
-                                content={mod.content}
-                                targetLine={summary ? modLineFor(summary, focusLine) : focusLine}
-                                highlightRanges={own.map((r) => [r.mod_start, r.mod_end] as [number, number])}
-                                collisionRanges={own.filter(overlapsCollision).map((r) => [r.mod_start, r.mod_end] as [number, number])}
-                              />
-                            );
-                          })()}
-                        </div>
-                      );
-                    })}
-                  </div>
+                    <CodePanels
+                      currentConflict={currentConflict}
+                      totalFileLines={totalFileLines}
+                      hasVanillaBase={hasVanillaBase}
+                      editorContent={editorContent}
+                      isManuallyEdited={isManuallyEdited}
+                      setEditorContent={setEditorContent}
+                      setIsManuallyEdited={setIsManuallyEdited}
+                      showToast={showToast}
+                      focusLine={focusLine}
+                      changedBaseRanges={changedBaseRanges}
+                      collisionBaseRanges={collisionBaseRanges}
+                      isCurrentlyPackaged={isCurrentlyPackaged}
+                      handleToggleAddMod={handleToggleAddMod}
+                    />
                 </div>
 
                 {/* Draggable Vertical Splitter Bar */}
@@ -1436,149 +1313,27 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   <GripHorizontal className="w-5 h-3" />
                 </div>
 
-                {/* Bottom Panel: Interactive Monaco Editor */}
-                <div
-                  style={{ height: `${100 - topHeightPercent}%` }}
-                  className="flex flex-col bg-slate-950 p-3 min-h-0 overflow-hidden"
-                >
-                  {!isCurrentlyPackaged && fileChoices.length > 1 && (
-                    <div className="flex flex-wrap items-center gap-2 mb-2 shrink-0">
-                      <span className="text-[11px] text-slate-400 mr-1">What should the game read?</span>
-                      {fileChoices.map((choice) => {
-                        const active = activeChoice === choice.key;
-                        return (
-                          <button
-                            key={choice.key}
-                            type="button"
-                            onClick={() => chooseForFile(choice)}
-                            aria-pressed={active}
-                            title={choice.help}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                              active
-                                ? 'bg-emerald-900/60 text-emerald-200 border-emerald-700'
-                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-                            }`}
-                          >
-                            {choice.label}
-                          </button>
-                        );
-                      })}
-                      {activeChoice === 'custom' && (
-                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-amber-950/60 text-amber-300 border-amber-800">
-                          Your own edit
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between mb-2 shrink-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                        <Code2 className="w-4 h-4 text-emerald-400" />
-                        <span>Merge Result (Master Patch)</span>
-                      </span>
-                      {editorLocked ? (
-                        <span className="px-2 py-0.5 text-[10px] rounded bg-emerald-950 text-emerald-300 border border-emerald-800/80 font-mono font-bold">
-                          🔒 Published (Read Only)
-                        </span>
-                      ) : isCurrentlyPackaged ? (
-                        <span
-                          className="px-2 py-0.5 text-[10px] rounded bg-amber-950 text-amber-300 border border-amber-800/80 font-mono"
-                          title="This is a mod's own file: Save publishes it into the packaged package in place, nothing is unpacked"
-                        >
-                          {isManuallyEdited ? '✏️ Edited · Save publishes in place' : 'Patch · Save publishes in place'}
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 text-[10px] rounded bg-amber-950 text-amber-300 border border-amber-800/80 font-mono">
-                          {isManuallyEdited ? '✏️ Manually Edited' : 'Draft (Editable)'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {editorLocked ? (
-                        <button
-                          onClick={() => setIsUnpackageModalOpen(true)}
-                          disabled={isCleaning}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-950 hover:bg-amber-900 text-amber-300 text-xs font-bold border border-amber-700/60 shadow transition cursor-pointer"
-                          title="Unpack this package to edit its merged code"
-                        >
-                          <Unlock className="w-3.5 h-3.5 text-amber-400" />
-                          <span>{isCleaning ? 'Opening...' : '🔓 Unmerge / Open to Edit'}</span>
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={handleResetToAutoMerge}
-                            disabled={isCurrentConflictAstApplied}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                              isCurrentConflictAstApplied
-                                ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 cursor-pointer'
-                            }`}
-                            title={isCurrentConflictAstApplied ? "The automatic AST merge is already applied in this file" : "Restores the automatic merge generated by the AST engine"}
-                          >
-                            <RotateCcw className={`w-3.5 h-3.5 ${isCurrentConflictAstApplied ? 'text-slate-600' : 'text-cyan-400'}`} />
-                            <span>Restore AST Merge</span>
-                          </button>
-
-                          <button
-                            onClick={handleUnmergeSingleConflict}
-                            disabled={isCurrentConflictUnmerged}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                              isCurrentConflictUnmerged
-                                ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 cursor-pointer'
-                            }`}
-                            title={isCurrentConflictUnmerged ? "This file is already in its original unmerged state" : "Restores this file to its unmerged base code (removes merged state)"}
-                          >
-                            <Undo2 className={`w-3.5 h-3.5 ${isCurrentConflictUnmerged ? 'text-slate-600' : 'text-amber-400'}`} />
-                            <span>Unmerge this File</span>
-                          </button>
-
-                          <button
-                            onClick={handleSaveSingleConflict}
-                            disabled={isCurrentConflictSaved}
-                            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-                              isCurrentConflictSaved
-                                ? 'bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow cursor-pointer'
-                            }`}
-                            title={isCurrentConflictSaved ? "This file is already saved and resolved (no pending changes)" : "Saves changes to this file and removes Needs Review warning"}
-                          >
-                            <Check className={`w-3.5 h-3.5 ${isCurrentConflictSaved ? 'text-slate-600' : 'text-white'}`} />
-                            <span>{isCurrentConflictSaved ? '✓ Merge Saved' : '✓ Save Merge of this File'}</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex-1 border border-slate-800 rounded-lg overflow-hidden relative">
-                    <Editor
-                      height="100%"
-                      language={currentConflict.file_type === 'LUA' ? 'lua' : 'plaintext'}
-                      path={currentConflict.id}
-                      theme="vs-dark"
-                      value={editorContent}
-                      onChange={(val) => {
-                        if (!editorLocked) {
-                          setEditorContent(val || '');
-                          setIsManuallyEdited(true);
-                        }
-                      }}
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 12,
-                        fontFamily: 'Consolas, Monaco, monospace',
-                        scrollBeyondLastLine: false,
-                        smoothScrolling: true,
-                        tabSize: 4,
-                        wordWrap: 'on',
-                        readOnly: editorLocked,
-                      }}
-                    />
-                  </div>
-                </div>
+                <EditorPanel
+                  topHeightPercent={topHeightPercent}
+                  currentConflict={currentConflict}
+                  isCurrentlyPackaged={isCurrentlyPackaged}
+                  fileChoices={fileChoices}
+                  activeChoice={activeChoice}
+                  chooseForFile={chooseForFile}
+                  editorLocked={editorLocked}
+                  isManuallyEdited={isManuallyEdited}
+                  setIsUnpackageModalOpen={setIsUnpackageModalOpen}
+                  isCleaning={isCleaning}
+                  handleResetToAutoMerge={handleResetToAutoMerge}
+                  isCurrentConflictAstApplied={isCurrentConflictAstApplied}
+                  handleUnmergeSingleConflict={handleUnmergeSingleConflict}
+                  isCurrentConflictUnmerged={isCurrentConflictUnmerged}
+                  handleSaveSingleConflict={handleSaveSingleConflict}
+                  isCurrentConflictSaved={isCurrentConflictSaved}
+                  editorContent={editorContent}
+                  setEditorContent={setEditorContent}
+                  setIsManuallyEdited={setIsManuallyEdited}
+                />
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-slate-500 bg-slate-950/50">
