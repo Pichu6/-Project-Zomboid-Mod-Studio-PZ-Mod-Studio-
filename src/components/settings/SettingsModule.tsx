@@ -86,6 +86,20 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     setRememberLaunchMode(on);
     localStorage.setItem('pz_remember_launch_mode', String(on));
   };
+  /** Whether the Studio fetches the community rules and mod index once a day (kept beside the mod list). */
+  const [communityDownloads, setCommunityDownloads] = useState<boolean>(true);
+  useEffect(() => {
+    if (!paths.user_zomboid_dir) return;
+    void TauriService.communityDownloads(paths.user_zomboid_dir).then(setCommunityDownloads);
+  }, [paths.user_zomboid_dir]);
+  const toggleCommunityDownloads = async (on: boolean) => {
+    try {
+      await TauriService.setCommunityDownloads(paths.user_zomboid_dir, on);
+      setCommunityDownloads(on);
+    } catch {
+      // Already shown by TauriService.
+    }
+  };
   const [startupBehavior, setStartupBehavior] = useState<'SHOW_STARTUP_SCREEN' | 'OPEN_LAST_PROFILE'>(() => {
     return (localStorage.getItem('pz_startup_behavior') as any) || 'SHOW_STARTUP_SCREEN';
   });
@@ -612,6 +626,32 @@ The file the game reads to know which mods are on and in what order. Found autom
               onClick={() => toggleRememberLaunchMode(!rememberLaunchMode)}
               className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
                 rememberLaunchMode ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-full bg-white shadow-md" />
+            </button>
+          </div>
+        )}
+
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200">Download the community rules and mod index</div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">
+                Once a day, from the Studio's own repository on GitHub: load-order rules, incompatible pairs, and one
+                registry per mod with the builds it runs on, what it clashes with and its known issues with the fix the
+                Studio can apply. Auto-Sort, Mod Health, the Mod List and the Browse page use them. Off: the last copy
+                is kept and nothing is fetched. Nothing is ever sent.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={communityDownloads}
+              aria-label="Download the community rules and mod index"
+              onClick={() => void toggleCommunityDownloads(!communityDownloads)}
+              className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
+                communityDownloads ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-white shadow-md" />

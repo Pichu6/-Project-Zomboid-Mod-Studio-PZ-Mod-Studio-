@@ -15,6 +15,8 @@ const LABELS: Record<string, string> = {
   user_rule_order: 'Before a mod you said it must follow',
   community_rule_order: 'Before a mod the community says it must follow',
   community_incompatible: 'The community says these clash',
+  community_known_issue: 'Known issue, per the community',
+  community_successor: 'There is a version for this build',
   load_before_order: 'Loads too late',
   incompatible: 'Incompatible',
   not_for_build: 'Not for this build',
@@ -62,6 +64,8 @@ const fixLabel = (fix: HealthFix, nameOf: (id: string) => string): string => {
       return 'Open in the Merger';
     case 'keep_version':
       return 'Keep this version';
+    case 'enable_shim_patch':
+      return 'Switch the shim patch on';
     case 'merge_files':
     case 'make_compatible_copy':
     case 'remove_compatible_copy':
@@ -112,6 +116,11 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
       case 'keep_version':
         void TauriService.keepModVersion(paths, fix.mod_id).then((kept) =>
           onNote?.(`${kept.mod_name} as it is today is kept (${kept.kept_at}). Right-click the row for its kept versions.`)
+        );
+        return;
+      case 'enable_shim_patch':
+        void TauriService.setShimPatch(paths.user_zomboid_dir, fix.name, true).then((written) =>
+          onNote?.(`The shim's patch ${fix.name} is on, written into ${written} package${written === 1 ? '' : 's'}; the game reads it on its next launch.`)
         );
         return;
       case 'merge_files':

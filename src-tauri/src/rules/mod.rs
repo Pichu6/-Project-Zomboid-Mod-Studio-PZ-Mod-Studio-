@@ -7,6 +7,7 @@
 //! health check says when the list breaks one, in the player's own words.
 
 pub mod community;
+pub mod index;
 
 use serde::{Deserialize, Serialize};
 use std::fs;

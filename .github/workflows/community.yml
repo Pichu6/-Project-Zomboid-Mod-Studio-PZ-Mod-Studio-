@@ -1,0 +1,42 @@
+name: 'Community index'
+
+# Every registry proposed for community/index must be well formed before a person looks at it;
+# on main, index.json (what the Studio downloads) is rebuilt from the registries.
+on:
+  pull_request:
+    paths: ['community/**', 'scripts/community-index.js']
+  push:
+    branches: [main]
+    paths: ['community/index/**', 'scripts/community-index.js']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Registries are well formed
+        run: node scripts/community-index.js check
+
+      - name: Rules file is well formed
+        run: node -e "const r=require('./community/rules.json'); for (const x of r.load_after) if (!x.mod_id||!x.after||x.mod_id===x.after) throw new Error('bad rule '+JSON.stringify(x)); for (const x of r.incompatible) if (!x.a||!x.b||x.a===x.b) throw new Error('bad pair '+JSON.stringify(x)); console.log('rules.json ok')"
+
+      - name: Build index.json
+        if: github.event_name == 'push'
+        run: node scripts/community-index.js build
+
+      - name: Commit index.json when it changed
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- community/index.json; then echo "index.json unchanged"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add community/index.json
+          git commit -m "The community index, rebuilt from its registries"
+          git push

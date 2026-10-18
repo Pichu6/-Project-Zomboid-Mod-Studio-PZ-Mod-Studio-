@@ -24,6 +24,8 @@ interface BrowseModuleProps {
   onInstalled: () => void;
   /** Makes a profile from a collection: the Studio's mod list and profiles live above here. */
   onMakeProfile?: (name: string, workshopIds: string[]) => void;
+  /** The game build installed, for the community index's lines on the detail page. */
+  installedBuild?: string | null;
 }
 
 type SourceTab = 'workshop' | 'nexus' | 'mine';
@@ -794,7 +796,7 @@ const TABS: { id: SourceTab; label: string; active: string }[] = [
   { id: 'mine', label: 'My mods', active: 'bg-emerald-950/80 text-emerald-200 border-emerald-700' },
 ];
 
-export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled, onMakeProfile }) => {
+export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null }) => {
   const [tab, setTab] = useState<SourceTab>('workshop');
   // Tabs stay mounted once visited, so switching keeps their page and filters.
   const [visited, setVisited] = useState<Set<SourceTab>>(() => new Set(['workshop']));
@@ -979,6 +981,7 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
           installedByNexusId={installedByNexusId}
           onNexusDownload={handleNexusDownload}
           onMakeProfile={onMakeProfile}
+          installedBuild={installedBuild}
         />
       )}
     </div>

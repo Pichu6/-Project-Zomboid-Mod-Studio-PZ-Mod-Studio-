@@ -333,7 +333,8 @@ export type HealthFix =
   | { action: 'keep_version'; mod_id: string }
   | { action: 'remove_compatible_copy'; folder: string }
   | { action: 'merge_files'; relative_paths: string[] }
-  | { action: 'open_in_merger'; relative_path: string };
+  | { action: 'open_in_merger'; relative_path: string }
+  | { action: 'enable_shim_patch'; name: string };
 
 /** Result of merging file conflicts automatically into the active patch package. */
 export interface AutoMergeResult {
@@ -372,6 +373,63 @@ export interface CommunitySummary {
   rules: number;
   pairs: number;
   updated: string | null;
+  fetched_at: number | null;
+  /** Registries in the community mod index at hand. */
+  mods: number;
+  index_updated: string | null;
+  /** Whether the Studio fetches the community files at all (Settings). */
+  downloads: boolean;
+}
+
+/** How sure an entry of the community index is: the Studio checked it, or a person said so. */
+export type CommunityStatus = 'verified' | 'reported';
+
+export interface CommunityRelation {
+  id: string;
+  note?: string | null;
+  build?: string | null;
+  date?: string | null;
+  source?: string | null;
+  status?: CommunityStatus;
+}
+
+export type CommunityIssueFix =
+  | { kind: 'shim_patch'; name: string }
+  | { kind: 'require_path'; from: string; to: string }
+  | { kind: 'compatible_copy' }
+  | { kind: 'none' };
+
+export interface CommunityIssue {
+  title: string;
+  note?: string | null;
+  file?: string | null;
+  line?: number | null;
+  log?: string | null;
+  fix: CommunityIssueFix;
+  build?: string | null;
+  date?: string | null;
+  source?: string | null;
+  status?: CommunityStatus;
+}
+
+/** One mod's registry in the community index (community/index/<id>.json). */
+export interface CommunityRegistry {
+  id: string;
+  name?: string | null;
+  workshop_id?: string | null;
+  authors: string[];
+  builds: string[];
+  requires: string[];
+  incompatible: CommunityRelation[];
+  load_after: CommunityRelation[];
+  successor?: { id: string; workshop_id?: string | null; note?: string | null } | null;
+  issues: CommunityIssue[];
+}
+
+export interface CommunityIndex {
+  version: number;
+  updated: string | null;
+  mods: Record<string, CommunityRegistry>;
   fetched_at: number | null;
 }
 

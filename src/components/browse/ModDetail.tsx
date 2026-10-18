@@ -4,6 +4,8 @@ import { NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, Workshop
 import { TauriService, reportBackendError } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { BBCode } from './BBCode';
+import { CommunityIndexSection } from './CommunityIndexSection';
+import { registriesForItem, useCommunityIndex } from '../../services/communityIndex';
 import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
 
 export type DetailTarget =
@@ -30,6 +32,8 @@ interface ModDetailProps {
   onNexusDownload: (m: NexusMod) => void;
   /** Makes a profile holding the mods installed from a collection's items. */
   onMakeProfile?: (name: string, workshopIds: string[]) => void;
+  /** The game build installed, so the index's lines read as "reported on 42.19" when it differs. */
+  installedBuild?: string | null;
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -163,8 +167,9 @@ function useDetails<T>(load: () => Promise<T>, key: string, what: string) {
   return { data, loading };
 }
 
-const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe }) => {
+const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, paths, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, installedBuild = null }) => {
   const { data, loading } = useDetails<WorkshopItemDetails>(() => TauriService.workshopItemDetails(target.id), target.id, 'Loading the Workshop item');
+  const index = useCommunityIndex(paths);
   const item = data?.item ?? target.preview;
   const installed = installedByItem.get(target.id) ?? [];
   const images = [...(item?.preview_url ? [item.preview_url] : []), ...(data?.screenshots ?? [])];
@@ -225,6 +230,7 @@ const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } &
               </div>
             </Section>
           )}
+          <CommunityIndexSection registries={registriesForItem(index, target.id, installed)} installedBuild={installedBuild} nameOf={(id) => index?.mods[id]?.name ?? id} />
           {item && !item.is_project_zomboid && <p className="text-[11px] text-amber-300">This item is for another game.</p>}
           {item?.banned && <p className="text-[11px] text-red-300">Steam has banned this item.</p>}
         </>

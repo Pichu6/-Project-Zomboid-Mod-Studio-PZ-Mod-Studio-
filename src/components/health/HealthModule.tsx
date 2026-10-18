@@ -23,6 +23,7 @@ interface HealthModuleProps {
 /** Fixes handled here (not by rewriting the mod list). */
 const ACTION_FIXES = new Set<HealthFix['action']>([
   'subscribe_workshop', 'open_workshop_page', 'make_compatible_copy', 'keep_version', 'remove_compatible_copy', 'merge_files', 'open_in_merger',
+  'enable_shim_patch',
 ]);
 
 /** Fixes the "fix all" button may apply without asking: they only enable or reorder. */
@@ -61,6 +62,8 @@ const fixLabel = (fix: HealthFix): string => {
       return 'Merge automatically';
     case 'open_in_merger':
       return 'Open in Merger';
+    case 'enable_shim_patch':
+      return `Switch the shim's ${fix.name} patch on`;
   }
 };
 
@@ -150,6 +153,18 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     }
     if (fix.action === 'remove_compatible_copy') {
       removeCompatibleCopy(fix.folder);
+      return;
+    }
+    if (fix.action === 'enable_shim_patch') {
+      void (async () => {
+        try {
+          const written = await TauriService.setShimPatch(paths.user_zomboid_dir, fix.name, true);
+          say(`The shim's patch ${fix.name} is on, written into ${written} package${written === 1 ? '' : 's'}; the game reads it on its next launch.`);
+          onRecheck();
+        } catch {
+          // Already shown by TauriService.
+        }
+      })();
       return;
     }
     if (fix.action === 'keep_version') {
@@ -289,8 +304,8 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                   onClick={() => {
                     void (async () => {
                       try {
-                        const c = await TauriService.refreshCommunityRules(paths);
-                        say(`Community rules fetched: ${c.rules} load-order rule${c.rules === 1 ? '' : 's'}, ${c.pairs} incompatible pair${c.pairs === 1 ? '' : 's'}${c.updated ? `, updated ${c.updated}` : ''}.`);
+                        const c = await TauriService.refreshCommunity(paths);
+                        say(`Community files fetched: ${c.rules} load-order rule${c.rules === 1 ? '' : 's'}, ${c.pairs} incompatible pair${c.pairs === 1 ? '' : 's'}, ${c.mods} mod registr${c.mods === 1 ? 'y' : 'ies'}${c.index_updated ? ` (index updated ${c.index_updated})` : ''}.`);
                         onRecheck();
                       } catch {
                         // Already shown by TauriService.
@@ -300,11 +315,11 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                   className="px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
                   title={
                     report.community
-                      ? `Community rules in use: ${report.community.rules} load-order, ${report.community.pairs} incompatible pairs${report.community.updated ? `, updated ${report.community.updated}` : ''}. Fetched once a day from the Studio's repository (community/rules.json); click to fetch now.`
-                      : 'No community rules at hand yet (fetched once a day from the Studio\'s repository, community/rules.json). Click to fetch now.'
+                      ? `From the community, in use: ${report.community.rules} load-order rule(s), ${report.community.pairs} incompatible pair(s), ${report.community.mods} mod registr${report.community.mods === 1 ? 'y' : 'ies'} with known issues and fixes${report.community.index_updated ? ` (index updated ${report.community.index_updated})` : ''}. Fetched once a day from the Studio's repository (community/); click to fetch now.${report.community.downloads ? '' : ' Downloads are off in Settings: this is the last copy.'}`
+                      : 'Nothing from the community at hand yet (fetched once a day from the Studio\'s repository, community/). Click to fetch now.'
                   }
                 >
-                  community rules: {report.community ? `${report.community.rules + report.community.pairs}` : 'none yet'} ↻
+                  community: {report.community ? `${report.community.rules + report.community.pairs} rules, ${report.community.mods} mods` : 'none yet'} ↻
                 </button>
               </div>
             )}

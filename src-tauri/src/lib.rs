@@ -331,13 +331,37 @@ fn sort_load_order_cmd(paths: StudioPaths, order: Vec<String>) -> catalog::SortR
     if let Some(community) = rules::community::current(&paths.user_zomboid_dir) {
         rules::apply_to_catalog(&mut catalog, &community.as_user_rules());
     }
+    if let Some(index) = rules::index::current(&paths.user_zomboid_dir) {
+        rules::apply_to_catalog(&mut catalog, &index.as_user_rules());
+    }
     catalog::sort_load_order(&catalog, &order)
 }
 
-/// Fetches the community rules now, whatever the age of the cached copy.
+/// Fetches the community rules and the mod index now, whatever the age of the cached copies.
 #[tauri::command(async)]
-fn refresh_community_rules_cmd(paths: StudioPaths) -> Result<rules::community::CommunitySummary, String> {
-    rules::community::refresh(&paths.user_zomboid_dir).map(|r| r.summary())
+fn refresh_community_cmd(paths: StudioPaths) -> Result<rules::community::CommunitySummary, String> {
+    let rules = rules::community::refresh(&paths.user_zomboid_dir)?;
+    let index = rules::index::refresh(&paths.user_zomboid_dir)?;
+    let mut summary = rules.summary().with_index(Some(&index));
+    summary.downloads = rules::community::downloads_enabled(&paths.user_zomboid_dir);
+    Ok(summary)
+}
+
+/// The community mod index at hand (cached, or fetched when a day old), whole: it is small.
+#[tauri::command(async)]
+fn community_index_cmd(paths: StudioPaths) -> Option<rules::index::CommunityIndex> {
+    rules::index::current(&paths.user_zomboid_dir)
+}
+
+/// Whether the Studio fetches the community rules and index (Settings).
+#[tauri::command(async)]
+fn community_downloads_cmd(user_zomboid_dir: String) -> bool {
+    rules::community::downloads_enabled(&user_zomboid_dir)
+}
+
+#[tauri::command(async)]
+fn set_community_downloads_cmd(user_zomboid_dir: String, enabled: bool) -> Result<(), String> {
+    rules::community::set_downloads_enabled(&user_zomboid_dir, enabled)
 }
 
 #[tauri::command(async)]
@@ -824,7 +848,10 @@ pub fn run() {
             auto_merge_conflicts_cmd,
             sort_load_order_cmd,
             list_load_rules_cmd,
-            refresh_community_rules_cmd,
+            refresh_community_cmd,
+            community_index_cmd,
+            community_downloads_cmd,
+            set_community_downloads_cmd,
             add_load_rule_cmd,
             remove_load_rule_cmd,
             make_compatible_copy_cmd,

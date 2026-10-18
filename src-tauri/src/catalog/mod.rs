@@ -274,6 +274,17 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
         add_community_rule_issues(&mut report, &catalog, active, &community);
         report.community = Some(community.summary());
     }
+    if let Some(index) = crate::rules::index::current(&paths.user_zomboid_dir) {
+        let switches = crate::patch_generator::read_patch_switches(&paths.user_zomboid_dir);
+        let shim_on = |name: &str| switches.get(name).copied().unwrap_or(true);
+        let package_root = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&paths.user_zomboid_dir)
+            .into_iter()
+            .next()
+            .map(|d| d.join("mods").join("Z_PZModStudio_MergedPatch"))
+            .unwrap_or_default();
+        add_index_issues(&mut report, &catalog, active, &index, &shim_on, &package_root);
+        report.community = Some(report.community.take().unwrap_or_else(|| crate::rules::community::summary(&paths.user_zomboid_dir)).with_index(Some(&index)));
+    }
     let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
     add_file_conflict_issues(&mut report, &conflicts);
     ModHealth { catalog, report }
@@ -538,6 +549,8 @@ pub enum SuggestedFix {
     MergeFiles { relative_paths: Vec<String> },
     /// Open this shared file in the Mod Merger to decide by hand.
     OpenInMerger { relative_path: String },
+    /// Switch one of the shim's per-mod patches on (Settings > Build 42 shim).
+    EnableShimPatch { name: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -572,7 +585,8 @@ impl IssueList {
                 | SuggestedFix::KeepVersion { .. }
                 | SuggestedFix::RemoveCompatibleCopy { .. }
                 | SuggestedFix::MergeFiles { .. }
-                | SuggestedFix::OpenInMerger { .. } => None,
+                | SuggestedFix::OpenInMerger { .. }
+                | SuggestedFix::EnableShimPatch { .. } => None,
             };
             if let Some(other) = other.filter(|o| Some(o.as_str()) != mod_id && !related.contains(o)) {
                 related.push(other.clone());
@@ -706,6 +720,102 @@ pub fn add_community_rule_issues(report: &mut HealthReport, catalog: &ModCatalog
                 format!("The community has it that {} and {} do not go together{}, and both are on",
                     name(&pair.a), name(&pair.b), why(&pair.note, &pair.source)),
                 vec![SuggestedFix::DisableMod { mod_id: pair.b.clone() }, SuggestedFix::DisableMod { mod_id: pair.a.clone() }]);
+        }
+    }
+    for issue in list.0 {
+        match issue.severity {
+            Severity::Error => report.errors += 1,
+            Severity::Warning => report.warnings += 1,
+            Severity::Info => {}
+        }
+        report.issues.push(issue);
+    }
+}
+
+/// The community index against the active list: an incompatible pair both on, a load-after
+/// relation the list breaks, a known issue not yet dealt with on this machine (with the fix the
+/// Studio can apply), and the Build 42 successor of a mod this build cannot load. Each named as
+/// the index's, with the build it was seen on and whether it was verified or reported.
+pub fn add_index_issues(
+    report: &mut HealthReport,
+    catalog: &ModCatalog,
+    active: &[String],
+    index: &crate::rules::index::CommunityIndex,
+    shim_on: &dyn Fn(&str) -> bool,
+    package_root: &std::path::Path,
+) {
+    use crate::rules::index::{IssueFix, Status};
+    let active_ids: Vec<String> = active
+        .iter()
+        .map(|e| resolve_entry(catalog, e.trim()).map(|m| m.id.clone()).unwrap_or_else(|| e.trim().to_string()))
+        .collect();
+    let position: HashMap<&str, usize> = active_ids.iter().enumerate().rev().map(|(i, id)| (id.as_str(), i)).collect();
+    let name = |id: &str| catalog.get(id).map(describe).unwrap_or_else(|| id.to_string());
+    let seen_on = |build: &Option<String>, status: Status| {
+        let who = match status {
+            Status::Verified => "verified",
+            Status::Reported => "reported",
+        };
+        match build {
+            Some(b) => format!("{} on {}", who, b),
+            None => who.to_string(),
+        }
+    };
+    let mut list = IssueList(Vec::new());
+    for id in &active_ids {
+        let Some(registry) = index.get(id) else { continue };
+        let mine = position[id.as_str()];
+        for rel in &registry.incompatible {
+            // Each pair once: from the side that comes first in the list, or the only side listed.
+            let other_listed = index.get(&rel.id).map(|r| r.incompatible.iter().any(|x| &x.id == id)).unwrap_or(false);
+            if let Some(&theirs) = position.get(rel.id.as_str()) {
+                if other_listed && theirs < mine {
+                    continue;
+                }
+                list.push(Severity::Warning, "community_incompatible", Some(id),
+                    format!("The community index has it that {} and {} do not go together ({}{}), and both are on",
+                        name(id), name(&rel.id), rel.note.clone().map(|n| format!("{}; ", n)).unwrap_or_default(), seen_on(&rel.build, rel.status)),
+                    vec![SuggestedFix::DisableMod { mod_id: rel.id.clone() }, SuggestedFix::DisableMod { mod_id: id.clone() }]);
+            }
+        }
+        for rel in &registry.load_after {
+            if let Some(&after_at) = position.get(rel.id.as_str()) {
+                if mine < after_at {
+                    list.push(Severity::Warning, "community_rule_order", Some(id),
+                        format!("The community index has it that {} loads after {} ({}{}), and it comes before it in the list",
+                            name(id), name(&rel.id), rel.note.clone().map(|n| format!("{}; ", n)).unwrap_or_default(), seen_on(&rel.build, rel.status)),
+                        vec![SuggestedFix::MoveBefore { mod_id: rel.id.clone(), before: id.clone() }]);
+                }
+            }
+        }
+        for issue in &registry.issues {
+            if crate::rules::index::issue_is_handled(issue, shim_on, package_root) {
+                continue;
+            }
+            let evidence = issue.file.as_deref().map(|f| match issue.line { Some(l) => format!(" ({}:{})", f, l), None => format!(" ({})", f) }).unwrap_or_default();
+            let note = issue.note.clone().map(|n| format!(": {}", n)).unwrap_or_default();
+            let (severity, fixes, how) = match &issue.fix {
+                IssueFix::ShimPatch { name: patch } => (Severity::Warning, vec![SuggestedFix::EnableShimPatch { name: patch.clone() }], "; the shim's patch for it is off".to_string()),
+                IssueFix::RequirePath { from, to } => (
+                    Severity::Warning,
+                    vec![SuggestedFix::MakeCompatibleCopy { mod_id: id.clone() }],
+                    format!("; it requires \"{}\", which Build 42 has at \"{}\" (a compatible copy rewrites it; Fix the path in the Monitor Center publishes the one file)", from, to),
+                ),
+                IssueFix::CompatibleCopy => (Severity::Warning, vec![SuggestedFix::MakeCompatibleCopy { mod_id: id.clone() }], "; a compatible copy fixes it".to_string()),
+                IssueFix::None => (Severity::Info, vec![], String::new()),
+            };
+            list.push(severity, "community_known_issue", Some(id),
+                format!("{} has a known issue, per the community index: {}{}{}{} [{}]", name(id), issue.title, evidence, note, how, seen_on(&issue.build, issue.status)),
+                fixes);
+        }
+        if let Some(successor) = &registry.successor {
+            let loadable = catalog.get(id).map(|m| matches!(m.loadability, Loadability::Loadable)).unwrap_or(true);
+            if !loadable && !position.contains_key(successor.id.as_str()) {
+                let fixes = successor.workshop_id.clone().map(|w| vec![SuggestedFix::OpenWorkshopPage { workshop_id: w }]).unwrap_or_default();
+                list.push(Severity::Info, "community_successor", Some(id),
+                    format!("{} has a version for this build, per the community index: {}{}", name(id), name(&successor.id), successor.note.clone().map(|n| format!(" ({})", n)).unwrap_or_default()),
+                    fixes);
+            }
         }
     }
     for issue in list.0 {

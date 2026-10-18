@@ -11,11 +11,13 @@ import { ModInspector } from './ModInspector';
 import { RowHealthChips } from './RowHealth';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
+import { draftRegistry, proposeUrl } from '../../utils/communityIndex';
 import {
   BookOpen,
   Copy,
   EyeOff,
   FolderOpen,
+  Globe,
   ListOrdered,
   RefreshCw,
   Search,
@@ -538,6 +540,20 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       label: 'Kept versions…',
       icon: Archive,
       onSelect: () => setKeptVersionsOf(mod),
+    },
+    {
+      label: 'Propose to the community index…',
+      icon: Globe,
+      onSelect: () => {
+        // GitHub's new-file page, with the registry the Studio can fill in already there; the
+        // person adds what they tested and GitHub opens the pull request. Nothing is sent from here.
+        const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild);
+        void navigator.clipboard.writeText(JSON.stringify(registry, null, 2));
+        showToast(`Opening GitHub with ${mod.name}'s registry filled in (also on the clipboard). Add what you tested, then "Propose changes" opens the pull request.`, 8000);
+        TauriService.openExternalUrl(proposeUrl(registry));
+      },
+      disabled: mod.mod_id.startsWith('Z_PZModStudio_'),
+      disabledReason: 'A Studio package is not a mod of the community',
     },
     {
       label: 'Copy the mod id',

@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -355,12 +355,39 @@ export const TauriService = {
     }
   },
 
-  /** Fetches the community rules now; returns what came. */
-  refreshCommunityRules: async (paths: StudioPathsUI): Promise<CommunitySummary> => {
+  /** Fetches the community rules and the mod index now; returns what came. */
+  refreshCommunity: async (paths: StudioPathsUI): Promise<CommunitySummary> => {
     try {
-      return await invoke<CommunitySummary>('refresh_community_rules_cmd', { paths });
+      return await invoke<CommunitySummary>('refresh_community_cmd', { paths });
     } catch (err) {
-      reportBackendError('Fetching the community rules', err);
+      reportBackendError('Fetching the community rules and index', err);
+      throw err;
+    }
+  },
+
+  /** The community mod index at hand (cached; fetched when a day old), or null when none. */
+  communityIndex: async (paths: StudioPathsUI): Promise<CommunityIndex | null> => {
+    try {
+      return await invoke<CommunityIndex | null>('community_index_cmd', { paths });
+    } catch {
+      return null;
+    }
+  },
+
+  /** Whether the Studio fetches the community rules and index (Settings). */
+  communityDownloads: async (userZomboidDir: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>('community_downloads_cmd', { userZomboidDir });
+    } catch {
+      return true;
+    }
+  },
+
+  setCommunityDownloads: async (userZomboidDir: string, enabled: boolean): Promise<void> => {
+    try {
+      await invoke('set_community_downloads_cmd', { userZomboidDir, enabled });
+    } catch (err) {
+      reportBackendError('Switching the community downloads', err);
       throw err;
     }
   },

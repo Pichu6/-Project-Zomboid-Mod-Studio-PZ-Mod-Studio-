@@ -670,6 +670,7 @@ Start the game anyway?`
               focusWorkshopId={browseFocusWorkshopId}
               onFocusHandled={() => setBrowseFocusWorkshopId(null)}
               onMakeProfile={handleMakeProfileFromCollection}
+              installedBuild={health.report?.game_version ?? null}
             />
           )}
 

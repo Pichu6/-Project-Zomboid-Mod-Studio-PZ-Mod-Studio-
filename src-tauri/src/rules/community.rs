@@ -12,6 +12,8 @@ use crate::load_order::mod_info::get_existing_user_zomboid_dirs;
 pub const RULES_URL: &str =
     "https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/community/rules.json";
 const CACHE_FILE: &str = "PZModStudio_CommunityRules.json";
+/// Settings the community downloads share: `{"downloads": false}` keeps the app offline.
+const SETTINGS_FILE: &str = "PZModStudio_Community.json";
 /// How long a fetched copy is trusted before another look.
 const FRESH_FOR_SECS: i64 = 24 * 60 * 60;
 
@@ -50,18 +52,54 @@ pub struct CommunityRules {
     pub fetched_at: Option<i64>,
 }
 
-/// What the Health screen says about the copy in use.
+/// What the Health screen says about the copies in use: the rules, and the mod index.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommunitySummary {
     pub rules: usize,
     pub pairs: usize,
     pub updated: Option<String>,
     pub fetched_at: Option<i64>,
+    /// Registries in the mod index at hand.
+    #[serde(default)]
+    pub mods: usize,
+    #[serde(default)]
+    pub index_updated: Option<String>,
+    /// Whether the Studio fetches these at all (Settings).
+    #[serde(default = "yes")]
+    pub downloads: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl CommunitySummary {
+    /// The rules summary with the index counted in.
+    pub fn with_index(mut self, index: Option<&super::index::CommunityIndex>) -> Self {
+        if let Some(i) = index {
+            self.mods = i.mods.len();
+            self.index_updated = i.updated.clone();
+        }
+        self
+    }
+}
+
+/// Everything the community gives this machine, counted, whether or not the rules file came.
+pub fn summary(user_zomboid_dir: &str) -> CommunitySummary {
+    let rules = current(user_zomboid_dir).map(|r| r.summary()).unwrap_or(CommunitySummary {
+        rules: 0, pairs: 0, updated: None, fetched_at: None, mods: 0, index_updated: None, downloads: true,
+    });
+    let mut s = rules.with_index(super::index::current(user_zomboid_dir).as_ref());
+    s.downloads = downloads_enabled(user_zomboid_dir);
+    s
 }
 
 impl CommunityRules {
     pub fn summary(&self) -> CommunitySummary {
-        CommunitySummary { rules: self.load_after.len(), pairs: self.incompatible.len(), updated: self.updated.clone(), fetched_at: self.fetched_at }
+        CommunitySummary {
+            rules: self.load_after.len(), pairs: self.incompatible.len(), updated: self.updated.clone(), fetched_at: self.fetched_at,
+            mods: 0, index_updated: None, downloads: true,
+        }
     }
 
     /// The load-after rules in the player's own shape, for the sort.
@@ -73,8 +111,44 @@ impl CommunityRules {
     }
 }
 
-fn cache_path(user_zomboid_dir: &str) -> Option<PathBuf> {
-    get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next().map(|d| d.join(CACHE_FILE))
+/// A file beside the mod list, for every community download's cache.
+pub(super) fn cache_path(user_zomboid_dir: &str, file: &str) -> Option<PathBuf> {
+    get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next().map(|d| d.join(file))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct CommunitySettings {
+    #[serde(default)]
+    downloads: Option<bool>,
+}
+
+/// Whether the Studio may fetch the community files at all. On unless the player said no.
+pub fn downloads_enabled(user_zomboid_dir: &str) -> bool {
+    cache_path(user_zomboid_dir, SETTINGS_FILE)
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str::<CommunitySettings>(&t).ok())
+        .and_then(|s| s.downloads)
+        .unwrap_or(true)
+}
+
+pub fn set_downloads_enabled(user_zomboid_dir: &str, on: bool) -> Result<(), String> {
+    let path = cache_path(user_zomboid_dir, SETTINGS_FILE).ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
+    let json = serde_json::to_string_pretty(&CommunitySettings { downloads: Some(on) }).map_err(|e| e.to_string())?;
+    fs::write(path, json).map_err(|e| e.to_string())
+}
+
+/// One small file over HTTPS, with a ten-second patience.
+pub(super) fn fetch_text(url: &str) -> Result<String, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(10)))
+        .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .into();
+    agent.get(url).call().map_err(|e| e.to_string())?.body_mut().read_to_string().map_err(|e| e.to_string())
+}
+
+pub(super) fn is_fresh(fetched_at: i64) -> bool {
+    now() - fetched_at < FRESH_FOR_SECS
 }
 
 /// Reads the rules text, refusing anything that is not the shape expected.
@@ -95,29 +169,18 @@ pub fn parse(text: &str) -> Result<CommunityRules, String> {
 
 /// The last copy fetched, if any.
 pub fn load_cached(user_zomboid_dir: &str) -> Option<CommunityRules> {
-    let text = fs::read_to_string(cache_path(user_zomboid_dir)?).ok()?;
+    let text = fs::read_to_string(cache_path(user_zomboid_dir, CACHE_FILE)?).ok()?;
     parse(&text).ok()
 }
 
-fn now() -> i64 {
+pub(super) fn now() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
 /// Fetches the rules now and keeps them. Says why when it cannot.
 pub fn refresh(user_zomboid_dir: &str) -> Result<CommunityRules, String> {
-    let path = cache_path(user_zomboid_dir).ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(std::time::Duration::from_secs(10)))
-        .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-        .into();
-    let text = agent
-        .get(RULES_URL)
-        .call()
-        .map_err(|e| format!("The community rules could not be fetched: {}", e))?
-        .body_mut()
-        .read_to_string()
-        .map_err(|e| format!("The community rules could not be read: {}", e))?;
+    let path = cache_path(user_zomboid_dir, CACHE_FILE).ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
+    let text = fetch_text(RULES_URL).map_err(|e| format!("The community rules could not be fetched: {}", e))?;
     let mut rules = parse(&text)?;
     rules.fetched_at = Some(now());
     let json = serde_json::to_string_pretty(&rules).map_err(|e| e.to_string())?;
@@ -127,10 +190,11 @@ pub fn refresh(user_zomboid_dir: &str) -> Result<CommunityRules, String> {
 
 /// The copy to use: the cached one while it is less than a day old, else a fresh fetch, else
 /// the cached one however old, else none. Never fails: no network means no community rules.
+/// With downloads off in Settings, the cached one only.
 pub fn current(user_zomboid_dir: &str) -> Option<CommunityRules> {
     let cached = load_cached(user_zomboid_dir);
-    let fresh = cached.as_ref().and_then(|c| c.fetched_at).map(|t| now() - t < FRESH_FOR_SECS).unwrap_or(false);
-    if fresh {
+    let fresh = cached.as_ref().and_then(|c| c.fetched_at).map(is_fresh).unwrap_or(false);
+    if fresh || !downloads_enabled(user_zomboid_dir) {
         return cached;
     }
     match refresh(user_zomboid_dir) {
