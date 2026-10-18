@@ -156,6 +156,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
     let mut issues: Vec<HealthIssue> = Vec::new();
     let mut add = |severity: Severity, code: &str, message: String| {
         issues.push(HealthIssue {
+            details: vec![],
             severity,
             code: code.to_string(),
             mod_id: None,

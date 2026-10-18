@@ -307,6 +307,29 @@ pub fn issues_for_script_conflicts(conflicts: &[crate::scripts::ScriptDefConflic
     issues_for_script_conflicts_with_state(conflicts, &states)
 }
 
+/// The same group file by file: for each mod and each of its files, the things in it that the
+/// group is about, in load order, so a person can see which file to open rather than a list of
+/// twenty files joined by slashes.
+fn details_by_file(group: &[(&crate::scripts::ScriptDefConflict, &str)]) -> Vec<IssueDetail> {
+    let mut details: Vec<IssueDetail> = Vec::new();
+    for (conflict, state) in group {
+        for (i, mod_id) in conflict.mod_ids.iter().enumerate() {
+            let file = conflict.files.get(i).cloned().unwrap_or_default();
+            let thing = DeclaredThing { definition: conflict.definition.clone(), merged_path: crate::scripts::merged_file_path(conflict), state: state.to_string() };
+            match details.iter_mut().find(|d| &d.mod_id == mod_id && d.file == file) {
+                Some(d) => d.declares.push(thing),
+                None => details.push(IssueDetail {
+                    mod_id: mod_id.clone(),
+                    mod_name: conflict.mods.get(i).cloned().unwrap_or_else(|| mod_id.clone()),
+                    file,
+                    declares: vec![thing],
+                }),
+            }
+        }
+    }
+    details
+}
+
 /// Turns what two mods both declare into issues, newest first, capped so one messy list cannot
 /// bury the problems that stop the game loading.
 pub fn issues_for_script_conflicts_with_state(
@@ -469,6 +492,7 @@ pub fn issues_for_script_conflicts_with_state(
         list.push(severity, code, Some(&winner_id), message, fixes);
         if let Some(last) = list.0.last_mut() {
             last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
+            last.details = details_by_file(group);
         }
     }
     if groups.len() > SHOWN {
@@ -573,6 +597,29 @@ pub struct HealthIssue {
     /// The other mod ids involved (the dependency, the incompatible mod, ...), for UIs that
     /// show the issue next to each mod.
     pub related: Vec<String>,
+    /// The same thing file by file, when the message lumps several: what each mod declares in
+    /// which file, and where the merged block for each would live. Empty for most issues.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<IssueDetail>,
+}
+
+/// One file of one mod, and the things in it that another mod also declares.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IssueDetail {
+    pub mod_id: String,
+    pub mod_name: String,
+    pub file: String,
+    pub declares: Vec<DeclaredThing>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeclaredThing {
+    /// `item Base.Axe`, as the game would name it.
+    pub definition: String,
+    /// The package file a merged block of it is written to.
+    pub merged_path: String,
+    /// pending, merged or stale, as the file conflicts say it.
+    pub state: String,
 }
 
 /// Collects issues; `related` is filled from the fixes (every fix names the other mod).
@@ -599,7 +646,7 @@ impl IssueList {
                 related.push(other.clone());
             }
         }
-        self.0.push(HealthIssue { severity, code: code.to_string(), mod_id: mod_id.map(str::to_string), message, fixes, related });
+        self.0.push(HealthIssue { severity, code: code.to_string(), mod_id: mod_id.map(str::to_string), message, fixes, related, details: vec![] });
     }
 
     fn relate_last(&mut self, other: &str) {
@@ -1450,6 +1497,16 @@ mod script_conflict_issue_tests {
         // comes last. (These mock values cannot be merged into one, so there is no auto-merge.)
         assert!(matches!(issues[0].fixes[0], SuggestedFix::OpenInMerger { .. }), "{:?}", issues[0].fixes);
         assert!(matches!(issues[0].fixes[1], SuggestedFix::MoveBefore { .. }), "{:?}", issues[0].fixes);
+        // File by file: each mod's file once, with the four things it declares, and the second
+        // pair's files apart from the first's.
+        let d = &issues[0].details;
+        assert_eq!(d.len(), 2, "{:#?}", d);
+        assert_eq!(d[0].mod_id, "Cars");
+        assert_eq!(d[0].declares.len(), 4);
+        assert_eq!(d[0].declares[0].definition, "item Base.ModernTire1");
+        assert!(d[0].declares[0].merged_path.starts_with("media/scripts/PZModStudio_"));
+        assert_eq!(d[0].declares[0].state, "pending");
+        assert_eq!(issues[1].details.len(), 2);
     }
 }
 

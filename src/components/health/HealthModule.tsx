@@ -466,6 +466,41 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-slate-200 break-words">{issue.message}</div>
                     <div className="text-[10px] font-mono text-slate-500 mt-0.5">{issue.code}</div>
+                    {issue.details && issue.details.length > 0 && (
+                      <details className="mt-1.5">
+                        <summary className="text-[11px] text-sky-300 cursor-pointer select-none">
+                          By file ({issue.details.length} file{issue.details.length === 1 ? '' : 's'})
+                        </summary>
+                        <div className="mt-1.5 flex flex-col gap-1.5">
+                          {issue.details.map((d) => (
+                            <div key={`${d.mod_id}:${d.file}`} className="rounded border border-slate-800 bg-slate-950/60 px-2 py-1.5">
+                              <div className="text-[11px] text-slate-300">
+                                <b className="text-slate-100">{d.mod_name}</b> <span className="font-mono text-slate-400">{d.file}</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {d.declares.map((t) => (
+                                  <button
+                                    key={t.definition}
+                                    type="button"
+                                    onClick={() => onOpenMerger(t.merged_path)}
+                                    title={`${t.definition}: ${t.state === 'merged' ? 'merged in your package' : t.state === 'stale' ? 'merged, but a mod changed since' : 'not settled yet'}. Click: open the merged block in the Merger`}
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono border cursor-pointer ${
+                                      t.state === 'merged'
+                                        ? 'border-emerald-800 text-emerald-300 bg-emerald-950/40'
+                                        : t.state === 'stale'
+                                        ? 'border-amber-800 text-amber-300 bg-amber-950/40'
+                                        : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                                    }`}
+                                  >
+                                    {t.definition}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                   {fixes.length > 0 && (
                     <div className="flex flex-wrap justify-end gap-1.5 shrink-0 max-w-[45%]">

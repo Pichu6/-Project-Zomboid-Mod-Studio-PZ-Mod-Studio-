@@ -421,6 +421,39 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "community_index_lookup".to_string(),
+            description: "What the community mod index says about one mod (or every mod, without mod_id): builds it runs on, requires, incompatible with, load after, its Build 42 successor, and known issues each with the fix the Studio can apply (shim_patch, require_path, compatible_copy, none), every entry with the build it was seen on and whether it was verified or reported. Fetched once a day from the Studio's repository (community/index.json), cached beside the mod list; null when none is at hand.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "mod_id": { "type": "string", "description": "The id= line of mod.info; omit for the whole index" }
+                }
+            }),
+        },
+        McpTool {
+            name: "refresh_community".to_string(),
+            description: "Fetches the community rules (community/rules.json) and the mod index (community/index.json) now, whatever the age of the cached copies, and says how many of each came.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" }
+                }
+            }),
+        },
+        McpTool {
+            name: "set_community_downloads".to_string(),
+            description: "Switches the daily download of the community rules and index on or off (Settings > Download the community rules and mod index). Off keeps the last copies and fetches nothing.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom user Zomboid directory" },
+                    "enabled": { "type": "boolean" }
+                },
+                "required": ["enabled"]
+            }),
+        },
+        McpTool {
             name: "list_load_rules".to_string(),
             description: "The player's own load-order rules (\"mod_id loads after after\", with a note), from Zomboid/PZModStudio_Rules.json. Auto-Sort follows them like loadModAfter; Mod Health reports a broken one as user_rule_order.".to_string(),
             input_schema: json!({
@@ -572,6 +605,9 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "publish_file_into_package" => handle_publish_file_into_package(args),
         "remove_file_from_package" => handle_remove_file_from_package(args),
         "keep_mod_version" => handle_keep_mod_version(args),
+        "community_index_lookup" => handle_community_index_lookup(args),
+        "refresh_community" => handle_refresh_community(args),
+        "set_community_downloads" => handle_set_community_downloads(args),
         "list_load_rules" => handle_list_load_rules(args),
         "add_load_rule" => handle_add_load_rule(args),
         "remove_load_rule" => handle_remove_load_rule(args),
@@ -1734,6 +1770,33 @@ fn handle_keep_mod_version(args: Value) -> ToolCallResult {
             crate::snapshots::keep_version(&paths.user_zomboid_dir, &m.id, &m.name, Path::new(&m.root_dir), m.info.mod_version.clone(), workshop_id)
         });
     json_result(result)
+}
+
+fn handle_community_index_lookup(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let index = crate::rules::index::current(&paths.user_zomboid_dir);
+    let mod_id = arg_str(&args, "mod_id");
+    if mod_id.is_empty() {
+        return json_result::<Option<crate::rules::index::CommunityIndex>>(Ok(index));
+    }
+    json_result(Ok(json!({
+        "summary": crate::rules::community::summary(&paths.user_zomboid_dir),
+        "registry": index.as_ref().and_then(|i| i.get(mod_id).cloned()),
+    })))
+}
+
+fn handle_refresh_community(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    json_result(
+        crate::rules::community::refresh(&paths.user_zomboid_dir)
+            .and_then(|rules| crate::rules::index::refresh(&paths.user_zomboid_dir).map(|index| rules.summary().with_index(Some(&index)))),
+    )
+}
+
+fn handle_set_community_downloads(args: Value) -> ToolCallResult {
+    let paths = resolve_paths(&args);
+    let enabled = args.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+    json_result(crate::rules::community::set_downloads_enabled(&paths.user_zomboid_dir, enabled).map(|_| json!({ "downloads": enabled })))
 }
 
 fn handle_list_load_rules(args: Value) -> ToolCallResult {

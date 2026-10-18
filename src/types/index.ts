@@ -357,6 +357,16 @@ export interface HealthIssue {
   fixes: HealthFix[];
   /** Other mod ids involved (dependency, incompatible mod, ...). */
   related: string[];
+  /** The same thing file by file, when the message lumps several (script conflicts). */
+  details?: IssueDetail[];
+}
+
+/** One file of one mod, and the things in it another mod also declares. */
+export interface IssueDetail {
+  mod_id: string;
+  mod_name: string;
+  file: string;
+  declares: { definition: string; merged_path: string; state: string }[];
 }
 
 /** One of the player's own load-order rules: `mod_id` must load after `after`. */
