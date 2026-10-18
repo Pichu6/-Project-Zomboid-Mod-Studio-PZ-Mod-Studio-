@@ -380,6 +380,24 @@ fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: 
     devtools::open_in_editor(&target, line, col)
 }
 
+/// The mod's Lua files changed after a moment (unix ms); all of them for 0.
+#[tauri::command(async)]
+fn changed_lua_files_cmd(root_dir: String, since_ms: u64) -> Vec<devtools::ChangedFile> {
+    devtools::changed_lua_files(std::path::Path::new(&root_dir), since_ms)
+}
+
+/// Asks the running game, through the bridge, to reload these Lua files; returns the request id.
+#[tauri::command(async)]
+fn reload_lua_in_game_cmd(paths: StudioPaths, files: Vec<String>) -> Result<String, String> {
+    devtools::reload_lua_in_game(&paths.user_zomboid_dir, &files)
+}
+
+/// What the game wrote back about the last reload request, when it has.
+#[tauri::command(async)]
+fn reload_result_cmd(paths: StudioPaths) -> Option<devtools::ReloadResult> {
+    devtools::read_reload_result(&paths.user_zomboid_dir)
+}
+
 /// Whether ProjectZomboid64.exe is running, and its pid.
 #[tauri::command(async)]
 fn game_status_cmd() -> Option<u32> {
@@ -989,6 +1007,9 @@ pub fn run() {
             validate_mod_cmd,
             open_in_editor_cmd,
             game_status_cmd,
+            changed_lua_files_cmd,
+            reload_lua_in_game_cmd,
+            reload_result_cmd,
             create_mod_list_cmd,
             rename_mod_list_cmd,
             delete_mod_list_cmd,

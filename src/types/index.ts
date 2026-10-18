@@ -359,6 +359,19 @@ export interface FileProblem {
   kind: 'lua' | 'script';
 }
 
+/** A Lua file of a mod changed since the last look. */
+export interface ChangedFile {
+  path: string;
+  absolute: string;
+  modified_ms: number;
+}
+
+/** What the game wrote back after reloading files: "ok <file>" or "failed <file>: <error>". */
+export interface ReloadResult {
+  id: string;
+  results: string[];
+}
+
 export interface ModValidation {
   root: string;
   lua_files: number;

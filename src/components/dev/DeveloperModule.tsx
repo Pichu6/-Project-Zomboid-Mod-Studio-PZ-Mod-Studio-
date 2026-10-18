@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Code2, ExternalLink, FolderOpen, Loader2, Play, RotateCcw, Wrench } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Code2, ExternalLink, FolderOpen, Loader2, Play, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
 import { CatalogModSummary, FileProblem, ModInfo, ModValidation } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -63,6 +63,66 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
     } catch {
       // Already shown by TauriService.
     }
+  };
+
+  /**
+   * Reload in the game while it runs: the bridge hands the game `reloadLuaFile` for each file
+   * that changed, and the game writes back what happened. Watching looks every two seconds.
+   */
+  const [watching, setWatching] = useState(false);
+  const [reloadLog, setReloadLog] = useState<string[]>([]);
+  const [reloading, setReloading] = useState(false);
+  const lastCheck = useRef<number>(Date.now());
+  const log = (line: string) => setReloadLog((l) => [`${new Date().toLocaleTimeString()}  ${line}`, ...l].slice(0, 40));
+
+  const reloadFiles = async (files: string[]) => {
+    if (files.length === 0) return;
+    if ((await TauriService.gameStatus()) === null) {
+      log('The game is not running: nothing to reload into. Start it (with the bridge on) first.');
+      return;
+    }
+    setReloading(true);
+    try {
+      const id = await TauriService.reloadLuaInGame(paths, files);
+      log(`Asked the game to reload ${files.length} file${files.length === 1 ? '' : 's'}…`);
+      // The bridge looks at its queue about twice a second; give it a few seconds.
+      for (let i = 0; i < 16; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        const result = await TauriService.reloadResult(paths);
+        if (result && result.id === id) {
+          result.results.forEach((r) => log(r));
+          return;
+        }
+      }
+      log('No answer from the game in 8 s: is the bridge mod (Z_PZModStudio_Bridge) on, and are you past the main menu? The Monitor shows the console.');
+    } catch {
+      // Already shown by TauriService.
+    } finally {
+      setReloading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!watching || !root) return;
+    lastCheck.current = Date.now();
+    const t = setInterval(() => {
+      void (async () => {
+        const since = lastCheck.current;
+        const changed = await TauriService.changedLuaFiles(root, since);
+        if (changed.length === 0) return;
+        lastCheck.current = Math.max(...changed.map((c) => c.modified_ms)) + 1;
+        changed.forEach((c) => log(`changed: ${c.path}`));
+        await reloadFiles(changed.map((c) => c.absolute));
+      })();
+    }, 2000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watching, root]);
+
+  const reloadAllNow = async () => {
+    if (!root) return;
+    const all = await TauriService.changedLuaFiles(root, 0);
+    await reloadFiles(all.map((c) => c.absolute));
   };
 
   const byFile = useMemo(() => {
@@ -142,9 +202,54 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               <Play className="w-3.5 h-3.5" aria-hidden="true" /> Start the game with only this mod
             </button>
           </div>
-          <p className="text-[11px] text-slate-500">
-            In the game, with Debug on, the Lua console reloads a file you changed without restarting (the EnableResetLuaButton mod puts a button for it on the screen).
-          </p>
+        </div>
+
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Reload in the game while it runs
+              </div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">
+                Save a Lua file of this mod and the game reloads it without restarting: the Studio's bridge hands the game
+                <code className="mx-1">reloadLuaFile</code> for each file that changed (what the game's own debug windows do),
+                and what happened shows here and in the console. The bridge mod must be on and the game past the main menu.
+                A file's top-level code runs again; tables it rebuilds are rebuilt, hooks it adds are added again.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={watching}
+              aria-label="Watch this mod's Lua files and reload them in the game when they change"
+              disabled={!root}
+              onClick={() => setWatching((w) => !w)}
+              className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer disabled:opacity-50 ${
+                watching ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-full bg-white shadow-md" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!root || reloading}
+              onClick={() => void reloadAllNow()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
+              title="Every .lua of this mod, now"
+            >
+              {reloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />} Reload every Lua of this mod now
+            </button>
+            {watching && <span className="text-[11px] text-emerald-300 self-center">Watching {mod?.name}: a saved .lua is reloaded within two seconds.</span>}
+          </div>
+          {reloadLog.length > 0 && (
+            <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 max-h-48 overflow-y-auto font-mono text-[10.5px] text-slate-300 flex flex-col gap-0.5">
+              {reloadLog.map((l, i) => (
+                <div key={i} className={l.includes('  failed ') ? 'text-red-300' : l.includes('  ok ') ? 'text-emerald-300' : ''}>{l}</div>
+              ))}
+            </div>
+          )}
         </div>
 
         {validation && (

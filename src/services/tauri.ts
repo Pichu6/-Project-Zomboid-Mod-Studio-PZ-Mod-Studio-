@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -437,6 +437,33 @@ export const TauriService = {
     } catch (err) {
       reportBackendError('Opening the file', err);
       throw err;
+    }
+  },
+
+  /** The mod's Lua files changed after a moment (unix ms); all for 0. */
+  changedLuaFiles: async (rootDir: string, sinceMs: number): Promise<ChangedFile[]> => {
+    try {
+      return await invoke<ChangedFile[]>('changed_lua_files_cmd', { rootDir, sinceMs });
+    } catch {
+      return [];
+    }
+  },
+
+  /** Asks the running game (through the bridge) to reload these files; resolves to the request id. */
+  reloadLuaInGame: async (paths: StudioPathsUI, files: string[]): Promise<string> => {
+    try {
+      return await invoke<string>('reload_lua_in_game_cmd', { paths, files });
+    } catch (err) {
+      reportBackendError('Reloading Lua in the game', err);
+      throw err;
+    }
+  },
+
+  reloadResult: async (paths: StudioPathsUI): Promise<ReloadResult | null> => {
+    try {
+      return await invoke<ReloadResult | null>('reload_result_cmd', { paths });
+    } catch {
+      return null;
     }
   },
 

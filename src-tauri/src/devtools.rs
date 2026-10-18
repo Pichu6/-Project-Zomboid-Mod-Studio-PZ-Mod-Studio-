@@ -219,3 +219,149 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+// ------------------------------------------------------------------------------------------
+// Reload a changed Lua file in the running game, through the bridge.
+//
+// The game's own debug windows call `reloadLuaFile(path)`; the bridge runs any Lua the Studio
+// hands it (`eval_lua`). So: find the files of the mod that changed since the last look, hand the
+// game a few lines that reload each one in a pcall, and have them write what happened to a file
+// of their own (`Zomboid/Lua/pz_dev_reload.json`), since the bridge overwrites its response file
+// with its own status after every command.
+// ------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChangedFile {
+    /// From the mod's root, with forward slashes.
+    pub path: String,
+    /// On disk, with forward slashes: what `reloadLuaFile` is given.
+    pub absolute: String,
+    pub modified_ms: u64,
+}
+
+fn modified_ms(path: &Path) -> Option<u64> {
+    path.metadata().ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_millis() as u64)
+}
+
+/// The mod's `.lua` files changed after `since_ms` (unix milliseconds); all of them for 0.
+pub fn changed_lua_files(root: &Path, since_ms: u64) -> Vec<ChangedFile> {
+    let mut out = Vec::new();
+    for entry in walkdir::WalkDir::new(root).into_iter().filter_map(Result::ok) {
+        let path = entry.path();
+        if !path.is_file() || !path.extension().map(|e| e.eq_ignore_ascii_case("lua")).unwrap_or(false) {
+            continue;
+        }
+        let Some(modified) = modified_ms(path) else { continue };
+        if modified > since_ms {
+            out.push(ChangedFile {
+                path: relative(root, path),
+                absolute: path.to_string_lossy().replace('\\', "/"),
+                modified_ms: modified,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    out
+}
+
+const RELOAD_RESULT_FILE: &str = "pz_dev_reload.json";
+
+/// A Lua string literal: backslashes and quotes escaped.
+fn lua_string(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The Lua the game runs: one `reloadLuaFile` per file, each in a pcall, the outcome printed to
+/// the console (where the Monitor sees it) and written to the result file with the request id.
+/// The JSON is built by hand because the game's Lua has no JSON library.
+pub fn reload_request_code(id: &str, files: &[String]) -> String {
+    let list: Vec<String> = files.iter().map(|f| lua_string(f)).collect();
+    let mut code = String::new();
+    code.push_str(&format!("local files = {{ {} }}\n", list.join(", ")));
+    code.push_str("local results = {}\n");
+    code.push_str("for _, f in ipairs(files) do\n");
+    code.push_str("  local ok, err = pcall(reloadLuaFile, f)\n");
+    code.push_str("  local line = (ok and 'ok ' or 'failed ') .. f .. (ok and '' or (': ' .. tostring(err)))\n");
+    code.push_str("  table.insert(results, line)\n");
+    code.push_str("  print('[PZModStudio] reload ' .. line)\n");
+    code.push_str("end\n");
+    code.push_str(&format!("local w = getFileWriter({}, true, false)\n", lua_string(RELOAD_RESULT_FILE)));
+    code.push_str("if w then\n");
+    // JSON-escape each result: a backslash becomes two, a quote gets one in front.
+    code.push_str("  local parts = {}\n");
+    code.push_str("  for _, r in ipairs(results) do\n");
+    code.push_str("    local s = string.gsub(tostring(r), '\\\\', '\\\\\\\\')\n");
+    code.push_str("    s = string.gsub(s, '\"', '\\\\\"')\n");
+    code.push_str("    table.insert(parts, '\"' .. s .. '\"')\n");
+    code.push_str("  end\n");
+    code.push_str(&format!("  w:write('{{\"id\":\"{}\",\"results\":[' .. table.concat(parts, ',') .. ']}}')\n", id));
+    code.push_str("  w:close()\n");
+    code.push_str("end\n");
+    code
+}
+
+/// Asks the running game to reload these files; returns the request id to wait for.
+pub fn reload_lua_in_game(user_zomboid_dir: &str, files: &[String]) -> Result<String, String> {
+    if files.is_empty() {
+        return Err("Nothing to reload.".to_string());
+    }
+    let id = format!("reload_{}", chrono::Utc::now().timestamp_millis());
+    // The result file from the last time would answer for this one.
+    for dir in [Path::new(user_zomboid_dir).join("Lua"), PathBuf::from(user_zomboid_dir)] {
+        let _ = std::fs::remove_file(dir.join(RELOAD_RESULT_FILE));
+    }
+    let command = serde_json::json!({ "id": id, "action": "eval_lua", "code": reload_request_code(&id, files) });
+    crate::sandbox::write_game_ipc_command(user_zomboid_dir, command)?;
+    Ok(id)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReloadResult {
+    pub id: String,
+    /// "ok <file>" or "failed <file>: <error>", one per file.
+    pub results: Vec<String>,
+}
+
+/// What the game wrote back, when it has.
+pub fn read_reload_result(user_zomboid_dir: &str) -> Option<ReloadResult> {
+    for dir in [Path::new(user_zomboid_dir).join("Lua"), PathBuf::from(user_zomboid_dir)] {
+        if let Ok(text) = std::fs::read_to_string(dir.join(RELOAD_RESULT_FILE)) {
+            if let Ok(r) = serde_json::from_str::<ReloadResult>(&text) {
+                return Some(r);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod reload_tests {
+    use super::*;
+
+    #[test]
+    fn the_request_names_each_file_and_the_result_file_and_carries_its_id() {
+        let code = reload_request_code("reload_1", &["C:/Users/x/Zomboid/mods/My/42/media/lua/client/a.lua".into(), "D:/q\"uote.lua".into()]);
+        assert!(code.contains("\"C:/Users/x/Zomboid/mods/My/42/media/lua/client/a.lua\""));
+        assert!(code.contains("\"D:/q\\\"uote.lua\""), "{}", code);
+        assert!(code.contains("pcall(reloadLuaFile, f)"));
+        assert!(code.contains("getFileWriter(\"pz_dev_reload.json\""));
+        assert!(code.contains("\"id\":\"reload_1\""), "{}", code);
+        // The Lua escapes a backslash in a result as two, and a quote with one in front.
+        assert!(code.contains("string.gsub(tostring(r), '\\\\', '\\\\\\\\')"), "{}", code);
+        let r: ReloadResult = serde_json::from_str(r#"{"id":"reload_1","results":["ok a.lua","failed b.lua: nope"]}"#).unwrap();
+        assert_eq!(r.results.len(), 2);
+    }
+
+    #[test]
+    fn changed_files_are_those_touched_after_the_mark() {
+        let dir = std::env::temp_dir().join(format!("pzms-reload-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("media/lua/client")).unwrap();
+        std::fs::write(dir.join("media/lua/client/a.lua"), "x=1").unwrap();
+        let all = changed_lua_files(&dir, 0);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].path, "media/lua/client/a.lua");
+        assert!(changed_lua_files(&dir, all[0].modified_ms + 1).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
