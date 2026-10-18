@@ -89,7 +89,7 @@ a machine could not.
 
 ## The web view
 
-`site/index.html` shows the same data in a browser: search, a build filter, a card per mod, the
+Live at https://pichu6.github.io/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/ — `site/index.html` shows the same data in a browser: search, a build filter, a card per mod, the
 detail with its issues and fixes, the rules table, and links to propose. `.github/workflows/pages.yml`
 publishes it as GitHub Pages with `index.json` and `rules.json` beside it, on every push that touches
 them; it needs Pages enabled once in the repository settings (Settings → Pages → Source: GitHub
