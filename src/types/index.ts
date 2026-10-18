@@ -83,6 +83,13 @@ export interface ModErrorStat {
   last_warning: string | null;
 }
 
+/** How long each mod's files took to load in the last session, from the game's DebugLog. */
+export interface LoadTimes {
+  log_file: string | null;
+  session: string | null;
+  mods: { mod_id: string; millis: number }[];
+}
+
 /** A copy of a mod as it was installed on a day, kept so an update can be undone. */
 export interface KeptVersion {
   mod_id: string;

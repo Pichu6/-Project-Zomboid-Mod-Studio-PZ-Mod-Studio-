@@ -16,6 +16,7 @@ export interface ModRowBodyProps {
   isBridge: boolean;
   catalogById?: Map<string, CatalogModSummary>;
   errorStats?: Map<string, ModErrorStat>;
+  loadTimes?: Map<string, number>;
   /** Showing everything: say which profiles each mod belongs to. */
   showEveryMod: boolean;
   activeProfile: AppInstance | null;
@@ -56,6 +57,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   isBridge,
   catalogById,
   errorStats,
+  loadTimes,
   showEveryMod,
   activeProfile,
   profilesByMod,
@@ -201,7 +203,24 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             );
           })()}
 
-          {/* Showing everything: say which profiles each mod belongs to. */}
+          {/* Its files' share of the loading screen last session, when it is worth a word. */}
+        {(() => {
+          const ms = loadTimes?.get(mod.mod_id);
+          if (ms === undefined || ms < 250) return null;
+          const slow = ms >= 1000;
+          return (
+            <span
+              className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
+                slow ? 'bg-amber-950/50 text-amber-300 border-amber-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
+              }`}
+              title={`Its files took ${(ms / 1000).toFixed(1)} s to load last session (the game's DebugLog: from its "loading" line to the next mod's). The Lua that runs after is loaded in one pass and is not timed per mod. Most mods take a few ms; tile and model packs take the most.`}
+            >
+              {ms >= 1000 ? `${(ms / 1000).toFixed(1)} s to load` : `${ms} ms to load`}
+            </span>
+          );
+        })()}
+
+        {/* Showing everything: say which profiles each mod belongs to. */}
           {showEveryMod && activeProfile && (() => {
             const usedBy = profilesByMod.get(mod.mod_id) ?? [];
             const others = usedBy.filter((name) => name !== activeProfile.name);

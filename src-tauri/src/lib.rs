@@ -345,6 +345,12 @@ fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
     sandbox::error_stats_from_console(&paths.user_zomboid_dir)
 }
 
+/// How long each mod's files took to load in the last session, from the game's DebugLog.
+#[tauri::command(async)]
+fn mod_load_times_cmd(paths: StudioPaths) -> sandbox::load_times::LoadTimes {
+    sandbox::load_times::from_logs(&paths.user_zomboid_dir)
+}
+
 /// The active profile was just played: remember on which build.
 #[tauri::command(async)]
 fn mark_profile_played_cmd(user_zomboid_dir: String, instance_id: String) -> Result<Option<String>, String> {
@@ -906,6 +912,7 @@ pub fn run() {
             list_kept_versions_cmd,
             mark_profile_played_cmd,
             mod_error_stats_cmd,
+            mod_load_times_cmd,
             restore_kept_version_cmd,
             delete_kept_version_cmd,
             nexus_search_cmd,

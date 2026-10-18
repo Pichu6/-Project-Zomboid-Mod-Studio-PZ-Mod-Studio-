@@ -1,3 +1,4 @@
+pub mod load_times;
 pub mod requires;
 
 use serde::{Deserialize, Serialize};

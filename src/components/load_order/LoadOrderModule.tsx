@@ -55,6 +55,8 @@ interface LoadOrderModuleProps {
   catalogById?: Map<string, CatalogModSummary>;
   /** What each mod did to the last session's log, by the name the game writes. */
   errorStats?: Map<string, ModErrorStat>;
+  /** Mod id -> how long its files took to load last session, in ms (the game's DebugLog). */
+  loadTimes?: Map<string, number>;
   /** The game build installed now, named in a rule proposed to the community. */
   installedBuild?: string | null;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
@@ -108,6 +110,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   healthIssues = null,
   catalogById,
   errorStats,
+  loadTimes,
   installedBuild = null,
   onOpenInBrowser,
   onOpenMerger,
@@ -1199,6 +1202,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       isBridge={isBridge}
                       catalogById={catalogById}
                       errorStats={errorStats}
+                      loadTimes={loadTimes}
                       showEveryMod={showEveryMod}
                       activeProfile={activeProfile}
                       profilesByMod={profilesByMod}

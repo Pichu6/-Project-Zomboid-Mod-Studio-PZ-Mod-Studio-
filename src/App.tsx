@@ -72,10 +72,14 @@ export const App: React.FC = () => {
    * "threw 413 times last session" without the Monitor open.
    */
   const [errorStats, setErrorStats] = useState<Map<string, ModErrorStat>>(new Map());
+  /** Mod id -> how long its files took to load last session, read with the error stats. */
+  const [loadTimes, setLoadTimes] = useState<Map<string, number>>(new Map());
   const loadErrorStats = useCallback(async () => {
     if (!paths.is_valid) return;
     const list = await TauriService.modErrorStats(paths);
     setErrorStats(new Map(list.map((s) => [s.mod_name, s])));
+    const times = await TauriService.modLoadTimes(paths);
+    setLoadTimes(new Map(times.mods.map((t) => [t.mod_id, t.millis])));
   }, [paths]);
   useEffect(() => {
     void loadErrorStats();
@@ -641,6 +645,7 @@ Start the game anyway?`
               healthIssues={health.report?.issues ?? null}
               catalogById={health.catalogById}
               errorStats={errorStats}
+              loadTimes={loadTimes}
               installedBuild={health.report?.game_version ?? null}
               onOpenMerger={(relativePath) => {
                 setMergerFocusPath(relativePath);
