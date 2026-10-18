@@ -12,6 +12,7 @@ const LABELS: Record<string, string> = {
   dependency_unavailable: 'Needs a mod this build cannot load',
   dependency_after: 'Loads before what it needs',
   load_after_order: 'Loads too early',
+  user_rule_order: 'Before a mod you said it must follow',
   load_before_order: 'Loads too late',
   incompatible: 'Incompatible',
   not_for_build: 'Not for this build',

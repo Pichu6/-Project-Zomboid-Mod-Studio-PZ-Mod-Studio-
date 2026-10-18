@@ -13,6 +13,7 @@ pub mod nexus;
 pub mod origins;
 pub mod patch_generator;
 pub mod preset_manager;
+pub mod rules;
 pub mod sandbox;
 pub mod scripts;
 pub mod secrets;
@@ -318,8 +319,25 @@ fn delete_kept_version_cmd(paths: StudioPaths, path: String) -> Result<(), Strin
 /// wherever no require/loadModAfter/loadModBefore rule forces a change.
 #[tauri::command(async)]
 fn sort_load_order_cmd(paths: StudioPaths, order: Vec<String>) -> catalog::SortResult {
-    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let mut catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    // The player's own rules, as if each mod had written loadModAfter itself.
+    rules::apply_to_catalog(&mut catalog, &rules::load_rules(&paths.user_zomboid_dir));
     catalog::sort_load_order(&catalog, &order)
+}
+
+#[tauri::command(async)]
+fn list_load_rules_cmd(paths: StudioPaths) -> Vec<rules::UserRule> {
+    rules::load_rules(&paths.user_zomboid_dir)
+}
+
+#[tauri::command(async)]
+fn add_load_rule_cmd(paths: StudioPaths, mod_id: String, after: String, note: Option<String>) -> Result<Vec<rules::UserRule>, String> {
+    rules::add_rule(&paths.user_zomboid_dir, &mod_id, &after, note)
+}
+
+#[tauri::command(async)]
+fn remove_load_rule_cmd(paths: StudioPaths, mod_id: String, after: String) -> Result<Vec<rules::UserRule>, String> {
+    rules::remove_rule(&paths.user_zomboid_dir, &mod_id, &after)
 }
 
 #[tauri::command(async)]
@@ -790,6 +808,9 @@ pub fn run() {
             get_mod_health_cmd,
             auto_merge_conflicts_cmd,
             sort_load_order_cmd,
+            list_load_rules_cmd,
+            add_load_rule_cmd,
+            remove_load_rule_cmd,
             make_compatible_copy_cmd,
             remove_compatible_copy_cmd,
             keep_mod_version_cmd,

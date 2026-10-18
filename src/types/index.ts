@@ -352,6 +352,13 @@ export interface HealthIssue {
   related: string[];
 }
 
+/** One of the player's own load-order rules: `mod_id` must load after `after`. */
+export interface UserRule {
+  mod_id: string;
+  after: string;
+  note: string | null;
+}
+
 /** The installed game as Steam's app manifest describes it. */
 export interface GameInstall {
   /** "stable" when no beta is opted into, else the beta's name ("unstable", "legacy41", ...). */

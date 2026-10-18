@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -351,6 +351,33 @@ export const TauriService = {
       return await invoke<KeptVersion>('keep_mod_version_cmd', { paths, modId });
     } catch (err) {
       reportBackendError('Keeping a copy of the mod', err);
+      throw err;
+    }
+  },
+
+  /** The player's own load-order rules. */
+  listLoadRules: async (paths: StudioPathsUI): Promise<UserRule[]> => {
+    try {
+      return await invoke<UserRule[]>('list_load_rules_cmd', { paths });
+    } catch {
+      return [];
+    }
+  },
+
+  addLoadRule: async (paths: StudioPathsUI, modId: string, after: string, note: string | null): Promise<UserRule[]> => {
+    try {
+      return await invoke<UserRule[]>('add_load_rule_cmd', { paths, modId, after, note });
+    } catch (err) {
+      reportBackendError('Adding the load-order rule', err);
+      throw err;
+    }
+  },
+
+  removeLoadRule: async (paths: StudioPathsUI, modId: string, after: string): Promise<UserRule[]> => {
+    try {
+      return await invoke<UserRule[]>('remove_load_rule_cmd', { paths, modId, after });
+    } catch (err) {
+      reportBackendError('Removing the load-order rule', err);
       throw err;
     }
   },

@@ -10,6 +10,7 @@ import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
 import { RowHealthChips } from './RowHealth';
 import { KeptVersions } from './KeptVersions';
+import { LoadRules } from './LoadRules';
 import {
   BookOpen,
   Copy,
@@ -61,6 +62,8 @@ interface LoadOrderModuleProps {
   onOpenMerger?: (relativePath: string) => void;
   /** Opens Mod Health, for a fix a row cannot apply by itself. */
   onGoToHealth?: () => void;
+  /** The player's load-order rules changed: the health check reads them again. */
+  onRulesChanged?: () => void;
   /** Every saved profile, so the list can show which of them a mod belongs to. */
   profiles?: AppInstance[];
   activeProfileId?: string | null;
@@ -107,6 +110,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   onOpenInBrowser,
   onOpenMerger,
   onGoToHealth,
+  onRulesChanged,
   profiles = [],
   activeProfileId = null,
 }) => {
@@ -125,6 +129,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const modRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   /** The mod whose kept versions are open in the dialog. */
   const [keptVersionsOf, setKeptVersionsOf] = useState<ModInfo | null>(null);
+  /** The mod whose load-order rules are open in the dialog. */
+  const [rulesOf, setRulesOf] = useState<ModInfo | null>(null);
 
   const triggerReorder = (newOrder: ModInfo[]) => {
     onReorder(newOrder);
@@ -506,6 +512,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       onSelect: () => TauriService.openModFolder(paths, catalogById?.get(mod.mod_id)?.root_dir ?? ''),
       disabled: !catalogById?.get(mod.mod_id)?.root_dir,
       disabledReason: 'The Studio does not know where this mod lives',
+    },
+    {
+      label: 'Load-order rules…',
+      icon: ListOrdered,
+      separatorBefore: true,
+      onSelect: () => setRulesOf(mod),
     },
     {
       label: 'Keep this version',
@@ -927,6 +939,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
           <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
           <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
+          <LoadRules paths={paths} mod={rulesOf} mods={mods} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
 
           <button
             onClick={handleAutoSortDependencies}

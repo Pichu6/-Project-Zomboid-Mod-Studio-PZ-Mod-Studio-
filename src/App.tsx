@@ -642,6 +642,7 @@ Start the game anyway?`
                 setActiveTab('MERGER');
               }}
               onGoToHealth={() => setActiveTab('HEALTH')}
+              onRulesChanged={health.recheck}
               profiles={profiles}
               activeProfileId={activeProfile?.id ?? null}
               onOpenInBrowser={(workshopId) => {

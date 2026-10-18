@@ -269,6 +269,7 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
     let catalog = build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
     let mut report = health_report(&catalog, active);
     report.install = read_game_install(&paths.pz_install_dir);
+    add_user_rule_issues(&mut report, &catalog, active, &crate::rules::load_rules(&paths.user_zomboid_dir));
     let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
     add_file_conflict_issues(&mut report, &conflicts);
     ModHealth { catalog, report }
@@ -593,6 +594,74 @@ pub struct HealthReport {
     pub errors: usize,
     pub warnings: usize,
     pub issues: Vec<HealthIssue>,
+}
+
+/// The player's own load-order rules, checked against the active list. A broken rule is a
+/// warning in the player's words, with the move that mends it; a rule about a mod that is off
+/// or not installed says nothing, like the game's own rules.
+pub fn add_user_rule_issues(report: &mut HealthReport, catalog: &ModCatalog, active: &[String], rules: &[crate::rules::UserRule]) {
+    if rules.is_empty() {
+        return;
+    }
+    let active_ids: Vec<String> = active
+        .iter()
+        .map(|e| resolve_entry(catalog, e.trim()).map(|m| m.id.clone()).unwrap_or_else(|| e.trim().to_string()))
+        .collect();
+    let position: HashMap<&str, usize> = active_ids.iter().enumerate().rev().map(|(i, id)| (id.as_str(), i)).collect();
+    let mut list = IssueList(Vec::new());
+    for rule in rules {
+        let (Some(&at), Some(&after_at)) = (position.get(rule.mod_id.as_str()), position.get(rule.after.as_str())) else { continue };
+        if at < after_at {
+            let name = |id: &str| catalog.get(id).map(describe).unwrap_or_else(|| id.to_string());
+            list.push(Severity::Warning, "user_rule_order", Some(&rule.mod_id),
+                format!("You asked for {} to load after {}{}, and it comes before it in the list",
+                    name(&rule.mod_id), name(&rule.after),
+                    rule.note.as_deref().map(|n| format!(" ({})", n)).unwrap_or_default()),
+                vec![SuggestedFix::MoveBefore { mod_id: rule.after.clone(), before: rule.mod_id.clone() }]);
+        }
+    }
+    for issue in list.0 {
+        match issue.severity {
+            Severity::Error => report.errors += 1,
+            Severity::Warning => report.warnings += 1,
+            Severity::Info => {}
+        }
+        report.issues.push(issue);
+    }
+}
+
+#[cfg(test)]
+mod user_rule_tests {
+    use super::*;
+
+    #[test]
+    fn a_broken_rule_is_a_warning_with_the_move_that_mends_it() {
+        let mut catalog = ModCatalog { game_version: None, mods: Vec::new() };
+        for id in ["Overhaul", "Library"] {
+            catalog.mods.push(CatalogMod {
+                id: id.to_string(), name: id.to_string(), source: ModSource::Local, root_dir: String::new(),
+                mod_info_path: None, version_folders: Vec::new(), has_common: false, has_root_mod_info: true,
+                loadability: Loadability::Loadable, shadowed_by: None, origin: None, workshop_state: None,
+                info: GameModInfo::default(),
+            });
+        }
+        let rules = vec![crate::rules::UserRule { mod_id: "Overhaul".into(), after: "Library".into(), note: Some("recipes vanish".into()) }];
+        let active = vec!["Overhaul".to_string(), "Library".to_string()];
+        let mut report = HealthReport { game_version: None, install: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        add_user_rule_issues(&mut report, &catalog, &active, &rules);
+        assert_eq!(report.warnings, 1);
+        let issue = &report.issues[0];
+        assert_eq!(issue.code, "user_rule_order");
+        assert!(issue.message.contains("recipes vanish"), "{}", issue.message);
+        assert!(matches!(&issue.fixes[0], SuggestedFix::MoveBefore { mod_id, before } if mod_id == "Library" && before == "Overhaul"));
+
+        // In order: nothing to say. A mod that is off: nothing either.
+        let mut ok = HealthReport { game_version: None, install: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        add_user_rule_issues(&mut ok, &catalog, &["Library".to_string(), "Overhaul".to_string()], &rules);
+        assert!(ok.issues.is_empty());
+        add_user_rule_issues(&mut ok, &catalog, &["Overhaul".to_string()], &rules);
+        assert!(ok.issues.is_empty());
+    }
 }
 
 /// The installed game as Steam's app manifest describes it.
