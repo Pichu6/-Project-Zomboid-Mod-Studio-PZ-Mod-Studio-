@@ -122,8 +122,8 @@ Asked 2026-10-18: the Studio already carries developer tools (the MCP server, th
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | Launch the game in debug with only the mod under development, and "Reset Lua" to reload it without restarting (~1.5 h) | The most used loop. The EnableResetLuaButton mod does the reload today |
-| ⬜ | Validate a whole mod: every Lua and script file, errors by file, "open in VS Code" (~1.5 h) | The parser is the Merger's (full_moon + the script brace-walker) |
+| 🔨 | Launch the game in debug with only the mod under development, and "Reset Lua" to reload it without restarting | Done 2026-10-18: a Developer screen (shown with "Developer features" in Settings) starts the game in Debug (Windowed) with only the chosen mod, what it requires and the bridge on; the list is set aside and comes back by itself once the game closes (or with one button), and Earlier lists keeps it too. Reset Lua: the EnableResetLuaButton mod does it in the game; a Studio button through the bridge (`reloadLuaFile`) is the next step |
+| ✅ | Validate a whole mod: every Lua and script file, errors by file, "open in VS Code" | Done 2026-10-18 (`devtools.rs`): every `.lua` through the Merger's parser (one row per error, line and column), every `media/scripts/*.txt` through a brace check (an unclosed block loses the rest of the file to the game); a row opens the file at the line in VS Code when `code` is on the PATH, else in the file's own program |
 | ⬜ | TileZed / WorldEd (TIS's own map editors): launch from the app with the mod as target when they are installed (~1 h) | External programs; the app only opens them with the right folder |
 | ⬜ | New-mod template: mod.info, the 42/ + common/ layout, poster (~1 h) | |
 | — | Blender / animations and the Workshop upload | Done outside and in the game; not the Studio's |

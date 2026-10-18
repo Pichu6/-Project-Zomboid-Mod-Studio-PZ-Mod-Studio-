@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActiveTab } from '../../types';
-import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2 } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -20,6 +20,13 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   errorCardCount,
   healthErrorCount = 0,
 }) => {
+  // The Developer screen shows with "Developer features" in Settings, the way the MCP tab does.
+  const [developer, setDeveloper] = useState(() => localStorage.getItem('pz_show_advanced') === 'true');
+  useEffect(() => {
+    const onChange = (e: Event) => setDeveloper(Boolean((e as CustomEvent<boolean>).detail));
+    window.addEventListener('pzms-advanced-changed', onChange);
+    return () => window.removeEventListener('pzms-advanced-changed', onChange);
+  }, []);
   const navItems = [
     {
       id: 'PROFILES' as ActiveTab,
@@ -69,6 +76,16 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       badgeColor: '',
       requiresProfile: true,
     },
+    ...(developer
+      ? [{
+          id: 'DEVELOPER' as ActiveTab,
+          label: 'Developer',
+          icon: Code2,
+          badge: null,
+          badgeColor: '',
+          requiresProfile: true,
+        }]
+      : []),
     {
       id: 'SERVERS' as ActiveTab,
       label: 'Servers',

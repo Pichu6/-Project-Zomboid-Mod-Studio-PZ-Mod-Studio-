@@ -2,6 +2,7 @@ pub mod bisect;
 pub mod catalog;
 pub mod claude_agent;
 pub mod compat;
+pub mod devtools;
 pub mod diff_engine;
 pub mod error_report;
 pub mod images;
@@ -344,6 +345,45 @@ fn keep_mod_version_cmd(paths: StudioPaths, mod_id: String) -> Result<snapshots:
 #[tauri::command(async)]
 fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
     sandbox::error_stats_from_console(&paths.user_zomboid_dir)
+}
+
+/// Every Lua and script file of a mod, checked: one row per problem with file, line and column.
+#[tauri::command(async)]
+fn validate_mod_cmd(paths: StudioPaths, root_dir: String) -> Result<devtools::ModValidation, String> {
+    let root = std::fs::canonicalize(&root_dir).map_err(|_| format!("{} is not there any more.", root_dir))?;
+    let allowed = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
+        .iter()
+        .filter(|d| !d.is_empty())
+        .filter_map(|d| std::fs::canonicalize(d).ok())
+        .any(|r| root.starts_with(r));
+    if !allowed {
+        return Err("That folder is outside your game and Zomboid folders.".to_string());
+    }
+    if !devtools::looks_like_a_mod(&root) {
+        return Err("That folder has no mod.info.".to_string());
+    }
+    devtools::validate_mod(&root)
+}
+
+/// Opens a file of a mod at a line: VS Code when it is on the PATH, else the file's own program.
+#[tauri::command(async)]
+fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: Option<u32>) -> Result<String, String> {
+    let target = std::fs::canonicalize(&file).map_err(|_| format!("{} is not there.", file))?;
+    let allowed = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
+        .iter()
+        .filter(|d| !d.is_empty())
+        .filter_map(|d| std::fs::canonicalize(d).ok())
+        .any(|r| target.starts_with(r));
+    if !allowed {
+        return Err("That file is outside your game and Zomboid folders.".to_string());
+    }
+    devtools::open_in_editor(&target, line, col)
+}
+
+/// Whether ProjectZomboid64.exe is running, and its pid.
+#[tauri::command(async)]
+fn game_status_cmd() -> Option<u32> {
+    sandbox::find_running_pz_pid()
 }
 
 /// The player's lists of mods (Favorites first), from Zomboid/PZModStudio_Lists.json.
@@ -946,6 +986,9 @@ pub fn run() {
             mod_error_stats_cmd,
             mod_load_times_cmd,
             mod_lists_cmd,
+            validate_mod_cmd,
+            open_in_editor_cmd,
+            game_status_cmd,
             create_mod_list_cmd,
             rename_mod_list_cmd,
             delete_mod_list_cmd,

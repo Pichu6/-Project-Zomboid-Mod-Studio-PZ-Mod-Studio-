@@ -3,7 +3,7 @@ import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -420,6 +420,35 @@ export const TauriService = {
   },
 
   /** What each mod did to the last session's log, from console.txt as it is now. */
+  /** Every Lua and script file of a mod checked; throws with the reason. */
+  validateMod: async (paths: StudioPathsUI, rootDir: string): Promise<ModValidation> => {
+    try {
+      return await invoke<ModValidation>('validate_mod_cmd', { paths, rootDir });
+    } catch (err) {
+      reportBackendError('Checking the mod', err);
+      throw err;
+    }
+  },
+
+  /** Opens a file at a line in VS Code or the file's own program; resolves to which. */
+  openInEditor: async (paths: StudioPathsUI, file: string, line: number | null, col: number | null): Promise<string> => {
+    try {
+      return await invoke<string>('open_in_editor_cmd', { paths, file, line, col });
+    } catch (err) {
+      reportBackendError('Opening the file', err);
+      throw err;
+    }
+  },
+
+  /** The game's pid when ProjectZomboid64.exe is running, else null. */
+  gameStatus: async (): Promise<number | null> => {
+    try {
+      return await invoke<number | null>('game_status_cmd');
+    } catch {
+      return null;
+    }
+  },
+
   /** The player's lists of mods, Favorites first. */
   modLists: async (userZomboidDir: string): Promise<ModList[]> => {
     try {

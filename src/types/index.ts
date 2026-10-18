@@ -348,7 +348,23 @@ export const profileBuildMajor = (p: AppInstance | null | undefined): string | n
 
 export type AppProfile = AppInstance;
 
-export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+
+/** One thing wrong in one file of a mod, as the Developer screen lists it. */
+export interface FileProblem {
+  path: string;
+  line: number | null;
+  col: number | null;
+  message: string;
+  kind: 'lua' | 'script';
+}
+
+export interface ModValidation {
+  root: string;
+  lua_files: number;
+  script_files: number;
+  problems: FileProblem[];
+}
 
 // ---- Mod health (Rust catalog module) ----
 export type HealthSeverity = 'error' | 'warning' | 'info';

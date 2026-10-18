@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, profileBuildMajor } from './types';
+import { DeveloperModule } from './components/dev/DeveloperModule';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
@@ -550,6 +551,48 @@ Start the game anyway?`
     setErrorCards([]);
   };
 
+  /**
+   * Developer: the game with only one mod on. The list as it is goes aside (Earlier lists keeps
+   * it too), the mod with what it requires and the Studio's bridge go on, the game starts in
+   * Debug (Windowed), and the list comes back by itself once the game has closed.
+   */
+  const [devLaunch, setDevLaunch] = useState<{ modId: string; since: string; saved: ModInfo[] } | null>(null);
+  const restoreDevList = useCallback(() => {
+    if (!devLaunch) return;
+    const saved = devLaunch.saved;
+    setDevLaunch(null);
+    handleApplyPresetLoadOrder(saved.map((m) => m.mod_id), saved.filter((m) => m.enabled).map((m) => m.mod_id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devLaunch, mods]);
+  const launchOnly = async (modId: string) => {
+    const wanted = new Set<string>([modId, 'Z_PZModStudio_Bridge']);
+    const byId = new Map(mods.map((m) => [m.mod_id, m]));
+    const queue = [modId];
+    while (queue.length) {
+      for (const dep of byId.get(queue.shift()!)?.dependencies ?? []) {
+        const found = mods.find((m) => m.mod_id === dep || m.mod_id.endsWith(`/${dep}`));
+        if (found && !wanted.has(found.mod_id)) {
+          wanted.add(found.mod_id);
+          queue.push(found.mod_id);
+        }
+      }
+    }
+    setDevLaunch({ modId, since: new Date().toLocaleTimeString(), saved: mods.map((m) => ({ ...m })) });
+    handleApplyPresetLoadOrder(mods.map((m) => m.mod_id), [...wanted]);
+    await executeLaunch('DEBUG_WINDOWED');
+  };
+  useEffect(() => {
+    if (!devLaunch) return;
+    let seenRunning = false;
+    const t = setInterval(() => {
+      void TauriService.gameStatus().then((pid) => {
+        if (pid !== null) seenRunning = true;
+        else if (seenRunning) restoreDevList();
+      });
+    }, 5000);
+    return () => clearInterval(t);
+  }, [devLaunch, restoreDevList]);
+
   const handleSavePaths = async (updatedPaths: StudioPathsUI) => {
     const saved = await TauriService.savePathsProfile(updatedPaths);
     setPaths(saved);
@@ -756,6 +799,17 @@ Start the game anyway?`
               onClearErrorCards={handleClearErrorCards}
               onDismissErrorCard={(id) => setErrorCards((prev) => prev.filter((c) => c.id !== id))}
               onGoToSettings={() => setActiveTab('SETTINGS')}
+            />
+          )}
+
+          {activeTab === 'DEVELOPER' && (
+            <DeveloperModule
+              paths={paths}
+              mods={mods}
+              catalogById={health.catalogById}
+              onLaunchOnly={(modId) => void launchOnly(modId)}
+              devLaunch={devLaunch ? { modId: devLaunch.modId, since: devLaunch.since } : null}
+              onRestoreList={restoreDevList}
             />
           )}
 
