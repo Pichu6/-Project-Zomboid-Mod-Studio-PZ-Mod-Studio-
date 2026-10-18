@@ -268,6 +268,7 @@ pub fn mod_health(workshop_dir: &str, user_zomboid_dir: &str, active: &[String])
 pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> ModHealth {
     let catalog = build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
     let mut report = health_report(&catalog, active);
+    report.install = read_game_install(&paths.pz_install_dir);
     let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
     add_file_conflict_issues(&mut report, &conflicts);
     ModHealth { catalog, report }
@@ -585,10 +586,71 @@ impl IssueList {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthReport {
     pub game_version: Option<String>,
+    /// What Steam says about the installed game: the branch and when it last updated.
+    #[serde(default)]
+    pub install: Option<GameInstall>,
     pub active_count: usize,
     pub errors: usize,
     pub warnings: usize,
     pub issues: Vec<HealthIssue>,
+}
+
+/// The installed game as Steam's app manifest describes it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GameInstall {
+    /// "stable" when no beta is opted into, else the beta's name ("unstable", "legacy41", "b41multiplayer"...).
+    pub branch: String,
+    /// Steam's build id for what is on disk.
+    pub build_id: Option<String>,
+    /// When Steam last updated the game, as a date.
+    pub last_updated: Option<String>,
+}
+
+/// What `appmanifest_108600.acf` says. Steam writes the beta under UserConfig (chosen) and
+/// MountedConfig (what is on disk); either names it, and neither is written on the default
+/// branch.
+pub fn game_install_from_manifest(text: &str) -> GameInstall {
+    let vdf = crate::vdf::parse(text);
+    let state = vdf.get("AppState").unwrap_or(&vdf);
+    let beta = ["MountedConfig", "UserConfig"]
+        .iter()
+        .filter_map(|k| state.get(k))
+        .filter_map(|cfg| cfg.str("BetaKey"))
+        .map(str::trim)
+        .find(|b| !b.is_empty() && !b.eq_ignore_ascii_case("public"));
+    GameInstall {
+        branch: beta.map(str::to_string).unwrap_or_else(|| "stable".to_string()),
+        build_id: state.str("buildid").map(|s| s.trim().to_string()),
+        last_updated: state
+            .u64("LastUpdated")
+            .and_then(|t| chrono::DateTime::from_timestamp(t as i64, 0))
+            .map(|d| d.format("%Y-%m-%d").to_string()),
+    }
+}
+
+/// The manifest beside the game: `<library>/steamapps/common/ProjectZomboid` ->
+/// `<library>/steamapps/appmanifest_108600.acf`. None when the game is not a Steam install.
+pub fn read_game_install(pz_install_dir: &str) -> Option<GameInstall> {
+    let manifest = std::path::Path::new(pz_install_dir).parent()?.parent()?.join("appmanifest_108600.acf");
+    let text = std::fs::read_to_string(manifest).ok()?;
+    Some(game_install_from_manifest(&text))
+}
+
+#[cfg(test)]
+mod game_install_tests {
+    use super::game_install_from_manifest;
+
+    #[test]
+    fn the_branch_is_read_from_the_manifest_and_stable_when_none_is_named() {
+        let stable = "\"AppState\"\n{\n\t\"appid\"\t\t\"108600\"\n\t\"buildid\"\t\t\"25485521\"\n\t\"LastUpdated\"\t\t\"1790603391\"\n}\n";
+        let got = game_install_from_manifest(stable);
+        assert_eq!(got.branch, "stable");
+        assert_eq!(got.build_id.as_deref(), Some("25485521"));
+        assert_eq!(got.last_updated.as_deref(), Some("2026-09-28"));
+
+        let beta = "\"AppState\"\n{\n\t\"buildid\"\t\t\"1\"\n\t\"UserConfig\"\n\t{\n\t\t\"BetaKey\"\t\t\"unstable\"\n\t}\n}\n";
+        assert_eq!(game_install_from_manifest(beta).branch, "unstable");
+    }
 }
 
 /// A default.txt entry may be `ModId` or `<workshopId>/<ModId>` (newer B42 builds use the second
@@ -815,7 +877,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
     issues.sort_by(|a, b| a.severity.cmp(&b.severity));
     let errors = issues.iter().filter(|i| i.severity == Severity::Error).count();
     let warnings = issues.iter().filter(|i| i.severity == Severity::Warning).count();
-    HealthReport { game_version: catalog.game_version.clone(), active_count: active.len(), errors, warnings, issues }
+    HealthReport { game_version: catalog.game_version.clone(), install: None, active_count: active.len(), errors, warnings, issues }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1085,7 +1147,7 @@ mod tests {
             strategy: String::new(),
             collisions: if auto { 0 } else { 1 },
         };
-        let mut report = HealthReport { game_version: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
+        let mut report = HealthReport { game_version: None, install: None, active_count: 2, errors: 0, warnings: 0, issues: vec![] };
         add_file_conflict_issues(
             &mut report,
             &[state("a.lua", "pending", true), state("b.lua", "pending", false), state("c.lua", "merged", true), state("d.lua", "stale", true)],

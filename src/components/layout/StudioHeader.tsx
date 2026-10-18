@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Shield, Play, Activity, ChevronDown, Layout, Zap, Check, Layers } from 'lucide-react';
-import { GameLaunchMode } from '../../types';
+import { GameLaunchMode, GameInstall } from '../../types';
 
 interface StudioHeaderProps {
   /** Conflicts still needing a decision. */
@@ -13,6 +13,8 @@ interface StudioHeaderProps {
   installedBuild?: string | null;
   /** The build the active profile was last played on from the Studio. */
   profileBuild?: string | null;
+  /** Steam's view of the install: the branch and when it last updated. */
+  install?: GameInstall | null;
   onNavigateToProfiles?: () => void;
   onRunSandbox: (mode: GameLaunchMode) => void;
 }
@@ -71,6 +73,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   activeProfileName,
   installedBuild = null,
   profileBuild = null,
+  install = null,
   onNavigateToProfiles,
   onRunSandbox,
 }) => {
@@ -158,12 +161,17 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                   : other
                   ? `This profile was last played on build ${profileBuild}; the game installed now is ${installedBuild}. A save from an earlier build usually opens on a later one of the same major; the other way round it does not.`
                   : profileBuild
-                  ? `Installed build ${installedBuild}; this profile was last played on it.`
-                  : `Installed build ${installedBuild}, from Zomboid/version.txt. Play this profile from the Studio once and it remembers the build.`
+                  ? `Installed build ${installedBuild}; this profile was last played on it.${
+                      install ? ` Steam branch: ${install.branch}${install.last_updated ? `, last updated ${install.last_updated}` : ''}.` : ''
+                    }`
+                  : `Installed build ${installedBuild}, from Zomboid/version.txt.${
+                      install ? ` Steam branch: ${install.branch}${install.last_updated ? `, last updated ${install.last_updated}` : ''}.` : ''
+                    } Play this profile from the Studio once and it remembers the build.`
               }
             >
               <span className="text-slate-400">Build</span>
               <span className="font-bold">{installedBuild}</span>
+              {install && install.branch !== 'stable' && <span className="text-[10px] text-cyan-300">{install.branch}</span>}
               {other && <span className="text-[10px]">· profile on {profileBuild}</span>}
             </span>
           );

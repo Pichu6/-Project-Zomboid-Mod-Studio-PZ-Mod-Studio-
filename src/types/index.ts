@@ -352,8 +352,17 @@ export interface HealthIssue {
   related: string[];
 }
 
+/** The installed game as Steam's app manifest describes it. */
+export interface GameInstall {
+  /** "stable" when no beta is opted into, else the beta's name ("unstable", "legacy41", ...). */
+  branch: string;
+  build_id: string | null;
+  last_updated: string | null;
+}
+
 export interface HealthReport {
   game_version: string | null;
+  install?: GameInstall | null;
   active_count: number;
   errors: number;
   warnings: number;

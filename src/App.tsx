@@ -566,6 +566,7 @@ export const App: React.FC = () => {
         onNavigateToMerger={() => setActiveTab('MERGER')}
         activeProfileName={activeProfile?.name}
         installedBuild={health.report?.game_version ?? null}
+        install={health.report?.install ?? null}
         profileBuild={activeProfile?.last_played_build ?? null}
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
