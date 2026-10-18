@@ -11,7 +11,7 @@
  * 'SCRIPT_DEFINITION' is not a file two mods ship: it is one thing two mods declare in files of
  * their own, which the Studio settles with a small script of its own in the package.
  */
-export type FileType = 'LUA' | 'SCRIPT_TXT' | 'SCRIPT_DEFINITION';
+export type FileType = 'LUA' | 'SCRIPT_TXT' | 'SCRIPT_DEFINITION' | 'TRANSLATION';
 
 export type ConflictStatus = 'AUTO_MERGED' | 'MANUAL_CONFLICT' | 'RESOLVED' | 'PENDING';
 

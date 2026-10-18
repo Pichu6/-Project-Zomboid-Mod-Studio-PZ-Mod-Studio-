@@ -69,7 +69,7 @@ pub struct FileConflictState {
 }
 
 /// The active, packaged PZ Mod Studio merge package (it loads last, so its files win).
-fn active_package_dir(catalog: &crate::catalog::ModCatalog, active: &[String]) -> Option<(String, PathBuf)> {
+pub fn active_package_dir(catalog: &crate::catalog::ModCatalog, active: &[String]) -> Option<(String, PathBuf)> {
     active.iter().rev().find_map(|entry| {
         let m = catalog.resolve(entry.trim())?;
         let is_package = m.id.starts_with("Z_PZModStudio_") && m.id != "Z_PZModStudio_Bridge" && !m.id.contains("Carrier");
@@ -596,6 +596,13 @@ pub fn scan_conflicts_for_package(
     // walk above cannot see them. They are the same question, so they are listed here too.
     let definitions = crate::scripts::script_definition_conflicts(catalog, &active);
     conflicts.extend(crate::scripts::as_merger_conflicts(&definitions, &draft_map));
+    // Likewise a thing two mods name differently in the same language: the game reads every
+    // mod's translations, so the files never collide, but the words do.
+    // Only the language the game shows: forty rows of Chinese and Czech the player never sees
+    // would bury the rest.
+    let language = crate::translations::game_language(&paths.user_zomboid_dir);
+    let translations: Vec<_> = crate::translations::translation_conflicts(catalog, &active).into_iter().filter(|c| c.lang == language).collect();
+    conflicts.extend(crate::translations::as_merger_conflicts(&translations, &draft_map));
 
     // A file only one mod ships is no conflict, so the walk drops it -- including one the user
     // opened to patch a bug of that mod's own. Once the package holds a decision for it, it

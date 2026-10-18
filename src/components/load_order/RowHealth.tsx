@@ -32,10 +32,13 @@ const LABELS: Record<string, string> = {
   script_definition_conflict_more: 'Same definition as other mods',
   script_definition_stale: 'Merge out of date',
   script_definition_settled: 'Settled in your package',
+  translation_conflict: 'Names things differently from another mod',
+  translation_stale: 'Chosen words out of date',
+  translation_settled: 'Words settled in your package',
 };
 
 /** Issues about a group of files and mods, which only Mod Health shows whole. */
-const HEALTH_ONLY_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'script_definition_conflict_more']);
+const HEALTH_ONLY_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'script_definition_conflict_more', 'translation_conflict', 'translation_stale', 'translation_settled']);
 
 const labelFor = (issue: HealthIssue) => LABELS[issue.code] ?? issue.code.replace(/_/g, ' ');
 

@@ -76,7 +76,14 @@ export const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (ba
       <div className="flex items-start gap-2 text-slate-200">
         <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
         <span>
-          {conflict.file_type === 'SCRIPT_DEFINITION' ? (
+          {conflict.file_type === 'TRANSLATION' ? (
+            <>
+              {conflict.competing_mods.length} mods translate the same things differently, each in a file of its own —
+              the game reads every mod's translations, so nothing collides on disk; for each key the mod that loads
+              last has the last word, today <b>{lastLoaded?.mod_name}</b>. Only the keys they disagree on are shown.
+              Saving this writes a translation file into your package, which loads last.{' '}
+            </>
+          ) : conflict.file_type === 'SCRIPT_DEFINITION' ? (
             <>
               {conflict.competing_mods.length} mods declare this, each in a file of its own — nothing collides on
               disk. The game applies all of them to the same thing, so what one sets and the others do not is

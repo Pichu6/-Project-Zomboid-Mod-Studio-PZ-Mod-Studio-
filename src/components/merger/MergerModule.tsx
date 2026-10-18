@@ -600,7 +600,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     if (!currentConflict) return [];
     const vanillaMissing = !hasVanillaBase;
     const merged = currentConflict.auto_ast_output || currentConflict.merged_output || '';
-    const isDefinition = currentConflict.file_type === 'SCRIPT_DEFINITION';
+    const isDefinition = currentConflict.file_type === 'SCRIPT_DEFINITION' || currentConflict.file_type === 'TRANSLATION';
     const choices: Choice[] = [];
     if (merged) {
       choices.push({
@@ -1228,7 +1228,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         >
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-                              {c.file_type === 'SCRIPT_DEFINITION' ? 'DEFINITION' : c.file_type}
+                              {c.file_type === 'SCRIPT_DEFINITION' ? 'DEFINITION' : c.file_type === 'TRANSLATION' ? 'WORDS' : c.file_type}
                             </span>
                             {isResolved ? (
                               <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/80">

@@ -22,6 +22,7 @@ pub mod secrets;
 pub mod steam_client;
 pub mod server_manager;
 pub mod snapshots;
+pub mod translations;
 pub mod vdf;
 pub mod vfs;
 pub mod workshop;

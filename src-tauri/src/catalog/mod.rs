@@ -297,7 +297,71 @@ pub fn script_definition_issues(paths: &crate::vfs::StudioPaths, active: &[Strin
     let catalog = build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
     let conflicts = crate::scripts::script_definition_conflicts(&catalog, active);
     let states = crate::vfs::definition_merge_states(&catalog, active, &conflicts);
-    issues_for_script_conflicts_with_state(&conflicts, &states)
+    let mut issues = issues_for_script_conflicts_with_state(&conflicts, &states);
+    let language = crate::translations::game_language(&paths.user_zomboid_dir);
+    let translations: Vec<_> = crate::translations::translation_conflicts(&catalog, active).into_iter().filter(|c| c.lang == language).collect();
+    let package = crate::vfs::active_package_dir(&catalog, active).map(|(_, root)| root);
+    issues.extend(issues_for_translation_conflicts(&translations, package.as_ref()));
+    issues
+}
+
+/// A thing two mods name differently in the same language: one row per language, category and
+/// set of mods, Info, since the game shows one of the two and nothing breaks. "Settled" once the
+/// package carries the file the Merger wrote.
+pub fn issues_for_translation_conflicts(conflicts: &[crate::translations::TranslationConflict], package_root: Option<&std::path::PathBuf>) -> Vec<HealthIssue> {
+    let mut groups: Vec<((String, String, Vec<String>), Vec<&crate::translations::TranslationConflict>)> = Vec::new();
+    for c in conflicts {
+        let key = (c.lang.clone(), c.category.clone(), c.mod_ids.clone());
+        match groups.iter_mut().find(|(k, _)| k == &key) {
+            Some((_, list)) => list.push(c),
+            None => groups.push((key, vec![c])),
+        }
+    }
+    let mut list = IssueList(Vec::new());
+    for ((lang, category, mod_ids), group) in groups {
+        let c = group[0];
+        let files: Vec<String> = group.iter().flat_map(|x| x.absolute_files.iter().cloned()).collect();
+        let state = crate::translations::merge_state(package_root, &lang, &category, &files);
+        let winner = c.mods.last().cloned().unwrap_or_default();
+        let winner_id = mod_ids.last().cloned().unwrap_or_default();
+        let others: Vec<&str> = c.mods[..c.mods.len().saturating_sub(1)].iter().map(String::as_str).collect();
+        let named: Vec<String> = group.iter().take(3).map(|x| x.key.clone()).collect();
+        let example = format!(" {} is {}.", c.key, crate::translations::distinct_values(c));
+        let what = if group.len() == 1 { c.key.clone() } else { format!("{} things ({}{})", group.len(), named.join(", "), if group.len() > 3 { ", ..." } else { "" }) };
+        let settled = match state.as_str() {
+            "merged" => " Your package already carries the words you chose; it loads last, so they show.",
+            "stale" => " The words you chose are in your package, but a mod changed since: look again.",
+            _ => "",
+        };
+        let message = format!(
+            "{} and {} name {} differently in {} ({}).{} The game reads every mod's translations and keeps the last loaded, so {}'s words show today.{}",
+            others.join(", "), winner, what, lang, category, example, winner, settled
+        );
+        let rel = crate::translations::merged_file_path(&lang, &category);
+        let fixes = vec![SuggestedFix::OpenInMerger { relative_path: rel }];
+        let (severity, code) = match state.as_str() {
+            "stale" => (Severity::Warning, "translation_stale"),
+            "merged" => (Severity::Info, "translation_settled"),
+            _ => (Severity::Info, "translation_conflict"),
+        };
+        list.push(severity, code, Some(&winner_id), message, fixes);
+        if let Some(last) = list.0.last_mut() {
+            last.related = mod_ids[..mod_ids.len().saturating_sub(1)].to_vec();
+            last.details = group
+                .iter()
+                .flat_map(|x| x.mod_ids.iter().enumerate().map(move |(i, id)| (id.clone(), x.mods[i].clone(), x.absolute_files[i].clone(), x.key.clone())))
+                .fold(Vec::<IssueDetail>::new(), |mut acc, (id, name, file, key)| {
+                    let merged_path = crate::translations::merged_file_path(&lang, &category);
+                    let thing = DeclaredThing { definition: format!("{} = {}", key, group.iter().find(|x| x.key == key).and_then(|x| x.mod_ids.iter().position(|m| m == &id).map(|i| x.values[i].clone())).unwrap_or_default()), merged_path, state: state.clone() };
+                    match acc.iter_mut().find(|d| d.mod_id == id && d.file == file) {
+                        Some(d) => d.declares.push(thing),
+                        None => acc.push(IssueDetail { mod_id: id, mod_name: name, file, declares: vec![thing] }),
+                    }
+                    acc
+                });
+        }
+    }
+    list.0
 }
 
 /// Whether each conflict is already settled in the active package, and whether a mod has changed

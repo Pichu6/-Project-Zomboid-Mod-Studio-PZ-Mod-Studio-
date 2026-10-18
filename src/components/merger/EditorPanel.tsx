@@ -178,7 +178,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     <div className="flex-1 border border-slate-800 rounded-lg overflow-hidden relative">
     <Editor
       height="100%"
-      language={currentConflict.file_type === 'LUA' ? 'lua' : 'plaintext'}
+      language={currentConflict.file_type === 'LUA' ? 'lua' : currentConflict.file_type === 'TRANSLATION' ? 'json' : 'plaintext'}
       path={currentConflict.id}
       theme="vs-dark"
       value={editorContent}
