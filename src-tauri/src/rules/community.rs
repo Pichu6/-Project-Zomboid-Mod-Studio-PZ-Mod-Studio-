@@ -139,7 +139,11 @@ pub fn set_downloads_enabled(user_zomboid_dir: &str, on: bool) -> Result<(), Str
 
 /// One small file over HTTPS, with a ten-second patience.
 pub(super) fn fetch_text(url: &str) -> Result<String, String> {
+    // The default provider is Rustls, which this build does not carry: without saying NativeTls,
+    // ureq panics on the first https URL (the rules fetch did, since 2026-10-18).
+    let tls = ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build();
     let agent: ureq::Agent = ureq::Agent::config_builder()
+        .tls_config(tls)
         .timeout_global(Some(std::time::Duration::from_secs(10)))
         .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
         .build()
