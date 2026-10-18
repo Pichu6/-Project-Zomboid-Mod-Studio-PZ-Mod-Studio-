@@ -263,7 +263,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
           <div className="flex flex-col gap-2">
             {m && (
               <ActionButton onClick={() => onNexusDownload(m)} className="bg-orange-700 hover:bg-orange-600 text-white"
-                title="Opens the Files tab on Nexus: download there, then use Install .zip in Browse Mods">
+                title="Opens the Files tab on Nexus: download there, then use Install .zip / .7z in Browse Mods">
                 <Download className="w-3.5 h-3.5" aria-hidden="true" /> Download on Nexus
               </ActionButton>
             )}
@@ -271,7 +271,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Open Nexus page
             </ActionButton>
             {installed.length > 0 && <div className="text-[10px] font-mono text-emerald-400/80 break-all">Installed as: {installed.join(', ')}</div>}
-            <p className="text-[10px] text-slate-500">After downloading, press <b>Install .zip</b> at the top of Browse Mods and choose the file.</p>
+            <p className="text-[10px] text-slate-500">After downloading, press <b>Install .zip / .7z</b> at the top of Browse Mods and choose the file.</p>
           </div>
           {m && (
             <Section title="Info">

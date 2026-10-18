@@ -541,7 +541,9 @@ fn pick_open_file_cmd(
 ) -> Option<String> {
     let mut dialog = rfd::FileDialog::new();
     if let (Some(ref fname), Some(ref fext)) = (filter_name, filter_ext) {
-        dialog = dialog.add_filter(fname, &[fext.as_str()]);
+        // "zip,7z": one filter, several extensions.
+        let exts: Vec<&str> = fext.split(',').map(str::trim).filter(|e| !e.is_empty()).collect();
+        dialog = dialog.add_filter(fname, &exts);
     } else {
         dialog = dialog.add_filter("PZ Mod Studio File", &["pzmerge", "pzpack", "json"]);
     }

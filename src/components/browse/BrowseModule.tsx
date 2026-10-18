@@ -80,7 +80,7 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
     result,
     clearResult: () => setResult(null),
     pickZip: async () => {
-      const file = await TauriService.pickOpenFile('Mod archive (.zip)', 'zip');
+      const file = await TauriService.pickOpenFile('Mod archive (.zip, .7z)', 'zip,7z');
       if (file) await install(file);
     },
     pickFolder: async () => {
@@ -896,11 +896,11 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
           <button type="button" onClick={installer.pickZip} disabled={installer.busy || !paths.is_valid}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
             {installer.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FileArchive className="w-3.5 h-3.5" aria-hidden="true" />}
-            Install .zip
+            Install .zip / .7z
           </button>
           <button type="button" onClick={installer.pickFolder} disabled={installer.busy || !paths.is_valid}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
-            title="For .7z / .rar: extract it first, then choose the folder">
+            title="For .rar, or anything already extracted: choose the folder">
             <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
             Folder
           </button>
@@ -927,7 +927,7 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
           <div className="flex items-center gap-2 text-[11px] text-orange-200 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-1.5">
             <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1">
-              Downloading <b>{pendingOrigin.name}</b> from Nexus: when it finishes, press <b>Install .zip</b> and it will be tagged as a Nexus mod.
+              Downloading <b>{pendingOrigin.name}</b> from Nexus: when it finishes, press <b>Install .zip / .7z</b> and it will be tagged as a Nexus mod.
             </span>
             <button type="button" onClick={() => setPendingOrigin(null)} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label="Do not tag the next install">
               <X className="w-3.5 h-3.5" />

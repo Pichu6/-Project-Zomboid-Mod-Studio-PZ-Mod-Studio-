@@ -190,7 +190,52 @@ fn describe_candidates(staging: &Path, fallback_name: &str) -> Result<Vec<Candid
     Ok(candidates)
 }
 
-/// Installs the mod(s) found in `source` (a .zip file or a folder) into `<Zomboid>/mods`.
+/// Unpacks a 7z into `dest` with the same rules as a zip: no entry outside it, no more than
+/// MAX_FILES entries, no more than MAX_TOTAL_BYTES unpacked, nothing larger than it claims.
+fn extract_7z(archive_path: &Path, dest: &Path) -> Result<(), String> {
+    let mut count: usize = 0;
+    let mut total: u64 = 0;
+    let other = |msg: String| sevenz_rust::Error::Other(msg.into());
+    sevenz_rust::decompress_file_with_extract_fn(archive_path, dest, |entry, reader, _suggested| {
+        count += 1;
+        if count > MAX_FILES {
+            return Err(other(format!("The archive has more than {} entries.", MAX_FILES)));
+        }
+        let name = entry.name().replace('\\', "/");
+        let relative = Path::new(&name);
+        let unsafe_path = relative.is_absolute()
+            || relative.components().any(|c| !matches!(c, std::path::Component::Normal(_)));
+        if unsafe_path {
+            return Err(other(format!("Refusing unsafe path in archive: {}", entry.name())));
+        }
+        let out_path = dest.join(relative);
+        if entry.is_directory() {
+            fs::create_dir_all(&out_path).map_err(|e| other(e.to_string()))?;
+            return Ok(true);
+        }
+        total = total.saturating_add(entry.size());
+        if total > MAX_TOTAL_BYTES {
+            return Err(other("The archive unpacks to more than 4 GB; refusing.".to_string()));
+        }
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| other(e.to_string()))?;
+        }
+        let mut out = fs::File::create(&out_path).map_err(|e| other(format!("Cannot write {}: {}", out_path.display(), e)))?;
+        let declared = entry.size();
+        let written = io::copy(&mut io::Read::take(reader, declared + 1), &mut out).map_err(|e| other(e.to_string()))?;
+        if written > declared {
+            return Err(other(format!("Archive entry {} is larger than it claims; refusing.", entry.name())));
+        }
+        Ok(true)
+    })
+    .map_err(|e| match e {
+        sevenz_rust::Error::Other(msg) => msg.to_string(),
+        sevenz_rust::Error::BadSignature(_) => "Not a readable 7z archive.".to_string(),
+        e => format!("Not a readable 7z archive: {}", e),
+    })
+}
+
+/// Installs the mod(s) found in `source` (a .zip, .7z or a folder) into `<Zomboid>/mods`.
 /// `origin` says where the file came from (e.g. the Nexus page the user downloaded it from);
 /// without it the install is recorded as a manual one with the file name.
 pub fn install_mods(
@@ -213,16 +258,21 @@ pub fn install_mods(
         source_path.to_path_buf()
     } else {
         let ext = source_path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-        if ext != "zip" {
-            return Err(format!(
-                "\".{}\" archives are not supported yet. Extract it first (for example with 7-Zip) and choose the extracted folder.",
-                ext
-            ));
-        }
+        let extract: fn(&Path, &Path) -> Result<(), String> = match ext.as_str() {
+            "zip" => extract_zip,
+            "7z" => extract_7z,
+            _ => {
+                return Err(format!(
+                    "\".{}\" archives are not supported{}. Extract it first (for example with 7-Zip) and choose the extracted folder.",
+                    ext,
+                    if ext == "rar" { " (RAR is a proprietary format)" } else { "" }
+                ))
+            }
+        };
         let dir = unique_temp_dir("install");
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         staging_to_clean = Some(dir.clone());
-        if let Err(e) = extract_zip(source_path, &dir) {
+        if let Err(e) = extract(source_path, &dir) {
             let _ = fs::remove_dir_all(&dir);
             return Err(e);
         }
@@ -396,9 +446,32 @@ mod tests {
         assert!(err.contains("unsafe path"), "{}", err);
         assert!(!t.0.join("outside.txt").exists());
 
-        fs::write(t.0.join("mod.7z"), b"7z").unwrap();
-        let err = install_mods(&t.0.join("mod.7z").to_string_lossy(), &z, "", false, None).unwrap_err();
+        fs::write(t.0.join("mod.rar"), b"Rar!").unwrap();
+        let err = install_mods(&t.0.join("mod.rar").to_string_lossy(), &z, "", false, None).unwrap_err();
         assert!(err.contains("not supported"), "{}", err);
+
+        fs::write(t.0.join("mod.7z"), b"not a 7z at all").unwrap();
+        let err = install_mods(&t.0.join("mod.7z").to_string_lossy(), &z, "", false, None).unwrap_err();
+        assert!(err.contains("7z"), "{}", err);
+    }
+
+    /// A 7z gets the same treatment as a zip: the mod inside is found and installed.
+    #[test]
+    fn installs_from_a_7z_archive() {
+        let t = zomboid("sevenz");
+        let z = t.0.join("Zomboid").to_string_lossy().to_string();
+        let src = t.0.join("src/SevenMod");
+        fs::create_dir_all(src.join("42/media/lua/shared")).unwrap();
+        fs::write(src.join("42/mod.info"), "name=Seven Mod
+id=SevenMod
+").unwrap();
+        fs::write(src.join("42/media/lua/shared/s.lua"), "return 7").unwrap();
+        let archive = t.0.join("seven.7z");
+        sevenz_rust::compress_to_path(t.0.join("src"), &archive).expect("a 7z is written");
+
+        let result = install_mods(&archive.to_string_lossy(), &z, "", false, None).expect("installed");
+        assert_eq!(result.installed.len(), 1, "{:?}", result);
+        assert!(t.0.join("Zomboid/mods/SevenMod/42/media/lua/shared/s.lua").is_file());
     }
 
     #[test]
