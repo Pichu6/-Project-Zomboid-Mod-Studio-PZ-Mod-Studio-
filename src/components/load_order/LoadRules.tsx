@@ -13,6 +13,8 @@ interface LoadRulesProps {
   /** A rule was added or removed: the sort and the health check read them again. */
   onRulesChanged: () => void;
   toast: (message: string, ms?: number) => void;
+  /** The game build installed now, so a proposed rule says what it was tested on. */
+  installedBuild?: string | null;
 }
 
 /**
@@ -20,7 +22,7 @@ interface LoadRulesProps {
  * after it. The sort honours them like a mod's own loadModAfter; the health check says when the
  * list breaks one.
  */
-export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose, onRulesChanged, toast }) => {
+export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose, onRulesChanged, toast, installedBuild = null }) => {
   const [rules, setRules] = useState<UserRule[] | null>(null);
   const [search, setSearch] = useState('');
   const [note, setNote] = useState('');
@@ -81,20 +83,46 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
     }
   };
 
+  /**
+   * A rule of the player's, offered to everyone: the JSON line for community/rules.json goes to
+   * the clipboard, named with the build it was tested on, and GitHub opens on that file. A pull
+   * request is the rest; nothing is sent from here.
+   */
+  const propose = async (rule: UserRule) => {
+    const entry = {
+      mod_id: rule.mod_id,
+      after: rule.after,
+      note: rule.note ?? `${nameOf(rule.mod_id)} has to load after ${nameOf(rule.after)}`,
+      source: `tested on ${installedBuild ?? 'build ?'}`,
+    };
+    await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
+    toast('The rule is on the clipboard as JSON. On GitHub, add it under "load_after" in community/rules.json and open a pull request.', 8000);
+    TauriService.openExternalUrl('https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/edit/main/community/rules.json');
+  };
+
   const Row = ({ rule, text }: { rule: UserRule; text: React.ReactNode }) => (
     <div className="p-2.5 flex items-start justify-between gap-3 hover:bg-slate-950/60 transition">
       <div className="min-w-0">
         <div className="text-xs text-slate-200">{text}</div>
         {rule.note && <div className="text-[10px] text-slate-500 mt-0.5">{rule.note}</div>}
       </div>
-      <button
-        onClick={() => void remove(rule)}
-        disabled={busy}
-        className="shrink-0 px-2 py-1 rounded-lg text-[11px] text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900 cursor-pointer transition disabled:opacity-50"
-        title="Remove this rule"
-      >
-        Remove
-      </button>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={() => void propose(rule)}
+          className="px-2 py-1 rounded-lg text-[11px] text-cyan-300 hover:text-cyan-200 border border-slate-800 hover:border-cyan-900 cursor-pointer transition"
+          title="Copies this rule as JSON and opens community/rules.json in the Studio's repository on GitHub, where a pull request adds it for everyone"
+        >
+          Propose to the community
+        </button>
+        <button
+          onClick={() => void remove(rule)}
+          disabled={busy}
+          className="px-2 py-1 rounded-lg text-[11px] text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900 cursor-pointer transition disabled:opacity-50"
+          title="Remove this rule"
+        >
+          Remove
+        </button>
+      </div>
     </div>
   );
 

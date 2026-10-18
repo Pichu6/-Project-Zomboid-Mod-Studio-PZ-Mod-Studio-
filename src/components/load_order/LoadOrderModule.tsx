@@ -56,6 +56,8 @@ interface LoadOrderModuleProps {
   catalogById?: Map<string, CatalogModSummary>;
   /** What each mod did to the last session's log, by the name the game writes. */
   errorStats?: Map<string, ModErrorStat>;
+  /** The game build installed now, named in a rule proposed to the community. */
+  installedBuild?: string | null;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
   onOpenInBrowser?: (workshopId: string) => void;
   /** Opens the Mod Merger on this conflicting file (a row chip's fix). */
@@ -107,6 +109,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   healthIssues = null,
   catalogById,
   errorStats,
+  installedBuild = null,
   onOpenInBrowser,
   onOpenMerger,
   onGoToHealth,
@@ -939,7 +942,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
           <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
           <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
-          <LoadRules paths={paths} mod={rulesOf} mods={mods} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
+          <LoadRules paths={paths} mod={rulesOf} mods={mods} installedBuild={installedBuild} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
 
           <button
             onClick={handleAutoSortDependencies}

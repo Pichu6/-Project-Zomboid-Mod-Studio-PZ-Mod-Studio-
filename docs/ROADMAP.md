@@ -113,7 +113,7 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | | Item | Notes |
 |---|---|---|
 | ✅ | Reproducible modlists: a `.pzpack` records each mod's `mod.info` version and the publish time of the copy the sender had, read from their own install rather than taken on trust, and the build they were on. Importing says which of your copies are older, newer or just differently versioned, and when the build differs. Older packs, which say none of this, still import | Wabbajack |
-| 🔨 | Public community rules repo + in-app rule editor | The repo is this one (`community/rules.json`, by pull request); the in-app editor is the player's own rules dialog. Next: "propose this rule" from that dialog, opening a prefilled pull request | RimSort |
+| 🔨 | Public community rules repo + in-app rule editor | The repo is this one (`community/rules.json`, by pull request); the in-app editor is the player's own rules dialog. "Propose to the community" on a rule copies it as the JSON line for `community/rules.json` (with the build it was tested on) and opens that file on GitHub to edit; the pull request is the player's, nothing is sent from the app | RimSort |
 
 ---
 

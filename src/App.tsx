@@ -637,6 +637,7 @@ Start the game anyway?`
               healthIssues={health.report?.issues ?? null}
               catalogById={health.catalogById}
               errorStats={errorStats}
+              installedBuild={health.report?.game_version ?? null}
               onOpenMerger={(relativePath) => {
                 setMergerFocusPath(relativePath);
                 setActiveTab('MERGER');
