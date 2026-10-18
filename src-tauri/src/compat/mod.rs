@@ -274,7 +274,10 @@ fn scan_for_problems(roots: &[PathBuf], target_is_b42: bool) -> Vec<String> {
             }
         }
         let translate = media.join("lua").join("shared").join("Translate");
-        txt_translations += files_under(&translate, "txt").len();
+        txt_translations += files_under(&translate, "txt")
+            .iter()
+            .filter(|t| json_sibling(t).map(|j| !j.is_file()).unwrap_or(true))
+            .count();
         for lua in files_under(&media.join("lua"), "lua") {
             let text = String::from_utf8_lossy(&fs::read(&lua).unwrap_or_default()).to_string();
             if !crate::diff_engine::lua::validate_lua_syntax(&text).is_valid {
@@ -364,6 +367,149 @@ pub fn make_compatible_copy(
     Ok(CompatResult { mod_id, folder, destination: dest.to_string_lossy().to_string(), changes, warnings })
 }
 
+/// `.../Translate/EN/ItemName_EN.txt` -> `.../Translate/EN/ItemName.json`: the Build 42 file for
+/// the same category, beside it. None for a file not named `<Category>_<LANG>.txt` in a `<LANG>` folder.
+fn json_sibling(txt: &Path) -> Option<PathBuf> {
+    let lang = txt.parent()?.file_name()?.to_str()?;
+    let stem = txt.file_stem()?.to_str()?;
+    let category = stem.strip_suffix(&format!("_{}", lang))?;
+    if category.is_empty() {
+        return None;
+    }
+    Some(txt.with_file_name(format!("{}.json", category)))
+}
+
+/// The Build 41 translation table: `Category_LANG = { key = "value", ... }`, with `--` comments,
+/// optional trailing commas and `"a" .. "b"` joins. Returns the pairs in file order.
+pub fn parse_b41_translation(text: &str) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with("--") || line.ends_with('{') || line == "}" {
+            continue;
+        }
+        let Some((key, rest)) = line.split_once('=') else { continue };
+        let key = key.trim();
+        if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == ' ') {
+            continue;
+        }
+        // Every quoted string on the line, joined: `"a" .. "b"` is one value.
+        let mut value = String::new();
+        let mut chars = rest.chars().peekable();
+        let mut found = false;
+        while let Some(c) = chars.next() {
+            if c != '"' {
+                continue;
+            }
+            found = true;
+            while let Some(c) = chars.next() {
+                match c {
+                    '\\' => {
+                        if let Some(n) = chars.next() {
+                            value.push(match n {
+                                'n' => '\n',
+                                't' => '\t',
+                                other => other,
+                            });
+                        }
+                    }
+                    '"' => break,
+                    other => value.push(other),
+                }
+            }
+        }
+        if found {
+            pairs.push((key.trim().to_string(), value));
+        }
+    }
+    pairs
+}
+
+/// Categories whose Build 42 file drops the `Category_` prefix from the key: in the game's own
+/// ItemName.json the key is `Base.Axe`, in Recipes.json `AddACigarette`. Every other category
+/// keeps the whole key (`ContextMenu_Destroy`). Read from the vanilla files of 42.21.
+const PREFIX_DROPPED: [&str; 3] = ["ItemName", "Recipe", "EvolvedRecipeName"];
+
+/// The JSON keys one Build 41 entry becomes. For the categories that drop the prefix, both the
+/// bare key the game's own files use and the prefixed one are written: a key the game never
+/// looks up costs nothing, and some mods ship the prefixed form and are read.
+fn b42_keys(category: &str, key: &str) -> Vec<String> {
+    let prefix = PREFIX_DROPPED.iter().find(|p| category.starts_with(*p)).map(|p| format!("{}_", p));
+    match prefix {
+        Some(prefix) => match key.strip_prefix(&prefix) {
+            Some(bare) => vec![bare.to_string(), key.to_string()],
+            None => vec![key.to_string(), format!("{}{}", prefix, key)],
+        },
+        None => vec![key.to_string()],
+    }
+}
+
+/// The Build 42 file for one Build 41 table.
+pub fn b41_table_to_json(category: &str, text: &str) -> String {
+    let mut out = String::from("{\n");
+    let mut first = true;
+    for (key, value) in parse_b41_translation(text) {
+        for k in b42_keys(category, &key) {
+            if !first {
+                out.push_str(",\n");
+            }
+            first = false;
+            out.push_str("    ");
+            out.push_str(&serde_json::to_string(&k).unwrap_or_default());
+            out.push_str(": ");
+            out.push_str(&serde_json::to_string(&value).unwrap_or_default());
+        }
+    }
+    out.push_str("\n}\n");
+    out
+}
+
+/// Writes a Build 42 JSON beside every Build 41 `.txt` translation that has none yet. The `.txt`
+/// stays: Build 42 ignores it, and the copy is meant to be removable.
+fn convert_translations(roots: &[PathBuf]) -> (Vec<String>, Vec<String>) {
+    let mut written = 0usize;
+    let mut categories: std::collections::BTreeSet<String> = Default::default();
+    let mut warnings = Vec::new();
+    for root in roots {
+        let translate = root.join("media").join("lua").join("shared").join("Translate");
+        for txt in files_under(&translate, "txt") {
+            let Some(json) = json_sibling(&txt) else { continue };
+            if json.is_file() {
+                continue;
+            }
+            let Ok(bytes) = fs::read(&txt) else { continue };
+            let text = match String::from_utf8(bytes) {
+                Ok(t) => t,
+                Err(_) => {
+                    warnings.push(format!(
+                        "{} is not UTF-8 (Build 41 used a legacy encoding for some languages); left as it is.",
+                        txt.strip_prefix(root).unwrap_or(&txt).display()
+                    ));
+                    continue;
+                }
+            };
+            let category = json.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let content = b41_table_to_json(&category, &text);
+            if content.trim() == "{\n}" || parse_b41_translation(&text).is_empty() {
+                continue;
+            }
+            if fs::write(&json, content).is_ok() {
+                written += 1;
+                categories.insert(category);
+            }
+        }
+    }
+    let mut changes = Vec::new();
+    if written > 0 {
+        changes.push(format!(
+            "Wrote {} Build 42 JSON translation file(s) ({}) from the Build 41 .txt ones; ItemName and Recipe keys are written both bare and prefixed, as the game's own files and the mods disagree.",
+            written,
+            categories.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    (changes, warnings)
+}
+
 /// Adapts the copied folder in place. Returns (changes, warnings, mod id).
 fn adapt(dest: &Path, game_version: u32) -> Result<(Vec<String>, Vec<String>, String), String> {
     let mut changes = Vec::new();
@@ -447,6 +593,9 @@ fn adapt(dest: &Path, game_version: u32) -> Result<(Vec<String>, Vec<String>, St
         let (converted, left_alone) = convert_item_types(&roots);
         changes.extend(converted);
         warnings.extend(left_alone);
+        let (made, trouble) = convert_translations(&roots);
+        changes.extend(made);
+        warnings.extend(trouble);
     }
 
     // 4. What may still break.
@@ -492,6 +641,47 @@ mod tests {
         fs::create_dir_all(t.0.join("Zomboid/mods")).unwrap();
         let z = t.0.join("Zomboid").to_string_lossy().to_string();
         (t, ws, z)
+    }
+
+    #[test]
+    fn a_build_41_table_becomes_the_build_42_json_with_the_vanilla_key_rule() {
+        let txt = "ItemName_EN = {\n\t-- a comment\n\tItemName_Base.Thing = \"A Thing\",\n\tItemName_Base.Other = \"Says \\\"hi\\\"\" .. \" twice\"\n}\n";
+        let pairs = parse_b41_translation(txt);
+        assert_eq!(pairs, vec![("ItemName_Base.Thing".to_string(), "A Thing".to_string()), ("ItemName_Base.Other".to_string(), "Says \"hi\" twice".to_string())]);
+
+        let json = b41_table_to_json("ItemName", txt);
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(parsed["Base.Thing"], "A Thing", "the bare key, as vanilla writes it");
+        assert_eq!(parsed["ItemName_Base.Thing"], "A Thing", "and the prefixed one some mods use");
+        assert_eq!(parsed["Base.Other"], "Says \"hi\" twice");
+
+        let menu = b41_table_to_json("ContextMenu", "ContextMenu_EN = {\n ContextMenu_Light = \"Light\"\n}");
+        let parsed: serde_json::Value = serde_json::from_str(&menu).unwrap();
+        assert_eq!(parsed["ContextMenu_Light"], "Light");
+        assert!(parsed.get("Light").is_none(), "other categories keep the whole key");
+
+        assert_eq!(json_sibling(Path::new("x/Translate/EN/IG_UI_EN.txt")).unwrap().file_name().unwrap(), "IG_UI.json");
+        assert!(json_sibling(Path::new("x/Translate/EN/notes.txt")).is_none());
+    }
+
+    #[test]
+    fn a_compatible_copy_gets_json_translations_beside_the_txt_ones() {
+        let (_t, ws, z) = setup("translate");
+        let src = ws.join("Talky");
+        fs::create_dir_all(src.join("media/lua/shared/Translate/EN")).unwrap();
+        fs::write(src.join("mod.info"), "name=Talky\nid=Talky\n").unwrap();
+        fs::write(src.join("media/lua/shared/Translate/EN/ItemName_EN.txt"), "ItemName_EN = {\n\tItemName_Base.Cup = \"Cup\",\n}\n").unwrap();
+        fs::write(src.join("media/lua/shared/Translate/EN/UI_EN.txt"), "UI_EN = {\n\tUI_talky_hello = \"Hello\"\n}\n").unwrap();
+        let result = make_compatible_copy(&src, &z, 42_021, None, false).expect("copied");
+        let dest = Path::new(&result.destination);
+        let item = fs::read_to_string(dest.join("42/media/lua/shared/Translate/EN/ItemName.json")).expect("ItemName.json written");
+        assert!(item.contains("\"Base.Cup\": \"Cup\""), "{}", item);
+        let ui = fs::read_to_string(dest.join("42/media/lua/shared/Translate/EN/UI.json")).unwrap();
+        assert!(ui.contains("\"UI_talky_hello\": \"Hello\""), "{}", ui);
+        assert!(dest.join("42/media/lua/shared/Translate/EN/UI_EN.txt").is_file(), "the txt stays");
+        let joined = result.changes.join(" ");
+        assert!(joined.contains("JSON translation"), "{}", joined);
+        assert!(!result.warnings.iter().any(|w| w.contains(".txt; Build 42.15+")), "no txt warning once converted: {:?}", result.warnings);
     }
 
     #[test]
