@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MergedPackageInfoUI } from '../../services/tauri';
 import { Edit2, Package, Unlock } from 'lucide-react';
+import i18next from 'i18next';
 
 /** New package: a name and an optional description; it is created in draft. */
 export const CreatePackageModal: React.FC<{
@@ -25,28 +26,28 @@ export const CreatePackageModal: React.FC<{
       <form onSubmit={submit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
         <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
           <Package className="w-5 h-5 text-emerald-400" />
-          <span>Create New Merge Package</span>
+          <span>{i18next.t('merger.modals.createTitle')}</span>
         </h3>
         <p className="text-xs text-slate-400 leading-relaxed">
-          Enter a name and description for this package. It will be created in DRAFT mode and you can enter to merge its files independently.
+          {i18next.t('merger.modals.createBlurb')}
         </p>
         <div>
-          <label className="block text-[11px] font-bold text-slate-300 mb-1">Package Name:</label>
+          <label className="block text-[11px] font-bold text-slate-300 mb-1">{i18next.t('merger.modals.name')}</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g: MergedPatch2"
+            placeholder={i18next.t('merger.modals.namePlaceholder')}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none font-mono"
             autoFocus
           />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-slate-300 mb-1">Description (Optional):</label>
+          <label className="block text-[11px] font-bold text-slate-300 mb-1">{i18next.t('merger.modals.description')}</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g: Compatibility merge to resolve collisions between weapon and vehicle mods."
+            placeholder={i18next.t('merger.modals.descriptionPlaceholder')}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none resize-none h-20"
           />
         </div>
@@ -56,13 +57,13 @@ export const CreatePackageModal: React.FC<{
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
           >
-            Cancel
+            {i18next.t('merger.modals.cancel')}
           </button>
           <button
             type="submit"
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg cursor-pointer"
           >
-            Create Package
+            {i18next.t('merger.modals.create')}
           </button>
         </div>
       </form>
@@ -100,10 +101,10 @@ const RenamePackageForm: React.FC<{
       <form onSubmit={submit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in">
         <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
           <Edit2 className="w-5 h-5 text-cyan-400" />
-          <span>Edit Package</span>
+          <span>{i18next.t('merger.modals.editTitle')}</span>
         </h3>
         <div>
-          <label className="block text-[11px] font-bold text-slate-300 mb-1">Package Name:</label>
+          <label className="block text-[11px] font-bold text-slate-300 mb-1">{i18next.t('merger.modals.name')}</label>
           <input
             type="text"
             value={name}
@@ -113,11 +114,11 @@ const RenamePackageForm: React.FC<{
           />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-slate-300 mb-1">Description (Optional):</label>
+          <label className="block text-[11px] font-bold text-slate-300 mb-1">{i18next.t('merger.modals.description')}</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Mod description..."
+            placeholder={i18next.t('merger.modals.modDescription')}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none resize-none h-20"
           />
         </div>
@@ -127,13 +128,13 @@ const RenamePackageForm: React.FC<{
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
           >
-            Cancel
+            {i18next.t('merger.modals.cancel')}
           </button>
           <button
             type="submit"
             className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg cursor-pointer"
           >
-            Save Changes
+            {i18next.t('merger.modals.saveChanges')}
           </button>
         </div>
       </form>
@@ -157,18 +158,14 @@ export const UnpackageModal: React.FC<{
             <Unlock className="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">⚠️ Open Package for Editing?</h3>
-            <p className="text-xs text-slate-400 mt-0.5">The package will switch to DRAFT mode.</p>
+            <h3 className="text-base font-bold text-slate-100">{i18next.t('merger.modals.unpackTitle')}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{i18next.t('merger.modals.unpackSub')}</p>
           </div>
         </div>
 
         <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2 text-xs text-slate-300">
-          <p>
-            By opening the package <b className="text-emerald-400 font-mono">{packageName}</b>, you will be able to edit its code merges.
-          </p>
-          <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-mono leading-relaxed">
-            ⚠️ <b>Visibility Notice:</b> While this package is in draft, it <b>will NOT be visible in the game Mod List</b> until you click "Package & Publish".
-          </div>
+          <p dangerouslySetInnerHTML={{ __html: i18next.t('merger.modals.unpackBody', { name: packageName ?? '' }) }} />
+          <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-mono leading-relaxed" dangerouslySetInnerHTML={{ __html: i18next.t('merger.modals.unpackNotice') }} />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">
@@ -177,7 +174,7 @@ export const UnpackageModal: React.FC<{
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer transition"
           >
-            Cancel
+            {i18next.t('merger.modals.cancel')}
           </button>
           <button
             type="button"
@@ -187,7 +184,7 @@ export const UnpackageModal: React.FC<{
             }}
             className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow transition"
           >
-            Confirm and Open Package
+            {i18next.t('merger.modals.confirmOpen')}
           </button>
         </div>
       </div>

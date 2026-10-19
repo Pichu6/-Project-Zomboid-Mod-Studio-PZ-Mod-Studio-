@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { VfsConflict, ChangeRegion, ModChangeSummary } from '../../types';
 import { Info } from 'lucide-react';
+import i18next from 'i18next';
 
 /** Lines shown around the point of interest; big vanilla files have tens of thousands. */
 const VIEW_WINDOW = 200;
@@ -33,7 +34,7 @@ export const LinedCodeSnippet = React.memo(function LinedCodeSnippet({ content, 
     <div className="flex-1 flex flex-col overflow-hidden rounded-b-lg">
       {lines.length > VIEW_WINDOW && (
         <div className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 border-b border-slate-800 shrink-0">
-          lines {from + 1}–{to} of {lines.length.toLocaleString()}
+          {i18next.t('merger.view.window', { from: from + 1, to, total: lines.length.toLocaleString() })}
         </div>
       )}
       <div className="flex-1 overflow-auto text-xs font-mono bg-slate-950 select-text">
@@ -61,10 +62,10 @@ export const LinedCodeSnippet = React.memo(function LinedCodeSnippet({ content, 
 
 const regionLabel = (r: ChangeRegion) =>
   r.kind === 'added'
-    ? `adds ${r.mod_end - r.mod_start + 1} line(s) before L${r.base_start}`
+    ? i18next.t('merger.view.adds', { count: r.mod_end - r.mod_start + 1, line: r.base_start })
     : r.kind === 'removed'
-    ? `removes L${r.base_start}${r.base_end > r.base_start ? `–${r.base_end}` : ''}`
-    : `changes L${r.base_start}${r.base_end > r.base_start ? `–${r.base_end}` : ''}`;
+    ? i18next.t('merger.view.removes', { range: `${r.base_start}${r.base_end > r.base_start ? `–${r.base_end}` : ''}` })
+    : i18next.t('merger.view.changes', { range: `${r.base_start}${r.base_end > r.base_start ? `–${r.base_end}` : ''}` });
 
 /** Plain summary: how the merge was built, what each mod changes, where they collide. */
 export const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (baseLine: number) => void }> = ({ conflict, onFocus }) => {
@@ -76,33 +77,16 @@ export const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (ba
       <div className="flex items-start gap-2 text-slate-200">
         <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
         <span>
-          {conflict.file_type === 'TRANSLATION' ? (
-            <>
-              {conflict.competing_mods.length} mods translate the same things differently, each in a file of its own —
-              the game reads every mod's translations, so nothing collides on disk; for each key the mod that loads
-              last has the last word, today <b>{lastLoaded?.mod_name}</b>. Only the keys they disagree on are shown.
-              Saving this writes a translation file into your package, which loads last.{' '}
-            </>
-          ) : conflict.file_type === 'SCRIPT_DEFINITION' ? (
-            <>
-              {conflict.competing_mods.length} mods declare this, each in a file of its own — nothing collides on
-              disk. The game applies all of them to the same thing, so what one sets and the others do not is
-              kept whatever happens; only what they set differently is decided by the load order, today in{' '}
-              <b>{lastLoaded?.mod_name}</b>'s favour. Saving this writes a small script into your package, which
-              loads last.{' '}
-            </>
-          ) : (
-            <>
-              {conflict.competing_mods.length} mods ship this file. Without merging, the game uses only{' '}
-              <b>{lastLoaded?.mod_name}</b>'s copy (it loads last).{' '}
-            </>
-          )}
+          <span dangerouslySetInnerHTML={{ __html: i18next.t(
+            conflict.file_type === 'TRANSLATION' ? 'merger.view.translationIntro' : conflict.file_type === 'SCRIPT_DEFINITION' ? 'merger.view.definitionIntro' : 'merger.view.fileIntro',
+            { count: conflict.competing_mods.length, last: lastLoaded?.mod_name ?? '' }
+          ) }} />
           {conflict.strategy}
         </span>
       </div>
       {collisions.length > 0 && (
         <div className="space-y-1">
-          <div className="text-amber-300 font-bold">Real conflicts ({collisions.length}): same vanilla lines changed differently</div>
+          <div className="text-amber-300 font-bold">{i18next.t('merger.view.realConflicts', { count: collisions.length })}</div>
           <div className="flex flex-wrap gap-1.5">
             {collisions.map((c, i) => (
               <button key={i} type="button" onClick={() => onFocus(c.base_start)}
@@ -115,20 +99,20 @@ export const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (ba
       )}
       {changes.length > 0 && (
         <div className="space-y-1">
-          <div className="text-slate-400 font-bold">What each mod changes compared to the base game</div>
+          <div className="text-slate-400 font-bold">{i18next.t('merger.view.whatEachChanges')}</div>
           {changes.map((m) => (
             <div key={m.mod_id} className="flex flex-wrap items-center gap-1.5">
               <span className="font-bold text-slate-200 mr-1">{m.mod_name}</span>
               <span className="font-mono text-emerald-300">+{m.lines_added}</span>
               <span className="font-mono text-red-300">−{m.lines_removed}</span>
-              <span className="text-slate-500">in {m.regions.length} place(s):</span>
+              <span className="text-slate-500">{i18next.t('merger.view.inPlaces', { count: m.regions.length })}</span>
               {m.regions.slice(0, 12).map((r, i) => (
                 <button key={i} type="button" onClick={() => onFocus(r.base_start)}
                   className="px-1.5 py-0.5 rounded border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 cursor-pointer font-mono text-[10px]">
                   {regionLabel(r)}
                 </button>
               ))}
-              {m.regions.length > 12 && <span className="text-slate-500">+{m.regions.length - 12} more</span>}
+              {m.regions.length > 12 && <span className="text-slate-500">{i18next.t('merger.view.more', { count: m.regions.length - 12 })}</span>}
             </div>
           ))}
         </div>

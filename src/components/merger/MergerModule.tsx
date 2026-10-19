@@ -9,6 +9,8 @@ import { PackageList } from './PackageList';
 import { CodePanels } from './CodePanels';
 import { Choice, EditorPanel } from './EditorPanel';
 import { CreatePackageModal, RenamePackageModal, UnpackageModal } from './PackageModals';
+import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 import {
   GitCompare,
   CheckCircle2,
@@ -108,6 +110,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const [isRescanning, setIsRescanning] = useState<boolean>(false);
   const [isCleaning, setIsCleaning] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  useTranslation();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [patchStatus, setPatchStatus] = useState<MasterPatchStatusInfoUI | null>(null);
 
@@ -192,8 +195,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       if (onRescan) await onRescan();
       showToast(
         targetState
-          ? `✓ Package "${pkg.display_name}" activated and VISIBLE in the mod list.`
-          : `✓ Package "${pkg.display_name}" HIDDEN from the mod list.`
+          ? i18next.t('merger.toasts.visible', { name: pkg.display_name })
+          : i18next.t('merger.toasts.hidden', { name: pkg.display_name })
       );
     }
   };
@@ -236,13 +239,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         const published = await savePatchTarget(entry.id, entry.relative_path, fixed.content);
         showToast(
           published
-            ? `Line ${fixed.line}: require("${fix!.from}") is now require("${fix!.to}"), published in the package. Relaunch the game.`
-            : `Line ${fixed.line}: require("${fix!.from}") is now require("${fix!.to}"), saved in the package. Press Package & Publish to put it in the game.`
+            ? i18next.t('merger.toasts.requirePublished', { line: fixed.line, from: fix!.from, to: fix!.to })
+            : i18next.t('merger.toasts.requireSaved', { line: fixed.line, from: fix!.from, to: fix!.to })
         );
       } else if (fix) {
-        showToast(`${relativePath} opened, but it has no require("${fix.from}") to change; look for the path by hand.`);
+        showToast(i18next.t('merger.toasts.noRequire', { path: relativePath, from: fix.from }));
       } else {
-        showToast(`${relativePath} opened. Edit it and press Save to put it in the package.`);
+        showToast(i18next.t('merger.toasts.opened', { path: relativePath }));
       }
     } catch (err) {
       alert(explainError(err));
@@ -251,10 +254,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
   const handleUnmergeAll = async () => {
     if (
-      confirm(
-        'Throw away every merge saved in this package?\n\n' +
-          'A copy is kept in Zomboid/PZModStudio_Backups, and the files already published stay until you publish again.'
-      )
+      confirm(i18next.t('merger.toasts.unmergeAllConfirm'))
     ) {
       if (paths.user_zomboid_dir && selectedPackageFolder) {
         await TauriService.clearDraftResolutions(paths.user_zomboid_dir, selectedPackageFolder);
@@ -264,7 +264,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         setIsManuallyEdited(false);
       }
       if (onRescan) await onRescan();
-      showToast(`✨ All package merges have been reverted.`);
+      showToast(i18next.t('merger.toasts.allReverted'));
     }
   };
 
@@ -280,7 +280,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       'PENDING'
     );
     if (onRescan) await onRescan();
-    showToast(`✓ Merge reverted for "${currentConflict.relative_path}".`);
+    showToast(i18next.t('merger.toasts.reverted', { path: currentConflict.relative_path }));
   };
 
   // Noise Filtering logic
@@ -402,13 +402,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setIsPackageOpened(true);
       if (onRefreshMods) await onRefreshMods();
       if (onRescan) await onRescan();
-      showToast(`New package "${pkg.display_name}" created in DRAFT. Ready to merge.`);
+      showToast(i18next.t('merger.toasts.created', { name: pkg.display_name }));
     }
   };
 
   const handleRenamePackage = async (folderName: string, name: string, description?: string) => {
     if (folderName === 'Z_PZModStudio_Bridge') {
-      alert('The Live Bridge mod is an official system module and cannot be renamed.');
+      alert(i18next.t('merger.toasts.bridgeRename'));
       setRenamingPackage(null);
       return;
     }
@@ -419,16 +419,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setSelectedPackageFolder(pkg.folder_name);
       if (onRefreshMods) await onRefreshMods();
       if (onRescan) await onRescan();
-      showToast(`Package updated to "${pkg.display_name}".`);
+      showToast(i18next.t('merger.toasts.updated', { name: pkg.display_name }));
     }
   };
 
   const handleDeletePackage = async (folderName: string) => {
     if (folderName === 'Z_PZModStudio_Bridge') {
-      alert('The Live Bridge mod is a protected official system module and cannot be deleted.');
+      alert(i18next.t('merger.toasts.bridgeDelete'));
       return;
     }
-    if (confirm(`Are you sure you want to delete the package "${folderName}" from disk?`)) {
+    if (confirm(i18next.t('merger.toasts.deleteConfirm', { name: folderName }))) {
       const deleted = await TauriService.deleteMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName);
       if (!deleted) return; // failure already shown by TauriService
       if (paths.user_zomboid_dir) {
@@ -443,7 +443,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         }
       }
       if (onRefreshMods) await onRefreshMods();
-      showToast(`Package "${folderName}" deleted.`);
+      showToast(i18next.t('merger.toasts.deleted', { name: folderName }));
     }
   };
 
@@ -452,22 +452,22 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       const cleanName = folder.replace('Z_PZModStudio_', '').toLowerCase();
       const filePath = await TauriService.pickSaveFile(
         `${cleanName}_package.pzmerge`,
-        'PZ Mod Studio Merged Package (.pzmerge)',
+        i18next.t('merger.toasts.pzmergeFilter'),
         'pzmerge'
       );
       if (filePath) {
         await TauriService.exportMergedPackage(paths.user_zomboid_dir, folder, filePath);
-        showToast(`✨ Package successfully saved at: ${filePath}`);
+        showToast(i18next.t('merger.toasts.exported', { path: filePath }));
       }
     } catch (err: any) {
-      alert(`Error exporting package: ${explainError(err)}`);
+      alert(i18next.t('merger.toasts.exportError', { error: explainError(err) }));
     }
   };
 
   const handleImportPackage = async () => {
     try {
       const filePath = await TauriService.pickOpenFile(
-        'PZ Mod Studio Merged Package (.pzmerge)',
+        i18next.t('merger.toasts.pzmergeFilter'),
         'pzmerge'
       );
       if (filePath) {
@@ -478,11 +478,11 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           setIsPackageOpened(true);
           if (onRefreshMods) await onRefreshMods();
           if (onRescan) await onRescan();
-          showToast(`✨ Package '${imported.display_name}' loaded and imported successfully.`);
+          showToast(i18next.t('merger.toasts.imported', { name: imported.display_name }));
         }
       }
     } catch (err: any) {
-      alert(`Error importing package: ${explainError(err)}`);
+      alert(i18next.t('merger.toasts.importError', { error: explainError(err) }));
     }
   };
 
@@ -503,7 +503,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         package_folder_name: selectedPackageFolder,
       });
       if (!cleaned) return; // failure already shown by TauriService
-      showToast(`Package "${selectedPackageFolder}" unpacked. Ready to edit.`);
+      showToast(i18next.t('merger.toasts.unpacked', { name: selectedPackageFolder }));
       await fetchPatchStatus();
       await fetchPackages();
       if (onRefreshMods) await onRefreshMods();
@@ -524,7 +524,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setEditorContent(targetAst);
       setIsManuallyEdited(false);
     }
-    showToast('⚡ All conflicts have been merged with the AST engine! Review the code and edit if you wish.');
+    showToast(i18next.t('merger.toasts.allMerged'));
   };
 
   // Step 2: Save Individual Conflict File Edit
@@ -535,7 +535,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       // game would also blame the package for every line the mod's own copy already produced.
       const modsOwn = currentConflict.competing_mods[0]?.content;
       if (modsOwn !== undefined && editorContent === modsOwn) {
-        showToast(`Nothing changed in "${currentConflict.relative_path}": an identical copy would only freeze the file. Edit it first.`);
+        showToast(i18next.t('merger.toasts.nothingChanged', { path: currentConflict.relative_path }));
         return;
       }
       try {
@@ -543,8 +543,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         setIsManuallyEdited(false);
         showToast(
           published
-            ? `✓ "${currentConflict.relative_path}" published in the package. Relaunch the game to read it.`
-            : `✓ "${currentConflict.relative_path}" saved. Press Package & Publish to put it in the game.`
+            ? i18next.t('merger.toasts.filePublished', { path: currentConflict.relative_path })
+            : i18next.t('merger.toasts.fileSaved', { path: currentConflict.relative_path })
         );
       } catch {
         // Already shown by TauriService.
@@ -553,7 +553,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
     onResolveConflict(currentConflict.id, editorContent, selectedPackageFolder, currentConflict.relative_path);
     setIsManuallyEdited(false);
-    showToast(`✓ Merge saved for "${currentConflict.relative_path}". Status marked as Resolved.`);
+    showToast(i18next.t('merger.toasts.mergeSaved', { path: currentConflict.relative_path }));
   };
 
   const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -569,7 +569,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       const newContent = editorContent.replace(regex, '\n\n').trim();
       setEditorContent(newContent || currentConflict?.base_content || '');
       setIsManuallyEdited(true);
-      showToast(`➖ Code from "${modUid}" removed from editor.`);
+      showToast(i18next.t('merger.toasts.codeRemoved', { mod: modUid }));
     } else {
       // ADD mod block
       const formatted = `\n\n${blockStart}\n${modContent}\n${blockEnd}`;
@@ -581,7 +581,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
         return `${prev}${formatted}`;
       });
       setIsManuallyEdited(true);
-      showToast(`➕ Code from "${modUid}" added to editor.`);
+      showToast(i18next.t('merger.toasts.codeAdded', { mod: modUid }));
     }
   };
 
@@ -605,28 +605,24 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     if (merged) {
       choices.push({
         key: 'merged',
-        label: isDefinition ? 'Merge them' : 'Keep both',
-        help: isDefinition
-          ? 'Everything the mods set differently that can hold both values keeps both; where only one value fits, what the game does today stays active and the other is left in a comment, one word away.'
-          : 'Each mod\u2019s changes applied together. Where two change the same lines, the one that loads last wins and the other is kept in a comment.',
+        label: isDefinition ? i18next.t('merger.choices.mergeThem') : i18next.t('merger.choices.keepBoth'),
+        help: isDefinition ? i18next.t('merger.choices.mergeThemHelp') : i18next.t('merger.choices.keepBothHelp'),
         content: merged,
       });
     }
     for (const mod of currentConflict.competing_mods) {
       choices.push({
         key: `mod:${mod.mod_id}`,
-        label: `Only ${mod.mod_name}`,
-        help: isDefinition
-          ? `Write ${mod.mod_name}\u2019s values into the package. What the other mods set and ${mod.mod_name} does not still applies \u2014 the game adds every declaration up \u2014 so this only settles what they disagree about.`
-          : `Use ${mod.mod_name}\u2019s file as it is. The other mods\u2019 changes to this file are dropped.`,
+        label: i18next.t('merger.choices.only', { mod: mod.mod_name }),
+        help: isDefinition ? i18next.t('merger.choices.onlyDefinitionHelp', { mod: mod.mod_name }) : i18next.t('merger.choices.onlyFileHelp', { mod: mod.mod_name }),
         content: mod.content,
       });
     }
     if (!vanillaMissing) {
       choices.push({
         key: 'vanilla',
-        label: 'Vanilla',
-        help: 'Use the game\u2019s own file, as if neither mod had touched it.',
+        label: i18next.t('merger.choices.vanilla'),
+        help: i18next.t('merger.choices.vanillaHelp'),
         content: currentConflict.base_content,
       });
     }
@@ -642,7 +638,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const chooseForFile = (choice: Choice) => {
     setEditorContent(choice.content);
     setIsManuallyEdited(true);
-    showToast(`${choice.label}: press Save to keep it for ${currentConflict?.relative_path}.`);
+    showToast(i18next.t('merger.toasts.chosen', { choice: choice.label, path: currentConflict?.relative_path ?? '' }));
   };
 
   const handleResetToAutoMerge = () => {
@@ -650,7 +646,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     const targetAst = currentConflict.auto_ast_output || currentConflict.merged_output || currentConflict.base_content || '';
     setEditorContent(targetAst);
     setIsManuallyEdited(true);
-    showToast(`Automatic AST merge restored for "${currentConflict.relative_path}".`);
+    showToast(i18next.t('merger.toasts.astRestored', { path: currentConflict.relative_path }));
   };
 
   // Step 5: Final Packaging on Disk
@@ -658,7 +654,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     setIsGenerating(true);
     try {
       if (!(await onOptimizeAndResolve(selectedPackageFolder))) return;
-      showToast(`Package packed and successfully published in Zomboid/mods/${selectedPackageFolder}.`);
+      showToast(i18next.t('merger.toasts.publishedIn', { folder: selectedPackageFolder }));
       await fetchPatchStatus();
       await fetchPackages();
       if (onRefreshMods) await onRefreshMods();
@@ -674,24 +670,24 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const handleRescanClick = async () => {
     setIsRescanning(true);
 
-    setScanProgress({ percent: 15, text: 'Step 1/5: Reading active mods from load list and Workshop...' });
+    setScanProgress({ percent: 15, text: i18next.t('merger.toasts.scan1') });
     await new Promise((r) => setTimeout(r, 150));
 
-    setScanProgress({ percent: 35, text: 'Step 2/5: Analyzing Lua and Script files of B41 and B42 mods...' });
+    setScanProgress({ percent: 35, text: i18next.t('merger.toasts.scan2') });
     await onRescan();
 
-    setScanProgress({ percent: 65, text: 'Step 3/5: Resolving VFS collisions and code differences...' });
+    setScanProgress({ percent: 65, text: i18next.t('merger.toasts.scan3') });
     await new Promise((r) => setTimeout(r, 150));
 
-    setScanProgress({ percent: 90, text: 'Step 4/5: Injecting real AST merges into the editor...' });
+    setScanProgress({ percent: 90, text: i18next.t('merger.toasts.scan4') });
     await new Promise((r) => setTimeout(r, 150));
 
-    setScanProgress({ percent: 100, text: 'Step 5/5: Scan 100% complete!' });
+    setScanProgress({ percent: 100, text: i18next.t('merger.toasts.scan5') });
 
     setTimeout(() => {
       setIsRescanning(false);
       setScanProgress(null);
-      showToast('Scan complete! Mods analyzed and integrated successfully.');
+      showToast(i18next.t('merger.toasts.scanDone'));
     }, 400);
   };
 
@@ -748,7 +744,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const totalFileLines = currentConflict?.total_file_lines ?? currentConflict?.base_content.split('\n').length ?? 1;
 
   const handleSelectConflict = (c: VfsConflict) => {
-    if (isManuallyEdited && !confirm('You have edits here that are not saved. Leave them behind?')) return;
+    if (isManuallyEdited && !confirm(i18next.t('merger.toasts.unsaved'))) return;
     setSelectedConflictId(c.id);
     setEditorContent(c.merged_output || c.base_content);
     setIsManuallyEdited(false);
@@ -773,7 +769,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
     if (focusStartedRef.current === focusRelativePath) {
       if (focusScanDone) {
-        showToast(`${focusRelativePath} is no longer a conflict.`);
+        showToast(i18next.t('merger.toasts.noLongerConflict', { path: focusRelativePath }));
         setFocusScanDone(false);
         onFocusHandled?.();
       }
@@ -830,7 +826,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           await openModFileToPatch(patchFocus.modId, named.relative_path, patchFocus.fix);
         } else {
           setPatchPicker({ open: true, modId: patchFocus.modId });
-          if (hint) showToast(`${patchFocus.fileHint} is not a file this build reads from the mod; pick one.`);
+          if (hint) showToast(i18next.t('merger.toasts.notReadFile', { file: patchFocus.fileHint }));
         }
       } catch (err) {
         alert(explainError(err));
@@ -849,16 +845,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             <FolderX className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Setup Required: Game Directory</h3>
+            <h3 className="text-base font-bold text-slate-100">{i18next.t('merger.setup.title')}</h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Project Zomboid installation directory could not be auto-detected. Please configure your paths in App Settings to scan active mods.
+              {i18next.t('merger.setup.blurb')}
             </p>
           </div>
           <button
             onClick={onGoToSettings}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs py-2.5 rounded-lg shadow transition cursor-pointer"
           >
-            Configure Directory Paths in Settings
+            {i18next.t('merger.setup.button')}
           </button>
         </div>
       </div>
@@ -926,16 +922,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               <button
                 onClick={handleClosePackage}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow cursor-pointer"
-                title="Return to the general package list"
+                title={i18next.t('merger.workspace.backTitle')}
               >
                 <ArrowLeft className="w-3.5 h-3.5 text-cyan-400" />
-                <span>← Back to List</span>
+                <span>{i18next.t('merger.workspace.back')}</span>
               </button>
 
               {/* Interactive Package Switcher Dropdown */}
               <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700/80 rounded-lg px-2.5 py-1 shadow-sm">
                 <Package className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Package:</span>
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{i18next.t('merger.workspace.package')}</span>
                 <select
                   value={selectedPackageFolder}
                   onChange={(e) => handleOpenPackage(e.target.value)}
@@ -943,7 +939,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 >
                   {packages.filter((p) => !p.is_companion_bridge).map((p) => (
                     <option key={p.folder_name} value={p.folder_name} className="bg-slate-900 text-slate-200">
-                      {p.display_name} {p.is_packaged ? '• [Packaged]' : '• [Draft / Open]'} {p.is_active_in_modlist ? '• [Visible]' : '• [Hidden]'}
+                      {p.display_name} {p.is_packaged ? i18next.t('merger.workspace.optPackaged') : i18next.t('merger.workspace.optDraft')} {p.is_active_in_modlist ? i18next.t('merger.workspace.optVisible') : i18next.t('merger.workspace.optHidden')}
                     </option>
                   ))}
                 </select>
@@ -951,17 +947,17 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
               {currentPackage?.is_companion_bridge && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                  COMPANION BRIDGE
+                  {i18next.t('merger.workspace.companion')}
                 </span>
               )}
 
               {isCurrentlyPackaged ? (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title="Compiled and ready as a mod for Project Zomboid">
-                  🟢 PACKAGED
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title={i18next.t('merger.list.packagedTitle')}>
+                  {i18next.t('merger.workspace.packaged')}
                 </span>
               ) : (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title="Package in editing mode (draft), deactivated for gameplay">
-                  🟡 OPEN (Draft)
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title={i18next.t('merger.workspace.openDraftTitle')}>
+                  {i18next.t('merger.list.openDraft')}
                 </span>
               )}
 
@@ -974,10 +970,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/70 hover:bg-emerald-900'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200'
                   }`}
-                  title={currentPackage.is_active_in_modlist ? "The package is active and visible in default.txt. Click to hide." : "The package is hidden in default.txt. Click to activate."}
+                  title={currentPackage.is_active_in_modlist ? i18next.t('merger.workspace.visibleTitle') : i18next.t('merger.workspace.hiddenTitle')}
                 >
                   {currentPackage.is_active_in_modlist ? <Eye className="w-3 h-3 text-emerald-400" /> : <EyeOff className="w-3 h-3 text-slate-400" />}
-                  <span>{currentPackage.is_active_in_modlist ? 'Visible in ModList' : 'Hidden in ModList'}</span>
+                  <span>{currentPackage.is_active_in_modlist ? i18next.t('merger.list.visible') : i18next.t('merger.list.hidden')}</span>
                 </button>
               )}
             </div>
@@ -990,10 +986,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       setPatchPicker({ open: true, modId: null });
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition shadow bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 cursor-pointer"
-                    title="Open one mod's own file to patch a bug in it. The package loads last, so the game reads your copy of that one file."
+                    title={i18next.t('merger.workspace.patchTitle')}
                   >
                     <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                    Patch a mod file
+                    {i18next.t('merger.workspace.patch')}
                   </button>
 
                   <button
@@ -1004,10 +1000,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         ? 'bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
                         : 'bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 cursor-pointer'
                     }`}
-                    title={!hasPendingConflicts ? "All conflicts in this package have already been merged and resolved" : "Applies the automatic AST engine to all unpacked conflicts"}
+                    title={!hasPendingConflicts ? i18next.t('merger.workspace.allMergedTitle') : i18next.t('merger.workspace.mergeAllTitle')}
                   >
                     <Wand2 className={`w-3.5 h-3.5 ${!hasPendingConflicts ? 'text-slate-600' : 'text-emerald-400'}`} />
-                    <span>⚡ Merge All (AST)</span>
+                    <span>{i18next.t('merger.workspace.mergeAll')}</span>
                   </button>
 
                   <button
@@ -1018,10 +1014,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
                         : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 cursor-pointer'
                     }`}
-                    title={!hasAnyMergedConflicts ? "There are no active merges in this package to unmerge" : "Undoes all merges in this package and restores original files"}
+                    title={!hasAnyMergedConflicts ? i18next.t('merger.workspace.noMergesTitle') : i18next.t('merger.workspace.unmergeAllTitle')}
                   >
                     <Undo2 className={`w-3.5 h-3.5 ${!hasAnyMergedConflicts ? 'text-slate-600' : 'text-amber-400'}`} />
-                    <span>↩️ Unmerge All</span>
+                    <span>{i18next.t('merger.workspace.unmergeAll')}</span>
                   </button>
                 </>
               )}
@@ -1033,16 +1029,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/80 font-bold'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
                 }`}
-                title={filterNoise ? "Showing only real collisions (identical noise hidden)" : "Showing all colliding files"}
+                title={filterNoise ? i18next.t('merger.workspace.noiseOnTitle') : i18next.t('merger.workspace.noiseOffTitle')}
               >
                 {filterNoise ? <EyeOff className="w-3.5 h-3.5 text-emerald-400" /> : <Eye className="w-3.5 h-3.5 text-slate-400" />}
-                <span>{filterNoise ? 'No Duplicates' : 'All'}</span>
+                <span>{filterNoise ? i18next.t('merger.workspace.noDuplicates') : i18next.t('merger.workspace.all')}</span>
               </button>
 
               <button
                 onClick={() => handleOpenPhysicalFolder()}
                 className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow cursor-pointer"
-                title="Open physical folder in Windows"
+                title={i18next.t('merger.workspace.folderTitle')}
               >
                 <FolderOpen className="w-4 h-4 text-amber-400" />
               </button>
@@ -1050,7 +1046,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
               <button
                 onClick={() => handleExportPackage()}
                 className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow cursor-pointer"
-                title="Save .pzmerge file"
+                title={i18next.t('merger.workspace.exportTitle')}
               >
                 <Download className="w-4 h-4 text-emerald-400" />
               </button>
@@ -1063,7 +1059,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 cursor-pointer'
                 }`}
-                title={isCurrentlyPackaged ? "The package is packaged (read-only). Unpack to rescan and edit." : "Rescan mod collisions"}
+                title={isCurrentlyPackaged ? i18next.t('merger.workspace.rescanPackagedTitle') : i18next.t('merger.workspace.rescanTitle')}
               >
                 <RefreshCw className={`w-4 h-4 ${isCurrentlyPackaged ? 'text-slate-600' : 'text-cyan-400'} ${isRescanning ? 'animate-spin' : ''}`} />
               </button>
@@ -1073,10 +1069,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   onClick={() => setIsUnpackageModalOpen(true)}
                   disabled={isCleaning}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60 text-xs font-bold rounded-lg transition shadow cursor-pointer"
-                  title="Unpacks and opens the package for further editing"
+                  title={i18next.t('merger.workspace.unpackOpenTitle')}
                 >
                   <Unlock className="w-4 h-4 text-amber-400" />
-                  <span>{isCleaning ? 'Opening...' : '🔓 Unmerge / Open to Edit'}</span>
+                  <span>{isCleaning ? i18next.t('merger.editor.opening') : i18next.t('merger.editor.unmergeOpen')}</span>
                 </button>
               ) : (
                 <button
@@ -1087,10 +1083,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white animate-pulse'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white'
                   }`}
-                  title="Final Step: Compiles all merged files to disk and publishes the package to the Mod List"
+                  title={i18next.t('merger.workspace.publishTitle')}
                 >
                   <PackageCheck className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                  <span>{isGenerating ? 'Packaging...' : '📦 Package & Publish'}</span>
+                  <span>{isGenerating ? i18next.t('merger.workspace.packaging') : i18next.t('merger.list.publish')}</span>
                 </button>
               )}
             </div>
@@ -1101,18 +1097,16 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             <div className="bg-emerald-950/40 border-b border-emerald-800/50 px-4 py-2 flex items-center justify-between gap-3 shrink-0 text-xs animate-fade-in">
               <div className="flex items-center gap-2 text-emerald-300">
                 <PackageCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>
-                  <b>Packaged Package (Mod Ready to Play):</b> The package is in read-only mode. All editing, unmerging, mod usage, and scanning functions are protected until you <b>Unpack it</b>.
-                </span>
+                <span dangerouslySetInnerHTML={{ __html: i18next.t('merger.workspace.packagedBanner') }} />
               </div>
               <button
                 onClick={() => setIsUnpackageModalOpen(true)}
                 disabled={isCleaning}
                 className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold text-[11px] transition shadow-md cursor-pointer shrink-0 flex items-center gap-1.5"
-                title="Unpack and open for editing"
+                title={i18next.t('merger.workspace.unpackEditTitle')}
               >
                 <Unlock className="w-3.5 h-3.5" />
-                <span>{isCleaning ? 'Opening...' : 'Unpack to Edit'}</span>
+                <span>{isCleaning ? i18next.t('merger.editor.opening') : i18next.t('merger.workspace.unpackEdit')}</span>
               </button>
             </div>
           )}
@@ -1128,14 +1122,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 <div className="space-y-2">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700/60">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>CLOSED AND PACKAGED PACKAGE</span>
+                    <span>{i18next.t('merger.workspace.closedBadge')}</span>
                   </div>
                   <h2 className="text-2xl font-bold text-slate-100 font-mono">
                     {currentPackage?.display_name || selectedPackageFolder}
                   </h2>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-                    This package is compiled in <b>Read Only</b> mode and ready to play. To avoid accidental discrepancies, editor content and collisions remain hidden until you decide to open it.
-                  </p>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed" dangerouslySetInnerHTML={{ __html: i18next.t('merger.workspace.closedBlurb') }} />
                 </div>
 
                 {/* Summary Info Cards */}
@@ -1143,19 +1135,19 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-1">
                     <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
                       <FileCode className="w-3.5 h-3.5 text-cyan-400" />
-                      Merged Files
+                      {i18next.t('merger.workspace.mergedFiles')}
                     </span>
                     <p className="text-lg font-bold text-emerald-400 font-mono">
-                      {conflicts.length} {conflicts.length === 1 ? 'file' : 'files'}
+                      {i18next.t('merger.workspace.files', { count: conflicts.length })}
                     </p>
                   </div>
                   <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-1">
                     <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                      State in ModList
+                      {i18next.t('merger.workspace.stateInModList')}
                     </span>
                     <p className="text-lg font-bold text-cyan-400">
-                      {currentPackage?.is_active_in_modlist ? '✓ Active and Visible' : 'Hidden'}
+                      {currentPackage?.is_active_in_modlist ? i18next.t('merger.workspace.activeVisible') : i18next.t('merger.workspace.hidden')}
                     </p>
                   </div>
                 </div>
@@ -1168,10 +1160,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                     className="w-full py-3.5 px-6 bg-gradient-to-r from-amber-600 via-amber-500 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-sm rounded-xl shadow-lg hover:shadow-amber-500/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer"
                   >
                     <Unlock className="w-5 h-5 text-amber-100" />
-                    <span>{isCleaning ? 'Opening package...' : '🔓 Unmerge / Open to Edit'}</span>
+                    <span>{isCleaning ? i18next.t('merger.workspace.openingPackage') : i18next.t('merger.editor.unmergeOpen')}</span>
                   </button>
                   <p className="text-[11px] text-slate-500">
-                    By opening the package you can inspect each colliding file, compare differences and modify the generated code.
+                    {i18next.t('merger.workspace.openBlurb')}
                   </p>
                 </div>
               </div>
@@ -1183,10 +1175,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                 <div className="p-3 border-b border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
                     <GitCompare className="w-4 h-4 text-emerald-400" />
-                    <span>VFS Conflicts</span>
+                    <span>{i18next.t('merger.workspace.vfsConflicts')}</span>
                   </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-cyan-400 border border-slate-700">
-                    {filteredConflicts.length} {filteredConflicts.length === 1 ? 'file' : 'files'}
+                    {i18next.t('merger.workspace.files', { count: filteredConflicts.length })}
                   </span>
                 </div>
 
@@ -1212,7 +1204,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   {filteredConflicts.length === 0 ? (
                     <div className="p-6 text-center text-xs text-slate-500 space-y-2">
                       <ShieldCheck className="w-8 h-8 text-emerald-500/50 mx-auto" />
-                      <p>No pending collisions under current filter.</p>
+                      <p>{i18next.t('merger.workspace.noPending')}</p>
                     </div>
                   ) : (
                     filteredConflicts.map((c) => {
@@ -1232,19 +1224,19 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                         >
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-                              {c.file_type === 'SCRIPT_DEFINITION' ? 'DEFINITION' : c.file_type === 'TRANSLATION' ? 'WORDS' : c.file_type}
+                              {c.file_type === 'SCRIPT_DEFINITION' ? i18next.t('merger.workspace.kindDefinition') : c.file_type === 'TRANSLATION' ? i18next.t('merger.workspace.kindWords') : c.file_type}
                             </span>
                             {isResolved ? (
                               <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/80">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Resolved
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {i18next.t('merger.workspace.resolved')}
                               </span>
                             ) : isAutoMerged ? (
                               <span className="flex items-center gap-1 text-[10px] text-cyan-300 font-bold bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/80">
-                                <Sparkle className="w-3 h-3 text-cyan-400" /> Auto-Merged
+                                <Sparkle className="w-3 h-3 text-cyan-400" /> {i18next.t('merger.workspace.autoMerged')}
                               </span>
                             ) : (
                               <span className="flex items-center gap-1 text-[10px] text-amber-400 font-medium bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/60">
-                                <AlertTriangle className="w-3 h-3 text-amber-400" /> Needs Review
+                                <AlertTriangle className="w-3 h-3 text-amber-400" /> {i18next.t('merger.workspace.needsReview')}
                               </span>
                             )}
                           </div>
@@ -1269,19 +1261,19 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       <div className="flex items-center gap-2 overflow-hidden max-w-xl">
                         <FileCode className="w-4 h-4 text-cyan-400 shrink-0" />
                         <span className="text-xs font-bold text-slate-200 truncate">
-                          Colliding File: <code className="text-emerald-400 font-mono">{currentConflict.relative_path}</code>
+                          {i18next.t('merger.workspace.collidingFile')} <code className="text-emerald-400 font-mono">{currentConflict.relative_path}</code>
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
                           <AlertCircle className="w-3 h-3 text-amber-400" />
-                          Line #{conflictLine}
+                          {i18next.t('merger.workspace.line', { line: conflictLine })}
                         </span>
 
                         <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
                           <Layers className="w-3 h-3 text-cyan-400" />
-                          {currentConflict.competing_mods.length + 1} Sources
+                          {i18next.t('merger.workspace.sources', { count: currentConflict.competing_mods.length + 1 })}
                         </span>
                       </div>
                     </div>
@@ -1312,7 +1304,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   className={`h-2.5 bg-slate-900 hover:bg-emerald-600/60 border-y border-slate-800 cursor-ns-resize flex items-center justify-center transition shrink-0 select-none ${
                     isResizing ? 'bg-emerald-500 text-white' : 'text-slate-600 hover:text-white'
                   }`}
-                  title="Drag to resize the top panel and editor"
+                  title={i18next.t('merger.workspace.dragTitle')}
                 >
                   <GripHorizontal className="w-5 h-3" />
                 </div>

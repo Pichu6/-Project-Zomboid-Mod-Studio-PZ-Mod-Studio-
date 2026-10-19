@@ -3,6 +3,7 @@ import { ModInfo, ModFile } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
 import { Wrench, X } from 'lucide-react';
+import i18next from 'i18next';
 
 interface PatchFilePickerProps {
   open: boolean;
@@ -61,12 +62,10 @@ export const PatchFilePicker: React.FC<PatchFilePickerProps> = ({ open, initialM
           <div>
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <Wrench className="w-4 h-4 text-amber-400" />
-              <span>Patch a mod file</span>
+              <span>{i18next.t('merger.picker.title')}</span>
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5 max-w-xl leading-relaxed">
-              For a bug in one mod, where there is nothing to merge. Your copy goes in this
-              package, which loads last, so the game reads it instead of the mod's — for that
-              file only. The mod stays on and the rest of it is untouched.
+              {i18next.t('merger.picker.blurb')}
             </p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer">
@@ -80,7 +79,7 @@ export const PatchFilePicker: React.FC<PatchFilePickerProps> = ({ open, initialM
               type="text"
               value={modSearch}
               onChange={(e) => setModSearch(e.target.value)}
-              placeholder="Which mod?"
+              placeholder={i18next.t('merger.picker.whichMod')}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             />
             <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-900">
@@ -115,22 +114,22 @@ export const PatchFilePicker: React.FC<PatchFilePickerProps> = ({ open, initialM
                 }}
                 className="text-[11px] px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
               >
-                ← Another mod
+                {i18next.t('merger.picker.anotherMod')}
               </button>
               <input
                 type="text"
                 value={fileSearch}
                 onChange={(e) => setFileSearch(e.target.value)}
-                placeholder="Which file? (lua, scripts)"
+                placeholder={i18next.t('merger.picker.whichFile')}
                 className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div className="max-h-80 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-900">
               {files === null ? (
-                <div className="px-3 py-6 text-center text-xs text-slate-500">Reading the mod…</div>
+                <div className="px-3 py-6 text-center text-xs text-slate-500">{i18next.t('merger.picker.reading')}</div>
               ) : files.length === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-slate-500">
-                  This mod ships no Lua or script files the build reads.
+                  {i18next.t('merger.picker.noFiles')}
                 </div>
               ) : (
                 files

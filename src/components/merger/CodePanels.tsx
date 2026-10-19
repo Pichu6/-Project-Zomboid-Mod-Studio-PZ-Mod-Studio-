@@ -2,6 +2,7 @@ import React from 'react';
 import { ChangeRegion, VfsConflict } from '../../types';
 import { LinedCodeSnippet, modLineFor } from './CodeView';
 import { Minus, Plus } from 'lucide-react';
+import i18next from 'i18next';
 
 export interface CodePanelsProps {
   currentConflict: VfsConflict;
@@ -46,10 +47,10 @@ export const CodePanels: React.FC<CodePanelsProps> = ({
     {/* Panel A: Vanilla Base */}
     <div className="w-96 min-w-96 bg-slate-950 border border-slate-800 rounded-lg flex flex-col shadow">
     <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-2">
-      <span className="text-xs font-bold text-slate-300">Vanilla Base Game</span>
+      <span className="text-xs font-bold text-slate-300">{i18next.t('merger.panels.vanilla')}</span>
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800">
-          {totalFileLines} lines
+          {i18next.t('merger.panels.lines', { count: totalFileLines })}
         </span>
         {/* With no vanilla file there is nothing to load: the button used to put
             the "not present" note itself into the editor, one Save away from
@@ -60,7 +61,7 @@ export const CodePanels: React.FC<CodePanelsProps> = ({
             if (!hasVanillaBase) return;
             setEditorContent(currentConflict.base_content);
             setIsManuallyEdited(false);
-            showToast(`Vanilla base code restored in editor.`);
+            showToast(i18next.t('merger.panels.baseRestored'));
           }}
           className={`px-2 py-1 text-[10px] font-semibold rounded border transition shadow-sm ${
             !hasVanillaBase
@@ -71,15 +72,15 @@ export const CodePanels: React.FC<CodePanelsProps> = ({
           }`}
           title={
             hasVanillaBase
-              ? 'Load original Vanilla base code in the lower editor'
-              : 'The base game has no file here, so there is nothing to go back to'
+              ? i18next.t('merger.panels.loadBaseTitle')
+              : i18next.t('merger.panels.noBaseTitle')
           }
         >
           {!hasVanillaBase
-            ? 'No base'
+            ? i18next.t('merger.panels.noBase')
             : editorContent === currentConflict.base_content && !isManuallyEdited
-            ? '\u2713 Base Active'
-            : 'Load Base'}
+            ? i18next.t('merger.panels.baseActive')
+            : i18next.t('merger.panels.loadBase')}
         </button>
       </div>
     </div>
@@ -131,23 +132,23 @@ export const CodePanels: React.FC<CodePanelsProps> = ({
             }`}
             title={
               isCurrentlyPackaged
-                ? 'The package is packaged (read-only). Unpack to modify.'
+                ? i18next.t('merger.panels.packagedTitle')
                 : isModExclusive
-                ? 'This mod is already loaded exclusively in the editor'
+                ? i18next.t('merger.panels.exclusiveTitle')
                 : isModAdded
-                ? `Take ${mod.mod_name}'s appended block back out`
-                : `Append ${mod.mod_name}'s version below what is in the editor`
+                ? i18next.t('merger.panels.removeTitle', { mod: mod.mod_name })
+                : i18next.t('merger.panels.appendTitle', { mod: mod.mod_name })
             }
           >
             {isModAdded ? (
               <>
                 <Minus className="w-3 h-3 text-rose-400" />
-                <span>Remove</span>
+                <span>{i18next.t('merger.panels.remove')}</span>
               </>
             ) : (
               <>
                 <Plus className="w-3 h-3 text-cyan-400" />
-                <span>Append</span>
+                <span>{i18next.t('merger.panels.append')}</span>
               </>
             )}
           </button>

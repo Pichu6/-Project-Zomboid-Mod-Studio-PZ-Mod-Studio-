@@ -1,6 +1,7 @@
 import React from 'react';
 import { MergedPackageInfoUI } from '../../services/tauri';
 import { Box, Download, Edit2, Eye, EyeOff, FolderOpen, Lock, Package, PackageCheck, Plus, Trash2, Upload } from 'lucide-react';
+import i18next from 'i18next';
 
 interface PackageListProps {
   packages: MergedPackageInfoUI[];
@@ -39,13 +40,13 @@ export const PackageList: React.FC<PackageListProps> = ({
         </div>
         <div>
           <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <span>Merge Packages</span>
+            <span>{i18next.t('merger.list.title')}</span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
-              {packages.length} {packages.length === 1 ? 'Package' : 'Packages'}
+              {i18next.t('merger.list.count', { count: packages.length })}
             </span>
           </h2>
           <p className="text-[11px] text-slate-400">
-            Select a package and enter to inspect its merged files, edit or package.
+            {i18next.t('merger.list.blurb')}
           </p>
         </div>
       </div>
@@ -54,10 +55,10 @@ export const PackageList: React.FC<PackageListProps> = ({
         <button
           onClick={onImport}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
-          title="Import a saved package (.pzmerge) from disk"
+          title={i18next.t('merger.list.importTitle')}
         >
           <Upload className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Load Package (.pzmerge)</span>
+          <span>{i18next.t('merger.list.import')}</span>
         </button>
 
         <button
@@ -65,17 +66,17 @@ export const PackageList: React.FC<PackageListProps> = ({
           className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>➕ New Package</span>
+          <span>{i18next.t('merger.list.new')}</span>
         </button>
 
         {/* Package & Publish stays greyed out until a package is open */}
         <button
           disabled
           className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50 shadow shrink-0"
-          title="You must open / enter a package first to be able to scan and package"
+          title={i18next.t('merger.list.publishDisabledTitle')}
         >
           <PackageCheck className="w-4 h-4 text-slate-600" />
-          <span>📦 Package & Publish</span>
+          <span>{i18next.t('merger.list.publish')}</span>
         </button>
       </div>
     </div>
@@ -87,9 +88,9 @@ export const PackageList: React.FC<PackageListProps> = ({
           <Box className="w-8 h-8 text-emerald-400" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-base font-bold text-slate-200">No merge packages created</h3>
+          <h3 className="text-base font-bold text-slate-200">{i18next.t('merger.list.none')}</h3>
           <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
-            To scan conflicts and merge mods, create a merge package first or load an existing .pzmerge file.
+            {i18next.t('merger.list.noneBlurb')}
           </p>
         </div>
         <button
@@ -97,7 +98,7 @@ export const PackageList: React.FC<PackageListProps> = ({
           className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl transition shadow-lg flex items-center gap-2 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>➕ Create First Merge Package</span>
+          <span>{i18next.t('merger.list.createFirst')}</span>
         </button>
       </div>
     ) : (
@@ -147,7 +148,7 @@ export const PackageList: React.FC<PackageListProps> = ({
                             onRename(pkg);
                           }}
                           className="p-1.5 hover:text-cyan-300 hover:bg-slate-800 rounded-lg transition text-slate-400 cursor-pointer"
-                          title="Edit package name and description"
+                          title={i18next.t('merger.list.renameTitle')}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -158,7 +159,7 @@ export const PackageList: React.FC<PackageListProps> = ({
                             onDelete(pkg.folder_name);
                           }}
                           className="p-1.5 hover:text-red-400 hover:bg-rose-950/40 rounded-lg transition text-slate-400 cursor-pointer"
-                          title="Delete package from disk"
+                          title={i18next.t('merger.list.deleteTitle')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -166,10 +167,10 @@ export const PackageList: React.FC<PackageListProps> = ({
                     ) : (
                       <div
                         className="flex items-center gap-1 px-2 py-0.5 bg-slate-950 border border-slate-800 rounded-lg text-[10px] text-cyan-400/80 font-mono select-none"
-                        title="Integrated system Companion Mod (Protected against editing or deletion)"
+                        title={i18next.t('merger.list.systemTitle')}
                       >
                         <Lock className="w-2.5 h-2.5" />
-                        <span>System</span>
+                        <span>{i18next.t('merger.list.system')}</span>
                       </div>
                     )}
                   </div>
@@ -181,8 +182,8 @@ export const PackageList: React.FC<PackageListProps> = ({
                     <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-2 rounded-lg border border-slate-800/60 break-words space-y-1">
                       <div className="font-bold text-slate-200">
                         {pkg.merged_files.length === 0
-                          ? 'Nothing in it yet'
-                          : `${pkg.merged_files.length} file${pkg.merged_files.length === 1 ? '' : 's'}`}
+                          ? i18next.t('merger.list.empty')
+                          : i18next.t('merger.list.files', { count: pkg.merged_files.length })}
                       </div>
                       {pkg.merged_files.length > 0 && (
                         <div className="text-[10px] font-mono text-slate-500 leading-snug">
@@ -190,7 +191,7 @@ export const PackageList: React.FC<PackageListProps> = ({
                             .slice(0, 3)
                             .map((f) => f.split('/').pop())
                             .join(', ')}
-                          {pkg.merged_files.length > 3 ? `, and ${pkg.merged_files.length - 3} more` : ''}
+                          {pkg.merged_files.length > 3 ? i18next.t('merger.list.andMore', { count: pkg.merged_files.length - 3 }) : ''}
                         </div>
                       )}
                     </div>
@@ -205,15 +206,15 @@ export const PackageList: React.FC<PackageListProps> = ({
                   <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-800/40">
                     {pkg.is_companion_bridge ? (
                       <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                        Live IPC Bridge
+                        {i18next.t('merger.list.bridge')}
                       </span>
                     ) : pkg.is_packaged ? (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title="Compiled and ready as a mod for Project Zomboid">
-                        🟢 PACKAGED / CLOSED
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600 shadow-sm" title={i18next.t('merger.list.packagedTitle')}>
+                        {i18next.t('merger.list.packagedClosed')}
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title="Open package: in editing mode with draft conflict resolutions, deactivated for gameplay">
-                        🟡 OPEN (Draft)
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-950/90 text-amber-300 border border-amber-600 shadow-sm animate-pulse" title={i18next.t('merger.list.openTitle')}>
+                        {i18next.t('merger.list.openDraft')}
                       </span>
                     )}
 
@@ -229,12 +230,12 @@ export const PackageList: React.FC<PackageListProps> = ({
                       }`}
                       title={
                         pkg.is_active_in_modlist
-                          ? "Active and visible in the game mod list (default.txt). Click to hide."
-                          : "Hidden from the game. Click to activate and show in ModList."
+                          ? i18next.t('merger.list.visibleTitle')
+                          : i18next.t('merger.list.hiddenTitle')
                       }
                     >
                       {pkg.is_active_in_modlist ? <Eye className="w-3 h-3 text-emerald-400" /> : <EyeOff className="w-3 h-3 text-slate-400" />}
-                      <span>{pkg.is_active_in_modlist ? 'Visible in ModList' : 'Hidden in ModList'}</span>
+                      <span>{pkg.is_active_in_modlist ? i18next.t('merger.list.visible') : i18next.t('merger.list.hidden')}</span>
                     </button>
                   </div>
                 </div>
@@ -248,7 +249,7 @@ export const PackageList: React.FC<PackageListProps> = ({
                           onExport(pkg.folder_name);
                         }}
                         className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition cursor-pointer"
-                        title="Export .pzmerge file"
+                        title={i18next.t('merger.list.exportTitle')}
                       >
                         <Download className="w-3.5 h-3.5 text-emerald-400" />
                       </button>
@@ -260,10 +261,10 @@ export const PackageList: React.FC<PackageListProps> = ({
                         onOpenFolder(pkg.folder_name);
                       }}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition cursor-pointer font-medium"
-                      title="Open physical folder in Windows Explorer"
+                      title={i18next.t('merger.list.folderTitle')}
                     >
                       <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-                      {pkg.is_companion_bridge && <span className="text-[11px]">View Files</span>}
+                      {pkg.is_companion_bridge && <span className="text-[11px]">{i18next.t('merger.list.viewFiles')}</span>}
                     </button>
                   </div>
 
@@ -272,12 +273,12 @@ export const PackageList: React.FC<PackageListProps> = ({
                       onClick={() => onOpen(pkg.folder_name)}
                       className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold transition shadow flex items-center gap-1.5 cursor-pointer"
                     >
-                      <span>🔍 Open / Enter Package</span>
+                      <span>{i18next.t('merger.list.open')}</span>
                     </button>
                   ) : (
                     <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono px-2 py-1 bg-slate-950/60 rounded-lg border border-slate-800">
                       <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                      <span>IPC Link with the Game</span>
+                      <span>{i18next.t('merger.list.ipcLink')}</span>
                     </div>
                   )}
                 </div>
