@@ -28,6 +28,8 @@ interface BrowseModuleProps {
   catalog: CatalogModSummary[];
   /** Called after mods were installed, so the mod list is rescanned. */
   onInstalled: () => void;
+  /** Workshop items Steam accepted a subscription to: they land later, when Steam has downloaded them. */
+  onSubscribed?: (workshopIds: string[]) => void;
   /** Makes a profile from a collection: the Studio's mod list and profiles live above here. */
   onMakeProfile?: (name: string, workshopIds: string[]) => void;
   /** The player's profiles, for "Add to a profile…", and what to call after one changed. */
@@ -798,7 +800,7 @@ const TABS: { id: SourceTab; active: string }[] = [
   { id: 'lists', active: 'bg-amber-950/80 text-amber-200 border-amber-700' },
 ];
 
-export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null, profiles = [], onProfilesChanged }) => {
+export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, onSubscribed, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null, profiles = [], onProfilesChanged }) => {
   const { t } = useTranslation();
   const keep = useKeepActions(paths, profiles, onProfilesChanged);
   const [tab, setTab] = useState<SourceTab>('workshop');
@@ -862,8 +864,9 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
             i18next.t('browse.subscribePartial', { failed: outcome.failed.length, total: ids.length, reason: outcome.failed[0][1] })
           );
         }
-        // Steam downloads in the background; pick up whatever has landed.
+        // Steam downloads in the background; pick up whatever has landed, and watch for the rest.
         onInstalled();
+        if (subscribe && outcome.done.length > 0) onSubscribed?.(outcome.done);
         // Nothing went through: the button must not say it did.
         if (outcome.done.length === 0) throw new Error('none subscribed');
       } catch (err) {
@@ -873,7 +876,7 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
         throw err;
       }
     },
-    [paths, onInstalled]
+    [paths, onInstalled, onSubscribed]
   );
 
   // The Mod List asked for one item: show it on its own, not stacked on whatever was open.

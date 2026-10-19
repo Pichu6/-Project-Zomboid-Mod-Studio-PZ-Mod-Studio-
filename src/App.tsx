@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor, STUDIO_LINK_MOD_ID } from './types';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor, profileMembers, STUDIO_LINK_MOD_ID } from './types';
 import { DeveloperModule } from './components/dev/DeveloperModule';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -247,6 +247,66 @@ export const App: React.FC = () => {
       setMods([...allSubscribedMods]);
     }
   };
+
+  /**
+   * Workshop items subscribed from Browse that Steam is still downloading, with the profile that
+   * was active then. Steam downloads in the background, so the list is read again every few
+   * seconds until each item lands; its mods then join that profile, switched off (an item can
+   * hold several mods, and which to switch on is the player's call). After 20 minutes the Studio
+   * stops waiting; anything that lands later is in "Showing everything".
+   */
+  const [awaitedItems, setAwaitedItems] = useState<Map<string, { profileId: string | null; since: number }>>(new Map());
+  const handleSubscribed = useCallback(
+    (workshopIds: string[]) => {
+      setAwaitedItems((prev) => {
+        const next = new Map(prev);
+        for (const id of workshopIds) next.set(id, { profileId: activeProfile?.id ?? null, since: Date.now() });
+        return next;
+      });
+    },
+    [activeProfile]
+  );
+  useEffect(() => {
+    if (awaitedItems.size === 0 || !paths.is_valid) return;
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      const scanned = await TauriService.scanAllInstalledMods(paths).catch(() => null);
+      if (cancelled || !scanned) return;
+      const landed = new Map<string, string[]>(); // profile id -> mod ids that arrived
+      const done: string[] = [];
+      for (const [itemId, wait] of awaitedItems) {
+        const arrived = scanned.filter((m) => m.workshop_id === itemId).map((m) => m.mod_id);
+        if (arrived.length > 0) {
+          done.push(itemId);
+          if (wait.profileId) landed.set(wait.profileId, [...(landed.get(wait.profileId) ?? []), ...arrived]);
+        } else if (Date.now() - wait.since > 20 * 60 * 1000) {
+          done.push(itemId);
+        }
+      }
+      if (done.length === 0) return;
+      setMods([...scanned]);
+      const fresh: AppProfile[] = await TauriService.listInstances(paths.user_zomboid_dir).catch(() => []);
+      for (const [profileId, modIds] of landed) {
+        const profile = fresh.find((p) => p.id === profileId);
+        if (!profile) continue;
+        const members = profileMembers(profile);
+        const added = modIds.filter((id) => !members.includes(id));
+        if (added.length > 0) {
+          await TauriService.setProfileMembers(paths.user_zomboid_dir, profileId, [...members, ...added]).catch(() => null);
+        }
+      }
+      void refreshActiveProfile();
+      setAwaitedItems((prev) => {
+        const next = new Map(prev);
+        for (const id of done) next.delete(id);
+        return next;
+      });
+    }, 6000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [awaitedItems, paths, refreshActiveProfile]);
 
   /**
    * Turns a Workshop collection into a profile: the mods you have installed from its items, kept
@@ -762,6 +822,7 @@ export const App: React.FC = () => {
               paths={paths}
               catalog={health.catalog}
               onInstalled={handleRefreshMods}
+              onSubscribed={handleSubscribed}
               focusWorkshopId={browseFocusWorkshopId}
               onFocusHandled={() => setBrowseFocusWorkshopId(null)}
               onMakeProfile={handleMakeProfileFromCollection}
