@@ -3,6 +3,7 @@ import { KeptVersion, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { Archive, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface KeptVersionsProps {
   paths: StudioPathsUI;
@@ -21,6 +22,7 @@ const sizeOf = (bytes: number) => (bytes >= 1 << 20 ? `${(bytes / (1 << 20)).toF
  * one back makes it a local copy the game reads instead of the Workshop one; the kept copy stays.
  */
 export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose, onModsChanged, toast }) => {
+  const { t } = useTranslation();
   const [all, setAll] = useState<KeptVersion[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose,
     setBusy('keep');
     try {
       const kept = await TauriService.keepModVersion(paths, mod.mod_id);
-      toast(`${kept.mod_name} as it is today is kept (${kept.kept_at}).`);
+      toast(t('dialogs.kept.keptNow', { name: kept.mod_name, when: kept.kept_at }));
       await reload();
     } catch {
       // Already shown by TauriService.
@@ -50,17 +52,13 @@ export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose,
 
   const restore = async (v: KeptVersion) => {
     if (
-      !window.confirm(
-        `Use the version of ${v.mod_name} kept on ${v.kept_at}${v.version ? ` (modversion ${v.version})` : ''}?\n\n` +
-          `It goes into Zomboid/mods as a local copy, and the game started from the Studio reads it instead of the Workshop one. ` +
-          `Mod Health lists it as a compatible copy, with "Remove compatible copy" to go back to the Workshop version.`
-      )
+      !window.confirm(t('dialogs.kept.confirmUse', { name: v.mod_name, when: v.kept_at, version: v.version ? t('dialogs.kept.modversion', { version: v.version }) : '' }))
     )
       return;
     setBusy(v.path);
     try {
       const back = await TauriService.restoreKeptVersion(paths, v.path);
-      toast(`${back.mod_name} is back to the version kept on ${back.kept_at}. Start the game from the Studio to play it.`, 6000);
+      toast(t('dialogs.kept.restored', { name: back.mod_name, when: back.kept_at }), 6000);
       onModsChanged();
     } catch {
       // Already shown by TauriService.
@@ -70,7 +68,7 @@ export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose,
   };
 
   const remove = async (v: KeptVersion) => {
-    if (!window.confirm(`Delete the version of ${v.mod_name} kept on ${v.kept_at}? This cannot be undone.`)) return;
+    if (!window.confirm(t('dialogs.kept.confirmDelete', { name: v.mod_name, when: v.kept_at }))) return;
     setBusy(v.path);
     try {
       await TauriService.deleteKeptVersion(paths, v.path);
@@ -89,11 +87,10 @@ export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose,
           <div>
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <Archive className="w-4 h-4 text-cyan-400" />
-              <span>Kept versions of {mod.name}</span>
+              <span>{t('dialogs.kept.title', { name: mod.name })}</span>
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Steam replaces a Workshop mod in place when it updates; there is no going back unless a copy was kept.
-              A kept version put back becomes a local copy the game reads instead of the Workshop one.
+              {t('dialogs.kept.blurb')}
             </p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer">
@@ -105,15 +102,15 @@ export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose,
           onClick={() => void keepNow()}
           disabled={busy !== null}
           className="w-full py-1.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/70 border border-cyan-800 text-cyan-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
-          title="Copies the mod's folder as it is today into Zomboid/PZModStudio_Snapshots"
+          title={t('dialogs.kept.keepTitle')}
         >
-          {busy === 'keep' ? 'Keeping…' : `Keep the version installed today${mod.version ? ` (modversion ${mod.version})` : ''}`}
+          {busy === 'keep' ? t('dialogs.kept.keeping') : t('dialogs.kept.keepToday', { version: mod.version ? t('dialogs.kept.modversion', { version: mod.version }) : '' })}
         </button>
 
         {all === null ? (
-          <p className="text-xs text-slate-400 py-4 text-center">Reading…</p>
+          <p className="text-xs text-slate-400 py-4 text-center">{t('dialogs.kept.reading')}</p>
         ) : versions.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">No version of this mod is kept yet.</p>
+          <p className="text-xs text-slate-400 py-4 text-center">{t('dialogs.kept.none')}</p>
         ) : (
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800">
             {versions.map((v) => (
@@ -134,15 +131,15 @@ export const KeptVersions: React.FC<KeptVersionsProps> = ({ paths, mod, onClose,
                     disabled={busy !== null}
                     className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 cursor-pointer transition disabled:opacity-50"
                   >
-                    {busy === v.path ? 'Working…' : 'Use this version'}
+                    {busy === v.path ? t('dialogs.kept.working') : t('dialogs.kept.use')}
                   </button>
                   <button
                     onClick={() => void remove(v)}
                     disabled={busy !== null}
                     className="px-2 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900 cursor-pointer transition disabled:opacity-50"
-                    title="Delete this kept copy"
+                    title={t('dialogs.kept.deleteTitle')}
                   >
-                    Delete
+                    {t('dialogs.kept.delete')}
                   </button>
                 </div>
               </div>

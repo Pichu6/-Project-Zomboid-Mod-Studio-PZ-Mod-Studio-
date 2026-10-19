@@ -4,6 +4,8 @@ import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, He
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 import { applyFix } from '../../utils/healthFix';
+import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -42,41 +44,43 @@ const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definitio
 
 
 const fixLabel = (fix: HealthFix): string => {
+  const t = i18next.t;
   switch (fix.action) {
     case 'enable_mod':
-      return `Enable ${fix.mod_id}`;
+      return t('health.fix.enable', { id: fix.mod_id });
     case 'disable_mod':
-      return `Disable ${fix.mod_id}`;
+      return t('health.fix.disable', { id: fix.mod_id });
     case 'move_before':
-      return `Move ${fix.mod_id} before ${fix.before}`;
+      return t('health.fix.moveBefore', { id: fix.mod_id, before: fix.before });
     case 'remove_from_list':
-      return `Remove ${fix.entry} from the list`;
+      return t('health.fix.remove', { entry: fix.entry });
     case 'subscribe_workshop':
-      return `Search Workshop for "${fix.hint}"`;
+      return t('health.fix.searchWorkshop', { hint: fix.hint });
     case 'open_workshop_page':
-      return 'Open Workshop page';
+      return t('health.fix.openWorkshop');
     case 'make_compatible_copy':
-      return 'Make compatible copy';
+      return t('health.fix.makeCopy');
     case 'keep_version':
-      return 'Keep the version you have';
+      return t('health.fix.keepVersion');
     case 'remove_compatible_copy':
-      return 'Remove compatible copy';
+      return t('health.fix.removeCopy');
     case 'merge_files':
-      return 'Merge automatically';
+      return t('health.fix.mergeAuto');
     case 'open_in_merger':
-      return 'Open in Merger';
+      return t('health.fix.openMerger');
     case 'enable_shim_patch':
-      return `Switch the shim's ${fix.name} patch on`;
+      return t('health.fix.shimOn', { name: fix.name });
   }
 };
 
-const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: string; iconColor: string; label: string }> = {
-  error: { icon: XCircle, row: 'border-red-500/40 bg-red-950/30', iconColor: 'text-red-400', label: 'Errors' },
-  warning: { icon: AlertTriangle, row: 'border-amber-500/40 bg-amber-950/20', iconColor: 'text-amber-400', label: 'Warnings' },
-  info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400', label: 'Info' },
+const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: string; iconColor: string }> = {
+  error: { icon: XCircle, row: 'border-red-500/40 bg-red-950/30', iconColor: 'text-red-400' },
+  warning: { icon: AlertTriangle, row: 'border-amber-500/40 bg-amber-950/20', iconColor: 'text-amber-400' },
+  info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400' },
 };
 
 export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged, onOpenMerger, focusIssue = null, onFocusHandled }) => {
+  const { t } = useTranslation();
   const [litKey, setLitKey] = useState<string | null>(null);
   const issueKey = (i: HealthIssue) => `${i.code}|${i.mod_id ?? ''}|${i.message}`;
   useEffect(() => {
@@ -121,7 +125,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         result = await TauriService.makeCompatibleCopy(paths, modId, false);
       } catch (err) {
         if (!String(err).includes('earlier compatible copy')) throw err;
-        if (!confirm(`${modId} already has a compatible copy. Make a fresh one? The current copy is moved to Zomboid/PZModStudio_Backups/mods.`)) return;
+        if (!confirm(t('health.freshCopy', { mod: modId }))) return;
         result = await TauriService.makeCompatibleCopy(paths, modId, true);
       }
       setCompatResult(result);
@@ -135,7 +139,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   };
 
   const removeCompatibleCopy = async (folder: string) => {
-    if (!confirm(`Remove the compatible copy of ${folder}? The game goes back to the original (which your build may not load). The copy is moved to Zomboid/PZModStudio_Backups/mods.`)) return;
+    if (!confirm(t('health.removeCopyConfirm', { folder }))) return;
     try {
       await TauriService.removeCompatibleCopy(paths, folder);
       setCompatResult(null);
@@ -178,7 +182,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       void (async () => {
         try {
           const written = await TauriService.setShimPatch(paths.user_zomboid_dir, fix.name, true);
-          say(`The shim's patch ${fix.name} is on, written into ${written} package${written === 1 ? '' : 's'}; the game reads it on its next launch.`);
+          say(t('health.shimOnDone', { name: fix.name, count: written }));
           onRecheck();
         } catch {
           // Already shown by TauriService.
@@ -190,7 +194,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       void (async () => {
         try {
           const kept = await TauriService.keepModVersion(paths, fix.mod_id);
-          say(`${kept.mod_name} as it is today is kept (${kept.kept_at}). If the update breaks a save: Mod List, right-click, Kept versions.`);
+          say(t('health.keptDone', { name: kept.mod_name, when: kept.kept_at }));
         } catch {
           // Already shown by TauriService.
         }
@@ -209,7 +213,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     }
     if (fix.action === 'disable_mod') {
       const name = mods.find((m) => m.mod_id === fix.mod_id)?.name ?? fix.mod_id;
-      if (!confirm(`Switch off ${name}?\n\nIt stays installed, and you can switch it back on in the Mod List.`)) return;
+      if (!confirm(t('health.confirmDisable', { name }))) return;
     }
     const next = applyFix(mods, fix);
     if (!next) return;
@@ -217,17 +221,13 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     if (fix.action === 'move_before') {
       const moved = nameOf(fix.mod_id);
       const anchor = nameOf(fix.before);
-      say(
-        issue && YOUR_CALL_CODES.has(issue.code)
-          ? `The game will now use ${anchor}'s version: ${moved} loads before it.`
-          : `${moved} now loads before ${anchor}.`
-      );
+      say(issue && YOUR_CALL_CODES.has(issue.code) ? t('health.nowUsesVersion', { anchor, moved }) : t('health.nowLoadsBefore', { moved, anchor }));
     } else if (fix.action === 'enable_mod') {
-      say(`${nameOf(fix.mod_id)} is switched on.`);
+      say(t('health.switchedOn', { name: nameOf(fix.mod_id) }));
     } else if (fix.action === 'disable_mod') {
-      say(`${nameOf(fix.mod_id)} is switched off.`);
+      say(t('health.switchedOff', { name: nameOf(fix.mod_id) }));
     } else if (fix.action === 'remove_from_list') {
-      say(`${fix.entry} is out of the list.`);
+      say(t('health.outOfList', { entry: fix.entry }));
     }
   };
 
@@ -242,11 +242,11 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       }
     }
     if (next === mods) {
-      say('Nothing changed: those fixes are already in place.');
+      say(t('health.nothingChanged'));
       return;
     }
     onApplyModList(next);
-    say(`${applied} change${applied === 1 ? '' : 's'} made to your mod list.`);
+    say(t('health.changesMade', { count: applied }));
   };
 
   /** The name the Mod List shows for a mod id. */
@@ -262,11 +262,8 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   const handleFixAllSafe = () => {
     const enabling = safeFixes.filter((f) => f.action === 'enable_mod').length;
     const moving = safeFixes.filter((f) => f.action === 'move_before').length;
-    const parts = [
-      enabling > 0 && `switch on ${enabling} ${enabling === 1 ? 'mod' : 'mods'} that others need`,
-      moving > 0 && `move ${moving} ${moving === 1 ? 'mod' : 'mods'} earlier in the load order`,
-    ].filter(Boolean);
-    if (!confirm(`This will ${parts.join(' and ')}.\n\nNothing is switched off, and the Mod List can undo it.`)) return;
+    const parts = [enabling > 0 && t('health.willEnable', { count: enabling }), moving > 0 && t('health.willMove', { count: moving })].filter(Boolean);
+    if (!confirm(t('health.confirmFixAll', { what: parts.join(t('health.and')) }))) return;
     handleFixes(safeFixes);
   };
 
@@ -290,7 +287,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   if (!paths.is_valid) {
     return (
       <div className="flex-1 flex items-center justify-center text-sm text-slate-400 p-6">
-        Configure your game and Zomboid folders in App Settings to check your mods.
+        {t('health.configureFirst')}
       </div>
     );
   }
@@ -301,22 +298,21 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         <div className="flex items-start gap-3">
           <HeartPulse className="w-6 h-6 text-emerald-400 mt-0.5" aria-hidden="true" />
           <div>
-            <h1 className="text-lg font-bold text-slate-100">Mod Health</h1>
+            <h1 className="text-lg font-bold text-slate-100">{t('health.title')}</h1>
             <p className="text-xs text-slate-400 max-w-2xl">
-              Checks your active load order the way the game reads it: mods your build cannot load, missing or
-              disabled requirements, libraries loading too late, incompatible mods enabled together.
+              {t('health.blurb')}
             </p>
             {report && (
               <div className="flex flex-wrap gap-2 mt-3 text-[11px] font-mono">
                 <span className="px-2 py-0.5 rounded border border-slate-700 text-slate-300">
-                  Game build {report.game_version ?? 'unknown'}
+                  {t('health.gameBuild', { build: report.game_version ?? t('health.unknown') })}
                 </span>
-                <span className="px-2 py-0.5 rounded border border-slate-700 text-slate-300">{report.active_count} active</span>
+                <span className="px-2 py-0.5 rounded border border-slate-700 text-slate-300">{t('health.activeCount', { count: report.active_count })}</span>
                 <span className={`px-2 py-0.5 rounded border ${report.errors ? 'border-red-500/50 text-red-300' : 'border-slate-700 text-slate-400'}`}>
-                  {report.errors} errors
+                  {t('health.errorsCount', { count: report.errors })}
                 </span>
                 <span className={`px-2 py-0.5 rounded border ${report.warnings ? 'border-amber-500/50 text-amber-300' : 'border-slate-700 text-slate-400'}`}>
-                  {report.warnings} warnings
+                  {t('health.warningsCount', { count: report.warnings })}
                 </span>
                 <button
                   type="button"
@@ -324,7 +320,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                     void (async () => {
                       try {
                         const c = await TauriService.refreshCommunity(paths);
-                        say(`Community files fetched: ${c.rules} load-order rule${c.rules === 1 ? '' : 's'}, ${c.pairs} incompatible pair${c.pairs === 1 ? '' : 's'}, ${c.mods} mod registr${c.mods === 1 ? 'y' : 'ies'}${c.index_updated ? ` (index updated ${c.index_updated})` : ''}.`);
+                        say(t('health.communityFetched', { rules: c.rules, pairs: c.pairs, mods: c.mods, updated: c.index_updated ? t('health.indexUpdated', { date: c.index_updated }) : '' }));
                         onRecheck();
                       } catch {
                         // Already shown by TauriService.
@@ -334,11 +330,11 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                   className="px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
                   title={
                     report.community
-                      ? `From the community, in use: ${report.community.rules} load-order rule(s), ${report.community.pairs} incompatible pair(s), ${report.community.mods} mod registr${report.community.mods === 1 ? 'y' : 'ies'} with known issues and fixes${report.community.index_updated ? ` (index updated ${report.community.index_updated})` : ''}. Fetched once a day from the Studio's repository (community/); click to fetch now.${report.community.downloads ? '' : ' Downloads are off in Settings: this is the last copy.'}`
-                      : 'Nothing from the community at hand yet (fetched once a day from the Studio\'s repository, community/). Click to fetch now.'
+                      ? t('health.communityTitle', { rules: report.community.rules, pairs: report.community.pairs, mods: report.community.mods, updated: report.community.index_updated ? t('health.indexUpdated', { date: report.community.index_updated }) : '', off: report.community.downloads ? '' : t('health.communityOff') })
+                      : t('health.communityNone')
                   }
                 >
-                  community: {report.community ? `${report.community.rules + report.community.pairs} rules, ${report.community.mods} mods` : 'none yet'} ↻
+                  {report.community ? t('health.community', { rules: report.community.rules + report.community.pairs, mods: report.community.mods }) : t('health.communityNoneShort')} ↻
                 </button>
               </div>
             )}
@@ -351,10 +347,10 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
               onClick={() => mergeFiles(mergeablePaths)}
               disabled={mergeBusy}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer disabled:opacity-60"
-              title="Merges every conflicting file that has no overlapping changes into your patch package"
+              title={t('health.mergeAllTitle')}
             >
               <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
-              Merge {mergeablePaths.length} files automatically
+              {t('health.mergeAll', { count: mergeablePaths.length })}
             </button>
           )}
           {safeFixes.length > 0 && (
@@ -362,10 +358,10 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
               type="button"
               onClick={handleFixAllSafe}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
-              title="Enables missing requirements and moves libraries before the mods that need them"
+              title={t('health.fixAllTitle')}
             >
               <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
-              Fix {safeIssueCount} {safeIssueCount === 1 ? 'problem' : 'problems'} automatically
+              {t('health.fixAll', { count: safeIssueCount })}
             </button>
           )}
           <button
@@ -375,19 +371,19 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60"
           >
             {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}
-            Check again
+            {t('health.checkAgain')}
           </button>
         </div>
       </div>
 
       {compatBusy && (
         <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
-          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Making a compatible copy...
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> {t('health.makingCopy')}
         </div>
       )}
       {mergeBusy && (
         <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
-          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Merging conflicting files...
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> {t('health.merging')}
         </div>
       )}
       {mergeResult && (
@@ -395,9 +391,9 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-indigo-200 font-bold">
               <CheckCircle2 className="w-4 h-4 text-indigo-300" aria-hidden="true" />
-              {mergeResult.merged.length} {mergeResult.merged.length === 1 ? 'file' : 'files'} merged into {mergeResult.package_folder}
+              {t('health.mergedInto', { count: mergeResult.merged.length, package: mergeResult.package_folder })}
             </div>
-            <button type="button" onClick={() => setMergeResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">Close</button>
+            <button type="button" onClick={() => setMergeResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">{t('health.close')}</button>
           </div>
           {mergeResult.merged.length > 0 && (
             <ul className="list-disc pl-5 text-slate-300 space-y-0.5 font-mono">
@@ -406,19 +402,19 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
           )}
           {mergeResult.skipped.length > 0 && (
             <>
-              <div className="text-amber-300 font-bold mt-1">These need your decision (two mods change the same lines):</div>
+              <div className="text-amber-300 font-bold mt-1">{t('health.needDecision')}</div>
               <ul className="list-disc pl-5 text-amber-200/90 space-y-0.5 font-mono">
                 {mergeResult.skipped.map((p) => (
                   <li key={p}>
                     {p}{' '}
-                    <button type="button" onClick={() => onOpenMerger(p)} className="underline text-amber-100 cursor-pointer">Open in Merger</button>
+                    <button type="button" onClick={() => onOpenMerger(p)} className="underline text-amber-100 cursor-pointer">{t('health.openInMerger')}</button>
                   </li>
                 ))}
               </ul>
             </>
           )}
           <div className="text-slate-400">
-            The package is enabled at the end of your load order, so its merged files win. Check again after you add or update mods.
+            {t('health.packageWins')}
           </div>
         </div>
       )}
@@ -427,27 +423,24 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-emerald-200 font-bold">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-              Compatible copy of {compatResult.mod_id} ready in Zomboid/mods/{compatResult.folder}
+              {t('health.copyReady', { mod: compatResult.mod_id, folder: compatResult.folder })}
             </div>
-            <button type="button" onClick={() => setCompatResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">Close</button>
+            <button type="button" onClick={() => setCompatResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">{t('health.close')}</button>
           </div>
           <ul className="list-disc pl-5 text-slate-300 space-y-0.5">
             {compatResult.changes.map((c, i) => <li key={i}>{c}</li>)}
           </ul>
           {compatResult.warnings.length > 0 ? (
             <>
-              <div className="text-amber-300 font-bold mt-1">May still break in game:</div>
+              <div className="text-amber-300 font-bold mt-1">{t('health.mayBreak')}</div>
               <ul className="list-disc pl-5 text-amber-200/90 space-y-0.5">
                 {compatResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </>
           ) : (
-            <div className="text-slate-400">No known Build 41 leftovers were found in it.</div>
+            <div className="text-slate-400">{t('health.noLeftovers')}</div>
           )}
-          <div className="text-slate-400">
-            Start the game from PZ Mod Studio so it uses the copy (from Steam, add the launch option
-            <code className="mx-1">-modfolders mods,workshop,steam</code>). Test it in a new or backed-up save first.
-          </div>
+          <div className="text-slate-400" dangerouslySetInnerHTML={{ __html: t('health.startFromStudio') }} />
         </div>
       )}
 
@@ -455,14 +448,14 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-xs">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
           <span>{done}</span>
-          <span className="text-emerald-500/70">Saved to your mod list.</span>
+          <span className="text-emerald-500/70">{t('health.savedToList')}</span>
         </div>
       )}
 
       {report && report.issues.length === 0 && (
         <div className="flex items-center gap-3 p-5 rounded-xl border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-400" aria-hidden="true" />
-          No problems found in your {report.active_count} active mods.
+          {t('health.noProblems', { count: report.active_count })}
         </div>
       )}
 
@@ -470,7 +463,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         grouped[sev].length === 0 ? null : (
           <section key={sev} className="flex flex-col gap-2">
             <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono">
-              {SEVERITY_STYLE[sev].label} ({grouped[sev].length})
+              {t(`health.severity.${sev}`)} ({grouped[sev].length})
             </h2>
             {grouped[sev].map((issue, idx) => {
               const style = SEVERITY_STYLE[sev];
@@ -492,7 +485,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                     {issue.details && issue.details.length > 0 && (
                       <details className="mt-1.5">
                         <summary className="text-[11px] text-sky-300 cursor-pointer select-none">
-                          By file ({issue.details.length} file{issue.details.length === 1 ? '' : 's'})
+                          {t('health.byFile', { count: issue.details.length })}
                         </summary>
                         <div className="mt-1.5 flex flex-col gap-1.5">
                           {issue.details.map((d) => (
@@ -501,21 +494,21 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                                 <b className="text-slate-100">{d.mod_name}</b> <span className="font-mono text-slate-400">{d.file}</span>
                               </div>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {d.declares.map((t) => (
+                                {d.declares.map((thing) => (
                                   <button
-                                    key={t.definition}
+                                    key={thing.definition}
                                     type="button"
-                                    onClick={() => onOpenMerger(t.merged_path)}
-                                    title={`${t.definition}: ${t.state === 'merged' ? 'merged in your package' : t.state === 'stale' ? 'merged, but a mod changed since' : 'not settled yet'}. Click: open the merged block in the Merger`}
+                                    onClick={() => onOpenMerger(thing.merged_path)}
+                                    title={`${thing.definition}: ${thing.state === 'merged' ? t('health.thingMerged') : thing.state === 'stale' ? t('health.thingStale') : t('health.thingPending')}${t('health.thingClick')}`}
                                     className={`px-1.5 py-0.5 rounded text-[10px] font-mono border cursor-pointer ${
-                                      t.state === 'merged'
+                                      thing.state === 'merged'
                                         ? 'border-emerald-800 text-emerald-300 bg-emerald-950/40'
-                                        : t.state === 'stale'
+                                        : thing.state === 'stale'
                                         ? 'border-amber-800 text-amber-300 bg-amber-950/40'
                                         : 'border-slate-700 text-slate-300 hover:bg-slate-800'
                                     }`}
                                   >
-                                    {t.definition}
+                                    {thing.definition}
                                   </button>
                                 ))}
                               </div>
@@ -536,7 +529,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                           className="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 cursor-pointer"
                         >
                           {YOUR_CALL_CODES.has(issue.code) && fix.action === 'move_before'
-                            ? `Use ${nameOf(fix.before)}'s version instead`
+                            ? t('health.useVersionInstead', { name: nameOf(fix.before) })
                             : fixLabel(fix)}
                         </button>
                       ))}

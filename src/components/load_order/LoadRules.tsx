@@ -3,6 +3,7 @@ import { ModInfo, UserRule } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { ListOrdered, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface LoadRulesProps {
   paths: StudioPathsUI;
@@ -23,6 +24,7 @@ interface LoadRulesProps {
  * list breaks one.
  */
 export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose, onRulesChanged, toast, installedBuild = null }) => {
+  const { t } = useTranslation();
   const [rules, setRules] = useState<UserRule[] | null>(null);
   const [search, setSearch] = useState('');
   const [note, setNote] = useState('');
@@ -58,7 +60,7 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
     setBusy(true);
     try {
       await TauriService.addLoadRule(paths, mod.mod_id, after.mod_id, note.trim() || null);
-      toast(`${mod.name} now loads after ${after.name}. Auto-Sort puts it there; Mod Health says if the list breaks it.`, 5000);
+      toast(t('dialogs.rules.added', { name: mod.name, after: after.name }), 5000);
       setSearch('');
       setNote('');
       await reload();
@@ -92,15 +94,15 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
     const entry = {
       mod_id: rule.mod_id,
       after: rule.after,
-      note: rule.note ?? `${nameOf(rule.mod_id)} has to load after ${nameOf(rule.after)}`,
-      source: `tested on ${installedBuild ?? 'build ?'}`,
+      note: rule.note ?? t('dialogs.rules.defaultNote', { name: nameOf(rule.mod_id), after: nameOf(rule.after) }),
+      source: t('dialogs.rules.testedOn', { build: installedBuild ?? t('dialogs.rules.buildUnknown') }),
     };
     if (await TauriService.githubTokenStatus()) {
       // With a token: the Studio adds the rule to the file on a branch of the fork and opens the pull request.
-      toast('Opening a pull request with the rule…', 20000);
+      toast(t('dialogs.rules.openingPr'), 20000);
       try {
         const r = await TauriService.proposeRule(entry);
-        toast(`Pull request opened: ${r.pr_url}`, 10000);
+        toast(t('dialogs.rules.prOpened', { url: r.pr_url }), 10000);
         TauriService.openExternalUrl(r.pr_url);
       } catch {
         // Already shown by TauriService.
@@ -108,7 +110,7 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
       return;
     }
     await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
-    toast('The rule is on the clipboard as JSON. On GitHub, add it under "load_after" in community/rules.json and open a pull request.', 8000);
+    toast(t('dialogs.rules.clipboard'), 8000);
     TauriService.openExternalUrl('https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/edit/main/community/rules.json');
   };
 
@@ -122,17 +124,17 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
         <button
           onClick={() => void propose(rule)}
           className="px-2 py-1 rounded-lg text-[11px] text-cyan-300 hover:text-cyan-200 border border-slate-800 hover:border-cyan-900 cursor-pointer transition"
-          title="Offers this rule to every player of the Studio: opens it on GitHub (community/rules.json), where a pull request adds it. Sends nothing by itself."
+          title={t('dialogs.rules.shareTitle')}
         >
-          Share this rule
+          {t('dialogs.rules.share')}
         </button>
         <button
           onClick={() => void remove(rule)}
           disabled={busy}
           className="px-2 py-1 rounded-lg text-[11px] text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900 cursor-pointer transition disabled:opacity-50"
-          title="Remove this rule"
+          title={t('dialogs.rules.removeTitle')}
         >
-          Remove
+          {t('dialogs.rules.remove')}
         </button>
       </div>
     </div>
@@ -145,11 +147,10 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
           <div>
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <ListOrdered className="w-4 h-4 text-cyan-400" />
-              <span>Load-order rules for {mod.name}</span>
+              <span>{t('dialogs.rules.title', { name: mod.name })}</span>
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              What you found out by playing, that mod.info does not say. Auto-Sort follows a rule like the mod's own
-              loadModAfter; Mod Health and the row say when the list breaks one.
+              {t('dialogs.rules.blurb')}
             </p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer">
@@ -158,12 +159,12 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
         </div>
 
         <div className="space-y-2">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{mod.name} must load after…</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('dialogs.rules.mustLoadAfter', { name: mod.name })}</div>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Which mod? Type part of its name"
+            placeholder={t('dialogs.rules.whichMod')}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
           />
           {candidates.length > 0 && (
@@ -186,22 +187,22 @@ export const LoadRules: React.FC<LoadRulesProps> = ({ paths, mod, mods, onClose,
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Why, in a few words (optional): recipes vanish otherwise…"
+            placeholder={t('dialogs.rules.notePlaceholder')}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-emerald-500"
           />
         </div>
 
         {rules === null ? (
-          <p className="text-xs text-slate-400 py-2 text-center">Reading…</p>
+          <p className="text-xs text-slate-400 py-2 text-center">{t('dialogs.rules.reading')}</p>
         ) : mine.length === 0 && theirs.length === 0 ? (
-          <p className="text-xs text-slate-400 py-2 text-center">No rule of yours mentions this mod yet.</p>
+          <p className="text-xs text-slate-400 py-2 text-center">{t('dialogs.rules.none')}</p>
         ) : (
           <div className="rounded-xl border border-slate-800 divide-y divide-slate-800 max-h-64 overflow-y-auto">
             {mine.map((r) => (
-              <Row key={`${r.mod_id}>${r.after}`} rule={r} text={<>loads after <b>{nameOf(r.after)}</b></>} />
+              <Row key={`${r.mod_id}>${r.after}`} rule={r} text={<>{t('dialogs.rules.loadsAfter')} <b>{nameOf(r.after)}</b></>} />
             ))}
             {theirs.map((r) => (
-              <Row key={`${r.mod_id}>${r.after}`} rule={r} text={<><b>{nameOf(r.mod_id)}</b> loads after this mod</>} />
+              <Row key={`${r.mod_id}>${r.after}`} rule={r} text={<><b>{nameOf(r.mod_id)}</b> {t('dialogs.rules.loadsAfterThis')}</>} />
             ))}
           </div>
         )}
