@@ -2017,6 +2017,11 @@
         "explanation": "Un mod llamó a Translator.getText() con un % o un . sin escapar, y el formateo de cadenas de Java se rompió.",
         "action": "Aplicá la regla de polyfill SANITIZE_TRANSLATOR_FORMAT"
       },
+      "translator_text": {
+        "title": "Un texto de un mod tiene un % suelto",
+        "explanation": "Un texto del archivo de traducción de un mod (casi siempre el nombre o la ayuda de una opción de sandbox) tiene un % que no está escrito %%, y el formateo de textos de Java no lo puede leer. El juego muestra el texto tal cual y sigue: no se rompe nada más.",
+        "action": "No hay que hacer nada para jugar. Se arregla en el archivo de traducción del mod (escribiendo %% en vez de %); \"Guardar informe\" dice qué mod, qué archivo y qué línea."
+      },
       "nil_table": {
         "title": "Acceso a una tabla global sin inicializar",
         "explanation": "El código de un mod intentó leer propiedades de una tabla nil o sin inicializar antes de que Build 42 la creara.",

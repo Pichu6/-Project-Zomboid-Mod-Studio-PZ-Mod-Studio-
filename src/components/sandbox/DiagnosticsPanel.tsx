@@ -604,8 +604,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     </div>
                   )}
                 </div>
-              ) : card.mod_name ? (
-                /* The game named a mod: say what to do about that, not what the shim covers. */
+              ) : card.mod_name || card.code === 'translator_text' ? (
+                /* The game named a mod, or it is a mod's text: say what to do, not what the shim covers. */
                 <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
                   {cardText(card, 'action')}
                 </div>

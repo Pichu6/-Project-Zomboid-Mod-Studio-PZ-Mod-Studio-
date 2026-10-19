@@ -2017,6 +2017,11 @@
         "explanation": "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to collapse.",
         "action": "Apply Polyfill Rule: SANITIZE_TRANSLATOR_FORMAT"
       },
+      "translator_text": {
+        "title": "A mod's text has a bare % sign",
+        "explanation": "A text in a mod's translation file (a sandbox option's name or tooltip, usually) has a % that is not written %%, so Java's text formatting cannot read it. The game shows the text as it is and carries on: nothing else breaks.",
+        "action": "Nothing to do to play. The fix is in the mod's translation file (% written as %%); \"Save report\" names the mod, the file and the line."
+      },
       "nil_table": {
         "title": "Uninitialized Global Table Access",
         "explanation": "Mod code attempted to access properties of a nil/uninitialized table before PZ Build 42 instantiated it.",

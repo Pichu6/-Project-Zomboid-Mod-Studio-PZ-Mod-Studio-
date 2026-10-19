@@ -700,6 +700,25 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
             severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SANITIZE_TRANSLATOR_FORMAT".to_string()),
         })
+        .map(|card| {
+            // `Formatting "Sandbox_X_Y"`: a text in a mod's translation file with a bare % that
+            // Java formats while building the menu. The game shows it unformatted and goes on;
+            // the shim, being Lua, never sees it (it showed up with the shim in the game), so
+            // the card says where the fix is instead of pointing at the Merger.
+            if !line.contains("Formatting \"") {
+                return card;
+            }
+            TranslatedErrorPayload {
+                code: "translator_text".to_string(),
+                source_file: None,
+                title: "A mod's text has a bare % sign".to_string(),
+                explanation: "A text in a mod's translation file (a sandbox option's name or tooltip, usually) has a % that is not written %%, so Java's text formatting cannot read it. The game shows the text as it is and carries on: nothing else breaks.".to_string(),
+                recommended_action: "Nothing to do to play. The fix is in the mod's translation file (% written as %%); Save report names the mod, the file and the line.".to_string(),
+                severity: Severity::Warning,
+                polyfill_rule_id_suggestion: None,
+                ..card
+            }
+        })
     } else if line.contains("attempted index of non-table") || line.contains("attempted index: getName of non-table") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
@@ -1268,6 +1287,16 @@ mod card_gate_tests {
         )
         .expect("a card");
         assert_eq!(translator.severity, Severity::Warning);
+
+        // A mod's text with a bare %: the shim does not cover it, so the card does not offer it.
+        let text = translate_log_error(
+            "WARN : General      f:0> Translator.reportMissingArgumentsFromPastAbuse> Exception thrown java.util.UnknownFormatConversionException: Conversion = ')' at Formatter.parse(null:-1). Message: ERROR: Formatting \"Sandbox_ReactiveSE_EventChance\"",
+            3,
+        )
+        .expect("a card");
+        assert_eq!(text.code, "translator_text");
+        assert_eq!(text.polyfill_rule_id_suggestion, None);
+        assert_eq!(text.source_file, None);
 
         let threw = translate_log_error(
             "ERROR: General      f:304> 20)).FHhandleKeybinds> Exception thrown aFancyHandwork.lua:126",
