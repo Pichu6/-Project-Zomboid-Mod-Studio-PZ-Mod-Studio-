@@ -1060,8 +1060,17 @@ pub fn add_index_issues(
                 }
             }
         }
+        // The copy the game loads is the Studio's compatible copy: it already rewrote what a
+        // compatible copy fixes, so offering to make one again says the opposite of the truth.
+        let compat_copy_loads = catalog
+            .get(id)
+            .map(|m| matches!(m.origin, Some(crate::origins::ModOrigin::Compat { .. })))
+            .unwrap_or(false);
         for issue in &registry.issues {
             if crate::rules::index::issue_is_handled(issue, shim_on, package_root) {
+                continue;
+            }
+            if compat_copy_loads && matches!(issue.fix, IssueFix::RequirePath { .. } | IssueFix::CompatibleCopy) {
                 continue;
             }
             let evidence = issue.file.as_deref().map(|f| match issue.line { Some(l) => format!(" ({}:{})", f, l), None => format!(" ({})", f) }).unwrap_or_default();
@@ -1809,5 +1818,22 @@ mod live_script_issue_tests {
             println!("  - {}", i.message);
             println!("    fixes: {}", i.fixes.len());
         }
+    }
+}
+
+#[cfg(test)]
+mod live_health_tests {
+    /// The whole Mod Health for this machine, read-only. PZMS_ZOMBOID_DIR.
+    #[test]
+    #[ignore]
+    fn the_real_mod_health() {
+        if std::env::var("PZMS_ZOMBOID_DIR").is_err() { return; }
+        let paths = crate::vfs::auto_detect_paths();
+        let active = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path).map(|d| d.active_mods).unwrap_or_default();
+        let health = super::mod_health_full(&paths, &active);
+        for i in health.report.issues.iter().filter(|i| i.severity != super::Severity::Info) {
+            println!("[{:?}] {} {:?}: {}", i.severity, i.code, i.mod_id, i.message.chars().take(160).collect::<String>());
+        }
+        println!("warnings {}, errors {}", health.report.warnings, health.report.errors);
     }
 }

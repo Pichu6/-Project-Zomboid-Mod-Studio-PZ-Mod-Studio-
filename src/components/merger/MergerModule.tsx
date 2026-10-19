@@ -828,6 +828,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   // scan, then select that conflict.
   const focusStartedRef = useRef<string | null>(null);
   const [focusScanDone, setFocusScanDone] = useState(false);
+  /** The conflict Mod Health sent, lit in the list for a moment. */
+  const [flashConflictId, setFlashConflictId] = useState<string | null>(null);
   useEffect(() => {
     if (!focusRelativePath) {
       focusStartedRef.current = null;
@@ -837,6 +839,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     if (hit && isPackageOpened) {
       setPeekConflictId(hit.id);
       handleSelectConflict(hit);
+      // Where it is in the list: scrolled to and lit for a moment, and never hidden by a filter.
+      setFilterNoise(false);
+      setFlashConflictId(hit.id);
+      window.setTimeout(() => setFlashConflictId((id) => (id === hit.id ? null : id)), 2500);
       setFocusScanDone(false);
       onFocusHandled?.();
       return;
@@ -1295,9 +1301,12 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                       return (
                         <div
                           key={c.id}
+                          ref={c.id === flashConflictId ? (el) => el?.scrollIntoView({ block: 'center', behavior: 'smooth' }) : undefined}
                           onClick={() => handleSelectConflict(c)}
                           className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
-                            isSelected
+                            c.id === flashConflictId
+                              ? 'bg-amber-950/40 border-amber-400 shadow-sm ring-2 ring-amber-400/60'
+                              : isSelected
                               ? 'bg-slate-800 border-emerald-500/70 shadow-sm ring-1 ring-emerald-500/30'
                               : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
                           }`}

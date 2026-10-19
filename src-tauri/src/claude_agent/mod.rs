@@ -52,6 +52,23 @@ pub fn install_claude_agent_mod(user_zomboid_dir: &str) -> Result<String, String
     ))
 }
 
+/// Brings an installed Z_ClaudeAgent up to this build's scripts. A copy installed by an older
+/// Studio keeps its bugs until replaced (one re-ran the last command at every game start), and
+/// nothing is installed for someone who never asked for it.
+pub fn refresh_if_installed(user_zomboid_dir: &Path) {
+    let target = user_zomboid_dir.join("mods").join(MOD_ID);
+    if !target.is_dir() {
+        return;
+    }
+    let lua = target.join("42").join("media").join("lua").join("client").join("ClaudeAgent.lua");
+    if std::fs::read_to_string(&lua).is_ok_and(|now| now == CLIENT_LUA) {
+        return;
+    }
+    if let Err(e) = install_claude_agent_mod(&user_zomboid_dir.to_string_lossy()) {
+        eprintln!("[ClaudeAgent] {}", e);
+    }
+}
+
 // ------------------------------------------------------------------ lua eval
 
 #[derive(Debug, Clone, Serialize)]

@@ -1875,7 +1875,9 @@
       "patchAFile": "Patch a file of it",
       "switchOffTitle": "Switch {{mod}} off in the Mod List, to see whether it is the cause",
       "switchOff": "Switch it off",
-      "openMergerTitle": "The Build 42 shim ships inside a merge package: build one in the Mod Merger",
+      "shimLive": "The shim is already in the game: it rides in your package \"{{package}}\", published and on. If this warning is from a session the package was not in, restart the game; if it comes back, the shim does not cover it.",
+      "shimDraft": "Your package \"{{package}}\" is open (a draft), so the shim is not in the game. Publish it in the Merger (Package & Publish) and restart the game.",
+      "openMergerTitle":"The Build 42 shim ships inside a merge package: build one in the Mod Merger",
       "openMerger": "A merge package may fix this — open the Mod Merger",
       "shimCovers": "The Build 42 shim already covers this"
     },

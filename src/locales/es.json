@@ -1876,6 +1876,8 @@
       "switchOffTitle": "Apaga {{mod}} en la Lista de mods, para ver si es la causa",
       "switchOff": "Apagarlo",
       "openMergerTitle": "El shim de Build 42 viaja dentro de un paquete de merge: armá uno en el Merger",
+      "shimLive": "El shim ya está en el juego: viaja en tu paquete \"{{package}}\", publicado y activo. Si este aviso es de una sesión en la que el paquete no estaba, reiniciá el juego; si vuelve a salir, el shim no lo cubre.",
+      "shimDraft": "Tu paquete \"{{package}}\" está abierto (borrador), así que el shim no está en el juego. Publicalo en el Merger (Empaquetar y publicar) y reiniciá el juego.",
       "openMerger": "Un paquete de merge puede arreglar esto — abrir el Merger",
       "shimCovers": "El shim de Build 42 ya cubre esto"
     },

@@ -259,6 +259,33 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
     }
   };
 
+  /**
+   * A card the Build 42 shim answers. The shim rides in every published package, so what to do
+   * depends on the packages: one published and on means the shim is already in the game (the
+   * line is from a session without it, or the shim does not cover it); one open as a draft means
+   * the game is without it until it is published; none means one has to be made in the Merger.
+   */
+  const [shimNotes, setShimNotes] = useState<Record<string, string>>({});
+  const handleShimCard = async (card: TranslatedErrorCard) => {
+    let packages: Awaited<ReturnType<typeof TauriService.listMergedPackages>> = [];
+    try {
+      packages = await TauriService.listMergedPackages(paths.user_zomboid_dir || '', paths.mod_list_ini_path || '');
+    } catch {
+      // Without the list, the Merger is still the place to look.
+    }
+    const own = packages.filter((p) => !p.is_companion_bridge);
+    const live = own.find((p) => p.is_packaged && p.is_active_in_modlist);
+    const draft = own.find((p) => !p.is_packaged);
+    if (live) {
+      setShimNotes((prev) => ({ ...prev, [card.id]: t('monitor.fixes.shimLive', { package: live.display_name }) }));
+      return;
+    }
+    if (draft) {
+      setShimNotes((prev) => ({ ...prev, [card.id]: t('monitor.fixes.shimDraft', { package: draft.display_name }) }));
+    }
+    onOpenMerger();
+  };
+
   /** A `require` the Studio found at another path: the fix is known before the file is opened. */
   const knownFix = (card: TranslatedErrorCard): { from: string; to: string } | null => {
     const wanted = moduleWanted(card);
@@ -562,14 +589,21 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               })()}
 
               {card.polyfill_rule_id_suggestion ? (
-                <button
-                  onClick={onOpenMerger}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
-                  title={t('monitor.fixes.openMergerTitle')}
-                >
-                  <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>{t('monitor.fixes.openMerger')}</span>
-                </button>
+                <div className="space-y-1.5">
+                  <button
+                    onClick={() => void handleShimCard(card)}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+                    title={t('monitor.fixes.openMergerTitle')}
+                  >
+                    <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>{t('monitor.fixes.openMerger')}</span>
+                  </button>
+                  {shimNotes[card.id] && (
+                    <div className="text-[11px] text-sky-200 bg-sky-950/40 border border-sky-800/50 rounded-lg px-2.5 py-1.5 leading-relaxed">
+                      {shimNotes[card.id]}
+                    </div>
+                  )}
+                </div>
               ) : card.mod_name ? (
                 /* The game named a mod: say what to do about that, not what the shim covers. */
                 <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-400">

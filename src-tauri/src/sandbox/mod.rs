@@ -145,6 +145,14 @@ fn sync_java_agents_for_launch(install_dir: &Path, user_zomboid_dir: &str) {
     if let Err(e) = crate::studio_link::sync_java_agents(install_dir, &z_dir, &active) {
         eprintln!("[StudioLink] {}", e);
     }
+    // The companion mods the player has installed run this build's scripts, not an older Studio's.
+    crate::claude_agent::refresh_if_installed(&z_dir);
+    let z = z_dir.to_string_lossy();
+    if z_dir.join("mods").join("Z_PZModStudio_Bridge").is_dir() && bridge_companion_mod_needs_update(&z) {
+        if let Err(e) = install_bridge_companion_mod(&z) {
+            eprintln!("[Bridge] {}", e);
+        }
+    }
 }
 
 /// Spawns or attaches to an active Project Zomboid process and monitors console.txt in real time.
