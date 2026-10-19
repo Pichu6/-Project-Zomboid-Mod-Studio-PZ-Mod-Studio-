@@ -39,9 +39,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     try {
       const written = await TauriService.setShimPatch(paths.user_zomboid_dir, patch.name, !patch.enabled);
       setShimPatches((list) => list.map((p) => (p.name === patch.name ? { ...p, enabled: !patch.enabled } : p)));
-      setPatchNote(
-        `${patch.label} is ${patch.enabled ? 'off' : 'on'}. Written into ${written} package${written === 1 ? '' : 's'}; the game reads it on its next launch.`
-      );
+      setPatchNote(t('settings.patchWritten', { label: patch.label, state: patch.enabled ? t('settings.stateOff') : t('settings.stateOn'), count: written }));
       setTimeout(() => setPatchNote(null), 6000);
     } catch {
       // Already shown by TauriService.
@@ -128,7 +126,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     }
   };
   const removeGithubToken = async () => {
-    if (!confirm('Remove the saved GitHub token from this PC?')) return;
+    if (!confirm(t('settings.removeTokenConfirm'))) return;
     try {
       await TauriService.deleteGithubToken();
       setGithubTokenSaved(false);
@@ -178,7 +176,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
 
   /** The mod list is a file, so offer a file picker rather than a folder one. */
   const handlePickModListFile = async () => {
-    const chosen = await TauriService.pickOpenFile('Mod list (default.txt)', 'txt');
+    const chosen = await TauriService.pickOpenFile(t('settings.modListFilter'), 'txt');
     if (!chosen) return;
     const updated = { ...formData, mod_list_ini_path: chosen };
     setFormData(updated);
@@ -282,10 +280,10 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <div>
             <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
               <HardDrive className="w-5 h-5 text-emerald-400" />
-              Settings
+              {t('settings.title')}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Where your game and mods live, which warnings you see, and what the Build 42 shim covers.
+              {t('settings.blurb')}
             </p>
           </div>
 
@@ -300,7 +298,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               }`}
             >
               <HardDrive className="w-3.5 h-3.5" />
-              Directory Paths
+              {t('settings.tabPaths')}
             </button>
             <button
               onClick={() => setActiveSubTab('POLYFILLS')}
@@ -311,7 +309,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               }`}
             >
               <Wrench className="w-3.5 h-3.5" />
-              Build 42 fixes
+              {t('settings.tabShim')}
             </button>
             {showAdvanced && (
             <button
@@ -323,7 +321,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               }`}
             >
               <Bot className="w-3.5 h-3.5 text-cyan-400" />
-              MCP Agent Server
+              {t('settings.tabMcp')}
             </button>
             )}
           </div>
@@ -332,7 +330,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
         {savedSuccess && (
           <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
-            Saved.
+            {t('settings.saved')}
           </div>
         )}
 
@@ -341,7 +339,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Folders
+                {t('settings.folders')}
               </span>
 
               <div className="flex items-center gap-2">
@@ -350,7 +348,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                  Auto-Detect Paths
+                  {t('settings.autoDetect')}
                 </button>
               </div>
             </div>
@@ -359,26 +357,24 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200">
-                  Project Zomboid Installation Directory
+                  {t('settings.gameDir')}
                 </label>
                 {/* The backend is what knows whether the folder is really a game install. */}
                 {!formData.pz_install_dir ? (
                   <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" aria-hidden="true" /> Not set
+                    <AlertTriangle className="w-3 h-3" aria-hidden="true" /> {t('settings.notSet')}
                   </span>
                 ) : paths.is_valid ? (
                   <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" aria-hidden="true" /> Found the game
+                    <CheckCircle className="w-3 h-3" aria-hidden="true" /> {t('settings.foundGame')}
                   </span>
                 ) : (
                   <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" aria-hidden="true" /> The Studio cannot find the game here
+                    <AlertTriangle className="w-3 h-3" aria-hidden="true" /> {t('settings.notFoundHere')}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
-                Root installation folder containing <span className="font-mono text-slate-300">ProjectZomboid64.exe</span> and base game files. Compatible with Steam, GOG or manual installations.
-              </p>
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.gameDirBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -391,7 +387,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition cursor-pointer"
                 >
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
-                  Browse...
+                  {t('settings.browse')}
                 </button>
               </div>
             </div>
@@ -400,25 +396,23 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200">
-                  Steam Workshop Folder (Optional if not using Steam)
+                  {t('settings.workshopDir')}
                 </label>
                 {formData.workshop_dir ? (
-                  <span className="text-[10px] text-slate-400 font-mono">Steam App ID: 108600</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{t('settings.steamAppId')}</span>
                 ) : (
                   <span className="text-[10px] text-cyan-300 font-mono bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50">
-                    Optional (GOG / No-Steam)
+                    {t('settings.optionalNoSteam')}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
-                For Steam users: Path where Workshop mods are downloaded (<span className="font-mono text-slate-300">workshop/content/108600</span>). If you play on GOG or install mods manually in <span className="font-mono text-slate-300">Zomboid/mods</span>, you can leave this field empty.
-              </p>
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.workshopDirBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
                   readOnly
                   value={formData.workshop_dir}
-                  placeholder="(Optional for GOG or No-Steam versions)"
+                  placeholder={t('settings.workshopPlaceholder')}
                   className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 cursor-not-allowed"
                 />
                 <button
@@ -426,7 +420,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition cursor-pointer"
                 >
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
-                  Browse...
+                  {t('settings.browse')}
                 </button>
               </div>
             </div>
@@ -435,21 +429,19 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200">
-                  User Zomboid Directory (Data and Local Mods Folder)
+                  {t('settings.userDir')}
                 </label>
                 {formData.user_zomboid_dir ? (
                   <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" /> Universal
+                    <CheckCircle className="w-3 h-3" /> {t('settings.universal')}
                   </span>
                 ) : (
                   <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Required
+                    <AlertTriangle className="w-3 h-3" /> {t('settings.required')}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
-                User personal folder (<span className="font-mono text-slate-300">C:\Users\&lt;User&gt;\Zomboid</span>). Contains logs (<span className="font-mono text-slate-300">console.txt</span>), saves, profiles and the local mods folder (<span className="font-mono text-slate-300">Zomboid/mods</span>).
-              </p>
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.userDirBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -462,7 +454,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition cursor-pointer"
                 >
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
-                  Browse...
+                  {t('settings.browse')}
                 </button>
               </div>
             </div>
@@ -470,11 +462,9 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             {/* Card 4: ModListData.ini Path */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2">
               <label className="text-xs font-bold text-slate-200">
-                Mod list file (Zomboid/mods/default.txt)
+                {t('settings.modListFile')}
               </label>
-              <p className="text-[11px] text-slate-400">
-The file the game reads to know which mods are on and in what order. Found automatically at <span className="font-mono text-slate-300">Zomboid/mods/default.txt</span>.
-              </p>
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.modListBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -487,7 +477,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition cursor-pointer"
                 >
                   <FolderOpen className="w-4 h-4 text-emerald-400" />
-                  Browse...
+                  {t('settings.browse')}
                 </button>
               </div>
             </div>
@@ -497,14 +487,14 @@ The file the game reads to know which mods are on and in what order. Found autom
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <Bell className="w-4 h-4 text-emerald-400" />
-                  System Notifications and Warnings
+                  {t('settings.notifications')}
                 </label>
                 <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-                  UI Preferences
+                  {t('settings.uiPrefs')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Choose which warnings the Studio shows you.
+                {t('settings.chooseWarnings')}
               </p>
 
               <div className="space-y-3">
@@ -513,10 +503,10 @@ The file the game reads to know which mods are on and in what order. Found autom
                   <div className="space-y-1 max-w-xl">
                     <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Warning when launching game without active merge package</span>
+                      <span>{t('settings.noMergeWarning')}</span>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Warn me before launching when no merge package is active to resolve collisions between mods.
+                      {t('settings.noMergeWarningBlurb')}
                     </p>
                   </div>
 
@@ -526,14 +516,14 @@ The file the game reads to know which mods are on and in what order. Found autom
                         onClick={handleRestoreNoMergeWarning}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
                       >
-                        Restore Warning
+                        {t('settings.restoreWarning')}
                       </button>
                     ) : (
                       <button
                         onClick={handleSilenceNoMergeWarning}
                         className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
                       >
-                        Silence Warning
+                        {t('settings.silenceWarning')}
                       </button>
                     )}
                   </div>
@@ -544,10 +534,10 @@ The file the game reads to know which mods are on and in what order. Found autom
                   <div className="space-y-1 max-w-xl">
                     <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Auto-Sort Dependencies Explanatory Message</span>
+                      <span>{t('settings.sortNotice')}</span>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Shows an explanatory informational dialog when clicking the sort dependencies button in the mod list.
+                      {t('settings.sortNoticeBlurb')}
                     </p>
                   </div>
 
@@ -557,7 +547,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                         onClick={handleRestoreNotice}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
                       >
-                        Restore Notification
+                        {t('settings.restoreNotification')}
                       </button>
                     ) : (
                       <button
@@ -567,7 +557,7 @@ The file the game reads to know which mods are on and in what order. Found autom
                         }}
                         className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
                       >
-                        Silence Notification
+                        {t('settings.silenceNotification')}
                       </button>
                     )}
                   </div>
@@ -580,14 +570,14 @@ The file the game reads to know which mods are on and in what order. Found autom
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <Layers className="w-4 h-4 text-emerald-400" />
-                  Startup Behavior
+                  {t('settings.startup')}
                 </label>
                 <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-slate-950 text-emerald-300 border border-slate-800">
-                  {startupBehavior === 'SHOW_STARTUP_SCREEN' ? 'Profiles Screen' : 'Last Active Profile'}
+                  {startupBehavior === 'SHOW_STARTUP_SCREEN' ? t('settings.profilesScreen') : t('settings.lastProfile')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                What should open when the Studio starts?
+                {t('settings.startupQuestion')}
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
@@ -608,11 +598,11 @@ The file the game reads to know which mods are on and in what order. Found autom
                   />
                   <div className="space-y-1 text-left">
                     <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                      <span>Profiles Screen (Start)</span>
-                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.5 rounded font-mono">Recommended</span>
+                      <span>{t('settings.profilesStart')}</span>
+                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.5 rounded font-mono">{t('settings.recommended')}</span>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Shows the profile manager so you can choose or activate the combination you are going to work with.
+                      {t('settings.profilesStartBlurb')}
                     </p>
                   </div>
                 </div>
@@ -634,10 +624,10 @@ The file the game reads to know which mods are on and in what order. Found autom
                   />
                   <div className="space-y-1 text-left">
                     <div className="text-xs font-bold text-slate-200">
-                      Open Last Profile Directly
+                      {t('settings.openLast')}
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Loads the previous active profile and takes you directly to the mod list.
+                      {t('settings.openLastBlurb')}
                     </p>
                   </div>
                 </div>
@@ -668,17 +658,16 @@ The file the game reads to know which mods are on and in what order. Found autom
         {activeSubTab === 'PATHS' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <div className="text-xs font-bold text-slate-200">Remember the launch mode</div>
+              <div className="text-xs font-bold text-slate-200">{t('settings.rememberMode')}</div>
               <p className="text-[11px] text-slate-400 max-w-2xl">
-                The Launch button starts on the mode you used last time (Debug, Windowed, Normal...). Off: it
-                always starts on Debug Mode (Fullscreen), the recommended one.
+                {t('settings.rememberModeBlurb')}
               </p>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={rememberLaunchMode}
-              aria-label="Remember the launch mode"
+              aria-label={t('settings.rememberMode')}
               onClick={() => toggleRememberLaunchMode(!rememberLaunchMode)}
               className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
                 rememberLaunchMode ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
@@ -692,19 +681,16 @@ The file the game reads to know which mods are on and in what order. Found autom
         {activeSubTab === 'PATHS' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <div className="text-xs font-bold text-slate-200">Download the community rules and mod index</div>
+              <div className="text-xs font-bold text-slate-200">{t('settings.community')}</div>
               <p className="text-[11px] text-slate-400 max-w-2xl">
-                Once a day, from the Studio's own repository on GitHub: load-order rules, incompatible pairs, and one
-                registry per mod with the builds it runs on, what it clashes with and its known issues with the fix the
-                Studio can apply. Auto-Sort, Mod Health, the Mod List and the Browse page use them. Off: the last copy
-                is kept and nothing is fetched. Nothing is ever sent.
+                {t('settings.communityBlurb')}
               </p>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={communityDownloads}
-              aria-label="Download the community rules and mod index"
+              aria-label={t('settings.community')}
               onClick={() => void toggleCommunityDownloads(!communityDownloads)}
               className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
                 communityDownloads ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
@@ -719,43 +705,37 @@ The file the game reads to know which mods are on and in what order. Found autom
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
             <div className="space-y-1">
               <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                <KeyRound className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" /> GitHub token, for "Propose" in one click
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" /> {t('settings.github')}
               </div>
               <p className="text-[11px] text-slate-400 max-w-2xl">
-                Optional. With a personal token saved, "Propose to the community" (a load-order rule, a mod's registry) forks
-                the Studio's repository on your account once, writes the file on a branch and opens the pull request by itself.
-                Without one, the same buttons open GitHub's page with the JSON filled in and you press "Propose changes"
-                there. Receiving the community files needs no account at all. The token is checked with GitHub and kept in
-                Windows Credential Manager on this PC only; nothing else is ever sent.
+                {t('settings.githubBlurb')}
               </p>
               <p className="text-[11px] text-slate-500 max-w-2xl">
-                Make a fine-grained token on GitHub (Settings → Developer settings → Personal access tokens) for your own
-                repositories with "Contents" and "Pull requests" read and write; it is used only on your fork and to open the
-                pull request.
+                {t('settings.githubHow')}
               </p>
             </div>
             {githubTokenSaved ? (
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
                 <span className="flex items-center gap-1.5 text-emerald-300">
-                  <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" /> A token is saved{githubLogin ? ` (GitHub account ${githubLogin})` : ''}.
+                  <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" /> {t('settings.tokenSaved', { account: githubLogin ? t('settings.tokenAccount', { login: githubLogin }) : '' })}
                 </span>
                 <button type="button" onClick={() => void removeGithubToken()}
                   className="px-2.5 py-1 rounded-lg text-[11px] text-slate-300 hover:text-red-300 border border-slate-800 hover:border-red-900 cursor-pointer transition">
-                  Remove
+                  {t('settings.remove')}
                 </button>
               </div>
             ) : (
               <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void saveGithubToken(); }}>
                 <button type="button" onClick={() => TauriService.openExternalUrl('https://github.com/settings/personal-access-tokens/new')}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
-                  <ExternalLink className="w-3 h-3" aria-hidden="true" /> Make a token
+                  <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('settings.makeToken')}
                 </button>
                 <input type="password" autoComplete="off" spellCheck={false} value={githubTokenInput} onChange={(e) => setGithubTokenInput(e.target.value)}
-                  placeholder="Paste your GitHub token" aria-label="GitHub token"
+                  placeholder={t('settings.pasteToken')} aria-label={t('settings.tokenLabel')}
                   className="flex-1 min-w-[220px] px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-[11px] text-slate-100 outline-none placeholder:text-slate-600 font-mono" />
                 <button type="submit" disabled={githubBusy || !githubTokenInput.trim()}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
-                  {githubBusy && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} Check and save
+                  {githubBusy && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} {t('settings.checkAndSave')}
                 </button>
               </form>
             )}
@@ -766,17 +746,16 @@ The file the game reads to know which mods are on and in what order. Found autom
         {activeSubTab === 'PATHS' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <div className="text-xs font-bold text-slate-200">Developer features</div>
+              <div className="text-xs font-bold text-slate-200">{t('settings.developer')}</div>
               <p className="text-[11px] text-slate-400 max-w-2xl">
-                Shows the MCP agent server, which lets an AI assistant drive the Studio, and the companion mod that
-                runs commands inside the game. Nothing a player needs; leave it off unless you are building with it.
+                {t('settings.developerBlurb')}
               </p>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={showAdvanced}
-              aria-label="Developer features"
+              aria-label={t('settings.developer')}
               onClick={() => toggleAdvanced(!showAdvanced)}
               className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
                 showAdvanced ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
@@ -795,22 +774,18 @@ The file the game reads to know which mods are on and in what order. Found autom
                   <Wrench className="w-4 h-4 text-emerald-400" aria-hidden="true" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-xs font-bold text-slate-100">Build 42 compatibility shim</h3>
+                  <h3 className="text-xs font-bold text-slate-100">{t('settings.shimTitle')}</h3>
                   <p className="text-[11px] text-slate-400 leading-relaxed max-w-3xl">
-                    Many Build 41 mods call things Build 42 renamed or removed, and crash. The Studio ships one
-                    shim that patches those calls at runtime, and writes it into every merge package you build.
-                    Parts 1 to 6 are all or nothing: they guard the game's own code and need nothing from you
-                    beyond a merge package being active. Part 7 patches particular mods, and each of those
-                    has a switch below.
+                    {t('settings.shimBlurb')}
                   </p>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-slate-800">
                 <div className="flex items-baseline justify-between mb-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">What it covers</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('settings.whatItCovers')}</div>
                   <div className="text-[10px] text-slate-500 font-mono">
-                    read from the shim itself{shimLines > 0 ? ` · ${shimLines} lines of Lua` : ''}
+                    {t('settings.readFromShim')}{shimLines > 0 ? t('settings.linesOfLua', { count: shimLines }) : ''}
                   </div>
                 </div>
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
@@ -820,14 +795,14 @@ The file the game reads to know which mods are on and in what order. Found autom
                       <span>
                         {section.title}
                         <span className="block text-[10px] text-slate-500 font-mono">
-                          part {section.number} · {section.lines} lines
+                          {t('settings.partLines', { number: section.number, lines: section.lines })}
                         </span>
                       </span>
                     </li>
                   ))}
                 </ul>
                 {shimSections.length === 0 && (
-                  <p className="text-[11px] text-slate-500">The shim could not be read from this build of the Studio.</p>
+                  <p className="text-[11px] text-slate-500">{t('settings.shimUnreadable')}</p>
                 )}
               </div>
 
@@ -835,9 +810,9 @@ The file the game reads to know which mods are on and in what order. Found autom
               {shimPatches.length > 0 && (
                 <div className="pt-3 border-t border-slate-800">
                   <div className="flex items-baseline justify-between mb-2">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Per-mod patches (part 7)</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('settings.perModPatches')}</div>
                     <div className="text-[10px] text-slate-500 font-mono">
-                      each runs only while its mod is active; off = the shim leaves that mod alone
+                      {t('settings.perModNote')}
                     </div>
                   </div>
                   <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
@@ -857,23 +832,15 @@ The file the game reads to know which mods are on and in what order. Found autom
                               ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70 hover:bg-emerald-900/80'
                               : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
                           }`}
-                          title={
-                            patch.enabled
-                              ? 'On: the shim patches this mod while it is active. Click to switch it off.'
-                              : 'Off: the shim leaves this mod alone. Click to switch it on.'
-                          }
+                          title={patch.enabled ? t('settings.patchOnTitle') : t('settings.patchOffTitle')}
                         >
-                          {patch.enabled ? 'ON' : 'OFF'}
+                          {patch.enabled ? t('settings.on') : t('settings.off')}
                         </button>
                       </li>
                     ))}
                   </ul>
                   {patchNote && <p className="text-[11px] text-emerald-300 mt-2">{patchNote}</p>}
-                  <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
-                    A switch is written into every Studio package on disk at once, as{' '}
-                    <code className="font-mono">Z_PZModStudio_Patches.lua</code>; no publish needed, the game reads it
-                    when it next starts.
-                  </p>
+                  <p className="text-[10px] text-slate-500 mt-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('settings.switchNote') }} />
                 </div>
               )}
             </div>
@@ -892,15 +859,15 @@ The file the game reads to know which mods are on and in what order. Found autom
                       <Bot className="w-5 h-5" />
                     </span>
                     <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                      Model Context Protocol (MCP) Server
+                      {t('settings.mcp.title')}
                       <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full flex items-center gap-1">
                         <Radio className="w-2.5 h-2.5 text-emerald-400 animate-pulse" />
-                        Ready to connect
+                        {t('settings.mcp.ready')}
                       </span>
                     </h3>
                   </div>
                   <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-                    Connect autonomous AI agents (Antigravity, Claude Desktop, Cursor, VS Code with Roo Code/Cline, or local models via Ollama/LM Studio) directly to PZ Mod Studio. The MCP server gives them the console log, crash reports, the files two mods both replace, a Lua syntax check and control of the running game.
+                    {t('settings.mcp.blurb')}
                   </p>
                 </div>
               </div>
@@ -912,10 +879,10 @@ The file the game reads to know which mods are on and in what order. Found autom
                 <div>
                   <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                     <Terminal className="w-4 h-4 text-cyan-400" />
-                    Configuration Generator for MCP Clients
+                    {t('settings.mcp.generator')}
                   </h4>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Select your AI client or environment and copy the JSON snippet into your configuration file:
+                    {t('settings.mcp.generatorBlurb')}
                   </p>
                 </div>
 
@@ -987,12 +954,12 @@ The file the game reads to know which mods are on and in what order. Found autom
                   {copiedMcpConfig ? (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      Copied!
+                      {t('settings.mcp.copied')}
                     </>
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      Copy MCP JSON
+                      {t('settings.mcp.copy')}
                     </>
                   )}
                 </button>
@@ -1089,19 +1056,17 @@ The file the game reads to know which mods are on and in what order. Found autom
               <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-lg text-xs text-amber-200 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-amber-300">
                   <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Important: Do NOT run pz-mcp-server.exe directly by double-clicking</span>
+                  <span>{t('settings.mcp.important')}</span>
                 </div>
-                <p className="text-[11px] text-amber-300/80 leading-relaxed">
-                  If you double-click <code className="bg-slate-950 px-1 py-0.5 rounded font-mono text-[10px] text-amber-200">pz-mcp-server.exe</code>, a black command prompt will open and stay blank. <b>This is completely normal.</b> The MCP server communicates silently over <code className="font-mono text-amber-100 font-semibold">stdio</code> (JSON-RPC) with AI agents. You do not need to keep it open; your AI assistant (Claude, Cursor, Antigravity) will launch and close it automatically in the background whenever you send prompts in chat.
-                </p>
+                <p className="text-[11px] text-amber-300/80 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('settings.mcp.importantBlurb') }} />
               </div>
 
               <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">
-                <span className="font-semibold text-slate-300">Executable:</span>
+                <span className="font-semibold text-slate-300">{t('settings.mcp.executable')}</span>
                 <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
                   &lt;PZ-Mod-Studio-Folder&gt;\PZ-Mod-Studio-Portable\pz-mcp-server.exe
                 </code>
-                <span>or CLI flag:</span>
+                <span>{t('settings.mcp.orFlag')}</span>
                 <code className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300 font-mono text-[10px]">
                   Project-Zomboid-Mod-Studio.exe --mcp
                 </code>
