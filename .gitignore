@@ -43,3 +43,6 @@ __pycache__/
 
 # Local backups of replaced executables
 *.old-*.exe
+
+# Preset exports the app writes next to the exe (the player's own)
+*.pzpack
