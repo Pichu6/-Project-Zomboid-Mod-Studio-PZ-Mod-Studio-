@@ -971,6 +971,11 @@
     "list": {
       "title": "Merge Packages",
       "count": "{{count}} package(s)",
+      "otherProfiles": "Other profiles' packages ({{count}})",
+      "onlyProfile": "Only \"{{name}}\"",
+      "otherProfilesTitle": "Showing the packages of the profile \"{{name}}\". Packages made with other profiles merge other mods; open them from here without switching profile.",
+      "profileChip": "Profile: {{name}}",
+      "noProfile": "In no profile",
       "blurb": "Select a package and enter to inspect its merged files, edit or package.",
       "importTitle": "Import a saved package (.pzmerge) from disk",
       "import": "Load Package (.pzmerge)",

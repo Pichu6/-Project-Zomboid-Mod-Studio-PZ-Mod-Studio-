@@ -15,6 +15,15 @@ interface PackageListProps {
   onOpenFolder: (folderName: string) => void;
   onImport: () => void;
   onCreate: () => void;
+  /** The active profile, whose packages the list shows; null = no profile, every package. */
+  activeProfileName?: string | null;
+  /** Packages that belong to other profiles only, hidden until asked for. */
+  otherProfilesCount?: number;
+  showOtherProfiles?: boolean;
+  onToggleOtherProfiles?: () => void;
+  /** The profiles a package belongs to. */
+  ownersOf?: (folderName: string) => string[];
+  isInActiveProfile?: (pkg: MergedPackageInfoUI) => boolean;
 }
 
 /** Level 1 of the Merger: every package as a card, before one is opened. */
@@ -30,6 +39,12 @@ export const PackageList: React.FC<PackageListProps> = ({
   onOpenFolder,
   onImport,
   onCreate,
+  activeProfileName = null,
+  otherProfilesCount = 0,
+  showOtherProfiles = false,
+  onToggleOtherProfiles,
+  ownersOf = () => [],
+  isInActiveProfile = () => true,
 }) => (
   <div className="flex-1 flex flex-col overflow-hidden">
     {/* Top Bar for Level 1 */}
@@ -52,6 +67,25 @@ export const PackageList: React.FC<PackageListProps> = ({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {activeProfileName && (otherProfilesCount > 0 || showOtherProfiles) && (
+          <button
+            onClick={onToggleOtherProfiles}
+            aria-pressed={showOtherProfiles}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer ${
+              showOtherProfiles
+                ? 'bg-purple-950/60 text-purple-200 border-purple-600/60 hover:bg-purple-900/60'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+            title={i18next.t('merger.list.otherProfilesTitle', { name: activeProfileName })}
+          >
+            {showOtherProfiles ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            <span>
+              {showOtherProfiles
+                ? i18next.t('merger.list.onlyProfile', { name: activeProfileName })
+                : i18next.t('merger.list.otherProfiles', { count: otherProfilesCount })}
+            </span>
+          </button>
+        )}
         <button
           onClick={onImport}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
@@ -136,6 +170,28 @@ export const PackageList: React.FC<PackageListProps> = ({
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5 break-all">
                           {pkg.folder_name}
                         </div>
+                        {activeProfileName && !pkg.is_companion_bridge && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {ownersOf(pkg.folder_name).length === 0 ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                                {i18next.t('merger.list.noProfile')}
+                              </span>
+                            ) : (
+                              ownersOf(pkg.folder_name).map((owner) => (
+                                <span
+                                  key={owner}
+                                  className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                    owner === activeProfileName && isInActiveProfile(pkg)
+                                      ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700/60'
+                                      : 'bg-purple-950/50 text-purple-300 border-purple-700/50'
+                                  }`}
+                                >
+                                  {i18next.t('merger.list.profileChip', { name: owner })}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 

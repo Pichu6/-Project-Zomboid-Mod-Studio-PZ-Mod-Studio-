@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { VfsConflict, ModInfo } from '../../types';
+import { VfsConflict, ModInfo, AppInstance, profileMembers } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
 import { RequireFix, applyRequireFix, packageForPatch } from '../../utils/requireFix';
@@ -63,6 +63,10 @@ interface MergerModuleProps {
    */
   patchFocus?: { modId: string; fileHint?: string | null; fix?: RequireFix | null } | null;
   onPatchFocusHandled?: () => void;
+  /** Profiles, to show the active one's packages and say whose the others are. */
+  profiles?: AppInstance[];
+  activeProfileId?: string | null;
+  onProfilesChanged?: () => void;
 }
 
 /** A mod's own file opened to patch, as opposed to a conflict the scan found. */
@@ -87,6 +91,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   onFocusHandled,
   patchFocus,
   onPatchFocusHandled,
+  profiles = [],
+  activeProfileId = null,
+  onProfilesChanged,
 }) => {
   /**
    * Files opened to patch a mod's own bug. They are not conflicts -- only one mod ships them --
@@ -138,6 +145,49 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       setSelectedPackageFolder(list[0].folder_name);
     }
   }, [paths.user_zomboid_dir, paths.mod_list_ini_path, selectedPackageFolder]);
+
+  /**
+   * A package belongs to the profiles that have it among their mods. With a profile active the
+   * list shows that profile's packages (and the bridge, which is everyone's); the others are a
+   * click away, each labelled with the profiles it belongs to.
+   */
+  const activeProfile = profiles.find((p) => p.id === activeProfileId) ?? null;
+  const [showOtherProfilesPackages, setShowOtherProfilesPackages] = useState(false);
+  const ownersByPackage = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const p of profiles) {
+      for (const id of profileMembers(p)) {
+        if (id.startsWith('Z_PZModStudio_')) map.set(id, [...(map.get(id) ?? []), p.name]);
+      }
+    }
+    return map;
+  }, [profiles]);
+  const inActiveProfile = useCallback(
+    (pkg: MergedPackageInfoUI) =>
+      !activeProfile || pkg.is_companion_bridge || profileMembers(activeProfile).includes(pkg.folder_name),
+    [activeProfile]
+  );
+  const shownPackages = useMemo(
+    () => (showOtherProfilesPackages ? packages : packages.filter(inActiveProfile)),
+    [packages, showOtherProfilesPackages, inActiveProfile]
+  );
+  const otherProfilesCount = packages.length - packages.filter(inActiveProfile).length;
+
+  /** Profiles hold packages by folder name: a renamed package stays in the profiles it was in. */
+  const renameInProfiles = async (from: string, to: string) => {
+    if (from === to) return;
+    const swap = (list: string[]) => list.map((id) => (id === from ? to : id));
+    for (const p of profiles) {
+      if (!profileMembers(p).includes(from) && !p.load_order.includes(from)) continue;
+      await TauriService.updateInstance(paths.user_zomboid_dir || '', {
+        ...p,
+        active_mod_ids: swap(p.active_mod_ids),
+        load_order: swap(p.load_order),
+        members: p.members ? swap(p.members) : p.members,
+      });
+    }
+    onProfilesChanged?.();
+  };
 
   const fetchPatchStatus = useCallback(async () => {
     if (selectedPackageFolder) {
@@ -397,6 +447,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     const pkg = await TauriService.createMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, name, description);
     if (pkg) {
       setIsCreateModalOpen(false);
+      // A package made while a profile is active is that profile's.
+      if (activeProfile) {
+        try {
+          await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, [...profileMembers(activeProfile), pkg.folder_name]);
+          onProfilesChanged?.();
+        } catch {
+          // Already shown by TauriService; the package is made either way.
+        }
+      }
       await fetchPackages();
       setSelectedPackageFolder(pkg.folder_name);
       setIsPackageOpened(true);
@@ -415,6 +474,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     const pkg = await TauriService.renameMergedPackage(paths.user_zomboid_dir, paths.mod_list_ini_path, folderName, name, description);
     if (pkg) {
       setRenamingPackage(null);
+      await renameInProfiles(folderName, pkg.folder_name);
       await fetchPackages();
       setSelectedPackageFolder(pkg.folder_name);
       if (onRefreshMods) await onRefreshMods();
@@ -898,7 +958,13 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       {/* LEVEL 1: Overview & Selection (When no package is opened) */}
       {!isPackageOpened ? (
         <PackageList
-          packages={packages}
+          packages={shownPackages}
+          activeProfileName={activeProfile?.name ?? null}
+          otherProfilesCount={otherProfilesCount}
+          showOtherProfiles={showOtherProfilesPackages}
+          onToggleOtherProfiles={() => setShowOtherProfilesPackages((v) => !v)}
+          ownersOf={(folder) => ownersByPackage.get(folder) ?? []}
+          isInActiveProfile={inActiveProfile}
           selectedFolder={selectedPackageFolder}
           onSelect={(folder) => {
             setSelectedPackageFolder(folder);

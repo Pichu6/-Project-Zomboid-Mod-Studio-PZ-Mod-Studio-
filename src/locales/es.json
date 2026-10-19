@@ -971,6 +971,11 @@
     "list": {
       "title": "Paquetes de fusión",
       "count": "{{count}} paquete(s)",
+      "otherProfiles": "Paquetes de otros perfiles ({{count}})",
+      "onlyProfile": "Solo \"{{name}}\"",
+      "otherProfilesTitle": "Se muestran los paquetes del perfil \"{{name}}\". Los paquetes hechos con otros perfiles fusionan otros mods; podés abrirlos desde acá sin cambiar de perfil.",
+      "profileChip": "Perfil: {{name}}",
+      "noProfile": "En ningún perfil",
       "blurb": "Elegí un paquete y entrá para revisar sus archivos fusionados, editar o empaquetar.",
       "importTitle": "Importa un paquete guardado (.pzmerge) desde el disco",
       "import": "Cargar paquete (.pzmerge)",

@@ -784,6 +784,9 @@ export const App: React.FC = () => {
               onFocusHandled={() => setMergerFocusPath(null)}
               patchFocus={mergerPatchFocus}
               onPatchFocusHandled={() => setMergerPatchFocus(null)}
+              profiles={profiles}
+              activeProfileId={activeProfile?.id ?? null}
+              onProfilesChanged={() => void refreshActiveProfile()}
             />
             </Suspense>
           )}
