@@ -12,6 +12,69 @@ pub struct ExportedMergedPackage {
     pub packaged_mod_ids: Vec<String>,
     pub draft_resolutions: std::collections::HashMap<String, DraftResolutionItem>,
     pub merged_files: Vec<MergedFilePayload>,
+    /// The mods the package was made with, each with the version its `mod.info` claimed and the
+    /// publish time of the Workshop copy the exporter had: the merged files are those copies'
+    /// code, so on another machine they only fit the same copies. Missing in files from before.
+    #[serde(default)]
+    pub mods: Vec<crate::preset_manager::PresetModEntry>,
+    /// The game build it was made on.
+    #[serde(default)]
+    pub game_version: Option<String>,
+}
+
+/// Every installed mod, Workshop ones included (an empty Workshop folder would leave them out).
+fn installed_catalog(user_zomboid_dir: &str) -> crate::catalog::ModCatalog {
+    let workshop_dir = crate::vfs::auto_detect_paths().workshop_dir;
+    crate::catalog::build_catalog(&workshop_dir, user_zomboid_dir, None)
+}
+
+/// Of the mods that were on when the package was made, the ones its files come from: a mod that
+/// ships one of the package's paths (in any of its version folders), or, for a script block the
+/// Merger settled, a mod its header names ("item X is declared by A and B"). A package records
+/// the whole active list, and checking a hundred unrelated mods on import would only be noise.
+fn mods_behind_files(
+    catalog: &crate::catalog::ModCatalog,
+    mod_ids: &[String],
+    files: &[MergedFilePayload],
+) -> Vec<String> {
+    mod_ids
+        .iter()
+        .filter(|id| !id.starts_with("Z_PZModStudio_"))
+        .filter(|id| {
+            let Some(m) = catalog.resolve(id) else { return false };
+            let root = std::path::Path::new(&m.root_dir);
+            let mut bases = vec![root.to_path_buf(), root.join("common")];
+            bases.extend(m.version_folders.iter().map(|v| root.join(v)));
+            files.iter().any(|f| {
+                bases.iter().any(|b| b.join(&f.relative_path).is_file())
+                    || (f.relative_path.contains("/PZModStudio_")
+                        && f.content.chars().take(600).collect::<String>().contains(m.name.as_str()))
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+/// The package's mods as they are on this machine, for the file.
+fn stamp_mods(catalog: &crate::catalog::ModCatalog, mod_ids: &[String]) -> Vec<crate::preset_manager::PresetModEntry> {
+    mod_ids
+        .iter()
+        .filter(|id| !id.starts_with("Z_PZModStudio_"))
+        .map(|id| {
+            let m = catalog.resolve(id);
+            crate::preset_manager::PresetModEntry {
+                mod_id: id.clone(),
+                name: m.map(|m| m.name.clone()).unwrap_or_else(|| id.clone()),
+                workshop_id: m.and_then(|m| match &m.source {
+                    crate::catalog::ModSource::Workshop { workshop_id } => Some(workshop_id.clone()),
+                    _ => None,
+                }),
+                enabled: true,
+                version: m.and_then(|m| m.info.mod_version.clone()),
+                updated_at: m.and_then(|m| m.workshop_state.as_ref().and_then(|s| s.installed_time)),
+            }
+        })
+        .collect()
 }
 
 pub fn export_merged_package(
@@ -68,8 +131,13 @@ pub fn export_merged_package(
         }
     }
 
+    let catalog = installed_catalog(user_zomboid_dir);
+    let behind = mods_behind_files(&catalog, &packaged_mods, &merged_files);
+    let mods = stamp_mods(&catalog, &behind);
     let export_payload = ExportedMergedPackage {
         format_version: 1,
+        mods,
+        game_version: catalog.game_version.clone(),
         folder_name: clean_pkg_name,
         display_name,
         created_at,
@@ -148,21 +216,40 @@ pub fn import_merged_package(
     // A merge package is vanilla files rewritten with other mods' code spliced in. Without
     // those mods the game runs code that refers to things that are not there, so the import
     // reports what is missing rather than letting it fail in game.
-    let installed: std::collections::HashSet<String> = crate::catalog::build_catalog(
-        "",
-        user_zomboid_dir,
-        None,
-    )
-    .mods
-    .iter()
-    .map(|m| m.id.to_lowercase())
-    .collect();
-    let missing: Vec<String> = imported
-        .packaged_mod_ids
-        .iter()
-        .filter(|id| !id.starts_with("Z_PZModStudio_") && !installed.contains(&id.to_lowercase()))
-        .cloned()
-        .collect();
+    // And the merged files are the exporter's copies of those mods: with another copy here they
+    // can put old code over new, so the import also says where the copies differ.
+    let catalog = installed_catalog(user_zomboid_dir);
+    let entries = if imported.mods.is_empty() {
+        // A file from before versions were recorded: only what is missing can be told.
+        imported
+            .packaged_mod_ids
+            .iter()
+            .filter(|id| !id.starts_with("Z_PZModStudio_"))
+            .map(|id| crate::preset_manager::PresetModEntry {
+                mod_id: id.clone(),
+                name: id.clone(),
+                workshop_id: None,
+                enabled: true,
+                version: None,
+                updated_at: None,
+            })
+            .collect()
+    } else {
+        imported.mods.clone()
+    };
+    let as_pack = crate::preset_manager::ModPreset {
+        id: String::new(),
+        name: imported.display_name.clone(),
+        description: None,
+        author: None,
+        created_at: imported.created_at.clone(),
+        load_order: Vec::new(),
+        mods: entries,
+        game_version: imported.game_version.clone(),
+        sandbox: None,
+    };
+    let version_check = crate::preset_manager::compare_with_installed(&as_pack, &catalog);
+    let missing: Vec<String> = version_check.missing_mods.iter().map(|m| m.mod_id.clone()).collect();
 
     let meta = MasterPatchMetadata {
         // Whoever built it says it is published; on this machine it has not been checked
@@ -198,7 +285,7 @@ pub fn import_merged_package(
         "Imported merge package. Check it in the Mod Merger, then publish it here.".to_string()
     } else {
         format!(
-            "Imported merge package. It patches {} mod(s) you do not have ({}), so parts of it              will not work until you install them. Check it in the Mod Merger before playing.",
+            "Imported merge package. It patches {} mod(s) you do not have ({}), so parts of it will not work until you install them. Check it in the Mod Merger before playing.",
             missing.len(),
             missing.join(", ")
         )
@@ -216,5 +303,43 @@ pub fn import_merged_package(
         created_at: Some(meta.created_at),
         packaged_mods: imported.packaged_mod_ids,
         merged_files: imported.merged_files.iter().map(|f| f.relative_path.clone()).collect(),
+        version_check: Some(version_check),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pzmerge_from_before_versions_were_recorded_still_reads() {
+        let old = r#"{"format_version":1,"folder_name":"Z_PZModStudio_X","display_name":"X","created_at":"","is_packaged":true,"packaged_mod_ids":["A"],"draft_resolutions":{},"merged_files":[]}"#;
+        let p: ExportedMergedPackage = serde_json::from_str(old).unwrap();
+        assert!(p.mods.is_empty() && p.game_version.is_none());
+    }
+
+    /// Exports a real package to a temp file and compares its recorded copies with this install.
+    /// Writes nothing in the Zomboid folder. PZMS_ZOMBOID_DIR, optional PZMS_PACKAGE.
+    #[test]
+    #[ignore]
+    fn a_real_package_records_its_mods_copies() {
+        let Ok(zomboid) = std::env::var("PZMS_ZOMBOID_DIR") else { return };
+        let package = std::env::var("PZMS_PACKAGE").unwrap_or_else(|_| "Z_PZModStudio_MergedPatch".into());
+        let out = std::env::temp_dir().join("pzms-real-export.pzmerge");
+        export_merged_package(&zomboid, &package, &out.to_string_lossy()).unwrap();
+        let p: ExportedMergedPackage = serde_json::from_str(&fs::read_to_string(&out).unwrap()).unwrap();
+        println!("{} mods recorded, build {:?}", p.mods.len(), p.game_version);
+        for m in &p.mods {
+            println!("  {} v{:?} ws {:?} updated {:?}", m.mod_id, m.version, m.workshop_id, m.updated_at);
+        }
+        let pack = crate::preset_manager::ModPreset {
+            id: String::new(), name: p.display_name.clone(), description: None, author: None,
+            created_at: String::new(), load_order: Vec::new(), mods: p.mods.clone(),
+            game_version: p.game_version.clone(), sandbox: None,
+        };
+        let r = crate::preset_manager::compare_with_installed(&pack, &installed_catalog(&zomboid));
+        println!("same machine: {} missing, {} differing", r.missing_mods.len(), r.drift.len());
+        assert!(r.missing_mods.is_empty() && r.drift.is_empty(), "the exporter's own machine matches itself");
+        let _ = fs::remove_file(out);
+    }
 }

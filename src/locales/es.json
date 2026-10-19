@@ -1034,6 +1034,17 @@
       "reading": "Leyendo el mod…",
       "noFiles": "Este mod no trae archivos Lua ni scripts que la build lea."
     },
+    "importCheck": {
+      "title": "Antes de publicar \"{{name}}\"",
+      "why": "Un paquete trae los archivos de los mods que fusiona tal como los tenía quien lo mandó. Si acá tenés otras copias de esos mods, publicarlo puede pisar código nuevo con viejo: revisá esto y después publicá (o volvé a fusionar acá con tus copias).",
+      "build": "Hecho en la build <b class=\"text-slate-100\">{{pack}}</b>; la tuya es la <b class=\"text-slate-100\">{{yours}}</b>.",
+      "missing": "{{count}} mod(s) que fusiona no están instalados",
+      "subscribed": "Steam tomó {{count}} suscripción(es) y las está descargando.",
+      "drift": "{{count}} mod(s) no son la copia con la que se hizo",
+      "driftWhat": "Lo más seguro es que los dos tengan las copias más nuevas; después reescaneá acá y volvé a fusionar antes de publicar.",
+      "ok": "Entendido",
+      "close": "Cerrar"
+    },
     "toasts": {
       "visible": "✓ Paquete \"{{name}}\" activado y VISIBLE en la lista de mods.",
       "hidden": "✓ Paquete \"{{name}}\" OCULTO en la lista de mods.",
@@ -1290,6 +1301,12 @@
     "importedFrom": "Importado de un archivo .pzpack",
     "missingTitle": "Mods no instalados en tu PC ({{count}})",
     "missingBlurb": "Para disfrutar este preset completo, suscribite a estos mods en el Steam Workshop:",
+    "subscribeAll": "Suscribirse a todos ({{count}})",
+    "subscribeAllTitle": "Se suscribe a cada mod del Workshop que falta a través del cliente de Steam (Steam tiene que estar abierto; no hace falta clave). Steam los descarga en segundo plano.",
+    "subscribing": "Suscribiendo…",
+    "checkAgain": "Revisar de nuevo",
+    "subscribed": "Steam tomó {{count}} suscripción(es) y las está descargando. Cuando termine, \"Revisar de nuevo\".",
+    "subscribeFailed": "{{count}} no se pudieron: {{reason}}",
     "steamLink": "Steam (#{{id}})",
     "localMod": "Mod local",
     "allInstalled": "¡Todos los mods de la colección están instalados!",

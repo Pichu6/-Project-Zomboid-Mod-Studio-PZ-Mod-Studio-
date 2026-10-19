@@ -213,6 +213,39 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
     setIsImportModalOpen(false);
     setImportedPreset(null);
     setMissingReport(null);
+    setSubscribeState({ kind: 'idle' });
+  };
+
+  /**
+   * Every missing mod that comes from the Workshop, subscribed in one go through the Steam client
+   * (no key). Several mods can share one Workshop item, so each item is asked for once. Steam
+   * downloads in the background; "Check again" reads the disk once it has.
+   */
+  const [subscribeState, setSubscribeState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'working' }
+    | { kind: 'done'; done: number; failed: [string, string][] }
+  >({ kind: 'idle' });
+  const missingWorkshopIds = [
+    ...new Set((missingReport?.missing_mods ?? []).map((m) => m.workshop_id).filter((id): id is string => !!id)),
+  ];
+  const subscribeToMissing = async () => {
+    setSubscribeState({ kind: 'working' });
+    try {
+      const outcome = await TauriService.workshopSubscribe(paths, missingWorkshopIds, true);
+      setSubscribeState({ kind: 'done', done: outcome.done.length, failed: outcome.failed });
+    } catch (err) {
+      setSubscribeState({ kind: 'done', done: 0, failed: [['', explainError(err)]] });
+    }
+  };
+  const checkAgain = async () => {
+    if (!importedPreset) return;
+    try {
+      setMissingReport(await TauriService.checkMissingPresetMods(importedPreset, paths.user_zomboid_dir, paths.workshop_dir));
+      setSubscribeState({ kind: 'idle' });
+    } catch (err) {
+      toast(explainError(err));
+    }
   };
 
   return (
@@ -420,6 +453,46 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                         </div>
                       ))}
                     </div>
+                    {missingWorkshopIds.length > 0 && (
+                      <div className="pt-1 space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={subscribeToMissing}
+                            disabled={subscribeState.kind === 'working'}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 disabled:opacity-50 text-white rounded-lg text-[11px] font-bold shadow transition cursor-pointer"
+                            title={t('presets.subscribeAllTitle')}
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>
+                              {subscribeState.kind === 'working'
+                                ? t('presets.subscribing')
+                                : t('presets.subscribeAll', { count: missingWorkshopIds.length })}
+                            </span>
+                          </button>
+                          {subscribeState.kind === 'done' && (
+                            <button
+                              onClick={checkAgain}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>{t('presets.checkAgain')}</span>
+                            </button>
+                          )}
+                        </div>
+                        {subscribeState.kind === 'done' && (
+                          <div className="text-[11px] leading-relaxed space-y-0.5">
+                            {subscribeState.done > 0 && (
+                              <div className="text-emerald-300">{t('presets.subscribed', { count: subscribeState.done })}</div>
+                            )}
+                            {subscribeState.failed.length > 0 && (
+                              <div className="text-rose-300">
+                                {t('presets.subscribeFailed', { count: subscribeState.failed.length, reason: subscribeState.failed[0][1] })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-3.5 bg-emerald-950/60 border border-emerald-700/80 rounded-xl flex items-center gap-3 text-xs text-emerald-300">

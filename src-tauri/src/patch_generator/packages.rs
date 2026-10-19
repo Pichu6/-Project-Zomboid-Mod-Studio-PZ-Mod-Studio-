@@ -227,6 +227,7 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
                             created_at,
                             packaged_mods,
                             merged_files,
+                            version_check: None,
                         });
                     }
                 }
@@ -304,6 +305,7 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
         created_at: None,
         packaged_mods: Vec::new(),
         merged_files: Vec::new(),
+        version_check: None,
     })
 }
 
@@ -382,6 +384,7 @@ pub fn rename_merged_package(
         created_at: None,
         packaged_mods: Vec::new(),
         merged_files: Vec::new(),
+        version_check: None,
     })
 }
 

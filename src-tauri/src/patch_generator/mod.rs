@@ -80,6 +80,10 @@ pub struct MergedPackageInfo {
     pub created_at: Option<String>,
     pub packaged_mods: Vec<String>,
     pub merged_files: Vec<String>,
+    /// Only on an import: the mods the package was made with that are missing here, and the ones
+    /// whose copy here is not the copy it was made with.
+    #[serde(default)]
+    pub version_check: Option<crate::preset_manager::MissingModsReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

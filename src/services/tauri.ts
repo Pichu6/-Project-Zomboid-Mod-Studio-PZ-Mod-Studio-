@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, VfsConflict, ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -63,6 +63,8 @@ export interface MergedPackageInfoUI {
   created_at?: string;
   packaged_mods: string[];
   merged_files: string[];
+  /** Only on an import: what is missing here and which copies differ from the sender's. */
+  version_check?: MissingModsReport | null;
 }
 
 const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';

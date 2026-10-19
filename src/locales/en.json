@@ -1034,6 +1034,17 @@
       "reading": "Reading the mod…",
       "noFiles": "This mod ships no Lua or script files the build reads."
     },
+    "importCheck": {
+      "title": "Before you publish \"{{name}}\"",
+      "why": "A package carries the files of the mods it merges as the sender had them. With other copies of those mods here, publishing it can put old code over new: check these, then publish (or merge again here with your own copies).",
+      "build": "Made on build <b class=\"text-slate-100\">{{pack}}</b>; yours is <b class=\"text-slate-100\">{{yours}}</b>.",
+      "missing": "{{count}} mod(s) it merges are not installed",
+      "subscribed": "Steam took {{count}} subscription(s) and is downloading them.",
+      "drift": "{{count}} mod(s) are not the copy it was made with",
+      "driftWhat": "The safest fix is for both of you to have the newest copies; then rescan here and merge again before publishing.",
+      "ok": "Got it",
+      "close": "Close"
+    },
     "toasts": {
       "visible": "✓ Package \"{{name}}\" activated and VISIBLE in the mod list.",
       "hidden": "✓ Package \"{{name}}\" HIDDEN from the mod list.",
@@ -1290,6 +1301,12 @@
     "importedFrom": "Imported from .pzpack file",
     "missingTitle": "Mods Not Installed on your PC ({{count}})",
     "missingBlurb": "To fully enjoy this preset, subscribe to these mods on Steam Workshop:",
+    "subscribeAll": "Subscribe to all ({{count}})",
+    "subscribeAllTitle": "Subscribes to every missing Workshop item through the Steam client (Steam has to be open; no key needed). Steam downloads them in the background.",
+    "subscribing": "Subscribing…",
+    "checkAgain": "Check again",
+    "subscribed": "Steam took {{count}} subscription(s) and is downloading them. When it is done, \"Check again\".",
+    "subscribeFailed": "{{count}} did not go through: {{reason}}",
     "steamLink": "Steam (#{{id}})",
     "localMod": "Local Mod",
     "allInstalled": "All mods in the collection are installed!",

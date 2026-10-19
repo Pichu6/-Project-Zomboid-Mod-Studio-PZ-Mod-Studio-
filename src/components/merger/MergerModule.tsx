@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { VfsConflict, ModInfo, AppInstance, profileMembers } from '../../types';
+import { VfsConflict, ModInfo, AppInstance, MissingModsReport, profileMembers } from '../../types';
+import { ImportCheck, importCheckHasNews } from './ImportCheck';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, MasterPatchStatusInfoUI, MergedPackageInfoUI, explainError } from '../../services/tauri';
 import { RequireFix, applyRequireFix, packageForPatch } from '../../utils/requireFix';
@@ -524,6 +525,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   };
 
+  /** What an imported package found missing or different here, shown before it is published. */
+  const [importCheck, setImportCheck] = useState<{ name: string; report: MissingModsReport } | null>(null);
+
   const handleImportPackage = async () => {
     try {
       const filePath = await TauriService.pickOpenFile(
@@ -539,6 +543,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           if (onRefreshMods) await onRefreshMods();
           if (onRescan) await onRescan();
           showToast(i18next.t('merger.toasts.imported', { name: imported.display_name }));
+          if (importCheckHasNews(imported.version_check)) {
+            setImportCheck({ name: imported.display_name, report: imported.version_check });
+          }
         }
       }
     } catch (err: any) {
@@ -1407,6 +1414,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       </div>
     )}
 
+      {importCheck && (
+        <ImportCheck packageName={importCheck.name} report={importCheck.report} paths={paths} onClose={() => setImportCheck(null)} />
+      )}
       <CreatePackageModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreatePackage} />
       <RenamePackageModal pkg={renamingPackage} onClose={() => setRenamingPackage(null)} onRename={handleRenamePackage} />
       <UnpackageModal
