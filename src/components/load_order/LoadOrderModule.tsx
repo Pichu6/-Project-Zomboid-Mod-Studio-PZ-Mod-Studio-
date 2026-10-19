@@ -13,6 +13,7 @@ import { useKeepActions } from '../common/keep';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
 import { draftRegistry, knownIssues, proposeUrl } from '../../utils/communityIndex';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   Archive,
@@ -87,18 +88,9 @@ const PACKAGE_COLOR_PALETTES = [
 ];
 
 /** The questions worth asking of a long mod list. */
-const MOD_FILTERS = [
-  { id: 'all', label: 'Every mod', hint: 'No filter' },
-  { id: 'enabled', label: 'Switched on', hint: 'The mods the game will load' },
-  { id: 'disabled', label: 'Switched off', hint: 'Installed, but not in the list the game reads' },
-  { id: 'problems', label: 'With a problem', hint: 'Missing or disabled requirements, load order, incompatible pairs' },
-  { id: 'maps', label: 'Maps', hint: 'Mods that add map tiles' },
-  { id: 'libraries', label: 'Libraries', hint: 'Mods other mods require' },
-  { id: 'unloadable', label: "Won't load on this build", hint: 'No folder for the installed build, or outside its version range' },
-  { id: 'updated', label: 'Updated recently', hint: 'Changed on the Workshop since you last played, or waiting to download' },
-] as const;
+const MOD_FILTERS = ['all', 'enabled', 'disabled', 'problems', 'maps', 'libraries', 'unloadable', 'updated'] as const;
 
-type ModFilterId = (typeof MOD_FILTERS)[number]['id'];
+type ModFilterId = (typeof MOD_FILTERS)[number];
 
 
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
@@ -127,6 +119,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
   const [highlightedModId, setHighlightedModId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const { t } = useTranslation();
   const [assigningModId, setAssigningModId] = useState<string | null>(null);
   const [targetPosInput, setTargetPosInput] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -398,9 +391,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   /** How many mods each filter would show, so an empty filter is visibly empty before you click. */
   const filterCounts = useMemo(() => {
     const counts = {} as Record<ModFilterId, number>;
-    for (const { id } of MOD_FILTERS) counts[id] = 0;
+    for (const id of MOD_FILTERS) counts[id] = 0;
     for (const m of mods) {
-      for (const { id } of MOD_FILTERS) if (matchesFilter(m, id)) counts[id] += 1;
+      for (const id of MOD_FILTERS) if (matchesFilter(m, id)) counts[id] += 1;
     }
     return counts;
   }, [
@@ -504,61 +497,61 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       icon: mod.enabled ? EyeOff : Check,
       onSelect: () => onToggleMod(mod.mod_id),
     },
-    { label: 'Move to the top', icon: ChevronsUp, onSelect: () => moveToTop(index), disabled: index === 0,
-      disabledReason: 'Already first' },
-    { label: 'Move to the bottom', icon: ChevronsDown, onSelect: () => moveToBottom(index),
-      disabled: index === mods.length - 1, disabledReason: 'Already last' },
+    { label: t('modList.menu.toTop'), icon: ChevronsUp, onSelect: () => moveToTop(index), disabled: index === 0,
+      disabledReason: t('modList.menu.alreadyFirst') },
+    { label: t('modList.menu.toBottom'), icon: ChevronsDown, onSelect: () => moveToBottom(index),
+      disabled: index === mods.length - 1, disabledReason: t('modList.menu.alreadyLast') },
     {
-      label: 'Open in Mod Browser',
+      label: t('modList.menu.openBrowser'),
       icon: BookOpen,
       separatorBefore: true,
       onSelect: () => mod.workshop_id && onOpenInBrowser?.(mod.workshop_id),
       disabled: !mod.workshop_id || !onOpenInBrowser,
-      disabledReason: 'This mod did not come from the Workshop',
+      disabledReason: t('modList.menu.notWorkshop'),
     },
     {
-      label: 'Open its folder',
+      label: t('modList.menu.openFolder'),
       icon: FolderOpen,
       onSelect: () => TauriService.openModFolder(paths, catalogById?.get(mod.mod_id)?.root_dir ?? ''),
       disabled: !catalogById?.get(mod.mod_id)?.root_dir,
-      disabledReason: 'The Studio does not know where this mod lives',
+      disabledReason: t('modList.menu.noFolder'),
     },
     {
-      label: 'Load-order rules…',
+      label: t('modList.menu.rules'),
       icon: ListOrdered,
       separatorBefore: true,
       onSelect: () => setRulesOf(mod),
     },
     {
-      label: 'Keep this version',
+      label: t('modList.menu.keepVersion'),
       icon: Archive,
       separatorBefore: true,
       onSelect: () => {
         void TauriService.keepModVersion(paths, mod.mod_id).then((kept) =>
-          showToast(`${kept.mod_name} as it is today is kept (${kept.kept_at}).`)
+          showToast(t('modList.menu.kept', { name: kept.mod_name, when: kept.kept_at }))
         );
       },
       disabled: !catalogById?.get(mod.mod_id)?.root_dir,
-      disabledReason: 'The Studio does not know where this mod lives',
+      disabledReason: t('modList.menu.noFolder'),
     },
     {
-      label: 'Kept versions…',
+      label: t('modList.menu.keptVersions'),
       icon: Archive,
       onSelect: () => setKeptVersionsOf(mod),
     },
     ...(mod.mod_id.startsWith('Z_PZModStudio_') ? [] : keep.menuItems({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })),
     {
-      label: 'Share what the Studio saw of this mod…',
+      label: t('modList.menu.share'),
       icon: Globe,
       onSelect: () => {
         void (async () => {
           const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild, knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild));
           if (await TauriService.githubTokenStatus()) {
             // With a token: the Studio forks, writes the file on a branch and opens the pull request.
-            showToast(`Opening a pull request with ${mod.name}'s registry…`, 20000);
+            showToast(t('modList.menu.openingPr', { name: mod.name }), 20000);
             try {
               const r = await TauriService.proposeRegistry(mod.mod_id, JSON.stringify(registry, null, 2));
-              showToast(`Pull request opened: ${r.pr_url} (opening it in your browser so you can add what you tested).`, 10000);
+              showToast(t('modList.menu.prOpened', { url: r.pr_url }), 10000);
               TauriService.openExternalUrl(r.pr_url);
             } catch {
               // Already shown by TauriService.
@@ -568,21 +561,16 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           // Without one: GitHub's new-file page, with the registry the Studio can fill in already
           // there; the person adds what they tested and GitHub opens the pull request. Nothing is sent from here.
           void navigator.clipboard.writeText(JSON.stringify(registry, null, 2));
-          showToast(`Opening GitHub with ${mod.name}'s registry filled in (also on the clipboard). Add what you tested, then "Propose changes" opens the pull request.`, 8000);
+          showToast(t('modList.menu.openingGithub', { name: mod.name }), 8000);
           TauriService.openExternalUrl(proposeUrl(registry));
         })();
       },
       disabled: mod.mod_id.startsWith('Z_PZModStudio_') || knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild).length === 0,
-      disabledReason: mod.mod_id.startsWith('Z_PZModStudio_')
-        ? 'A Studio package is not a mod of the community'
-        : 'Nothing seen of this mod yet: the errors and warnings the Monitor counts for it, or a compatible copy it needed, would go here',
-      title: (() => {
-        const facts = knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild);
-        return `Sends nothing by itself: opens a note for the community index on GitHub with what was seen here (${facts.map((f) => f.title.toLowerCase()).join('; ')}), for you to complete`;
-      })(),
+      disabledReason: mod.mod_id.startsWith('Z_PZModStudio_') ? t('modList.menu.notCommunity') : t('modList.menu.nothingSeen'),
+      title: t('modList.menu.shareTitle', { facts: knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild).map((f) => f.title.toLowerCase()).join('; ') }),
     },
     {
-      label: 'Copy the mod id',
+      label: t('modList.menu.copyId'),
       icon: Copy,
       separatorBefore: true,
       onSelect: () => navigator.clipboard.writeText(mod.mod_id),
@@ -786,15 +774,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <ListOrdered className="w-5 h-5 text-emerald-400" />
-            Mod List &amp; Load Order (<code className="text-emerald-400">Zomboid/mods/default.txt</code>)
+            {t('modList.title')} (<code className="text-emerald-400">Zomboid/mods/default.txt</code>)
           </h2>
           <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
-            <span>Steam Subscriptions: <b className="text-cyan-400">{uniqueWorkshopIds} items</b></span>
+            <span>{t('modList.subscriptions')} <b className="text-cyan-400">{t('modList.items', { count: uniqueWorkshopIds })}</b></span>
 
             <span>•</span>
-            <span>Total Sub-mods: <b className="text-slate-200">{mods.length}</b></span>
+            <span>{t('modList.totalSubmods')} <b className="text-slate-200">{mods.length}</b></span>
             <span>•</span>
-            <span>Active: <b className="text-emerald-400">{activeCount}</b></span>
+            <span>{t('modList.active')} <b className="text-emerald-400">{activeCount}</b></span>
             {/* Grave 1: Dependencies missing (Red) */}
             {missingUninstalledModIds.length > 0 && (
               <>
@@ -802,10 +790,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleMissingUninstalled}
                   className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Click to cycle through mods with missing dependencies (not installed)"
+                  title={t('modList.cycleMissing')}
                 >
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span>Dependencies missing</span>
+                  <span>{t('modList.missing')}</span>
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
                   <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.5 rounded border border-red-700/50 ml-0.5">
                     {missingUninstalledCycleIdx + 1}/{missingUninstalledModIds.length} ⚙️
@@ -821,10 +809,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleMissingDeps}
                   className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Click to cycle through mods with disabled libraries"
+                  title={t('modList.cycleOff')}
                 >
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span>Dependencies off</span>
+                  <span>{t('modList.depsOff')}</span>
                   <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
                   <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.5 rounded border border-red-700/50 ml-0.5">
                     {missingDepCycleIdx + 1}/{missingDepModIds.length} ⚙️
@@ -840,10 +828,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleConflicts}
                   className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Click to cycle through mods with exclusive incompatibilities"
+                  title={t('modList.cycleIncompatible')}
                 >
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span>Incompatibility</span>
+                  <span>{t('modList.incompatibility')}</span>
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/50 ml-0.5">
                     {conflictCycleIdx + 1}/{conflictModIds.length} ⚙️
@@ -859,10 +847,10 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <button
                   onClick={handleCycleOrderViolations}
                   className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title="Click to cycle through mods with incorrect load order"
+                  title={t('modList.cycleOrder')}
                 >
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span>List Order</span>
+                  <span>{t('modList.listOrder')}</span>
                   <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
                   <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/50 ml-0.5">
                     {orderViolationCycleIdx + 1}/{orderViolationModIds.length} ⚙️
@@ -887,17 +875,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             onClick={handleRefresh}
             disabled={isRefreshing}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
-            title="Re-scan Workshop directory for newly subscribed/unsubscribed mods"
+            title={t('modList.refreshTitle')}
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <span>{t('modList.refresh')}</span>
           </button>
 
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search mod name, ID, workshop..."
+              placeholder={t('modList.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-60 bg-slate-900 border border-slate-800 focus:border-emerald-500/80 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
@@ -917,31 +905,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               type="button"
               onClick={() => setShowEveryMod((v) => !v)}
               aria-pressed={showEveryMod}
-              title={
-                showEveryMod
-                  ? `Show only what the profile ${activeProfile.name} uses`
-                  : 'Show every installed mod, so you can add one to this profile'
-              }
+              title={showEveryMod ? t('modList.onlyProfileTitle', { name: activeProfile.name }) : t('modList.everythingTitle')}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition ${
                 showEveryMod
                   ? 'bg-slate-800 text-slate-200 border-slate-700'
                   : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/70'
               }`}
             >
-              {showEveryMod ? 'Showing everything' : `Only ${activeProfile.name}`}
+              {showEveryMod ? t('modList.showingEverything') : t('modList.onlyProfile', { name: activeProfile.name })}
             </button>
           )}
 
           <select
             value={stateFilter}
             onChange={(e) => setStateFilter(e.target.value as ModFilterId)}
-            aria-label="Filter the list"
-            title="Show only the mods you are looking for"
+            aria-label={t('modList.filterLabel')}
+            title={t('modList.filterTitle')}
             className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 cursor-pointer"
           >
-            {MOD_FILTERS.map(({ id, label, hint }) => (
-              <option key={id} value={id} title={hint}>
-                {label} ({filterCounts[id] ?? 0})
+            {MOD_FILTERS.map((id) => (
+              <option key={id} value={id} title={t(`modList.filters.${id}.hint`)}>
+                {t(`modList.filters.${id}.label`)} ({filterCounts[id] ?? 0})
               </option>
             ))}
           </select>
@@ -949,36 +933,32 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            aria-label="Filter by source"
-            title="Show only mods from one source"
+            aria-label={t('modList.sourceLabel')}
+            title={t('modList.sourceTitle')}
             className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 cursor-pointer"
           >
-            <option value="all">All sources</option>
-            <option value="steam">Steam Workshop</option>
-            <option value="nexus">Nexus Mods</option>
-            <option value="manual">Installed by hand</option>
-            <option value="local">Local (other)</option>
-            <option value="studio">PZ Mod Studio</option>
-            <option value="compat">Compatible copies</option>
+            {(['all', 'steam', 'nexus', 'manual', 'local', 'studio', 'compat'] as const).map((id) => (
+              <option key={id} value={id}>{t(`modList.sources.${id}`)}</option>
+            ))}
           </select>
 
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
             <button
               onClick={() => handleEnableAllWithoutDiscrimination(true)}
               className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-emerald-400 font-medium transition cursor-pointer"
-              title="Enable ALL Mods 100% Without Discrimination"
+              title={t('modList.enableAllTitle')}
             >
               <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Enable All</span>
+              <span>{t('modList.enableAll')}</span>
             </button>
 
             <button
               onClick={() => handleEnableAllWithoutDiscrimination(false)}
               className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-slate-400 font-medium transition cursor-pointer"
-              title="Disable All Mods"
+              title={t('modList.disableAllTitle')}
             >
               <Square className="w-3.5 h-3.5 text-slate-500" />
-              <span>Disable All</span>
+              <span>{t('modList.disableAll')}</span>
             </button>
           </div>
 
@@ -992,7 +972,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
           >
             <Wand2 className="w-4 h-4" />
-            Auto-Sort Dependencies
+            {t('modList.autoSort')}
           </button>
         </div>
       </div>
@@ -1009,29 +989,29 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-xs text-slate-400">
         <div className="flex items-center gap-1.5 font-bold text-slate-300">
           <HelpCircle className="w-4 h-4 text-cyan-400" />
-          <span>Mod Type Legend:</span>
+          <span>{t('modList.legend')}</span>
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2" title="Map Mod - Adds new towns, roads or custom map tiles">
+          <div className="flex items-center gap-2" title={t('modList.mapTitle')}>
             <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
               <MapPin className="w-3.5 h-3.5 text-amber-400" />
             </div>
-            <span>Map Mod (<b className="text-amber-400">{modCategoryCounts.mapCount}</b>)</span>
+            <span>{t('modList.map')} (<b className="text-amber-400">{modCategoryCounts.mapCount}</b>)</span>
           </div>
 
-          <div className="flex items-center gap-2" title="Base Library / Framework - Required by other mods">
+          <div className="flex items-center gap-2" title={t('modList.libraryTitle')}>
             <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
               <Package className="w-3.5 h-3.5 text-purple-400" />
             </div>
-            <span>Base Library (<b className="text-purple-400">{modCategoryCounts.libCount}</b>)</span>
+            <span>{t('modList.library')} (<b className="text-purple-400">{modCategoryCounts.libCount}</b>)</span>
           </div>
 
-          <div className="flex items-center gap-2" title="Script / Feature Mod - Gameplay tweaks, items, clothing, etc.">
+          <div className="flex items-center gap-2" title={t('modList.scriptTitle')}>
             <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
               <ListOrdered className="w-3.5 h-3.5 text-cyan-400" />
             </div>
-            <span>Script Mod (<b className="text-cyan-400">{modCategoryCounts.scriptCount}</b>)</span>
+            <span>{t('modList.script')} (<b className="text-cyan-400">{modCategoryCounts.scriptCount}</b>)</span>
           </div>
         </div>
       </div>
@@ -1042,14 +1022,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <div className="col-span-12 lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
           <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800 items-center">
             <div className="col-span-1 text-center">#</div>
-            <div className="col-span-1 text-center">Active</div>
+            <div className="col-span-1 text-center">{t('modList.colActive')}</div>
             <div className="col-span-6 flex items-center gap-2 min-w-0">
-              <span className="shrink-0">Mod Name & ID</span>
+              <span className="shrink-0">{t('modList.colName')}</span>
               <div className="relative flex-1 max-w-[260px] normal-case font-normal text-xs">
                 <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search the list..."
+                  placeholder={t('modList.searchList')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-slate-950/90 border border-slate-800 hover:border-slate-700 focus:border-cyan-500/80 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
@@ -1058,14 +1038,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <button
                     onClick={() => setSearchQuery('')}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
-                    title="Clear search"
+                    title={t('modList.clearSearch')}
                   >
                     <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
             </div>
-            <div className="col-span-4 text-right">Actions</div>
+            <div className="col-span-4 text-right">{t('modList.colActions')}</div>
           </div>
 
           <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
@@ -1085,7 +1065,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   <>
                     No mod is{' '}
                     <b className="text-slate-400">
-                      {MOD_FILTERS.find((f) => f.id === stateFilter)?.label.toLowerCase()}
+                      {t(`modList.filters.${stateFilter}.label`).toLowerCase()}
                     </b>
                   </>
                 )}
@@ -1161,7 +1141,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       const box = e.currentTarget.getBoundingClientRect();
                       handleDropOnMod(mod.mod_id, e.clientY > box.top + box.height / 2);
                     }}
-                    title={isAssigningThis ? undefined : 'Drag to move this mod in the load order'}
+                    title={isAssigningThis ? undefined : t('modList.dragTitle')}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     onContextMenu={(e) => {
                       setSelectedModId(mod.mod_id);
@@ -1284,17 +1264,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 <Wand2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">Auto-sort completed</h3>
+                <h3 className="text-base font-bold text-slate-100">{t('modList.sortDone')}</h3>
                 <p className="text-xs text-slate-400">
-                  {lastSortMoved === 0 ? 'Your load order already follows every rule: nothing moved.' : `${lastSortMoved} mods moved.`}
+                  {lastSortMoved === 0 ? t('modList.sortNothing') : t('modList.sortMoved', { count: lastSortMoved })}
                 </p>
               </div>
             </div>
 
             <ul className="text-xs text-slate-300 space-y-2 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-sans leading-relaxed">
-              <li>Mods load after the mods they require and their <code>loadModAfter</code> mods, and before their <code>loadModBefore</code> mods (read from mod.info exactly like the game does).</li>
-              <li>Everything else keeps the order you chose.</li>
-              <li className="text-amber-300">PZ Mod Studio merge packages are placed last.</li>
+              <li dangerouslySetInnerHTML={{ __html: t('modList.sortRule1') }} />
+              <li>{t('modList.sortRule2')}</li>
+              <li className="text-amber-300">{t('modList.sortRule3')}</li>
             </ul>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800 gap-4">
@@ -1305,7 +1285,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   onChange={(e) => setDontShowNoticeChecked(e.target.checked)}
                   className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-2 w-4 h-4 cursor-pointer"
                 />
-                <span>Do not show this message again</span>
+                <span>{t('modList.dontShowAgain')}</span>
               </label>
 
               {orderBeforeSort && (
@@ -1316,7 +1296,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                   }}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
                 >
-                  Undo
+                  {t('modList.undo')}
                 </button>
               )}
               <button

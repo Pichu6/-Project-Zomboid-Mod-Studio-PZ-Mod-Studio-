@@ -4,49 +4,17 @@ import { HealthFix, HealthIssue, HealthSeverity, ModInfo } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { applyFix } from '../../utils/healthFix';
+import i18next from 'i18next';
 
 /** What a row says for each code the health check can raise. Short: the row is narrow. */
-const LABELS: Record<string, string> = {
-  missing_dependency: 'Needs a mod you do not have',
-  dependency_not_enabled: 'Needs a mod that is off',
-  dependency_unavailable: 'Needs a mod this build cannot load',
-  dependency_after: 'Loads before what it needs',
-  load_after_order: 'Loads too early',
-  user_rule_order: 'Before a mod you said it must follow',
-  community_rule_order: 'Before a mod the community says it must follow',
-  community_incompatible: 'The community says these clash',
-  community_known_issue: 'Known issue, per the community',
-  community_successor: 'There is a version for this build',
-  load_before_order: 'Loads too late',
-  incompatible: 'Incompatible',
-  not_for_build: 'Not for this build',
-  outside_version_range: 'Outside its version range',
-  invalid_mod_info: 'Broken mod.info',
-  missing_mod: 'Not installed',
-  duplicate_entry: 'Listed twice',
-  shadowed_copy: 'Another copy wins',
-  compatible_copy: 'Compatible copy',
-  workshop_update_pending: 'Update waiting',
-  updated_since_last_play: 'Updated since you last played',
-  script_definition_conflict: 'Same definition as another mod',
-  script_definition_conflict_more: 'Same definition as other mods',
-  script_definition_stale: 'Merge out of date',
-  script_definition_settled: 'Settled in your package',
-  translation_conflict: 'Names things differently from another mod',
-  translation_stale: 'Chosen words out of date',
-  translation_settled: 'Words settled in your package',
-  package_built_for_other_list: 'Built for another list',
-};
-
 /** Settled things are Mod Health's record, not a row's problem. */
 const SETTLED_CODES = new Set(['script_definition_settled', 'translation_settled', 'compatible_copy']);
 /** A row has room for this many chips; the rest fold into one that opens Mod Health. */
 const MAX_CHIPS = 2;
-
 /** Issues about a group of files and mods, which only Mod Health shows whole. */
 const HEALTH_ONLY_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'script_definition_conflict_more', 'translation_conflict', 'translation_stale', 'translation_settled']);
 
-const labelFor = (issue: HealthIssue) => LABELS[issue.code] ?? issue.code.replace(/_/g, ' ');
+const labelFor = (issue: HealthIssue) => i18next.t(`modList.health.labels.${issue.code}`, { defaultValue: issue.code.replace(/_/g, ' ') });
 
 const STYLE: Record<HealthSeverity, { chip: string; icon: React.ElementType; iconColor: string }> = {
   error: { chip: 'bg-red-500/20 hover:bg-red-500/35 text-red-200 border-red-500/60', icon: XCircle, iconColor: 'text-red-400' },
@@ -60,29 +28,30 @@ const ORDER: Record<HealthSeverity, number> = { error: 0, warning: 1, info: 2 };
 const LIST_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'disable_mod', 'move_before', 'remove_from_list']);
 
 const fixLabel = (fix: HealthFix, nameOf: (id: string) => string): string => {
+  const t = i18next.t;
   switch (fix.action) {
     case 'enable_mod':
-      return `Switch on ${nameOf(fix.mod_id)}`;
+      return t('modList.health.fix.enable', { name: nameOf(fix.mod_id) });
     case 'disable_mod':
-      return `Switch off ${nameOf(fix.mod_id)}`;
+      return t('modList.health.fix.disable', { name: nameOf(fix.mod_id) });
     case 'move_before':
-      return `Move before ${nameOf(fix.before)}`;
+      return t('modList.health.fix.moveBefore', { name: nameOf(fix.before) });
     case 'remove_from_list':
-      return 'Remove from the list';
+      return t('modList.health.fix.remove');
     case 'subscribe_workshop':
-      return 'Search the Workshop';
+      return t('modList.health.fix.searchWorkshop');
     case 'open_workshop_page':
-      return 'Open Workshop page';
+      return t('modList.health.fix.openWorkshop');
     case 'open_in_merger':
-      return 'Open in the Merger';
+      return t('modList.health.fix.openMerger');
     case 'keep_version':
-      return 'Keep this version';
+      return t('modList.health.fix.keepVersion');
     case 'enable_shim_patch':
-      return 'Switch the shim patch on';
+      return t('modList.health.fix.shimOn');
     case 'merge_files':
     case 'make_compatible_copy':
     case 'remove_compatible_copy':
-      return 'Fix in Mod Health';
+      return t('modList.health.fix.inHealth');
   }
 };
 
@@ -135,12 +104,12 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
         return;
       case 'keep_version':
         void TauriService.keepModVersion(paths, fix.mod_id).then((kept) =>
-          onNote?.(`${kept.mod_name} as it is today is kept (${kept.kept_at}). Right-click the row for its kept versions.`)
+          onNote?.(i18next.t('modList.health.kept', { name: kept.mod_name, when: kept.kept_at }))
         );
         return;
       case 'enable_shim_patch':
         void TauriService.setShimPatch(paths.user_zomboid_dir, fix.name, true).then((written) =>
-          onNote?.(`The shim's patch ${fix.name} is on, written into ${written} package${written === 1 ? '' : 's'}; the game reads it on its next launch.`)
+          onNote?.(i18next.t('modList.health.shimOn', { name: fix.name, count: written }))
         );
         return;
       case 'merge_files':
@@ -149,7 +118,7 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
         onGoToHealth?.(issue);
         return;
       case 'disable_mod':
-        if (!confirm(`Switch off ${nameOf(fix.mod_id)}?\n\nIt stays installed, and you can switch it back on here.`)) return;
+        if (!confirm(i18next.t('modList.health.confirmDisable', { name: nameOf(fix.mod_id) }))) return;
         break;
       default:
         break;
@@ -182,10 +151,10 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
               }`}
               title={`${issue.message}${
                 other
-                  ? `\n\nClick: go to ${nameOf(other)}`
+                  ? i18next.t('modList.health.clickGoTo', { name: nameOf(other) })
                   : others.length > 1
-                    ? `\n\nClick: open Mod Health on this, which shows all ${others.length + 1} mods, the files and the fixes`
-                    : '\n\nClick: open Mod Health on this'
+                    ? i18next.t('modList.health.clickHealthAll', { count: others.length + 1 })
+                    : i18next.t('modList.health.clickHealth')
               }`}
             >
               <Icon className={`w-3 h-3 shrink-0 ${style.iconColor}`} aria-hidden="true" />
@@ -201,11 +170,11 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
                 className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-r border border-l-0 transition cursor-pointer shadow-sm ${style.chip}`}
                 title={
                   LIST_FIX_ACTIONS.has(fix.action)
-                    ? `${fixLabel(fix, nameOf)} — changes your list; Earlier lists can undo it`
+                    ? i18next.t('modList.health.listFix', { fix: fixLabel(fix, nameOf) })
                     : fix.action === 'open_in_merger'
-                    ? `Opens ${fix.relative_path} in the Mod Merger, in the package the game uses, with what each mod says side by side. A packaged package shows it read-only; Save publishes the decision into it.`
+                    ? i18next.t('modList.health.mergerFix', { path: fix.relative_path })
                     : fix.action === 'merge_files' || fix.action === 'make_compatible_copy' || fix.action === 'remove_compatible_copy'
-                    ? `${fixLabel(fix, nameOf)}: opens Mod Health on this, where the button is`
+                    ? i18next.t('modList.health.healthFix', { fix: fixLabel(fix, nameOf) })
                     : fixLabel(fix, nameOf)
                 }
               >
@@ -224,7 +193,7 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
             onGoToHealth?.(folded[0]);
           }}
           className="flex items-center text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border transition cursor-pointer shadow-sm bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-600 shrink-0"
-          title={`${folded.length} more: ${folded.map(labelFor).join('; ')}\n\nClick: open Mod Health on them`}
+          title={i18next.t('modList.health.more', { count: folded.length, labels: folded.map(labelFor).join('; ') })}
         >
           +{folded.length}
         </button>

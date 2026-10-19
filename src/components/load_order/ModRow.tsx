@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppInstance, CatalogModSummary, HealthIssue, ModErrorStat, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
+import { useTranslation } from 'react-i18next';
 import { SourceBadge } from '../common/SourceBadge';
 import { RowHealthChips } from './RowHealth';
 import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered, MapPin, Package, Star } from 'lucide-react';
@@ -81,7 +82,9 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   moveDown,
   moveToBottom,
   handleAssignPosition,
-}) => (
+}) => {
+  const { t } = useTranslation();
+  return (
   <>
     {/* Fixed Line Number (Original Load Order Index) */}
     <div className={`col-span-1 text-center font-mono text-[11px] ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
@@ -109,13 +112,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             ? 'bg-slate-950 text-slate-700 border border-slate-700 hover:border-slate-500'
             : ''
         }`}
-        title={
-          isOpenedPackage
-            ? 'This package is open in draft mode and deactivated. It cannot be enabled until it is packaged/published in Mod Merger.'
-            : mod.enabled
-            ? 'Click to disable mod'
-            : 'Click to enable mod'
-        }
+        title={isOpenedPackage ? t('modList.row.draftLocked') : mod.enabled ? t('modList.row.clickDisable') : t('modList.row.clickEnable')}
       >
         {mod.enabled && !isOpenedPackage && <Check className="w-3.5 h-3.5 stroke-[3]" />}
       </button>
@@ -129,13 +126,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             ? 'bg-slate-900 border-slate-800'
             : 'bg-slate-950/80 border-slate-900 opacity-60'
         }`}
-        title={
-          mod.is_map_mod
-            ? 'Map Mod (Adds custom tiles/towns)'
-            : mod.is_library
-            ? 'Base Library / Framework'
-            : 'Script / Feature Mod'
-        }
+        title={mod.is_map_mod ? t('modList.row.mapMod') : mod.is_library ? t('modList.row.libraryMod') : t('modList.row.scriptMod')}
       >
         {mod.is_map_mod ? (
           <MapPin className={`w-3.5 h-3.5 ${mod.enabled ? 'text-amber-400' : 'text-amber-700'}`} />
@@ -156,30 +147,30 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
           {isBridge && (
             <span
               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-700 shrink-0 shadow-sm"
-              title="PZ Mod Studio Live Bridge Companion Mod"
+              title={t('modList.row.bridgeTitle')}
             >
               <Package className="w-3 h-3 text-cyan-400" />
-              <span>COMPANION BRIDGE</span>
+              <span>{t('modList.row.bridge')}</span>
             </span>
           )}
 
           {isOpenedPackage && (
             <span
               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shrink-0 shadow-sm cursor-help animate-pulse"
-              title={`Open Package (Draft): ${mod.mod_id}\nThis package is in editing mode and deactivated. Package / publish it in Mod Merger to use it in-game.`}
+              title={t('modList.row.openDraftTitle', { id: mod.mod_id })}
             >
               <Package className="w-3 h-3 text-amber-400" />
-              <span>OPEN (Draft)</span>
+              <span>{t('modList.row.openDraft')}</span>
             </span>
           )}
 
           {isClosedPackage && (
             <span
               className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shrink-0 shadow-sm cursor-help"
-              title={`Packaged Mod (Closed): ${mod.mod_id}\nContains compiled compatibility patches ready for Project Zomboid.`}
+              title={t('modList.row.packagedTitle', { id: mod.mod_id })}
             >
               <Package className="w-3 h-3 text-emerald-400" />
-              <span>PACKAGED</span>
+              <span>{t('modList.row.packaged')}</span>
             </span>
           )}
 
@@ -196,16 +187,14 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
                   threw ? 'bg-red-950/60 text-red-300 border-red-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
                 }`}
                 title={
-                  (threw
-                    ? `Last session the game logged ${stat.exceptions} error${stat.exceptions === 1 ? '' : 's'} from this mod: something in its code threw, and whatever it was doing at that moment did not finish.`
-                    : `Last session the game logged ${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} about this mod: the game noticed something odd and carried on, so nothing broke by itself.`) +
-                  (threw && stat.warnings > 0 ? ` Also ${stat.warnings} warning${stat.warnings === 1 ? '' : 's'}.` : '') +
-                  `\n\nThe last line:\n${stat.last_exception ?? stat.last_warning ?? ''}` +
-                  ((stat.last_exception ?? stat.last_warning ?? '').includes('require(') ? '\n\n(require(...) failed: the mod asked for a file the game could not find at that path. Harmless unless a feature is missing; the Monitor Center can fix the path.)' : '') +
-                  `\n\nFrom console.txt as it is now; the Monitor Center has the full cards.`
+                  (threw ? t('modList.row.errorsTitle', { count: stat.exceptions }) : t('modList.row.warningsTitle', { count: stat.warnings })) +
+                  (threw && stat.warnings > 0 ? t('modList.row.alsoWarnings', { count: stat.warnings }) : '') +
+                  t('modList.row.lastLine', { line: stat.last_exception ?? stat.last_warning ?? '' }) +
+                  ((stat.last_exception ?? stat.last_warning ?? '').includes('require(') ? t('modList.row.requireNote') : '') +
+                  t('modList.row.fromConsole')
                 }
               >
-                {threw ? `${stat.exceptions}× threw` : `${stat.warnings} warn`}
+                {threw ? t('modList.row.threw', { count: stat.exceptions }) : t('modList.row.warn', { count: stat.warnings })}
               </span>
             );
           })()}
@@ -220,9 +209,9 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
               className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
                 slow ? 'bg-amber-950/50 text-amber-300 border-amber-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
               }`}
-              title={`Loading time: of the time the game spent on the loading screen last session, ${ms >= 1000 ? `${(ms / 1000).toFixed(1)} seconds` : `${ms} milliseconds`} went to reading this mod's files.\n\nMost mods take a few milliseconds; tile and model packs take seconds. It says nothing about how the mod runs once loaded.\n\nMeasured from the game's own DebugLog (Zomboid/Logs), from this mod's "loading" line to the next mod's; the Lua phase after that is one pass and is not timed per mod.`}
+              title={t('modList.row.loadTimeTitle', { time: ms >= 1000 ? t('modList.row.seconds', { n: (ms / 1000).toFixed(1) }) : t('modList.row.millis', { n: ms }) })}
             >
-              {ms >= 1000 ? `loads in ${(ms / 1000).toFixed(1)} s` : `loads in ${ms} ms`}
+              {t('modList.row.loadsIn', { time: ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms` })}
             </span>
           );
         })()}
@@ -235,34 +224,34 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
               return (
                 <span
                   className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-700/60 text-emerald-300 shrink-0"
-                  title={`In this profile${others.length ? `, and in ${others.join(', ')}` : ''}`}
+                  title={t('modList.row.inThisProfile') + (others.length ? t('modList.row.andIn', { names: others.join(', ') }) : '')}
                 >
-                  in {activeProfile.name}
+                  {t('modList.row.inProfile', { name: activeProfile.name })}
                 </span>
               );
             }
             return (
               <span
                 className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 shrink-0"
-                title={others.length ? `Used by: ${others.join(', ')}` : 'Not in any profile yet'}
+                title={others.length ? t('modList.row.usedBy', { names: others.join(', ') }) : t('modList.row.noProfileYet')}
               >
-                {others.length ? `in ${others.join(', ')}` : 'no profile'}
+                {others.length ? t('modList.row.inProfile', { name: others.join(', ') }) : t('modList.row.noProfile')}
               </span>
             );
           })()}
 
           {!mod.enabled && (
             <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
-              OFF
+              {t('modList.row.off')}
             </span>
           )}
 
           {mod.loadable_on_installed_build === false && !mod.enabled && (
             <span
               className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
-              title="This mod has no mod.info the installed game build reads (B41-only, or only folders for newer builds). The game will not load it."
+              title={t('modList.row.notForBuildTitle')}
             >
-              NOT FOR THIS BUILD
+              {t('modList.row.notForBuild')}
             </span>
           )}
 
@@ -314,10 +303,10 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             setTargetPosInput(String(originalIndex + 1));
           }}
           className="px-1.5 py-1 text-[10px] font-mono font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer flex items-center gap-0.5"
-          title="Assign Position #"
+          title={t('modList.row.assignPosition')}
         >
           <Hash className="w-3 h-3 text-emerald-400" />
-          <span>Pos #</span>
+          <span>{t('modList.row.pos')}</span>
         </button>
       )}
 
@@ -325,7 +314,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
         onClick={() => moveToTop(originalIndex)}
         disabled={originalIndex === 0}
         className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-        title="Move to Top (🔝)"
+        title={t('modList.row.toTop')}
       >
         <ChevronsUp className="w-3.5 h-3.5 text-emerald-400" />
       </button>
@@ -333,7 +322,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
         onClick={() => moveUp(originalIndex)}
         disabled={originalIndex === 0}
         className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-        title="Move Up"
+        title={t('modList.row.up')}
       >
         <ArrowUp className="w-3.5 h-3.5" />
       </button>
@@ -341,7 +330,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
         onClick={() => moveDown(originalIndex)}
         disabled={originalIndex === mods.length - 1}
         className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-        title="Move Down"
+        title={t('modList.row.down')}
       >
         <ArrowDown className="w-3.5 h-3.5" />
       </button>
@@ -349,10 +338,11 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
         onClick={() => moveToBottom(originalIndex)}
         disabled={originalIndex === mods.length - 1}
         className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 transition cursor-pointer"
-        title="Move to Bottom (🔻)"
+        title={t('modList.row.toBottom')}
       >
         <ChevronsDown className="w-3.5 h-3.5 text-amber-400" />
       </button>
     </div>
   </>
-);
+  );
+};
