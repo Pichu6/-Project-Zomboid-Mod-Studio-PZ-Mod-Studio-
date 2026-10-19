@@ -16,6 +16,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const STORAGE_KEY = 'pz_mod_studio_saved_presets';
 
@@ -44,6 +45,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
   onOpenInBrowser,
   toast,
 }) => {
+  const { t } = useTranslation();
   const [savedPresets, setSavedPresets] = useState<ModPreset[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -88,7 +90,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
 
   const handleSaveCurrentAsPreset = () => {
     if (!newPresetName.trim()) {
-      alert('Please enter a name for the preset.');
+      alert(t('presets.needName'));
       return;
     }
     const newPreset = currentAsPreset(newPresetName.trim(), newPresetDesc.trim() || undefined);
@@ -97,7 +99,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
     setIsSaveModalOpen(false);
     setNewPresetName('');
     setNewPresetDesc('');
-    toast(`✨ Preset '${newPreset.name}' saved successfully.`);
+    toast(t('presets.saved', { name: newPreset.name }));
   };
 
   const handleApplyPreset = (preset: ModPreset) => {
@@ -126,23 +128,23 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
     setActivePresetName(preset.name);
     setIsDropdownOpen(false);
     setIsImportModalOpen(false);
-    toast(`✨ Preset '${preset.name}' applied to the game.`);
+    toast(t('presets.applied', { name: preset.name }));
   };
 
   const handleDeletePreset = (presetId: string) => {
     const target = savedPresets.find((p) => p.id === presetId);
-    if (confirm(`Delete preset '${target?.name || ''}'?`)) {
+    if (confirm(t('presets.deleteConfirm', { name: target?.name || '' }))) {
       persist(savedPresets.filter((p) => p.id !== presetId));
       if (activePresetName === target?.name) {
         setActivePresetName(null);
       }
-      toast('Preset deleted.', 2500);
+      toast(t('presets.deleted'), 2500);
     }
   };
 
   const handleExportPresetFile = async (targetPreset?: ModPreset) => {
     const presetToExport: ModPreset =
-      targetPreset || currentAsPreset(activePresetName || 'ModList_Preset', 'Exported from PZ Mod Studio');
+      targetPreset || currentAsPreset(activePresetName || 'ModList_Preset', t('presets.exportedFrom'));
 
     // The same list under different sandbox settings is a different game, so they can travel
     // with it. Asked for before the save dialog, and only when there is something to offer.
@@ -151,41 +153,34 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
     if (mine.length === 1) {
       const only = mine[0];
       if (
-        confirm(
-          `Include your sandbox settings "${only.name}" (${only.settings} settings, ` +
-            `${only.mod_settings} of them from mods)?\n\nWhoever opens the pack can save them as a preset ` +
-            `and pick them when starting a game.`
-        )
+        confirm(t('presets.includeOne', { name: only.name, settings: only.settings, mod: only.mod_settings }))
       ) {
         sandboxName = only.name;
       }
     } else if (mine.length > 1) {
-      const answer = prompt(
-        `Include sandbox settings in the pack? Type the name, or leave it empty for none.\n\n` +
-          mine.map((p) => `- ${p.name} (${p.settings} settings, ${p.mod_settings} from mods)`).join('\n')
-      );
+      const answer = prompt(t('presets.includeWhich', { list: mine.map((p) => t('presets.sandboxLine', { name: p.name, settings: p.settings, mod: p.mod_settings })).join('\n') }));
       const match = mine.find((p) => p.name.toLowerCase() === (answer ?? '').trim().toLowerCase());
       if (answer && answer.trim() && !match) {
-        alert(`There is no sandbox preset called "${answer.trim()}". The pack will have no settings in it.`);
+        alert(t('presets.noSuchSandbox', { name: answer.trim() }));
       }
       sandboxName = match?.name ?? null;
     }
 
     try {
       const defaultFileName = `${presetToExport.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pzpack`;
-      const filePath = await TauriService.pickSaveFile(defaultFileName, 'PZ Mod Studio Preset (.pzpack)', 'pzpack');
+      const filePath = await TauriService.pickSaveFile(defaultFileName, t('presets.filter'), 'pzpack');
       if (filePath) {
         await TauriService.exportPresetFile(paths, presetToExport, filePath, sandboxName);
-        toast(`✨ Collection exported to: ${filePath}`, 4000);
+        toast(t('presets.exported', { path: filePath }), 4000);
       }
     } catch (err: any) {
-      alert(`Error exporting preset: ${explainError(err)}`);
+      alert(t('presets.exportError', { error: explainError(err) }));
     }
   };
 
   const handleImportPresetFile = async () => {
     try {
-      const filePath = await TauriService.pickOpenFile('PZ Mod Studio Preset (.pzpack)', 'pzpack');
+      const filePath = await TauriService.pickOpenFile(t('presets.filter'), 'pzpack');
       if (filePath) {
         const preset: ModPreset = await TauriService.importPresetFile(filePath);
         setImportedPreset(preset);
@@ -200,7 +195,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
         setIsDropdownOpen(false);
       }
     } catch (err: any) {
-      alert(`Error importing .pzpack file: ${explainError(err)}`);
+      alert(t('presets.importError', { error: explainError(err) }));
     }
   };
 
@@ -226,17 +221,17 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
-          title="Preset Management & Collections (.pzpack)"
+          title={t('presets.buttonTitle')}
         >
           <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
-          <span>{activePresetName ? `Preset: ${activePresetName}` : `Presets (${savedPresets.length})`}</span>
+          <span>{activePresetName ? t('presets.buttonActive', { name: activePresetName }) : t('presets.buttonCount', { count: savedPresets.length })}</span>
         </button>
 
         {isDropdownOpen && (
           <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-2 space-y-2">
             <div className="text-[11px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
-              <span>Mod Presets</span>
-              <span className="text-cyan-400 font-mono text-[10px]">{savedPresets.length} Saved</span>
+              <span>{t('presets.menuTitle')}</span>
+              <span className="text-cyan-400 font-mono text-[10px]">{t('presets.savedCount', { count: savedPresets.length })}</span>
             </div>
 
             <div className="space-y-1">
@@ -248,7 +243,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-emerald-300 hover:bg-emerald-950/40 rounded-lg transition text-left cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Save Current List as Preset</span>
+                <span>{t('presets.saveCurrent')}</span>
               </button>
 
               <button
@@ -256,7 +251,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-cyan-300 hover:bg-cyan-950/40 rounded-lg transition text-left cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Import .pzpack File</span>
+                <span>{t('presets.importFile')}</span>
               </button>
 
               <button
@@ -267,14 +262,14 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 rounded-lg transition text-left cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-slate-400" />
-                <span>Export Current List (.pzpack)</span>
+                <span>{t('presets.exportCurrent')}</span>
               </button>
             </div>
 
             {savedPresets.length > 0 && (
               <>
                 <div className="text-[10px] font-bold text-slate-500 px-2 pt-1 uppercase border-t border-slate-800">
-                  Load Saved Preset
+                  {t('presets.loadSaved')}
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
                   {savedPresets.map((p) => (
@@ -285,23 +280,23 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                       <button
                         onClick={() => handleApplyPreset(p)}
                         className="flex-1 text-left truncate pr-2 text-slate-200 hover:text-cyan-300 font-medium text-xs cursor-pointer"
-                        title={`Load ${p.name} (${p.mods.length} mods)`}
+                        title={t('presets.loadTitle', { name: p.name, count: p.mods.length })}
                       >
                         <div className="truncate font-semibold">{p.name}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">{p.mods.filter((m) => m.enabled).length} active mods</div>
+                        <div className="text-[10px] text-slate-500 font-mono">{t('presets.activeMods', { count: p.mods.filter((m) => m.enabled).length })}</div>
                       </button>
                       <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100">
                         <button
                           onClick={() => handleExportPresetFile(p)}
                           className="p-1 hover:text-cyan-400 transition cursor-pointer"
-                          title="Export as .pzpack"
+                          title={t('presets.exportAs')}
                         >
                           <Download className="w-3 h-3" />
                         </button>
                         <button
                           onClick={() => handleDeletePreset(p.id)}
                           className="p-1 hover:text-red-400 transition cursor-pointer"
-                          title="Delete preset"
+                          title={t('presets.delete')}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -322,23 +317,21 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <Bookmark className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-slate-100">Save Current List as Preset</h3>
+                <h3 className="text-base font-bold text-slate-100">{t('presets.saveCurrent')}</h3>
               </div>
               <button onClick={() => setIsSaveModalOpen(false)} className="text-slate-500 hover:text-slate-300 p-1">
                 <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Save the current configuration of <b className="text-emerald-400">{activeCount} active mods</b> and its load order so you can restore it at any time.
-            </p>
+            <p className="text-xs text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('presets.saveBlurb', { count: activeCount }) }} />
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Preset Name *</label>
+                <label className="text-xs font-bold text-slate-300 block mb-1">{t('presets.nameLabel')}</label>
                 <input
                   type="text"
-                  placeholder="e.g. Hardcore Survival 1993, Vanilla Plus..."
+                  placeholder={t('presets.namePlaceholder')}
                   value={newPresetName}
                   onChange={(e) => setNewPresetName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
@@ -347,10 +340,10 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Description (Optional)</label>
+                <label className="text-xs font-bold text-slate-300 block mb-1">{t('presets.descLabel')}</label>
                 <input
                   type="text"
-                  placeholder="e.g. Optimized collection with weapon and UI mods"
+                  placeholder={t('presets.descPlaceholder')}
                   value={newPresetDesc}
                   onChange={(e) => setNewPresetDesc(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none"
@@ -363,7 +356,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 onClick={() => setIsSaveModalOpen(false)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
               >
-                Cancel
+                {t('presets.cancel')}
               </button>
               <button
                 onClick={handleSaveCurrentAsPreset}
@@ -371,7 +364,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Save Preset</span>
+                <span>{t('presets.save')}</span>
               </button>
             </div>
           </div>
@@ -386,8 +379,8 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
               <div className="flex items-center gap-2.5">
                 <Sparkles className="w-5 h-5 text-cyan-400" />
                 <div>
-                  <h3 className="text-base font-bold text-slate-100">Collection: {importedPreset.name}</h3>
-                  <p className="text-[11px] text-slate-400">{importedPreset.description || 'Imported from .pzpack file'}</p>
+                  <h3 className="text-base font-bold text-slate-100">{t('presets.collection', { name: importedPreset.name })}</h3>
+                  <p className="text-[11px] text-slate-400">{importedPreset.description || t('presets.importedFrom')}</p>
                 </div>
               </div>
               <button onClick={closeImport} className="text-slate-500 hover:text-slate-300 p-1">
@@ -403,11 +396,11 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                     <div className="flex items-center justify-between font-bold text-amber-300">
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Mods Not Installed on your PC ({missingReport.missing_mods.length})</span>
+                        <span>{t('presets.missingTitle', { count: missingReport.missing_mods.length })}</span>
                       </div>
                     </div>
                     <p className="text-[11px] text-slate-300 leading-relaxed">
-                      To fully enjoy this preset, subscribe to these mods on Steam Workshop:
+                      {t('presets.missingBlurb')}
                     </p>
                     <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                       {missingReport.missing_mods.map((m, idx) => (
@@ -418,11 +411,11 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                               onClick={() => (onOpenInBrowser ? onOpenInBrowser(m.workshop_id!) : TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshop_id}`))}
                               className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
                             >
-                              <span>Steam (#{m.workshop_id})</span>
+                              <span>{t('presets.steamLink', { id: m.workshop_id })}</span>
                               <ExternalLink className="w-3 h-3" />
                             </button>
                           ) : (
-                            <span className="text-slate-500 text-[10px]">Local Mod</span>
+                            <span className="text-slate-500 text-[10px]">{t('presets.localMod')}</span>
                           )}
                         </div>
                       ))}
@@ -432,8 +425,8 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                   <div className="p-3.5 bg-emerald-950/60 border border-emerald-700/80 rounded-xl flex items-center gap-3 text-xs text-emerald-300">
                     <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
                     <div>
-                      <div className="font-bold">All mods in the collection are installed!</div>
-                      <div className="text-[11px] text-slate-300">You can apply the order and activation immediately.</div>
+                      <div className="font-bold">{t('presets.allInstalled')}</div>
+                      <div className="text-[11px] text-slate-300">{t('presets.allInstalledBlurb')}</div>
                     </div>
                   </div>
                 )}
@@ -441,26 +434,21 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 {/* Settings that came with the pack: saved only if the player wants them. */}
                 {importedPreset?.sandbox && (
                   <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
-                    <div className="text-[11px] text-slate-200">
-                      This pack also carries the sandbox settings{' '}
-                      <b className="text-slate-100">{importedPreset.sandbox.name}</b> —{' '}
-                      {importedPreset.sandbox.settings} settings,{' '}
-                      {importedPreset.sandbox.mod_settings} of them from mods.
-                    </div>
+                    <div className="text-[11px] text-slate-200" dangerouslySetInnerHTML={{ __html: t('presets.sandboxCarried', { name: importedPreset.sandbox.name, settings: importedPreset.sandbox.settings, mod: importedPreset.sandbox.mod_settings }) }} />
                     <button
                       onClick={async () => {
                         if (!importedPreset?.sandbox) return;
                         try {
                           const name = await TauriService.writeSandboxPreset(paths.user_zomboid_dir, importedPreset.sandbox);
-                          toast(`Saved as the sandbox preset "${name}". Pick it when you start a game.`, 5000);
+                          toast(t('presets.sandboxSaved', { name }), 5000);
                         } catch (err) {
                           alert(explainError(err));
                         }
                       }}
                       className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 cursor-pointer transition"
-                      title="Writes them into Zomboid/Sandbox Presets without touching any preset of your own"
+                      title={t('presets.sandboxSaveTitle')}
                     >
-                      Save these settings as a preset
+                      {t('presets.sandboxSave')}
                     </button>
                   </div>
                 )}
@@ -469,23 +457,17 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 {missingReport.pack_game_version &&
                   missingReport.your_game_version &&
                   missingReport.pack_game_version !== missingReport.your_game_version && (
-                    <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-slate-300">
-                      This list was put together on build <b className="text-slate-100">{missingReport.pack_game_version}</b>;
-                      yours is <b className="text-slate-100">{missingReport.your_game_version}</b>. Mods made for one build do
-                      not always work on the other, and saves never cross them.
-                    </div>
+                    <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-slate-300" dangerouslySetInnerHTML={{ __html: t('presets.buildDiffers', { pack: missingReport.pack_game_version, yours: missingReport.your_game_version }) }} />
                   )}
 
                 {/* Installed, but not the copy the pack was made with. */}
                 {missingReport.drift && missingReport.drift.length > 0 && (
                   <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
                     <div className="text-[11px] font-bold text-slate-200">
-                      {missingReport.drift.length} mod{missingReport.drift.length === 1 ? '' : 's'} differ from the copy this
-                      list was made with
+                      {t('presets.driftTitle', { count: missingReport.drift.length })}
                     </div>
                     <p className="text-[10px] text-slate-400 leading-relaxed">
-                      Steam only ever gives you the newest copy, so there is nothing to fix here. It is worth knowing when a
-                      recipe or an item is not where the sender said it was.
+                      {t('presets.driftBlurb')}
                     </p>
                     <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                       {missingReport.drift.map((d) => (
@@ -493,10 +475,10 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                           <span className="text-slate-200 truncate">{d.name}</span>
                           <span className="font-mono text-[10px] text-slate-400 shrink-0">
                             {d.direction === 'older'
-                              ? 'yours is older'
+                              ? t('presets.older')
                               : d.direction === 'newer'
-                              ? 'yours is newer'
-                              : 'version differs'}
+                              ? t('presets.newer')
+                              : t('presets.differs')}
                             {d.pack_version || d.your_version ? ` (${d.pack_version ?? '?'} → ${d.your_version ?? '?'})` : ''}
                           </span>
                         </div>
@@ -512,14 +494,14 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 onClick={closeImport}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition cursor-pointer"
               >
-                Cancel
+                {t('presets.cancel')}
               </button>
               <button
                 onClick={handleApplyImportedPreset}
                 className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
-                <span>Apply Preset to my Game</span>
+                <span>{t('presets.apply')}</span>
               </button>
             </div>
           </div>

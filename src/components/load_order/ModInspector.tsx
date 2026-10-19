@@ -15,6 +15,8 @@ import {
   ShieldAlert,
   Wand2,
 } from 'lucide-react';
+import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 /** The first problem of each kind the health check found for the selected mod, if any. */
 export interface InspectorProblems {
@@ -43,7 +45,7 @@ interface ModInspectorProps {
 
 /** The game's own description markup: `<LINE>`, `<SIZE:large>`, `<RGB:r,g,b>`, `<CENTRE>`. */
 const renderPZRichText = (text?: string): React.ReactNode => {
-  if (!text) return <span className="text-slate-500 italic">No description provided in mod.info manifest.</span>;
+  if (!text) return <span className="text-slate-500 italic">{i18next.t('inspector.noDescription')}</span>;
 
   const cleanText = text.replace(/<LINE>/gi, '\n');
   const parts = cleanText.split(/(<[^>]+>)/g);
@@ -131,6 +133,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
   onToggleMod,
   onOpenInBrowser,
 }) => {
+  const { t } = useTranslation();
   const [imageError, setImageError] = useState<boolean>(false);
   /** The selected mod's poster, read from disk as a data URL (the webview cannot open files). */
   const [posterSrc, setPosterSrc] = useState<string | null>(null);
@@ -197,7 +200,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
     return (
       <div className="col-span-12 lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow p-4">
         <div className="flex-1 flex items-center justify-center text-slate-500 text-xs">
-          Select a mod from the left list to view Workshop metadata details.
+          {t('inspector.selectOne')}
         </div>
       </div>
     );
@@ -212,12 +215,12 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                {mod.is_map_mod ? 'MAP MOD' : mod.is_library ? 'BASE LIBRARY' : 'SCRIPT MOD'}
+                {mod.is_map_mod ? t('inspector.mapMod') : mod.is_library ? t('inspector.baseLibrary') : t('inspector.scriptMod')}
               </span>
               {packageBadgeClass && (
                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${packageBadgeClass} flex items-center gap-1`}>
                   <Layers className="w-3 h-3" />
-                  Multi-Mod Package
+                  {t('inspector.multiPackage')}
                 </span>
               )}
             </div>
@@ -226,9 +229,9 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
               <button
                 onClick={() => onOpenInBrowser(mod.workshop_id!)}
                 className="flex items-center gap-1 text-[10px] text-cyan-400 hover:underline font-mono bg-transparent border-0 cursor-pointer"
-                title="Opens this mod in Browse Mods: description, images and the Workshop page"
+                title={t('inspector.openInBrowserTitle')}
               >
-                <span>Open in Mod Browser (#{mod.workshop_id})</span>
+                <span>{t('inspector.openInBrowser', { id: mod.workshop_id })}</span>
                 <BookOpen className="w-3 h-3" />
               </button>
             )}
@@ -237,11 +240,11 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           <h3
             onClick={() => onJumpToMod(mod.mod_id)}
             className="text-base font-bold text-slate-100 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1.5"
-            title="Click to center and highlight this mod in the left list"
+            title={t('inspector.centerTitle')}
           >
             <span>{mod.name}</span>
           </h3>
-          <div className="text-xs font-mono text-slate-400">ID: <code className="text-emerald-400">{mod.mod_id}</code></div>
+          <div className="text-xs font-mono text-slate-400">{t('inspector.id')} <code className="text-emerald-400">{mod.mod_id}</code></div>
         </div>
 
         {/* Load Order Violation Warning Card */}
@@ -250,30 +253,27 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
             <div className="flex items-center justify-between font-bold text-orange-300">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-orange-400 shrink-0" />
-                <span>Warning: Incorrect Load Order</span>
+                <span>{t('inspector.orderTitle')}</span>
               </div>
               <span className="text-[10px] font-mono bg-orange-900/80 text-orange-200 px-2 py-0.5 rounded border border-orange-600">
-                Position #{position + 1}
+                {t('inspector.position', { n: position + 1 })}
               </span>
             </div>
-            <p className="text-[11px] text-slate-200 leading-relaxed">
-              This mod is loading <b>BEFORE</b> its required dependency{' '}
-              <b className="text-orange-300">[{orderViolation.requiredModName}]</b> (Position #{orderViolation.requiredModIndex + 1}). Must be placed <b>AFTER</b> in the list to avoid errors.
-            </p>
+            <p className="text-[11px] text-slate-200 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('inspector.orderBody', { name: orderViolation.requiredModName, n: orderViolation.requiredModIndex + 1 }) }} />
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onFixLoadOrder(mod.mod_id, orderViolation.requiredModId)}
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
               >
                 <Wand2 className="w-4 h-4" />
-                <span>Move After {orderViolation.requiredModName}</span>
+                <span>{t('inspector.moveAfter', { name: orderViolation.requiredModName })}</span>
               </button>
               <button
                 onClick={() => onJumpToMod(orderViolation.requiredModId)}
                 className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-orange-300 border border-orange-800 rounded-lg text-xs font-bold transition cursor-pointer"
-                title="Jump to required dependency"
+                title={t('inspector.jumpToDependency')}
               >
-                <span>Ver Dep</span>
+                <span>{t('inspector.viewDependency')}</span>
               </button>
             </div>
           </div>
@@ -284,26 +284,23 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           <div className="p-3 bg-rose-950/60 border-2 border-rose-500/80 rounded-xl space-y-2 text-xs">
             <div className="flex items-center gap-2 font-bold text-rose-300">
               <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>Warning: Base Library Disabled</span>
+              <span>{t('inspector.disabledTitle')}</span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              This mod is active but requires the library{' '}
-              <b className="text-rose-300">[{disabledDependency.name}]</b> which is DISABLED.
-            </p>
+            <p className="text-[11px] text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('inspector.disabledBody', { name: disabledDependency.name }) }} />
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onToggleMod(disabledDependency.mod_id)}
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
               >
                 <Check className="w-4 h-4" />
-                <span>Activate Library</span>
+                <span>{t('inspector.activateLibrary')}</span>
               </button>
               <button
                 onClick={() => onJumpToMod(disabledDependency.mod_id)}
                 className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800 rounded-lg text-xs font-bold transition cursor-pointer"
-                title="Jump to library in list"
+                title={t('inspector.jumpToLibrary')}
               >
-                <span>View Mod</span>
+                <span>{t('inspector.viewMod')}</span>
               </button>
             </div>
           </div>
@@ -314,25 +311,22 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           <div className="p-3 bg-amber-950/60 border-2 border-amber-500/80 rounded-xl space-y-2 text-xs">
             <div className="flex items-center gap-2 font-bold text-amber-300">
               <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Warning: Incompatibility Detected</span>
+              <span>{t('inspector.incompatTitle')}</span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Mutually exclusive with:{' '}
-              <b className="text-amber-300">[{incompatibility.conflictingModName}]</b>.
-            </p>
+            <p className="text-[11px] text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('inspector.incompatBody', { name: incompatibility.conflictingModName }) }} />
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onJumpToMod(incompatibility.conflictingModId)}
                 className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
               >
-                <span>View Conflicting Mod</span>
+                <span>{t('inspector.viewConflicting')}</span>
               </button>
               <button
                 onClick={() => onToggleMod(incompatibility.conflictingModId)}
                 className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
-                title="Deactivate conflicting variant"
+                title={t('inspector.deactivateTitle')}
               >
-                <span>Deactivate</span>
+                <span>{t('inspector.deactivate')}</span>
               </button>
             </div>
           </div>
@@ -343,7 +337,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           {/* Left Description Box with Parsed RichText */}
           <div className="col-span-12 sm:col-span-7 space-y-1">
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Mod Overview & Description
+              {t('inspector.overview')}
             </label>
             <div className="p-3 bg-slate-950/90 rounded-xl text-xs text-slate-300 leading-relaxed font-sans border border-slate-800 h-48 overflow-y-auto select-text shadow-inner">
               {renderPZRichText(mod.description)}
@@ -353,7 +347,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           {/* Right Poster Image Frame (256x256 image with fallback) */}
           <div className="col-span-12 sm:col-span-5 space-y-1">
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Mod Poster
+              {t('inspector.poster')}
             </label>
             <div className="h-48 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden relative shadow-inner">
               {posterSrc && !imageError ? (
@@ -378,7 +372,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
                     {mod.name}
                   </span>
                   <div className="text-[10px] text-slate-400 font-mono">
-                    <span>{mod.is_map_mod ? 'Map Tile' : mod.is_library ? 'Framework' : 'Script Mod'}</span>
+                    <span>{mod.is_map_mod ? t('inspector.mapTile') : mod.is_library ? t('inspector.framework') : t('inspector.scriptModShort')}</span>
                   </div>
                 </div>
               )}
@@ -389,30 +383,30 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
         {/* Bottom Section: In-Game Style Metadata Table Grid */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl overflow-hidden text-xs shadow-md">
           <div className="bg-slate-900/90 px-3.5 py-2 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between">
-            <span>Mod Metadata Details</span>
-            <span className="text-[10px] font-mono text-emerald-400 font-normal">PZ Build 42 Manifest</span>
+            <span>{t('inspector.metadata')}</span>
+            <span className="text-[10px] font-mono text-emerald-400 font-normal">{t('inspector.manifest')}</span>
           </div>
           <div className="divide-y divide-slate-800/60 font-mono text-[11px]">
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Status</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.status')}</div>
               <div className={`col-span-8 font-bold ${mod.enabled ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {mod.enabled ? 'Enabled' : 'Disabled'}
+                {mod.enabled ? t('inspector.enabled') : t('inspector.disabled')}
               </div>
             </div>
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Version</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.version')}</div>
               <div className="col-span-8 text-slate-200">{mod.version || '1.0'}</div>
             </div>
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Author</div>
-              <div className="col-span-8 text-cyan-300 font-bold">{mod.author || 'Unknown'}</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.author')}</div>
+              <div className="col-span-8 text-cyan-300 font-bold">{mod.author || t('inspector.unknown')}</div>
             </div>
 
             {mod.url && (
               <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-                <div className="col-span-4 text-slate-400">Homepage</div>
+                <div className="col-span-4 text-slate-400">{t('inspector.homepage')}</div>
                 <div className="col-span-8">
                   <button
                     onClick={() => TauriService.openExternalUrl(mod.url!)}
@@ -425,27 +419,27 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
             )}
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Mod ID</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.modId')}</div>
               <div className="col-span-8 text-emerald-400 font-bold">{mod.mod_id}</div>
             </div>
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Workshop ID</div>
-              <div className="col-span-8 text-slate-300">{mod.workshop_id || 'Built-in / Local'}</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.workshopId')}</div>
+              <div className="col-span-8 text-slate-300">{mod.workshop_id || t('inspector.builtIn')}</div>
             </div>
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Source</div>
-              <div className="col-span-8 text-slate-300">{mod.workshop_id ? 'Steam Workshop' : 'Local Directory'}</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.source')}</div>
+              <div className="col-span-8 text-slate-300">{mod.workshop_id ? t('inspector.steamWorkshop') : t('inspector.localDirectory')}</div>
             </div>
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-center">
-              <div className="col-span-4 text-slate-400">Zomboid Version</div>
+              <div className="col-span-4 text-slate-400">{t('inspector.zomboidVersion')}</div>
               <div className="col-span-8 text-slate-300">{mod.pzversion || '42.0+'}</div>
             </div>
 
             <div className="grid grid-cols-12 px-3.5 py-1.5 items-start">
-              <div className="col-span-4 text-slate-400 pt-0.5">Incompatible With</div>
+              <div className="col-span-4 text-slate-400 pt-0.5">{t('inspector.incompatibleWith')}</div>
               <div className="col-span-8">
                 {mod.incompatible && mod.incompatible.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
@@ -466,7 +460,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
               <Package className="w-3.5 h-3.5 text-emerald-400" />
-              Library Required by this Mod ({parentLibraries.length})
+              {t('inspector.libraryRequired', { count: parentLibraries.length })}
             </span>
           </label>
           <div className="flex flex-wrap gap-1.5 pt-1">
@@ -487,8 +481,8 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
                     }`}
                     title={
                       matched
-                        ? `Click to center and go to parent library [${matched.name}] (${matched.enabled ? 'ACTIVE' : 'DISABLED'})`
-                        : `Library not installed: ${item.raw} (Click to search on Steam Workshop)`
+                        ? t('inspector.parentTitle', { name: matched.name, state: matched.enabled ? t('inspector.active') : t('inspector.disabledUpper') })
+                        : t('inspector.notInstalledTitle', { name: item.raw })
                     }
                   >
                     <span className={`w-2 h-2 rounded-full ${isDepDisabled ? 'bg-rose-400 animate-pulse' : matched ? 'bg-emerald-400' : 'bg-red-400'}`} />
@@ -498,7 +492,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
                 );
               })
             ) : (
-              <span className="text-xs text-slate-500 italic">No base library required by this mod</span>
+              <span className="text-xs text-slate-500 italic">{t('inspector.noLibrary')}</span>
             )}
           </div>
         </div>
@@ -508,7 +502,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-purple-400 font-bold">
               <Link2 className="w-3.5 h-3.5 text-purple-400" />
-              Mods Requiring This Library ({reverseDependents.length})
+              {t('inspector.modsRequiring', { count: reverseDependents.length })}
             </span>
           </label>
           <div className="flex flex-wrap gap-1.5 pt-1">
@@ -522,14 +516,14 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
                       ? 'bg-purple-950/80 border-purple-700 text-purple-200 hover:border-purple-400 shadow'
                       : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
                   }`}
-                  title={`Click to center and go to child mod [${depMod.name}] (${depMod.enabled ? 'ACTIVE' : 'DISABLED'})`}
+                  title={t('inspector.childTitle', { name: depMod.name, state: depMod.enabled ? t('inspector.active') : t('inspector.disabledUpper') })}
                 >
                   <span className={`w-2 h-2 rounded-full ${depMod.enabled ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                   <span>{depMod.name}</span>
                 </button>
               ))
             ) : (
-              <span className="text-xs text-slate-500 italic">No installed mods require this library</span>
+              <span className="text-xs text-slate-500 italic">{t('inspector.noDependents')}</span>
             )}
           </div>
         </div>

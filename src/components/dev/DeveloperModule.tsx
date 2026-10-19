@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
 import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Map as MapIcon, Play, RefreshCw, RotateCcw, Users, Wrench } from 'lucide-react';
 import { CatalogModSummary, FileProblem, MapTools, ModInfo, ModValidation, MpReport } from '../../types';
 import { MpCheckPanel } from '../common/MpCheckPanel';
@@ -24,6 +26,7 @@ interface DeveloperModuleProps {
  * start the game with only that mod on.
  */
 export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, catalogById, onLaunchOnly, devLaunch, onRestoreList, onRefreshMods }) => {
+  const { t } = useTranslation();
   const [modId, setModId] = useState<string>(() => localStorage.getItem('pz_dev_mod') ?? '');
   const [validation, setValidation] = useState<ModValidation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,7 +64,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
     if (!root) return;
     try {
       const where = await TauriService.openInEditor(paths, `${root}/${p.path}`, p.line, p.col);
-      setNote(`Opened in ${where}.`);
+      setNote(i18next.t('developer.note.opened', { where }));
       setTimeout(() => setNote(null), 3000);
     } catch {
       // Already shown by TauriService.
@@ -81,13 +84,13 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
   const reloadFiles = async (files: string[]) => {
     if (files.length === 0) return;
     if ((await TauriService.gameStatus()) === null) {
-      log('The game is not running: nothing to reload into. Start it (with the bridge on) first.');
+      log(i18next.t('developer.reload.notRunning'));
       return;
     }
     setReloading(true);
     try {
       const id = await TauriService.reloadLuaInGame(paths, files);
-      log(`Asked the game to reload ${files.length} file${files.length === 1 ? '' : 's'}…`);
+      log(i18next.t('developer.reload.asked', { count: files.length }));
       // The bridge looks at its queue about twice a second; give it a few seconds.
       for (let i = 0; i < 16; i++) {
         await new Promise((r) => setTimeout(r, 500));
@@ -97,7 +100,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
           return;
         }
       }
-      log('No answer from the game in 8 s: is the bridge mod (Z_PZModStudio_Bridge) on, and are you past the main menu? The Monitor shows the console.');
+      log(i18next.t('developer.reload.noAnswer'));
     } catch {
       // Already shown by TauriService.
     } finally {
@@ -114,7 +117,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
         const changed = await TauriService.changedLuaFiles(root, since);
         if (changed.length === 0) return;
         lastCheck.current = Math.max(...changed.map((c) => c.modified_ms)) + 1;
-        changed.forEach((c) => log(`changed: ${c.path}`));
+        changed.forEach((c) => log(i18next.t('developer.reload.changed', { path: c.path })));
         await reloadFiles(changed.map((c) => c.absolute));
       })();
     }, 2000);
@@ -201,8 +204,8 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
       <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-3">
         <Code2 className="w-5 h-5 text-emerald-400" aria-hidden="true" />
         <div>
-          <h1 className="text-sm font-bold text-slate-100">Developer</h1>
-          <p className="text-[11px] text-slate-400">Check a mod before the game does; start the game with only it on.</p>
+          <h1 className="text-sm font-bold text-slate-100">{t('developer.header.title')}</h1>
+          <p className="text-[11px] text-slate-400">{t('developer.header.subtitle')}</p>
         </div>
       </div>
 
@@ -210,11 +213,9 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
         {devLaunch && (
           <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-amber-700/60 bg-amber-950/30 text-xs text-amber-200">
             <Play className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1">
-              The game was started with only <b>{mods.find((m) => m.mod_id === devLaunch.modId)?.name ?? devLaunch.modId}</b> on ({devLaunch.since}); your list is set aside and comes back when the game closes.
-            </span>
+            <span className="flex-1" dangerouslySetInnerHTML={{ __html: t('developer.devLaunch.banner', { name: mods.find((m) => m.mod_id === devLaunch.modId)?.name ?? devLaunch.modId, since: devLaunch.since }) }} />
             <button type="button" onClick={onRestoreList} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-700 hover:bg-amber-600 text-white cursor-pointer">
-              <RotateCcw className="w-3 h-3" aria-hidden="true" /> Put my list back now
+              <RotateCcw className="w-3 h-3" aria-hidden="true" /> {t('developer.devLaunch.restore')}
             </button>
           </div>
         )}
@@ -223,19 +224,14 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                <FolderPlus className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> A new mod
+                <FolderPlus className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.newMod.title')}
               </div>
-              <p className="text-[11px] text-slate-400 max-w-2xl">
-                Made in Zomboid/mods the way Build 42 reads it: <code>42/mod.info</code> (name, id, description, author,
-                poster, versionMin), <code>42/media/lua/client|server|shared</code> and <code>42/media/scripts</code>,
-                <code>common/media/lua</code> for what every build shares, a poster to replace, and one Lua file that prints
-                the mod's name when the game loads it. The game lists it after the next scan.
-              </p>
+              <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.newMod.intro') }} />
             </div>
             {!newMod && (
               <button type="button" onClick={() => setNewMod({ id: '', name: '', author: '', description: '', also41: false })}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shrink-0">
-                <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" /> New mod…
+                <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" /> {t('developer.newMod.button')}
               </button>
             )}
           </div>
@@ -248,37 +244,37 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               }}
             >
               <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                Name
+                {t('developer.newMod.name')}
                 <input type="text" value={newMod.name} autoFocus
                   onChange={(e) => setNewMod({ ...newMod, name: e.target.value, id: newMod.id === idFromName(newMod.name) ? idFromName(e.target.value) : newMod.id })}
                   className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
               </label>
               <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                Id (the folder and the list entry: letters, digits, _ and -)
+                {t('developer.newMod.id')}
                 <input type="text" value={newMod.id} onChange={(e) => setNewMod({ ...newMod, id: e.target.value })} spellCheck={false}
                   className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500" />
               </label>
               <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                Author
+                {t('developer.newMod.author')}
                 <input type="text" value={newMod.author} onChange={(e) => setNewMod({ ...newMod, author: e.target.value })}
                   className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
               </label>
               <label className="flex flex-col gap-1 text-[11px] text-slate-400">
-                Description (one line per paragraph)
+                {t('developer.newMod.description')}
                 <textarea rows={2} value={newMod.description} onChange={(e) => setNewMod({ ...newMod, description: e.target.value })}
                   className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
               </label>
               <label className="flex items-center gap-2 text-[11px] text-slate-300 md:col-span-2">
                 <input type="checkbox" checked={newMod.also41} onChange={(e) => setNewMod({ ...newMod, also41: e.target.checked })} />
-                Build 41 too (a root mod.info and media/ beside the 42/ folder)
+                {t('developer.newMod.also41')}
               </label>
               <div className="flex gap-2 md:col-span-2">
                 <button type="submit" disabled={creating || !newMod.name.trim() || !newMod.id.trim()}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
-                  {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" />} Make it
+                  {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FolderPlus className="w-3.5 h-3.5" aria-hidden="true" />} {t('developer.newMod.make')}
                 </button>
                 <button type="button" onClick={() => setNewMod(null)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer">
-                  Cancel
+                  {t('developer.newMod.cancel')}
                 </button>
               </div>
             </form>
@@ -286,41 +282,41 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
           {created && (
             <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-[11px] text-emerald-200 flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
-                <span>Made <b>{created.id}</b> in <span className="font-mono">{created.folder}</span>.</span>
+                <span dangerouslySetInnerHTML={{ __html: t('developer.newMod.made', { id: created.id, folder: created.folder }) }} />
                 <button type="button" onClick={() => TauriService.openModFolder(paths, created.folder)} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer shrink-0">
-                  <FolderOpen className="w-3 h-3" aria-hidden="true" /> Open the folder
+                  <FolderOpen className="w-3 h-3" aria-hidden="true" /> {t('developer.newMod.openFolder')}
                 </button>
               </div>
               <div className="font-mono text-[10px] text-emerald-300/80">{created.files.join(' · ')}</div>
-              <div className="text-emerald-300/80">Switch it on in the Mod List when it is ready; "Start the game with only this mod" here works as soon as the scan lists it.</div>
+              <div className="text-emerald-300/80">{t('developer.newMod.next')}</div>
             </div>
           )}
         </div>
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
-          <div className="text-xs font-bold text-slate-200">The mod you are working on</div>
+          <div className="text-xs font-bold text-slate-200">{t('developer.pick.title')}</div>
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={modId}
               onChange={(e) => pick(e.target.value)}
-              aria-label="Mod to work on"
+              aria-label={t('developer.pick.aria')}
               className="min-w-[280px] px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer"
             >
-              <option value="">Pick a mod…</option>
+              <option value="">{t('developer.pick.placeholder')}</option>
               {choices.local.length > 0 && (
-                <optgroup label="In Zomboid/mods (yours)">
+                <optgroup label={t('developer.pick.local')}>
                   {choices.local.map((m) => <option key={m.mod_id} value={m.mod_id}>{m.name} — {m.mod_id}</option>)}
                 </optgroup>
               )}
               {choices.workshop.length > 0 && (
-                <optgroup label="From the Workshop">
+                <optgroup label={t('developer.pick.workshop')}>
                   {choices.workshop.map((m) => <option key={m.mod_id} value={m.mod_id}>{m.name} — {m.mod_id}</option>)}
                 </optgroup>
               )}
             </select>
             {root && (
               <button type="button" onClick={() => TauriService.openModFolder(paths, root)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer" title={root}>
-                <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" /> Open its folder
+                <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" /> {t('developer.pick.openFolder')}
               </button>
             )}
           </div>
@@ -331,18 +327,18 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               disabled={!root || busy}
               onClick={() => void validate()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50"
-              title="Every .lua through the parser the Merger uses, every media/scripts/*.txt through a brace check"
+              title={t('developer.pick.checkTitle')}
             >
-              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Wrench className="w-3.5 h-3.5" aria-hidden="true" />} Check every file
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Wrench className="w-3.5 h-3.5" aria-hidden="true" />} {t('developer.pick.check')}
             </button>
             <button
               type="button"
               disabled={!mod || !!devLaunch}
               onClick={() => mod && onLaunchOnly(mod.mod_id)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50"
-              title="Debug (Windowed), with only this mod, what it requires and the Studio's bridge on. Your list is set aside and comes back when the game closes; Earlier lists has it too."
+              title={t('developer.pick.launchTitle')}
             >
-              <Play className="w-3.5 h-3.5" aria-hidden="true" /> Start the game with only this mod
+              <Play className="w-3.5 h-3.5" aria-hidden="true" /> {t('developer.pick.launch')}
             </button>
           </div>
         </div>
@@ -351,20 +347,15 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Reload in the game while it runs
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.reload.title')}
               </div>
-              <p className="text-[11px] text-slate-400 max-w-2xl">
-                Save a Lua file of this mod and the game reloads it without restarting: the Studio's bridge hands the game
-                <code className="mx-1">reloadLuaFile</code> for each file that changed (what the game's own debug windows do),
-                and what happened shows here and in the console. The bridge mod must be on and the game past the main menu.
-                A file's top-level code runs again; tables it rebuilds are rebuilt, hooks it adds are added again.
-              </p>
+              <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.reload.intro') }} />
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={watching}
-              aria-label="Watch this mod's Lua files and reload them in the game when they change"
+              aria-label={t('developer.reload.watchAria')}
               disabled={!root}
               onClick={() => setWatching((w) => !w)}
               className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer disabled:opacity-50 ${
@@ -380,11 +371,11 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               disabled={!root || reloading}
               onClick={() => void reloadAllNow()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
-              title="Every .lua of this mod, now"
+              title={t('developer.reload.allTitle')}
             >
-              {reloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />} Reload every Lua of this mod now
+              {reloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />} {t('developer.reload.all')}
             </button>
-            {watching && <span className="text-[11px] text-emerald-300 self-center">Watching {mod?.name}: a saved .lua is reloaded within two seconds.</span>}
+            {watching && <span className="text-[11px] text-emerald-300 self-center">{t('developer.reload.watching', { name: mod?.name })}</span>}
           </div>
           {reloadLog.length > 0 && (
             <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 max-h-48 overflow-y-auto font-mono text-[10.5px] text-slate-300 flex flex-col gap-0.5">
@@ -398,16 +389,9 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
         <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
           <div className="space-y-1">
             <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Multiplayer check
+              <Users className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.mp.title')}
             </div>
-            <p className="text-[11px] text-slate-400 max-w-2xl">
-              Where the game's own client code would change the world, a vehicle, an animal or the map, it asks the server
-              (<code>sendClientCommand</code>) and <code>media/lua/server/ClientCommands.lua</code> does it. This lists
-              the same calls made directly from this mod's client or shared Lua, with the game's handler as evidence. A
-              call inside an <code>if isClient()</code> branch counts as handled. It checks only those calls; a mod that
-              only touches its own UI or the player's own inventory has nothing here and may still misbehave in
-              multiplayer in ways this cannot see.
-            </p>
+            <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.mp.intro') }} />
           </div>
           <div>
             <button
@@ -416,12 +400,12 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               onClick={() => void checkMp()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
             >
-              {mpBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Users className="w-3.5 h-3.5" aria-hidden="true" />} Check this mod for multiplayer
+              {mpBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Users className="w-3.5 h-3.5" aria-hidden="true" />} {t('developer.mp.check')}
             </button>
           </div>
           {mp && mod && (
             <>
-              <div className="text-[11px] text-slate-500">{mp.files_checked} client and shared Lua file{mp.files_checked === 1 ? '' : 's'} checked{mp.has_server_lua ? '; the mod ships server Lua too' : ''}.</div>
+              <div className="text-[11px] text-slate-500">{t('developer.mp.summary', { count: mp.files_checked, server: mp.has_server_lua ? t('developer.mp.alsoServer') : '' })}</div>
               <MpCheckPanel
                 reports={[{ mod_id: mod.mod_id, name: mod.name, report: mp }]}
                 onOpen={(r, f) => void TauriService.openInEditor(paths, `${r}/${f.path}`, f.line, null).catch(() => undefined)}
@@ -433,19 +417,15 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
         <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
           <div className="space-y-1">
             <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
-              <MapIcon className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> Map tools
+              <MapIcon className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.mapTools.title')}
             </div>
-            <p className="text-[11px] text-slate-400 max-w-2xl">
-              The Indie Stone's own editors, the ones the game's maps were made with. They come as one zip you unpack
-              anywhere; the Studio looks in the usual places and in the folders you name, and starts each from its own
-              folder. A map mod's cells go in <code>media/maps/&lt;name&gt;</code> of the mod.
-            </p>
+            <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.mapTools.intro') }} />
           </div>
           {[
             {
               key: 'tilezed',
               name: 'TileZed',
-              what: 'Draws the tiles: buildings, rooms, furniture and the ground, one cell (300 by 300 tiles) at a time. Its files (.tmx, and .tbx for buildings) are what WorldEd assembles.',
+              what: t('developer.mapTools.tilezedWhat'),
               dir: tilezedDir,
               setDir: setTilezed,
               exe: mapTools?.tilezed ?? null,
@@ -453,7 +433,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
             {
               key: 'worlded',
               name: 'WorldEd',
-              what: 'Lays the cells out on the world grid, places buildings on them, sets spawn points and zones, and writes the map files the game reads (media/maps).',
+              what: t('developer.mapTools.worldedWhat'),
               dir: worldedDir,
               setDir: setWorlded,
               exe: mapTools?.worlded ?? null,
@@ -469,22 +449,22 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
                   type="button"
                   disabled={!tool.exe}
                   onClick={() => tool.exe && void TauriService.launchMapTool(tool.exe).catch(() => undefined)}
-                  title={tool.exe ?? `${tool.name}.exe was not found: name its folder below`}
+                  title={tool.exe ?? t('developer.mapTools.notFoundTitle', { name: tool.name })}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50 shrink-0"
                 >
-                  <Play className="w-3.5 h-3.5" aria-hidden="true" /> Start {tool.name}
+                  <Play className="w-3.5 h-3.5" aria-hidden="true" /> {t('developer.mapTools.start', { name: tool.name })}
                 </button>
               </div>
               <input
                 type="text"
                 value={tool.dir}
                 onChange={(e) => tool.setDir(e.target.value)}
-                placeholder={`Folder with ${tool.name}.exe (optional: the usual places are looked in first)`}
+                placeholder={t('developer.mapTools.folderPlaceholder', { name: tool.name })}
                 spellCheck={false}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
               />
               <div className={`text-[10px] font-mono break-all ${tool.exe ? 'text-emerald-400/80' : 'text-slate-500'}`}>
-                {tool.exe ?? (mapTools ? `Not found. Looked in ${mapTools.searched.length} places: your folder, then TileZed under your user folder, Documents, Desktop, Downloads and the C: drive.` : 'Looking…')}
+                {tool.exe ?? (mapTools ? t('developer.mapTools.notFound', { count: mapTools.searched.length }) : t('developer.mapTools.looking'))}
               </div>
             </div>
           ))}
@@ -494,12 +474,12 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs font-bold text-slate-200">
-                {validation.problems.length === 0 ? 'Every file reads' : `${validation.problems.length} problem${validation.problems.length === 1 ? '' : 's'} in ${byFile.length} file${byFile.length === 1 ? '' : 's'}`}
+                {validation.problems.length === 0 ? t('developer.results.allRead') : t('developer.results.problems', { problems: validation.problems.length, files: byFile.length })}
               </div>
-              <div className="text-[11px] font-mono text-slate-500">{validation.lua_files} Lua, {validation.script_files} script files checked</div>
+              <div className="text-[11px] font-mono text-slate-500">{t('developer.results.counts', { lua: validation.lua_files, scripts: validation.script_files })}</div>
             </div>
             {validation.problems.length === 0 && (
-              <p className="text-[11px] text-slate-400">No syntax errors in the Lua, no unbalanced block in the scripts. What the game does with them is the Monitor's to say.</p>
+              <p className="text-[11px] text-slate-400">{t('developer.results.clean')}</p>
             )}
             {byFile.map(([file, problems]) => (
               <div key={file} className="rounded-lg border border-slate-800 bg-slate-950/60">
@@ -513,7 +493,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
                     type="button"
                     onClick={() => void openProblem(p)}
                     className="w-full text-left px-3 py-1.5 text-[11px] text-slate-300 hover:bg-slate-900 cursor-pointer flex items-start gap-2"
-                    title="Opens the file at this line in VS Code when it is installed, else in the file's own program"
+                    title={t('developer.results.openTitle')}
                   >
                     <span className="font-mono text-amber-300 shrink-0 w-16">{p.line ? `${p.line}${p.col ? `:${p.col}` : ''}` : '—'}</span>
                     <span className="flex-1">{p.message}</span>

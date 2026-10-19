@@ -23,6 +23,7 @@ import { ContextMenuProvider } from './components/common/ContextMenu';
 const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
 
 import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
+import i18next from 'i18next';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('PROFILES');
@@ -122,11 +123,11 @@ export const App: React.FC = () => {
         setPaths(savedProfile);
 
         if (savedProfile.is_valid) {
-          setInitStatusMessage('Reading your mod list and profiles...');
+          setInitStatusMessage(i18next.t('app.init.reading'));
           setInitProgress(50);
           const active = await refreshActiveProfile(savedProfile.user_zomboid_dir);
 
-          setInitStatusMessage('Looking for your mods...');
+          setInitStatusMessage(i18next.t('app.init.looking'));
           setInitProgress(75);
           // Scan all subscribed Workshop & local mods on disk (preserving saved absolute order)
           const allSubscribedMods = await TauriService.scanAllInstalledMods(savedProfile);
@@ -147,7 +148,7 @@ export const App: React.FC = () => {
             setActiveTab('PROFILES');
           }
         } else {
-          setInitStatusMessage('Setting things up...');
+          setInitStatusMessage(i18next.t('app.init.setup'));
           setInitProgress(85);
         }
 
@@ -238,25 +239,15 @@ export const App: React.FC = () => {
     const missing = workshopIds.filter((id) => !haveItem.has(id));
 
     if (included.length === 0) {
-      alert(
-        `None of the ${workshopIds.length} mods in "${name}" are installed yet.\n\n` +
-          `Subscribe to them first (the button above), let Steam download them, then make the profile.`
-      );
+      alert(i18next.t('app.collection.noneInstalled', { count: workshopIds.length, name }));
       return;
     }
-    const ok = confirm(
-      `Make a profile "${name}" with ${included.length} mod${included.length === 1 ? '' : 's'}?` +
-        (missing.length > 0
-          ? `\n\n${missing.length} of the collection's mods are not installed, so they are left out. ` +
-            `Subscribe to them and make the profile again to include them.`
-          : '') +
-        `\n\nYour current list is not touched: a profile is switched to when you want it.`
-    );
+    const ok = confirm(i18next.t('app.collection.confirm', { name, count: included.length, missing: missing.length > 0 ? i18next.t('app.collection.missing', { count: missing.length }) : '' }));
     if (!ok) return;
 
     try {
       const ids = included.map((m) => m.mod_id);
-      await TauriService.createInstance(paths.user_zomboid_dir, name, `From the Steam collection`, ids, ids);
+      await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('app.collection.description'), ids, ids);
       await refreshActiveProfile();
       setActiveTab('PROFILES');
     } catch (err) {
@@ -283,7 +274,7 @@ export const App: React.FC = () => {
   // Returns whether the package was written, so callers only report success when it was.
   const handleAutoMergeAll = async (packageFolderName?: string): Promise<boolean> => {
     if (!paths.is_valid) {
-      alert('Configure and validate PZ paths before generating automatic patches.');
+      alert(i18next.t('app.pathsFirst'));
       return false;
     }
 
@@ -409,17 +400,9 @@ export const App: React.FC = () => {
     const profileMajor = profileBuildMajor(activeProfile);
     if (installed && profileMajor && profileMajor !== installed.split('.')[0]) {
       const why = activeProfile?.target_build
-        ? `${activeProfile.name} is set for build ${profileMajor}`
-        : `${activeProfile!.name} was last played on build ${activeProfile!.last_played_build}`;
-      const ok = window.confirm(
-        `${why}; the game installed now is ${installed}.
-
-` +
-          `Saves never cross a major build: a ${profileMajor} save will not open on ${installed.split('.')[0]}. ` +
-          `To play it, switch Steam's beta branch first.
-
-Start the game anyway?`
-      );
+        ? i18next.t('app.build.setFor', { name: activeProfile.name, build: profileMajor })
+        : i18next.t('app.build.lastPlayed', { name: activeProfile!.name, build: activeProfile!.last_played_build });
+      const ok = window.confirm(i18next.t('app.build.confirm', { why, installed, profile: profileMajor, major: installed.split('.')[0] }));
       if (!ok) return;
     }
 
@@ -760,7 +743,7 @@ Start the game anyway?`
           )}
 
           {activeTab === 'MERGER' && (
-            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-slate-500">Loading the merge editor...</div>}>
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-slate-500">{i18next.t('app.loadingMerger')}</div>}>
             <MergerModule
               conflicts={conflicts}
               mods={mods}
@@ -799,14 +782,14 @@ Start the game anyway?`
                 // The log gives a display name, which is what the Mod List shows too.
                 const target = mods.find((m) => m.name === modName || m.mod_id === modName);
                 if (!target) {
-                  alert(`${modName} is not in your mod list any more.`);
+                  alert(i18next.t('app.switchOff.gone', { name: modName }));
                   return;
                 }
                 if (!target.enabled) {
-                  alert(`${target.name} is already switched off.`);
+                  alert(i18next.t('app.switchOff.already', { name: target.name }));
                   return;
                 }
-                if (!confirm(`Switch off ${target.name}?\n\nIt stays installed; switch it back on in the Mod List whenever you like.`)) return;
+                if (!confirm(i18next.t('app.switchOff.confirm', { name: target.name }))) return;
                 handleToggleMod(target.mod_id);
                 setActiveTab('MOD_LIST');
               }}
@@ -852,27 +835,27 @@ Start the game anyway?`
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <span>✨ Auto-Merge Completed Successfully</span>
+                  <span>{i18next.t('app.autoMerge.title')}</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">All script conflicts were resolved in the merge patch.</p>
+                <p className="text-xs text-slate-400 mt-0.5">{i18next.t('app.autoMerge.blurb')}</p>
               </div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs font-mono">
               <div className="text-emerald-400 font-bold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Patch Generated on Disk:</span>
+                <span>{i18next.t('app.autoMerge.patchOnDisk')}</span>
               </div>
               <div className="p-2 bg-slate-900 rounded border border-slate-800 text-[11px] text-slate-300 break-all select-all font-mono">
                 {autoMergeResultModal.patch_mod_dir}
               </div>
               <div className="grid grid-cols-2 gap-2 pt-1 text-slate-300">
                 <div className="p-2 bg-slate-900/60 rounded border border-slate-800/80">
-                  <span className="text-slate-400 text-[10px] block">Conflicts Resolved</span>
+                  <span className="text-slate-400 text-[10px] block">{i18next.t('app.autoMerge.conflicts')}</span>
                   <b className="text-emerald-400 text-sm">{autoMergeResultModal.total_conflicts}</b>
                 </div>
                 <div className="p-2 bg-slate-900/60 rounded border border-slate-800/80">
-                  <span className="text-slate-400 text-[10px] block">Files Merged</span>
+                  <span className="text-slate-400 text-[10px] block">{i18next.t('app.autoMerge.files')}</span>
                   <b className="text-emerald-400 text-sm">{autoMergeResultModal.files_written}</b>
                 </div>
               </div>
@@ -883,7 +866,7 @@ Start the game anyway?`
                 onClick={() => setAutoMergeResultModal(null)}
                 className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg transition"
               >
-                Accept and Continue
+                {i18next.t('app.autoMerge.accept')}
               </button>
             </div>
           </div>
@@ -907,20 +890,14 @@ Start the game anyway?`
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-slate-100">
-                  {isOpenPackageWarning ? 'Open Package (Deactivated)' : 'No Active Merge Package'}
+                  {isOpenPackageWarning ? i18next.t('app.launch.openTitle') : i18next.t('app.launch.noneTitle')}
                 </h3>
-                <p className="text-xs text-amber-300/90 font-medium">
-                  {isOpenPackageWarning
-                    ? <>The package <code className="text-amber-200 bg-amber-950/60 px-1 rounded">{openPackageNames}</code> is open in draft mode and is currently deactivated.</>
-                    : 'There is no active merge patch in your profile.'}
-                </p>
+                <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: isOpenPackageWarning ? i18next.t('app.launch.openLine', { names: openPackageNames }) : i18next.t('app.launch.noneLine') }} />
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-              {isOpenPackageWarning
-                ? 'An open package (draft) is deactivated to prevent runtime conflicts while editing. To have it take effect in the game, you must package / publish it in Mod Merger before starting the game.'
-                : 'If your installed mods have conflicting files (Lua code collisions or shared scripts), errors, unexpected behaviors, or crashes could occur during gameplay. We suggest creating or activating a merge package in Mod Merger.'}
+              {isOpenPackageWarning ? i18next.t('app.launch.openBody') : i18next.t('app.launch.noneBody')}
             </p>
 
             {!isOpenPackageWarning && (
@@ -937,7 +914,7 @@ Start the game anyway?`
                   className="rounded border-slate-700 text-amber-500 focus:ring-amber-500/40 bg-slate-950 cursor-pointer"
                 />
                 <label htmlFor="skipNoMergeWarningCheckbox" className="text-[11px] text-slate-400 select-none cursor-pointer">
-                  Do not show this warning again
+                  {i18next.t('app.launch.dontShow')}
                 </label>
               </div>
             )}
@@ -950,7 +927,7 @@ Start the game anyway?`
                 }}
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shadow"
               >
-                Go to Mod Merger
+                {i18next.t('app.launch.goToMerger')}
               </button>
               <button
                 onClick={() => {
@@ -960,7 +937,7 @@ Start the game anyway?`
                 }}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition cursor-pointer"
               >
-                {isOpenPackageWarning ? 'Launch without package' : 'Launch anyway'}
+                {isOpenPackageWarning ? i18next.t('app.launch.withoutPackage') : i18next.t('app.launch.anyway')}
               </button>
             </div>
           </div>

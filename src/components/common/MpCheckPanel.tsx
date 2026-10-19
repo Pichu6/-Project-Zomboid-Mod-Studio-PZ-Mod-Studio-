@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ExternalLink } from 'lucide-react';
 import { MpFinding, MpModReport } from '../../types';
 
@@ -9,14 +10,13 @@ import { MpFinding, MpModReport } from '../../types';
  * aware, and its rows are notes rather than warnings.
  */
 export const MpCheckPanel: React.FC<{ reports: MpModReport[]; onOpen?: (root: string, f: MpFinding) => void }> = ({ reports, onOpen }) => {
+  const { t } = useTranslation();
   if (reports.length === 0) return null;
   const total = reports.reduce((n, r) => n + r.report.findings.filter((f) => !f.guarded).length, 0);
   return (
     <div className="flex flex-col gap-2">
       <div className="text-[11px] text-slate-400">
-        {total === 0
-          ? 'Nothing the game keeps server-side is called directly from client code. (This checks the calls the game routes through server/ClientCommands.lua and VehicleCommands.lua; it says nothing about what it cannot see.)'
-          : `${total} call${total === 1 ? '' : 's'} the game routes through the server in multiplayer, made directly from client or shared code. Each row names the game's handler, so it can be checked against the game's own Lua.`}
+        {total === 0 ? t('mpCheck.none') : t('mpCheck.some', { count: total })}
       </div>
       {reports.map(({ mod_id, name, report }) => {
         const open = report.findings.filter((f) => !f.guarded);
@@ -27,7 +27,7 @@ export const MpCheckPanel: React.FC<{ reports: MpModReport[]; onOpen?: (root: st
             <div className="px-3 py-1.5 text-[11px] border-b border-slate-900 flex items-center justify-between gap-2">
               <span className="text-slate-200 font-bold truncate">{name} <span className="font-mono font-normal text-slate-500">{mod_id}</span></span>
               <span className="text-slate-500 shrink-0">
-                {open.length} to look at{guarded ? `, ${guarded} handled` : ''}{report.has_server_lua ? ' · ships server Lua' : ''}
+                {t('mpCheck.toLookAt', { count: open.length })}{guarded ? t('mpCheck.handled', { count: guarded }) : ''}{report.has_server_lua ? t('mpCheck.serverLua') : ''}
               </span>
             </div>
             {open.map((f, i) => (
@@ -35,7 +35,7 @@ export const MpCheckPanel: React.FC<{ reports: MpModReport[]; onOpen?: (root: st
                 key={i}
                 type="button"
                 onClick={() => onOpen?.(report.root, f)}
-                title={`${f.what}: the game does this in ${f.handler} (media/lua/${f.evidence}) when a client asks; called here directly it changes only this client's world in multiplayer, or is refused.${f.aware ? ' This file knows about multiplayer (isClient/sendClientCommand), so the author may handle it another way.' : ''}${onOpen ? '\n\nClick: open the file at this line' : ''}`}
+                title={`${t('mpCheck.rowTitle', { what: f.what, handler: f.handler, evidence: f.evidence })}${f.aware ? t('mpCheck.rowAware') : ''}${onOpen ? t('mpCheck.rowClick') : ''}`}
                 className={`w-full text-left px-3 py-1.5 text-[11px] flex items-start gap-2 ${onOpen ? 'hover:bg-slate-900 cursor-pointer' : 'cursor-default'}`}
               >
                 <span className={`font-mono shrink-0 w-6 text-center ${f.aware ? 'text-slate-500' : 'text-amber-300'}`}>{f.aware ? 'i' : '!'}</span>

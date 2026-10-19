@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Terminal, Cpu, CheckCircle2, ShieldAlert, MousePointerClick } from 'lucide-react';
+import i18next from 'i18next';
 
 interface SplashScreenProps {
   isLoading: boolean;
@@ -8,9 +9,9 @@ interface SplashScreenProps {
 }
 
 const CINEMATIC_PHRASES = [
-  { text: 'These are the mod times.', color: 'text-slate-100', glow: 'drop-shadow-[0_0_20px_rgba(255,255,255,0.45)]' },
-  { text: 'There was no hope of compatibility.', color: 'text-slate-200', glow: 'drop-shadow-[0_0_20px_rgba(226,232,240,0.35)]' },
-  { text: 'This is how you mod.', color: 'text-red-500 font-bold', glow: 'drop-shadow-[0_0_35px_rgba(239,68,68,0.95)]' },
+  { text: 'line1', color: 'text-slate-100', glow: 'drop-shadow-[0_0_20px_rgba(255,255,255,0.45)]' },
+  { text: 'line2', color: 'text-slate-200', glow: 'drop-shadow-[0_0_20px_rgba(226,232,240,0.35)]' },
+  { text: 'line3', color: 'text-red-500 font-bold', glow: 'drop-shadow-[0_0_35px_rgba(239,68,68,0.95)]' },
 ];
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({
@@ -123,7 +124,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
               letterSpacing: '0.09em',
             }}
           >
-            "{currentPhrase.text}"
+            "{i18next.t(`splash.${currentPhrase.text}`)}"
           </h2>
         </div>
 
@@ -134,7 +135,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           }`}
         >
           <MousePointerClick className="w-4 h-4 text-red-500" />
-          <span>Click or press any key to continue</span>
+          <span>{i18next.t('splash.continue')}</span>
         </div>
       </div>
 
@@ -175,15 +176,15 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           <div className="flex items-center justify-between text-[10px] font-mono text-neutral-500 pt-0.5">
             <span className="flex items-center gap-1">
               <Cpu className="w-3 h-3 text-neutral-600" />
-              <span>Lua checker</span>
+              <span>{i18next.t('splash.lua')}</span>
             </span>
             <span className="flex items-center gap-1">
               <ShieldAlert className="w-3 h-3 text-neutral-600" />
-              <span>Conflict scanner</span>
+              <span>{i18next.t('splash.conflicts')}</span>
             </span>
             <span className="flex items-center gap-1 text-emerald-500/80">
               <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-              <span>B41 & B42 Ready</span>
+              <span>{i18next.t('splash.ready')}</span>
             </span>
           </div>
         </div>

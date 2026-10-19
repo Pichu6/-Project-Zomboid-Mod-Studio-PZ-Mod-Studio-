@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { BACKEND_ERROR_EVENT, BackendErrorDetail, explainError } from '../../services/tauri';
+import { useTranslation } from 'react-i18next';
 
 interface ToastItem extends BackendErrorDetail {
   id: number;
@@ -11,6 +12,7 @@ const MAX_VISIBLE = 4;
 
 /** Shows every failed backend operation reported through TauriService (reportBackendError). */
 export const BackendErrorToasts: React.FC = () => {
+  const { t } = useTranslation();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useEffect(() => {
@@ -37,18 +39,18 @@ export const BackendErrorToasts: React.FC = () => {
 
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-96 max-w-[calc(100vw-2rem)]" role="status" aria-live="assertive">
-      {toasts.map((t) => (
-        <div key={t.id} role="alert" className="flex items-start gap-3 p-3 rounded-lg border border-red-500/40 bg-red-950/90 text-red-100 shadow-lg">
+      {toasts.map((item) => (
+        <div key={item.id} role="alert" className="flex items-start gap-3 p-3 rounded-lg border border-red-500/40 bg-red-950/90 text-red-100 shadow-lg">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" aria-hidden="true" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold">{t.action} failed</div>
-            <div className="text-[11px] text-red-200/90 break-words">{explainError(t.message)}</div>
+            <div className="text-xs font-bold">{t('backend.failed', { action: t(`backend.actions.${item.action}`, { defaultValue: item.action }) })}</div>
+            <div className="text-[11px] text-red-200/90 break-words">{explainError(item.message)}</div>
           </div>
           <button
             type="button"
-            onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+            onClick={() => setToasts((prev) => prev.filter((x) => x.id !== item.id))}
             className="p-0.5 rounded text-red-300 hover:text-white hover:bg-red-800/60 cursor-pointer"
-            aria-label="Dismiss"
+            aria-label={t('backend.dismiss')}
           >
             <X className="w-3.5 h-3.5" />
           </button>

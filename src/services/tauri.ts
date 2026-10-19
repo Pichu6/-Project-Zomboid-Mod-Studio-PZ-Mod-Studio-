@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { cached, clearRemoteCache, prefetch } from './cache';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
 import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
@@ -85,19 +86,19 @@ const errorMessage = (err: unknown): string =>
 export function explainError(err: unknown): string {
   const raw = String(err ?? '').replace(/^Error:\s*/i, '').trim();
   const known: [RegExp, string][] = [
-    [/Zomboid folder not found/i, 'The Studio cannot find your Zomboid folder. Set it in App Settings.'],
-    [/ProjectZomboid64\.exe not found/i, 'Project Zomboid is not where the Studio is looking. Set your game folder in App Settings.'],
-    [/steam_api64\.dll was not found/i, 'That is not a Project Zomboid folder. Check the game folder in App Settings.'],
-    [/Steam is not running/i, 'Steam is not running. Start Steam, sign in, and try again.'],
-    [/could not be reached|os error 10051|dns error/i, 'No connection. Check your internet and try again.'],
-    [/rate-limit/i, 'Steam is rate-limiting requests. Try again in a minute.'],
-    [/Access is denied|os error 5/i, 'Windows would not allow that. The file may be open in the game or another program.'],
-    [/os error 2|No such file/i, 'That file is no longer there. Refresh and try again.'],
+    [/Zomboid folder not found/i, 'noZomboid'],
+    [/ProjectZomboid64\.exe not found/i, 'noExe'],
+    [/steam_api64\.dll was not found/i, 'notPzFolder'],
+    [/Steam is not running/i, 'steamNotRunning'],
+    [/could not be reached|os error 10051|dns error/i, 'noConnection'],
+    [/rate-limit/i, 'rateLimit'],
+    [/Access is denied|os error 5/i, 'accessDenied'],
+    [/os error 2|No such file/i, 'gone'],
   ];
   const match = known.find(([pattern]) => pattern.test(raw));
-  if (match) return match[1];
+  if (match) return i18next.t(`backend.explain.${match[1]}`);
   // Nothing recognised: show it, but without the Rust decoration.
-  return raw.replace(/^[A-Za-z_:]+Error\(|\)$/g, '') || 'Something went wrong.';
+  return raw.replace(/^[A-Za-z_:]+Error\(|\)$/g, '') || i18next.t('backend.somethingWrong');
 }
 
 export const reportBackendError = (action: string, err: unknown): void => {

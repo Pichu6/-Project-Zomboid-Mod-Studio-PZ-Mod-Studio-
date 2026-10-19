@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Server,
   RefreshCw,
@@ -41,6 +42,7 @@ interface ServerModuleProps {
 type ServerSubTab = 'HOST' | 'MODS' | 'PLAYERS' | 'SETTINGS';
 
 export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
+  const { t } = useTranslation();
   const [servers, setServers] = useState<PZServerConfig[]>([]);
   const [selectedServer, setSelectedServer] = useState<PZServerConfig | null>(null);
   const [newServerName, setNewServerName] = useState('');
@@ -100,7 +102,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
           setSelectedServer(null);
         }
         if (isManual) {
-          setStatusMessage(`✅ Found ${list.length} server configuration(s).`);
+          setStatusMessage(t('servers.status.found', { count: list.length }));
         }
       } catch (err: any) {
         console.error('Error loading server configs:', err);
@@ -156,7 +158,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
 
   const handleCreateServer = async () => {
     if (!newServerName.trim()) {
-      alert('Enter a name for the server configuration.');
+      alert(t('servers.status.nameRequired'));
       return;
     }
     try {
@@ -165,30 +167,30 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
         newServerName.trim()
       );
       setNewServerName('');
-      setStatusMessage(`✨ Server '${created.name}.ini' created successfully.`);
+      setStatusMessage(t('servers.status.created', { name: created.name }));
       await loadServerConfigs();
       setSelectedServer(created);
       await loadQuickSettings(created.file_path);
     } catch (err: any) {
-      alert(`Error creating server: ${explainError(err)}`);
+      alert(t('servers.status.errorCreating', { error: explainError(err) }));
     }
   };
 
   const handleDeleteServer = async (e: React.MouseEvent, srv: PZServerConfig) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to permanently delete '${srv.name}.ini' from your hard drive?`)) {
+    if (!window.confirm(t('servers.status.confirmDelete', { name: srv.name }))) {
       return;
     }
     try {
       await TauriService.deleteServerConfig(paths.user_zomboid_dir, srv.file_path, srv.name);
-      setStatusMessage(`🗑️ Server '${srv.name}.ini' deleted from disk.`);
+      setStatusMessage(t('servers.status.deleted', { name: srv.name }));
       const list = await TauriService.listServerConfigs(paths.user_zomboid_dir);
       setServers(list);
       if (selectedServer?.file_path === srv.file_path) {
         setSelectedServer(list.length > 0 ? list[0] : null);
       }
     } catch (err: any) {
-      alert(`Error deleting server: ${explainError(err)}`);
+      alert(t('servers.status.errorDeleting', { error: explainError(err) }));
     }
   };
 
@@ -215,21 +217,25 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
         activeMods.map((m) => m.mod_id)
       );
       setStatusMessage(
-        `${selectedServer.name}.ini now has ${written.mods.length} mods, ` +
-          `${written.workshop_items.length} Workshop items and ${written.maps.length} maps ` +
-          `(${written.maps.join(', ')}). The previous file is in Zomboid/PZModStudio_Backups.`
+        t('servers.status.synced', {
+          name: selectedServer.name,
+          mods: written.mods.length,
+          workshop: written.workshop_items.length,
+          maps: written.maps.length,
+          mapList: written.maps.join(', '),
+        })
       );
       await loadServerConfigs();
       await checkSelectedServer();
     } catch (err: any) {
-      alert(`Error synchronizing: ${explainError(err)}`);
+      alert(t('servers.status.errorSync', { error: explainError(err) }));
     }
   };
 
   const handleLaunchDedicatedServer = async () => {
     if (!selectedServer) return;
     if (!paths.pz_install_dir) {
-      alert('Please configure the Project Zomboid installation path in Settings.');
+      alert(t('servers.status.needInstallPath'));
       return;
     }
     setIsLaunching(true);
@@ -242,10 +248,10 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
         isNoSteam,
         adminPassword || undefined
       );
-      setStatusMessage(`🎮 Dedicated server started successfully in interactive console! PID: ${pid}`);
+      setStatusMessage(t('servers.status.launched', { pid }));
       await refreshServerStatusAndPlayers();
     } catch (err: any) {
-      alert(`Error starting dedicated server: ${explainError(err)}`);
+      alert(t('servers.status.errorLaunch', { error: explainError(err) }));
     } finally {
       setIsLaunching(false);
     }
@@ -255,10 +261,10 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
     if (!paths.user_zomboid_dir) return;
     try {
       await TauriService.stopDedicatedServer(paths.user_zomboid_dir, serverStatus.pid || undefined);
-      setStatusMessage(`⏹️ Shutdown signal sent to dedicated server.`);
+      setStatusMessage(t('servers.status.stopped'));
       await refreshServerStatusAndPlayers();
     } catch (err: any) {
-      alert(`Error stopping server: ${explainError(err)}`);
+      alert(t('servers.status.errorStop', { error: explainError(err) }));
     }
   };
 
@@ -275,9 +281,9 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
     setIsSavingSettings(true);
     try {
       await TauriService.saveServerQuickSettings(selectedServer.file_path, quickSettings);
-      setStatusMessage(`💾 Settings saved successfully to '${selectedServer.name}.ini'.`);
+      setStatusMessage(t('servers.status.settingsSaved', { name: selectedServer.name }));
     } catch (err: any) {
-      alert(`Error saving settings: ${explainError(err)}`);
+      alert(t('servers.status.errorSaving', { error: explainError(err) }));
     } finally {
       setIsSavingSettings(false);
     }
@@ -287,15 +293,19 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
     if (!selectedServer) return;
     const port = quickSettings?.port || 16261;
     const srvName = quickSettings?.public_name || selectedServer.name;
-    const pwd = quickSettings?.password ? `\nPassword: ${quickSettings.password}` : '';
+    const pwd = quickSettings?.password
+      ? '\n' + t('servers.header.invitePassword', { password: quickSettings.password })
+      : '';
 
     // Your public address is not something this app can know: the invite leaves a blank for it,
     // rather than handing friends 127.0.0.1, which only ever reaches their own PC.
-    const inviteText = `Project Zomboid server: ${srvName}
-Address: <your public IP>:${port}  (find it at https://whatismyip.com, and forward the port)
-Max players: ${quickSettings?.max_players || 16}${pwd}
-Mods: ${selectedServer.mods.length}
-Invite made with Project Zomboid Mod Studio`;
+    const inviteText = t('servers.header.invite', {
+      name: srvName,
+      port,
+      maxPlayers: quickSettings?.max_players || 16,
+      pwd,
+      mods: selectedServer.mods.length,
+    });
 
     navigator.clipboard.writeText(inviteText);
     setCopiedInvite(true);
@@ -314,22 +324,22 @@ Invite made with Project Zomboid Mod Studio`;
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-slate-100 tracking-tight">
-                  Server & Dedicated Suite
+                  {t('servers.header.title')}
                 </h2>
                 {serverStatus.is_running ? (
                   <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-600/60 px-2.5 py-0.5 rounded-full shadow">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>ONLINE (PID: {serverStatus.pid})</span>
+                    <span>{t('servers.header.online', { pid: serverStatus.pid })}</span>
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold bg-slate-900 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                    <span>OFFLINE</span>
+                    <span>{t('servers.header.offline')}</span>
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                Host dedicated servers, monitor live players, execute admin actions, and synchronize mod load orders with 1-click.
+                {t('servers.header.subtitle')}
               </p>
             </div>
           </div>
@@ -340,17 +350,17 @@ Invite made with Project Zomboid Mod Studio`;
             <button
               onClick={handleCopyInviteLink}
               className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-800/50 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow"
-              title="Copy Steam invite and server card"
+              title={t('servers.header.shareTitle')}
             >
               {copiedInvite ? (
                 <>
                   <Check className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">Copied!</span>
+                  <span className="text-emerald-400">{t('servers.header.copied')}</span>
                 </>
               ) : (
                 <>
                   <Share2 className="w-4 h-4 text-purple-400" />
-                  <span>Share Invite</span>
+                  <span>{t('servers.header.share')}</span>
                 </>
               )}
             </button>
@@ -359,7 +369,7 @@ Invite made with Project Zomboid Mod Studio`;
           <button
             onClick={() => loadServerConfigs(true)}
             className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer"
-            title="Reload server files"
+            title={t('servers.header.reload')}
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -370,7 +380,7 @@ Invite made with Project Zomboid Mod Studio`;
         <div className="p-3 bg-purple-950/80 border border-purple-700/80 rounded-xl text-xs text-purple-200 font-bold flex items-center justify-between animate-fade-in shadow-lg">
           <span>{statusMessage}</span>
           <button onClick={() => setStatusMessage(null)} className="text-purple-400 hover:underline cursor-pointer">
-            Close
+            {t('servers.status.close')}
           </button>
         </div>
       )}
@@ -382,10 +392,10 @@ Invite made with Project Zomboid Mod Studio`;
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
               <FileText className="w-4 h-4 text-purple-400" />
-              <span>Server Configs (.ini)</span>
+              <span>{t('servers.list.title')}</span>
             </h3>
             <span className="text-[10px] font-mono text-slate-400 font-bold">
-              {servers.length} Found
+              {t('servers.list.found', { count: servers.length })}
             </span>
           </div>
 
@@ -393,7 +403,7 @@ Invite made with Project Zomboid Mod Studio`;
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="e.g. servertest o Coop_B42"
+              placeholder={t('servers.list.placeholder')}
               value={newServerName}
               onChange={(e) => setNewServerName(e.target.value)}
               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-medium"
@@ -403,7 +413,7 @@ Invite made with Project Zomboid Mod Studio`;
               className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow"
             >
               <Plus className="w-4 h-4" />
-              <span>Create</span>
+              <span>{t('servers.list.create')}</span>
             </button>
           </div>
 
@@ -429,14 +439,14 @@ Invite made with Project Zomboid Mod Studio`;
                         <span>{srv.name}.ini</span>
                       </div>
                       <div className="text-[10px] font-mono text-slate-400 flex items-center gap-2">
-                        <span>Mods: {srv.mods.length}</span>
+                        <span>{t('servers.list.mods', { count: srv.mods.length })}</span>
                         <span>•</span>
-                        <span>Workshop: {srv.workshop_items.length}</span>
+                        <span>{t('servers.list.workshop', { count: srv.workshop_items.length })}</span>
                       </div>
                       {isRunning && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-[10px] font-bold text-emerald-400 uppercase">Running</span>
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase">{t('servers.list.running')}</span>
                         </div>
                       )}
                     </div>
@@ -448,7 +458,7 @@ Invite made with Project Zomboid Mod Studio`;
                       <button
                         onClick={(e) => handleDeleteServer(e, srv)}
                         className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
-                        title={`Delete ${srv.name}.ini from disk`}
+                        title={t('servers.list.deleteTitle', { name: srv.name })}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -458,24 +468,22 @@ Invite made with Project Zomboid Mod Studio`;
               })
             ) : (
               <div className="p-6 text-center space-y-3 border border-dashed border-slate-800 rounded-xl bg-slate-950/40">
-                <p className="text-xs text-slate-400">
-                  No <code className="text-purple-300">.ini</code> configuration files found in <code className="text-purple-300">Zomboid/Server</code>.
-                </p>
+                <p className="text-xs text-slate-400" dangerouslySetInnerHTML={{ __html: t('servers.list.empty') }} />
                 <button
                   onClick={async () => {
                     setNewServerName('servertest');
                     try {
                       const created = await TauriService.createNewServerConfig(paths.user_zomboid_dir, 'servertest');
-                      setStatusMessage(`✨ Server 'servertest.ini' created successfully.`);
+                      setStatusMessage(t('servers.status.created', { name: 'servertest' }));
                       await loadServerConfigs(false);
                       setSelectedServer(created);
                     } catch (err: any) {
-                      alert(`Error: ${explainError(err)}`);
+                      alert(t('servers.status.error', { error: explainError(err) }));
                     }
                   }}
                   className="px-3 py-1.5 bg-purple-900/60 hover:bg-purple-800/80 border border-purple-600/50 text-purple-200 text-xs font-semibold rounded-lg transition cursor-pointer"
                 >
-                  ⚡ Create default configuration (servertest.ini)
+                  {t('servers.list.createDefault')}
                 </button>
               </div>
             )}
@@ -498,7 +506,7 @@ Invite made with Project Zomboid Mod Studio`;
                     }`}
                   >
                     <Play className="w-3.5 h-3.5" />
-                    <span>Host & Launcher</span>
+                    <span>{t('servers.tabs.host')}</span>
                   </button>
 
                   <button
@@ -510,7 +518,7 @@ Invite made with Project Zomboid Mod Studio`;
                     }`}
                   >
                     <Zap className="w-3.5 h-3.5" />
-                    <span>Mods & Sync</span>
+                    <span>{t('servers.tabs.mods')}</span>
                   </button>
 
                   <button
@@ -522,7 +530,7 @@ Invite made with Project Zomboid Mod Studio`;
                     }`}
                   >
                     <Users className="w-3.5 h-3.5" />
-                    <span>Players</span>
+                    <span>{t('servers.tabs.players')}</span>
                     <span className="text-[10px] bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded-full font-mono">
                       {players.length}
                     </span>
@@ -539,7 +547,7 @@ Invite made with Project Zomboid Mod Studio`;
                     }`}
                   >
                     <Sliders className="w-3.5 h-3.5" />
-                    <span>Quick .ini</span>
+                    <span>{t('servers.tabs.settings')}</span>
                   </button>
                 </div>
 
@@ -559,7 +567,7 @@ Invite made with Project Zomboid Mod Studio`;
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                             <Cpu className="w-4 h-4 text-purple-400" />
-                            <span>Memory (-Xmx)</span>
+                            <span>{t('servers.host.memory')}</span>
                           </label>
                           <span className="text-xs font-mono font-bold text-purple-400">{selectedRam} GB</span>
                         </div>
@@ -584,22 +592,22 @@ Invite made with Project Zomboid Mod Studio`;
                       <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                         <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                           <Shield className="w-4 h-4 text-purple-400" />
-                          <span>Admin Password</span>
+                          <span>{t('servers.host.adminPassword')}</span>
                         </label>
                         <div className="relative">
                           <input
                             type={showAdminPassword ? 'text' : 'password'}
-                            placeholder="Create admin pass..."
+                            placeholder={t('servers.host.adminPlaceholder')}
                             value={adminPassword}
                             onChange={(e) => handleAdminPasswordChange(e.target.value)}
                             className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-2.5 pr-8 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
-                            title="Sets the password for the 'admin' superuser account on startup automatically"
+                            title={t('servers.host.adminTitle')}
                           />
                           <button
                             type="button"
                             onClick={() => setShowAdminPassword(!showAdminPassword)}
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-300 cursor-pointer p-0.5"
-                            title={showAdminPassword ? 'Hide password' : 'Show password'}
+                            title={showAdminPassword ? t('servers.host.hidePassword') : t('servers.host.showPassword')}
                           >
                             {showAdminPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
@@ -610,7 +618,7 @@ Invite made with Project Zomboid Mod Studio`;
                       <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                         <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                           <Globe className="w-4 h-4 text-purple-400" />
-                          <span>Auth & Network</span>
+                          <span>{t('servers.host.authNetwork')}</span>
                         </label>
                         <div className="flex items-center justify-between pt-0.5 text-xs text-slate-300">
                           <button
@@ -621,7 +629,7 @@ Invite made with Project Zomboid Mod Studio`;
                                 : 'bg-amber-950 text-amber-300 border border-amber-600/50'
                             }`}
                           >
-                            {!isNoSteam ? 'Steam Enabled' : 'NoSteam (LAN)'}
+                            {!isNoSteam ? t('servers.host.steamEnabled') : t('servers.host.noSteam')}
                           </button>
                         </div>
                       </div>
@@ -630,17 +638,17 @@ Invite made with Project Zomboid Mod Studio`;
                     {/* Server Info Card */}
                     <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2 text-xs">
                       <div className="flex items-center justify-between text-slate-400">
-                        <span>Public Name:</span>
+                        <span>{t('servers.host.publicName')}</span>
                         <b className="text-slate-200">{quickSettings?.public_name || selectedServer.name}</b>
                       </div>
                       <div className="flex items-center justify-between text-slate-400">
-                        <span>Port:</span>
+                        <span>{t('servers.host.port')}</span>
                         <b className="text-purple-300 font-mono">{quickSettings?.port || 16261}</b>
                       </div>
                       <div className="flex items-center justify-between text-slate-400">
-                        <span>PVP Mode:</span>
+                        <span>{t('servers.host.pvpMode')}</span>
                         <b className={quickSettings?.pvp ? 'text-rose-400' : 'text-emerald-400'}>
-                          {quickSettings?.pvp ? 'Enabled' : 'Disabled'}
+                          {quickSettings?.pvp ? t('servers.host.enabled') : t('servers.host.disabled')}
                         </b>
                       </div>
                     </div>
@@ -655,7 +663,7 @@ Invite made with Project Zomboid Mod Studio`;
                         className="flex-1 w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2"
                       >
                         <Play className="w-4 h-4 fill-white" />
-                        <span>Launch Dedicated Server ({selectedServer.name})</span>
+                        <span>{t('servers.host.launch', { name: selectedServer.name })}</span>
                       </button>
                     ) : (
                       <>
@@ -664,14 +672,14 @@ Invite made with Project Zomboid Mod Studio`;
                           className="flex-1 w-full py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2"
                         >
                           <Square className="w-4 h-4 fill-white" />
-                          <span>Stop Dedicated Server</span>
+                          <span>{t('servers.host.stop')}</span>
                         </button>
                         <button
                           onClick={handleRestartDedicatedServer}
                           className="px-5 py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2"
                         >
                           <RotateCw className="w-4 h-4" />
-                          <span>Restart</span>
+                          <span>{t('servers.host.restart')}</span>
                         </button>
                       </>
                     )}
@@ -686,15 +694,15 @@ Invite made with Project Zomboid Mod Studio`;
                     {/* Direct Sync Comparison Card */}
                     <div className="grid grid-cols-2 gap-3 font-mono text-xs">
                       <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-                        <div className="text-[10px] text-slate-400 font-bold uppercase">Current Client State</div>
-                        <div className="text-emerald-400 font-bold text-sm">{activeMods.length} Active Mods</div>
-                        <div className="text-cyan-400 text-[11px]">{activeWorkshopIds.length} Workshop IDs</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">{t('servers.mods.clientState')}</div>
+                        <div className="text-emerald-400 font-bold text-sm">{t('servers.mods.activeMods', { count: activeMods.length })}</div>
+                        <div className="text-cyan-400 text-[11px]">{t('servers.mods.workshopIds', { count: activeWorkshopIds.length })}</div>
                       </div>
 
                       <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-                        <div className="text-[10px] text-slate-400 font-bold uppercase">Configured in .ini Server</div>
-                        <div className="text-purple-300 font-bold text-sm">{selectedServer.mods.length} Registered Mods</div>
-                        <div className="text-purple-400 text-[11px]">{selectedServer.workshop_items.length} WorkshopItems</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">{t('servers.mods.iniState')}</div>
+                        <div className="text-purple-300 font-bold text-sm">{t('servers.mods.registeredMods', { count: selectedServer.mods.length })}</div>
+                        <div className="text-purple-400 text-[11px]">{t('servers.mods.workshopItems', { count: selectedServer.workshop_items.length })}</div>
                       </div>
                     </div>
 
@@ -703,14 +711,17 @@ Invite made with Project Zomboid Mod Studio`;
                       <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
                         <div className="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                           <span className="text-[11px] font-bold text-slate-300">
-                            This .ini: {modReport.mods.length} Mods, {modReport.workshop_items.length} WorkshopItems,{' '}
-                            {modReport.maps.length} Map
+                            {t('servers.mods.thisIni', {
+                              mods: modReport.mods.length,
+                              workshop: modReport.workshop_items.length,
+                              maps: modReport.maps.length,
+                            })}
                           </span>
                           {modReport.issues.length === 0 ? (
-                            <span className="text-[10px] text-emerald-400 font-mono">nothing to fix</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">{t('servers.mods.nothingToFix')}</span>
                           ) : (
                             <span className="text-[10px] text-amber-300 font-mono">
-                              {modReport.issues.length} thing(s) to look at
+                              {t('servers.mods.toLookAt', { count: modReport.issues.length })}
                             </span>
                           )}
                         </div>
@@ -744,7 +755,7 @@ Invite made with Project Zomboid Mod Studio`;
                     {/* What the active mods' client code does that only the server should, in multiplayer. */}
                     <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="text-[11px] font-bold text-slate-300">Multiplayer check of the active mods</div>
+                        <div className="text-[11px] font-bold text-slate-300">{t('servers.mods.mpTitle')}</div>
                         <button
                           type="button"
                           disabled={mpBusy}
@@ -755,14 +766,14 @@ Invite made with Project Zomboid Mod Studio`;
                               .finally(() => setMpBusy(false));
                           }}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
-                          title="Lists the calls the game routes through the server (server/ClientCommands.lua, VehicleCommands.lua) that a mod's client or shared Lua makes directly: in multiplayer they change only that client's world, or are refused. The Developer screen opens each at its line."
+                          title={t('servers.mods.mpTooltip')}
                         >
-                          {mpBusy ? 'Checking…' : mpReports ? 'Check again' : 'Check'}
+                          {mpBusy ? t('servers.mods.checking') : mpReports ? t('servers.mods.checkAgain') : t('servers.mods.check')}
                         </button>
                       </div>
                       {mpReports && (
                         mpReports.length === 0
-                          ? <div className="text-[11px] text-slate-500">Nothing the game keeps server-side is called directly by any active mod's client code. (It checks only those calls.)</div>
+                          ? <div className="text-[11px] text-slate-500">{t('servers.mods.mpClean')}</div>
                           : <MpCheckPanel reports={mpReports} />
                       )}
                     </div>
@@ -770,9 +781,7 @@ Invite made with Project Zomboid Mod Studio`;
                     {/* Warning / Master Patch Inclusion */}
                     <div className="p-3 bg-indigo-950/50 border border-indigo-700/60 rounded-xl text-xs text-indigo-300 flex items-center gap-2.5">
                       <Shield className="w-5 h-5 text-indigo-400 shrink-0" />
-                      <div className="text-[11px] leading-relaxed">
-                        The sync will automatically include your published synthetic package <b className="text-emerald-300">Z_PZModStudio_*</b> to ensure server players use the unified 3-Way patches without checksum mismatches.
-                      </div>
+                      <div className="text-[11px] leading-relaxed" dangerouslySetInnerHTML={{ __html: t('servers.mods.syncNote') }} />
                     </div>
                   </div>
 
@@ -782,7 +791,7 @@ Invite made with Project Zomboid Mod Studio`;
                     className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2 mt-4"
                   >
                     <Zap className="w-4 h-4 fill-white" />
-                    <span>Write my list into this server (Mods, WorkshopItems and Map)</span>
+                    <span>{t('servers.mods.syncButton')}</span>
                   </button>
                 </div>
               )}
@@ -793,10 +802,7 @@ Invite made with Project Zomboid Mod Studio`;
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 px-3 py-2 rounded-xl border border-slate-800 bg-slate-900/60 text-[11px] text-slate-400">
                       <Users className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-500" aria-hidden="true" />
-                      <span>
-                        Who is connected, read from the server's own log. Kicking, banning and messaging players
-                        needs RCON, which the Studio does not speak yet — use the server console for those.
-                      </span>
+                      <span>{t('servers.players.note')}</span>
                     </div>
 
                     {/* Connected Players Table */}
@@ -804,9 +810,9 @@ Invite made with Project Zomboid Mod Studio`;
                       <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs font-bold text-slate-300">
                         <span className="flex items-center gap-2">
                           <Users className="w-4 h-4 text-purple-400" />
-                          <span>Connected Players ({players.length})</span>
+                          <span>{t('servers.players.connected', { count: players.length })}</span>
                         </span>
-                        <span className="text-[10px] text-slate-400 font-normal">Read from the server log</span>
+                        <span className="text-[10px] text-slate-400 font-normal">{t('servers.players.fromLog')}</span>
                       </div>
 
                       <div className="divide-y divide-slate-800 max-h-64 overflow-y-auto">
@@ -818,27 +824,27 @@ Invite made with Project Zomboid Mod Studio`;
                                   <span>{p.username}</span>
                                   {p.role.toLowerCase() === 'admin' ? (
                                     <span className="text-[10px] bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                                      ADMIN
+                                      {t('servers.players.admin')}
                                     </span>
                                   ) : (
                                     <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
-                                      PLAYER
+                                      {t('servers.players.player')}
                                     </span>
                                   )}
                                   {p.is_godmode && (
                                     <span className="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                                      GOD
+                                      {t('servers.players.god')}
                                     </span>
                                   )}
                                 </div>
                                 <div className="text-[10px] font-mono text-slate-400 flex items-center gap-3">
-                                  <span>Ping: {p.ping}ms</span>
+                                  <span>{t('servers.players.ping', { ms: p.ping })}</span>
                                   <span>•</span>
-                                  <span>Health: {Math.round(p.health * 100)}%</span>
+                                  <span>{t('servers.players.health', { pct: Math.round(p.health * 100) })}</span>
                                   {p.x !== 0 && (
                                     <>
                                       <span>•</span>
-                                      <span>Coords: ({p.x}, {p.y}, {p.z})</span>
+                                      <span>{t('servers.players.coords', { x: p.x, y: p.y, z: p.z })}</span>
                                     </>
                                   )}
                                 </div>
@@ -848,11 +854,11 @@ Invite made with Project Zomboid Mod Studio`;
                           ))
                         ) : (
                           <div className="p-8 text-center text-xs text-slate-500 space-y-1">
-                            <div>No players connected currently.</div>
+                            <div>{t('servers.players.none')}</div>
                             <div className="text-[10px] text-slate-600">
                               {serverStatus.is_running
-                                ? 'Server is listening for connections.'
-                                : 'Start the dedicated server to manage live players.'}
+                                ? t('servers.players.listening')
+                                : t('servers.players.startHint')}
                             </div>
                           </div>
                         )}
@@ -867,7 +873,7 @@ Invite made with Project Zomboid Mod Studio`;
                 <div className="space-y-4 flex-1 flex flex-col justify-between">
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Public Server Name</label>
+                      <label className="text-[11px] font-bold text-slate-300">{t('servers.settings.publicName')}</label>
                       <input
                         type="text"
                         value={quickSettings.public_name}
@@ -877,11 +883,11 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Server Password (Join)</label>
+                      <label className="text-[11px] font-bold text-slate-300">{t('servers.settings.password')}</label>
                       <div className="relative">
                         <input
                           type={showServerPassword ? 'text' : 'password'}
-                          placeholder="Leave blank for open server"
+                          placeholder={t('servers.settings.passwordPlaceholder')}
                           value={quickSettings.password}
                           onChange={(e) => setQuickSettings({ ...quickSettings, password: e.target.value })}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-8 py-1.5 text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
@@ -890,7 +896,7 @@ Invite made with Project Zomboid Mod Studio`;
                           type="button"
                           onClick={() => setShowServerPassword(!showServerPassword)}
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-300 cursor-pointer p-0.5"
-                          title={showServerPassword ? 'Hide password' : 'Show password'}
+                          title={showServerPassword ? t('servers.host.hidePassword') : t('servers.host.showPassword')}
                         >
                           {showServerPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
@@ -898,11 +904,11 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Admin Password (-adminpassword)</label>
+                      <label className="text-[11px] font-bold text-slate-300">{t('servers.settings.adminPassword')}</label>
                       <div className="relative">
                         <input
                           type={showAdminPassword ? 'text' : 'password'}
-                          placeholder="Superuser admin password..."
+                          placeholder={t('servers.settings.adminPlaceholder')}
                           value={adminPassword}
                           onChange={(e) => handleAdminPasswordChange(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-8 py-1.5 text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
@@ -911,7 +917,7 @@ Invite made with Project Zomboid Mod Studio`;
                           type="button"
                           onClick={() => setShowAdminPassword(!showAdminPassword)}
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-300 cursor-pointer p-0.5"
-                          title={showAdminPassword ? 'Hide password' : 'Show password'}
+                          title={showAdminPassword ? t('servers.host.hidePassword') : t('servers.host.showPassword')}
                         >
                           {showAdminPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
@@ -919,7 +925,7 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Max Players</label>
+                      <label className="text-[11px] font-bold text-slate-300">{t('servers.settings.maxPlayers')}</label>
                       <input
                         type="number"
                         min="1"
@@ -933,7 +939,7 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Default Port</label>
+                      <label className="text-[11px] font-bold text-slate-300">{t('servers.settings.defaultPort')}</label>
                       <input
                         type="number"
                         value={quickSettings.port}
@@ -945,7 +951,7 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="col-span-2 space-y-1">
-                      <label className="text-[11px] font-bold text-slate-300">Public Description</label>
+                      <label className="text-[11px] font-bold text-slate-300">{t('servers.settings.description')}</label>
                       <input
                         type="text"
                         value={quickSettings.public_description}
@@ -955,7 +961,7 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="font-bold text-slate-300">PVP Combat:</span>
+                      <span className="font-bold text-slate-300">{t('servers.settings.pvp')}</span>
                       <input
                         type="checkbox"
                         checked={quickSettings.pvp}
@@ -965,7 +971,7 @@ Invite made with Project Zomboid Mod Studio`;
                     </div>
 
                     <div className="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
-                      <span className="font-bold text-slate-300">Pause When Empty:</span>
+                      <span className="font-bold text-slate-300">{t('servers.settings.pauseEmpty')}</span>
                       <input
                         type="checkbox"
                         checked={quickSettings.pause_empty}
@@ -981,7 +987,7 @@ Invite made with Project Zomboid Mod Studio`;
                     className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg flex items-center justify-center gap-2 mt-4"
                   >
                     <Sliders className="w-4 h-4" />
-                    <span>Save Settings to .ini</span>
+                    <span>{t('servers.settings.save')}</span>
                   </button>
                 </div>
               )}
@@ -992,9 +998,9 @@ Invite made with Project Zomboid Mod Studio`;
                 <Terminal className="w-7 h-7 text-purple-400" />
               </div>
               <div className="space-y-1 max-w-md">
-                <h3 className="text-sm font-bold text-slate-200">Select a Server Configuration</h3>
+                <h3 className="text-sm font-bold text-slate-200">{t('servers.list.selectTitle')}</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Choose a server from the left list to launch the dedicated host, manage online players, or synchronize mods.
+                  {t('servers.list.selectHint')}
                 </p>
               </div>
             </div>
