@@ -7,6 +7,7 @@ import { MpCheckPanel } from '../common/MpCheckPanel';
 import { TauriService } from '../../services/tauri';
 import { problemText } from '../../i18n/backendText';
 import { StudioPathsUI } from '../settings/SettingsModule';
+import { tHtml } from '../../i18n/html';
 
 interface DeveloperModuleProps {
   paths: StudioPathsUI;
@@ -214,7 +215,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
         {devLaunch && (
           <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-amber-700/60 bg-amber-950/30 text-xs text-amber-200">
             <Play className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1" dangerouslySetInnerHTML={{ __html: t('developer.devLaunch.banner', { name: mods.find((m) => m.mod_id === devLaunch.modId)?.name ?? devLaunch.modId, since: devLaunch.since }) }} />
+            <span className="flex-1" dangerouslySetInnerHTML={{ __html: tHtml('developer.devLaunch.banner', { name: mods.find((m) => m.mod_id === devLaunch.modId)?.name ?? devLaunch.modId, since: devLaunch.since }) }} />
             <button type="button" onClick={onRestoreList} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-700 hover:bg-amber-600 text-white cursor-pointer">
               <RotateCcw className="w-3 h-3" aria-hidden="true" /> {t('developer.devLaunch.restore')}
             </button>
@@ -227,7 +228,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
                 <FolderPlus className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.newMod.title')}
               </div>
-              <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.newMod.intro') }} />
+              <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: tHtml('developer.newMod.intro') }} />
             </div>
             {!newMod && (
               <button type="button" onClick={() => setNewMod({ id: '', name: '', author: '', description: '', also41: false })}
@@ -283,7 +284,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
           {created && (
             <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-[11px] text-emerald-200 flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
-                <span dangerouslySetInnerHTML={{ __html: t('developer.newMod.made', { id: created.id, folder: created.folder }) }} />
+                <span dangerouslySetInnerHTML={{ __html: tHtml('developer.newMod.made', { id: created.id, folder: created.folder }) }} />
                 <button type="button" onClick={() => TauriService.openModFolder(paths, created.folder)} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer shrink-0">
                   <FolderOpen className="w-3 h-3" aria-hidden="true" /> {t('developer.newMod.openFolder')}
                 </button>
@@ -350,7 +351,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
               <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
                 <RefreshCw className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.reload.title')}
               </div>
-              <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.reload.intro') }} />
+              <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: tHtml('developer.reload.intro') }} />
             </div>
             <button
               type="button"
@@ -392,7 +393,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
             <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
               <Users className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.mp.title')}
             </div>
-            <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.mp.intro') }} />
+            <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: tHtml('developer.mp.intro') }} />
           </div>
           <div>
             <button
@@ -420,7 +421,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
             <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
               <MapIcon className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" /> {t('developer.mapTools.title')}
             </div>
-            <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: t('developer.mapTools.intro') }} />
+            <p className="text-[11px] text-slate-400 max-w-2xl" dangerouslySetInnerHTML={{ __html: tHtml('developer.mapTools.intro') }} />
           </div>
           {[
             {

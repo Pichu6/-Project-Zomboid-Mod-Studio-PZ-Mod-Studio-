@@ -342,6 +342,31 @@ fn prune_backups(dir: &Path, prefix: &str, keep: usize) {
     }
 }
 
+/// `fs::write` through a temp file + rename, for the Studio's own JSON state: a crash or a full
+/// disk mid-write leaves the previous file, never a truncated one that reads as "no profile".
+pub fn atomic_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) -> std::io::Result<()> {
+    static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let path = path.as_ref();
+    let n = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let name = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+    let tmp = path.with_file_name(format!(".{}.pzms-tmp-{}-{}", name, std::process::id(), n));
+    fs::write(&tmp, content)?;
+    fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = fs::remove_file(&tmp);
+    })
+}
+
+/// Before a file of the Studio's that no longer parses is replaced, a copy of it is kept beside
+/// it: it read as empty, and the save about to happen would otherwise be all that is left.
+pub fn keep_unreadable<T: serde::de::DeserializeOwned>(path: &Path) {
+    let Ok(text) = fs::read_to_string(path) else { return };
+    if text.trim().is_empty() || serde_json::from_str::<T>(&text).is_ok() {
+        return;
+    }
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let _ = fs::copy(path, path.with_extension(format!("unreadable-{}.json", stamp)));
+}
+
 /// Replaces `path` with `content`: skips the write when nothing changed, copies the previous
 /// version into `backup_dir` first, and writes through a temp file + rename so a crash can
 /// never leave a truncated file behind.

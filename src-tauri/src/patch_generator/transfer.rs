@@ -153,6 +153,17 @@ pub fn export_merged_package(
     Ok(true)
 }
 
+/// `wanted`, or `wanted_2`, `wanted_3`... whichever is not a folder in `mods_dir` yet.
+fn free_package_folder(mods_dir: &Path, wanted: &str) -> String {
+    if !mods_dir.join(wanted).exists() {
+        return wanted.to_string();
+    }
+    (2..)
+        .map(|n| format!("{}_{}", wanted, n))
+        .find(|name| !mods_dir.join(name).exists())
+        .unwrap_or_else(|| wanted.to_string())
+}
+
 pub fn import_merged_package(
     user_zomboid_dir: &str,
     _mod_list_ini_path: &str,
@@ -188,11 +199,19 @@ pub fn import_merged_package(
         );
     }
 
-    let pkg_dir = user_dirs[0].join("mods").join(&clean_folder);
+    // A package already here is the user's own work (drafts, merges, hand patches): the import
+    // goes beside it under a free name instead of over it.
+    let mods_dir = user_dirs[0].join("mods");
+    let clean_folder = free_package_folder(&mods_dir, &clean_folder);
+    let pkg_dir = mods_dir.join(&clean_folder);
 
     // Check every path in the (untrusted) file before anything is written.
     let mut file_targets = Vec::with_capacity(imported.merged_files.len());
     for file in &imported.merged_files {
+        let lower = file.relative_path.trim().replace('\\', "/").trim_start_matches("./").to_ascii_lowercase();
+        if ["mod.info", "patch_metadata.json", "draft_resolutions.json"].contains(&lower.as_str()) {
+            return Err(format!("A .pzmerge cannot carry its own {}.", file.relative_path.trim()));
+        }
         let dest = safe_join(&pkg_dir, &file.relative_path)?;
         let dest_42 = safe_join(&pkg_dir.join("42"), &file.relative_path)?;
         file_targets.push((dest, dest_42, &file.content));
@@ -310,6 +329,17 @@ pub fn import_merged_package(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_import_never_lands_on_a_package_that_is_there() {
+        let mods = std::env::temp_dir().join(format!("pzms-free-pkg-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&mods);
+        fs::create_dir_all(mods.join("Z_PZModStudio_MergedPatch")).unwrap();
+        fs::create_dir_all(mods.join("Z_PZModStudio_MergedPatch_2")).unwrap();
+        assert_eq!(free_package_folder(&mods, "Z_PZModStudio_MergedPatch"), "Z_PZModStudio_MergedPatch_3");
+        assert_eq!(free_package_folder(&mods, "Z_PZModStudio_Other"), "Z_PZModStudio_Other");
+        let _ = fs::remove_dir_all(&mods);
+    }
 
     #[test]
     fn a_pzmerge_from_before_versions_were_recorded_still_reads() {

@@ -594,6 +594,28 @@ fn mod_info_rank(mod_info: &Path, game_version: Option<u32>) -> Option<(u8, Opti
 
 /// Scans all subscribed Workshop & local mods recursively without depth limits.
 /// Preserves exact ModListData.ini load order for active mods, and sorts remaining mods deterministically.
+/// The installed mod a list entry means: the exact id first (the game matches ids exactly), then
+/// the same id in another case, then the same letters and digits -- each looser step only when
+/// it names a single mod, so `Mod_A` never switches on `ModA` beside it.
+fn match_installed_key<V>(installed: &std::collections::HashMap<String, V>, wanted: &str) -> Option<String> {
+    let wanted = wanted.trim();
+    if installed.contains_key(wanted) {
+        return Some(wanted.to_string());
+    }
+    let unique = |keys: Vec<&String>| if keys.len() == 1 { Some(keys[0].clone()) } else { None };
+    let lower = wanted.to_lowercase();
+    let by_case: Vec<&String> = installed.keys().filter(|k| k.trim().to_lowercase() == lower).collect();
+    if !by_case.is_empty() {
+        return unique(by_case);
+    }
+    let alnum = |s: &str| s.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+    let wanted_alnum = alnum(wanted);
+    if wanted_alnum.is_empty() {
+        return None;
+    }
+    unique(installed.keys().filter(|k| alnum(k) == wanted_alnum).collect())
+}
+
 pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     let mut all_mods_map: std::collections::HashMap<String, ModManifest> = std::collections::HashMap::new();
     let mut mod_scores: std::collections::HashMap<String, u8> = std::collections::HashMap::new();
@@ -738,6 +760,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
     // 3. Check for Active Profile or PZModStudio_MasterLoadOrder.json to restore exact absolute load order
     let mut saved_load_order: Option<Vec<String>> = None;
     let mut saved_active_ids: Option<HashSet<String>> = None;
+    let mut saved_in: Option<(std::path::PathBuf, bool)> = None;
 
     let user_dirs = get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
     for u_dir in &user_dirs {
@@ -753,6 +776,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                                 if inst.is_active && !inst.load_order.is_empty() {
                                     saved_load_order = Some(inst.load_order);
                                     saved_active_ids = Some(inst.active_mod_ids.into_iter().collect());
+                                    saved_in = Some((u_dir.clone(), true));
                                     break;
                                 }
                             }
@@ -779,9 +803,40 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                                 .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
                                 .unwrap_or_default();
                             saved_active_ids = Some(active);
+                            saved_in = Some((u_dir.clone(), false));
                             break;
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // default.txt is what the game loads. When it no longer says what the Studio saved -- the
+    // game's own Mods screen, an earlier list restored, a bisect trial, another tool -- it wins,
+    // and the saved list takes it, so the next save does not put the old list back.
+    if let (Some(order), Some(active), Some((u_dir, is_profile))) = (&saved_load_order, &saved_active_ids, &saved_in) {
+        if let Ok(ini) = read_mod_list_ini(&paths.mod_list_ini_path) {
+            let game_active: Vec<String> = ini.active_mods.iter().map(|s| sanitize_mod_id(s)).filter(|s| !s.is_empty()).collect();
+            let installed = |id: &String| all_mods_map.contains_key(id);
+            let in_game: HashSet<&String> = game_active.iter().filter(|id| installed(id)).collect();
+            let in_saved: HashSet<&String> = active.iter().filter(|id| installed(id)).collect();
+            if !game_active.is_empty() && in_game != in_saved {
+                if *is_profile {
+                    if let Ok(Some(inst)) = crate::instance_manager::take_mod_list_from_game(u_dir, &game_active) {
+                        saved_load_order = Some(inst.load_order);
+                        saved_active_ids = Some(inst.active_mod_ids.into_iter().collect());
+                    }
+                } else {
+                    let merged = crate::studio_link::merge_game_order(order, &game_active);
+                    let master = serde_json::json!({ "load_order": merged, "active_mod_ids": game_active });
+                    let _ = crate::load_order::ini_parser::write_file_with_backup(
+                        &u_dir.join("PZModStudio_MasterLoadOrder.json"),
+                        &serde_json::to_string_pretty(&master).unwrap_or_default(),
+                        &u_dir.join("PZModStudio_Backups"),
+                    );
+                    saved_load_order = Some(merged);
+                    saved_active_ids = Some(game_active.into_iter().collect());
                 }
             }
         }
@@ -794,22 +849,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         let active_set = saved_active_ids.unwrap_or_default();
         for raw_id in order {
             let clean_id = sanitize_mod_id(&raw_id);
-            let matched_key = all_mods_map
-                .keys()
-                .find(|k| {
-                    let clean_k = k.trim().to_lowercase();
-                    let clean_act = clean_id.trim().to_lowercase();
-                    if clean_k == clean_act {
-                        return true;
-                    }
-                    let alpha_k: String = clean_k.chars().filter(|c| c.is_alphanumeric()).collect();
-                    let alpha_act: String = clean_act.chars().filter(|c| c.is_alphanumeric()).collect();
-                    if !alpha_k.is_empty() && alpha_k == alpha_act {
-                        return true;
-                    }
-                    false
-                })
-                .cloned();
+            let matched_key = match_installed_key(&all_mods_map, &clean_id);
 
             if let Some(key) = matched_key {
                 if let Some(mut manifest) = all_mods_map.remove(&key) {
@@ -824,23 +864,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
         for raw_active_id in &ini_data.active_mods {
             let active_id = sanitize_mod_id(raw_active_id);
 
-            // Case-insensitive & sanitized matching against scanned manifests
-            let matched_key = all_mods_map
-                .keys()
-                .find(|k| {
-                    let clean_k = k.trim().to_lowercase();
-                    let clean_act = active_id.trim().to_lowercase();
-                    if clean_k == clean_act {
-                        return true;
-                    }
-                    let alpha_k: String = clean_k.chars().filter(|c| c.is_alphanumeric()).collect();
-                    let alpha_act: String = clean_act.chars().filter(|c| c.is_alphanumeric()).collect();
-                    if !alpha_k.is_empty() && alpha_k == alpha_act {
-                        return true;
-                    }
-                    false
-                })
-                .cloned();
+            let matched_key = match_installed_key(&all_mods_map, &active_id);
 
             if let Some(key) = matched_key {
                 if let Some(mut manifest) = all_mods_map.remove(&key) {
@@ -1301,6 +1325,51 @@ fn find_recipe_start(text: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_exact_id_wins_and_a_loose_match_must_be_the_only_one() {
+        let installed: std::collections::HashMap<String, ()> =
+            ["Mod_A", "ModA", "Other"].iter().map(|k| (k.to_string(), ())).collect();
+        assert_eq!(match_installed_key(&installed, "Mod_A").as_deref(), Some("Mod_A"));
+        assert_eq!(match_installed_key(&installed, "ModA").as_deref(), Some("ModA"));
+        assert_eq!(match_installed_key(&installed, "other").as_deref(), Some("Other"));
+        // "mod-a" is both of them by letters and digits: neither is guessed.
+        assert_eq!(match_installed_key(&installed, "mod-a"), None);
+    }
+
+    /// The game's Mods screen (or an earlier list restored) changed default.txt while the Studio
+    /// was closed: the Mod List shows that, and the saved order takes it.
+    #[test]
+    fn the_list_the_game_reads_wins_over_the_saved_one() {
+        let z = std::env::temp_dir().join(format!("pzms-scan-truth-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&z);
+        for id in ["ModA", "ModB", "ModC"] {
+            let dir = z.join("mods").join(id);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("mod.info"), format!("name={}\nid={}\n", id, id)).unwrap();
+        }
+        fs::write(
+            z.join("PZModStudio_MasterLoadOrder.json"),
+            r#"{"load_order":["ModA","ModB","ModC"],"active_mod_ids":["ModA","ModB"]}"#,
+        )
+        .unwrap();
+        fs::write(z.join("mods").join("default.txt"), "VERSION = 1,\nmods\n{\n    mod = ModC,\n}\n").unwrap();
+
+        let paths = StudioPaths {
+            pz_install_dir: String::new(),
+            workshop_dir: z.join("no-workshop").to_string_lossy().to_string(),
+            user_zomboid_dir: z.to_string_lossy().to_string(),
+            mod_list_ini_path: z.join("mods").join("default.txt").to_string_lossy().to_string(),
+            carrier_workshop_id: None,
+            is_valid: true,
+        };
+        let mods = scan_all_installed_mods(&paths);
+        let on: Vec<&str> = mods.iter().filter(|m| m.enabled).map(|m| m.id.as_str()).collect();
+        assert_eq!(on, vec!["ModC"]);
+        let saved = fs::read_to_string(z.join("PZModStudio_MasterLoadOrder.json")).unwrap();
+        assert!(saved.contains("\"ModC\"") && !saved.contains("\"active_mod_ids\": [\n    \"ModA\""), "{}", saved);
+        let _ = fs::remove_dir_all(&z);
+    }
 
     /// Reads a real Workshop folder when one is given: PZMS_WORKSHOP_DIR=... cargo test
     #[test]

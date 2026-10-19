@@ -78,3 +78,50 @@ All done. For the record, what it covered:
 Still true and deliberate: generated packages carry the Studio's repo URL in their `mod.info`,
 and the card background and radius drift (11 shades, 6 radii) is cosmetic and widespread enough
 that it wants one pass with a shared set of classes rather than scattered edits.
+
+---
+
+# Second full review — 2026-10-19
+
+Eight read-only reviews in parallel, one per area (profiles and Studio Link, Mod List and
+Health, Browse, Merger, Monitor/Developer/bisect, Servers, Settings/MCP/companion mods, and a
+cross-cutting security pass). Every finding was checked again in the code before it was fixed or
+listed. Tests added beside the fixes; `cargo test --lib`, `tsc` and `vitest` green.
+
+## Fixed
+
+| | What | Where |
+|---|---|---|
+| ✅ | **Stored XSS with full backend access.** i18next runs with `escapeValue: false` and ~37 `dangerouslySetInnerHTML` translations put mod names (mod.info), Workshop collection titles, Nexus names and fields of imported `.pzpack`/`.pzmerge` into HTML; with `csp: null` a mod named `<img onerror=…>` could call any Tauri command. Every such translation goes through `tHtml`, which escapes the values; a CSP is set (`script-src 'self'`) | `src/i18n/html.ts`, `tauri.conf.json` |
+| ✅ | **"Open in VS Code" ran commands from a mod's file name** (`cmd /C code --goto <path>`: `&` in a Workshop file name is cmd syntax). VS Code's own executable is started directly; without it the file opens in its own program | `devtools.rs` |
+| ✅ | `save_text_file_cmd` wrote anything anywhere; it only writes `.md`/`.txt`. `read_log_file_cmd` only reads `.txt`/`.log` | `lib.rs` |
+| ✅ | **Publishing deleted whatever a package's `patch_metadata.json` listed**, `..` and absolute paths included, and an archive could install a folder named `Z_PZModStudio_*` carrying one. The list goes through `safe_join`; installs refuse that prefix | `publish.rs`, `mod_install/mod.rs` |
+| ✅ | **Importing a `.pzmerge` overwrote a package of the same name** (drafts, metadata, `mod.info`). It goes in beside it (`_2`, `_3`…); `mod.info` and the Studio's own files are refused as merged paths | `transfer.rs` |
+| ✅ | **The Mod List ignored `default.txt`** once the Studio had saved a list: changes made in the game's Mods screen, an Earlier list restored, a bisect trial were shown as not there and undone at the next save. The scan now takes what the game reads when it differs and updates the profile / saved order; ids match exactly first, a looser match only when it names one mod | `load_order/mod_info.rs` |
+| ✅ | **Stale profile copies overwrote newer changes** (Remove from profile, Add to profile, a package made in the Merger, renaming a profile): each edit starts from the profile on disk | `utils/profiles.ts` |
+| ✅ | A failed activation left the files on the new profile and the screen on the old one; the game's list is written first. Deleting the active profile left the game's Mods screen locked to it; the link file goes, the profile JSON is kept in `PZModStudio_Backups/profiles` | `instance_manager` |
+| ✅ | Profile, list, rule, bisect and launch-file JSON written in place (a crash left an empty file that read as "no profile"); written through temp + rename; an unreadable lists/rules file is kept aside before it is replaced | `ini_parser::atomic_write` |
+| ✅ | The `default.txt` watcher, the MCP server and the zbNative edit used auto-detected folders, not the ones chosen in Settings; the chosen paths are saved for them (`%APPDATA%/PZModStudio/paths.json`) | `vfs::studio_paths` |
+| ✅ | Developer "launch with only this mod" started the game with the full list (stale render), and a closed Studio forgot the list it set aside; the list is passed in and kept in localStorage until it is put back | `App.tsx` |
+| ✅ | Bisect replaced `default.txt` before saving the session that knows how to put it back; Studio Link could be named the culprit | `bisect/mod.rs` |
+| ✅ | Merger: create / import / rename did not tell the scan which package was open, so its merges were shown and published into another one; renaming kept the old id in `42/mod.info` (B42 stopped loading it) and could land on another package; creating an existing name reset it; "Unmerge this file" published the vanilla file; failed writes reported "published"; two different deletions of overlapping lines counted as the same edit | `MergerModule.tsx`, `packages.rs`, `drafts.rs`, `publish.rs`, `diff_engine/lua.rs` |
+| ✅ | Browse: a subscribe Steam refused (removed or private item) counted as done and the button said "Subscribed"; the button's state carried over to the next item opened (Unsubscribe on a mod never subscribed); Steam started after the Studio was never seen; downloads over two minutes failed | `steam_client`, `ModDetail.tsx`, `BrowseModule.tsx`, `from_url.rs` |
+| ✅ | Servers: **Create overwrote an existing server's `.ini`** and took `..` in the name; Delete removed files in every Zomboid folder without a backup, also while running; Stop killed the server without a save (now `quit` over RCON first, new servers get an RCON password); Start could orphan a running server; a name with spaces started a fresh vanilla config; quick settings were written in place without a backup; stale map mods stayed in `Map=`; B42's `\ModId` read as not installed | `server_manager` |
+| ✅ | Z_ClaudeAgent re-ran the last session's command at every game start and had no multiplayer gate; the bridge answered `ok` when `eval_lua` failed, and its error JSON broke on `\` or a newline; `terminate_game` could kill any PID | companion mods, `sandbox/mod.rs` |
+| ✅ | Enable / Disable all switched the whole library (into the profile for good), draft packages and several packages at once, without asking; "Share" opened a public PR at once, replaced the registry others had added to, and could publish the Windows user name inside log paths | `LoadOrderModule.tsx`, `communityIndex.ts`, `lib.rs`, `propose.rs` |
+| ✅ | New-mod template broke on quotes or line breaks in the name; the Nexus description parser panicked on non-ASCII text after `&` | `devtools.rs`, `nexus/mod.rs` |
+
+## Still open
+
+| | What | Where |
+|---|---|---|
+| ⬜ | Mods switched on but not installed vanish from the Mod List, so Health's `missing_mod` never shows there | `mod_info.rs` scan |
+| ⬜ | Dev launch / bisect still go through the profile: during a hunt the profile follows the trial list (it comes back when the hunt ends) | `bisect`, `App.tsx` |
+| ⬜ | Publishing a package is not a swap: files are written in place (errors now fail the publish) | `publish.rs` |
+| ⬜ | Unpack deletes `media/` and `42/` whole, hand-placed files included; publish replaces the package description with a fixed text | `publish.rs` |
+| ⬜ | IPC commands still trust folder roots the page passes (`open_package_folder_cmd`, launch commands with an install dir); with the XSS fixed and a CSP set this needs a compromised page | `lib.rs` |
+| ⬜ | Players tab shows a fixed ping and health; server log snapshot may pick the client's log | `server_manager` |
+| ⬜ | Bisect "Launch" forces fullscreen; one non-UTF-8 log line stops the per-mod stats; whole log read into memory | `sandbox` |
+| ⬜ | MCP: parse errors answered without `id: null`, `prompts` capability advertised but not served, `--mcp` on the main exe runs on a 1 MB stack | `mcp/` |
+| ⬜ | Backend messages of Browse, bisect, devtools and servers are English only; MCP setup guides in Settings are English only | i18n |
+| ⬜ | A GitHub "releases/tag" link installs the latest release | `from_url.rs` |

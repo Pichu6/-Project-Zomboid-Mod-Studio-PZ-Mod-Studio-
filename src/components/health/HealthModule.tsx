@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { issueText } from '../../i18n/backendText';
 import { RichText } from '../common/RichText';
+import { tHtml } from '../../i18n/html';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -463,7 +464,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
           ) : (
             <div className="text-slate-400">{t('health.noLeftovers')}</div>
           )}
-          <div className="text-slate-400" dangerouslySetInnerHTML={{ __html: t('health.startFromStudio') }} />
+          <div className="text-slate-400" dangerouslySetInnerHTML={{ __html: tHtml('health.startFromStudio') }} />
         </div>
       )}
 

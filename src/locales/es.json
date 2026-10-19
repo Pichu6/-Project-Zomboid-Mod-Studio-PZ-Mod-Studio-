@@ -350,7 +350,10 @@
       "removeFromProfile": "Sacar del perfil \"{{name}}\"",
       "linkAlwaysOn": "PZ Mod Studio Link está en todos los perfiles: es lo que hace que la pantalla de Mods del juego muestre el perfil.",
       "addedToProfile": "{{mod}} ahora está en \"{{name}}\".",
-      "removedFromProfile": "{{mod}} salió de \"{{name}}\" y quedó apagado."
+      "removedFromProfile": "{{mod}} salió de \"{{name}}\" y quedó apagado.",
+      "switchOn": "Activar",
+      "switchOff": "Desactivar",
+      "prConfirm": "Esto abre un pull request público en GitHub, desde tu cuenta, con lo que el Studio vio de {{name}}:\n\n{{json}}\n\n¿Lo mandamos?"
     },
     "row": {
       "draftLocked": "Este paquete está abierto en modo borrador y desactivado. No se puede activar hasta empaquetarlo o publicarlo en el Fusionador.",
@@ -474,7 +477,9 @@
     "position": "Posición #{{n}}",
     "noMatch": "Ningún mod coincide con",
     "noneFiltered": "Ningún mod cumple estos filtros.",
-    "understood": "Entendido"
+    "understood": "Entendido",
+    "enableAllConfirm": "¿Activar los {{count}} mod(s) que se ven acá y están apagados?",
+    "disableAllConfirm": "¿Desactivar los {{count}} mod(s) que se ven acá y están prendidos?"
   },
   "health": {
     "title": "Salud de mods",
@@ -912,7 +917,8 @@
       "verified": "verificado",
       "reported": "reportado",
       "on": " en {{build}}"
-    }
+    },
+    "subscribePartial": "{{failed}} de {{total}} no se pudieron: {{reason}}"
   },
   "merger": {
     "panels": {
@@ -1216,7 +1222,9 @@
       "Taking out of a list": "Sacar de una lista",
       "Unpacking the merge package": "Desempaquetar el paquete de fusión",
       "Updating the package in the mod list": "Actualizar el paquete en la lista de mods",
-      "Writing the error report": "Escribir el informe de error"
+      "Writing the error report": "Escribir el informe de error",
+      "Subscribing": "Suscribirse",
+      "Unsubscribing": "Desuscribirse"
     },
     "explain": {
       "noZomboid": "El Studio no encuentra tu carpeta Zomboid. Configurala en Configuración.",

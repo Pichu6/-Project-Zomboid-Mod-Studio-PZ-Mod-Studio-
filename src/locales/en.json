@@ -350,7 +350,10 @@
       "removeFromProfile": "Take out of the profile \"{{name}}\"",
       "linkAlwaysOn": "PZ Mod Studio Link stays in every profile: it is how the game's Mods screen shows the profile.",
       "addedToProfile": "{{mod}} is now in \"{{name}}\".",
-      "removedFromProfile": "{{mod}} is out of \"{{name}}\" and switched off."
+      "removedFromProfile": "{{mod}} is out of \"{{name}}\" and switched off.",
+      "switchOn": "Switch on",
+      "switchOff": "Switch off",
+      "prConfirm": "This opens a public pull request on GitHub, from your account, with what the Studio saw of {{name}}:\n\n{{json}}\n\nSend it?"
     },
     "row": {
       "draftLocked": "This package is open in draft mode and deactivated. It cannot be enabled until it is packaged/published in Mod Merger.",
@@ -474,7 +477,9 @@
     "position": "Position #{{n}}",
     "noMatch": "No mod matches",
     "noneFiltered": "No mod passes these filters.",
-    "understood": "Understood"
+    "understood": "Understood",
+    "enableAllConfirm": "Switch on the {{count}} mod(s) shown here that are off?",
+    "disableAllConfirm": "Switch off the {{count}} mod(s) shown here that are on?"
   },
   "health": {
     "title": "Mod Health",
@@ -912,7 +917,8 @@
       "verified": "verified",
       "reported": "reported",
       "on": " on {{build}}"
-    }
+    },
+    "subscribePartial": "{{failed}} of {{total}} did not go through: {{reason}}"
   },
   "merger": {
     "panels": {
@@ -1216,7 +1222,9 @@
       "Taking out of a list": "Taking out of a list",
       "Unpacking the merge package": "Unpacking the merge package",
       "Updating the package in the mod list": "Updating the package in the mod list",
-      "Writing the error report": "Writing the error report"
+      "Writing the error report": "Writing the error report",
+      "Subscribing": "Subscribing",
+      "Unsubscribing": "Unsubscribing"
     },
     "explain": {
       "noZomboid": "The Studio cannot find your Zomboid folder. Set it in App Settings.",

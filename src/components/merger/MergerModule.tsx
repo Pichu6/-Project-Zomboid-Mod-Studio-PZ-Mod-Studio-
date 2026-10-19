@@ -1,3 +1,4 @@
+import { freshProfile } from '../../utils/profiles';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { VfsConflict, ModInfo, AppInstance, MissingModsReport, profileMembers } from '../../types';
 import { ImportCheck, importCheckHasNews } from './ImportCheck';
@@ -36,6 +37,7 @@ import {
   Undo2,
   Wrench,
 } from 'lucide-react';
+import { tHtml } from '../../i18n/html';
 
 interface MergerModuleProps {
   conflicts: VfsConflict[];
@@ -327,8 +329,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       paths.user_zomboid_dir,
       selectedPackageFolder,
       currentConflict.relative_path,
-      currentConflict.base_content,
-      'PENDING'
+      '',
+      'CLEARED'
     );
     if (onRescan) await onRescan();
     showToast(i18next.t('merger.toasts.reverted', { path: currentConflict.relative_path }));
@@ -451,7 +453,8 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       // A package made while a profile is active is that profile's.
       if (activeProfile) {
         try {
-          await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, [...profileMembers(activeProfile), pkg.folder_name]);
+          const current = await freshProfile(paths.user_zomboid_dir || '', activeProfile);
+          await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, [...profileMembers(current), pkg.folder_name]);
           onProfilesChanged?.();
         } catch {
           // Already shown by TauriService; the package is made either way.
@@ -460,8 +463,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       await fetchPackages();
       setSelectedPackageFolder(pkg.folder_name);
       setIsPackageOpened(true);
+      // The scan shows the merges of the package now open, not of the one open before.
+      onPackageOpened?.(pkg.folder_name);
       if (onRefreshMods) await onRefreshMods();
-      if (onRescan) await onRescan();
+      if (onRescan) await onRescan(pkg.folder_name);
       showToast(i18next.t('merger.toasts.created', { name: pkg.display_name }));
     }
   };
@@ -478,8 +483,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
       await renameInProfiles(folderName, pkg.folder_name);
       await fetchPackages();
       setSelectedPackageFolder(pkg.folder_name);
+      if (isPackageOpened && selectedPackageFolder === folderName) onPackageOpened?.(pkg.folder_name);
       if (onRefreshMods) await onRefreshMods();
-      if (onRescan) await onRescan();
+      if (onRescan) await onRescan(isPackageOpened && selectedPackageFolder === folderName ? pkg.folder_name : undefined);
       showToast(i18next.t('merger.toasts.updated', { name: pkg.display_name }));
     }
   };
@@ -540,8 +546,9 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           await fetchPackages();
           setSelectedPackageFolder(imported.folder_name);
           setIsPackageOpened(true);
+          onPackageOpened?.(imported.folder_name);
           if (onRefreshMods) await onRefreshMods();
-          if (onRescan) await onRescan();
+          if (onRescan) await onRescan(imported.folder_name);
           showToast(i18next.t('merger.toasts.imported', { name: imported.display_name }));
           if (importCheckHasNews(imported.version_check)) {
             setImportCheck({ name: imported.display_name, report: imported.version_check });
@@ -1170,7 +1177,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
             <div className="bg-emerald-950/40 border-b border-emerald-800/50 px-4 py-2 flex items-center justify-between gap-3 shrink-0 text-xs animate-fade-in">
               <div className="flex items-center gap-2 text-emerald-300">
                 <PackageCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span dangerouslySetInnerHTML={{ __html: i18next.t('merger.workspace.packagedBanner') }} />
+                <span dangerouslySetInnerHTML={{ __html: tHtml('merger.workspace.packagedBanner') }} />
               </div>
               <button
                 onClick={() => setIsUnpackageModalOpen(true)}
@@ -1200,7 +1207,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
                   <h2 className="text-2xl font-bold text-slate-100 font-mono">
                     {currentPackage?.display_name || selectedPackageFolder}
                   </h2>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed" dangerouslySetInnerHTML={{ __html: i18next.t('merger.workspace.closedBlurb') }} />
+                  <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('merger.workspace.closedBlurb') }} />
                 </div>
 
                 {/* Summary Info Cards */}

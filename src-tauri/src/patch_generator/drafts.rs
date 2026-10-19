@@ -36,17 +36,24 @@ pub fn save_draft_resolution(
         std::collections::HashMap::new()
     };
 
-    resolutions.insert(
-        relative_path.to_string(),
-        DraftResolutionItem {
-            relative_path: relative_path.to_string(),
-            resolved_content: resolved_content.to_string(),
-            status: status.to_string(),
-        },
-    );
+    if status == "CLEARED" {
+        // Unmerging one file: the saved merge goes, and the file is back to the scan's own
+        // proposal (what Unmerge All does for every file). Saving the vanilla text instead
+        // would publish vanilla over both mods.
+        resolutions.remove(relative_path);
+    } else {
+        resolutions.insert(
+            relative_path.to_string(),
+            DraftResolutionItem {
+                relative_path: relative_path.to_string(),
+                resolved_content: resolved_content.to_string(),
+                status: status.to_string(),
+            },
+        );
+    }
 
     let json_str = serde_json::to_string_pretty(&resolutions).map_err(|e| e.to_string())?;
-    fs::write(draft_file, json_str).map_err(|e| e.to_string())?;
+    crate::load_order::ini_parser::atomic_write(draft_file, json_str).map_err(|e| e.to_string())?;
     Ok(true)
 }
 

@@ -35,6 +35,7 @@ type ItemCall = unsafe extern "C" fn(*mut c_void, u64) -> u64;
 type Shutdown = unsafe extern "C" fn();
 type RunCallbacks = unsafe extern "C" fn();
 type IsCallDone = unsafe extern "C" fn(*mut c_void, u64, *mut bool) -> bool;
+type CallResult = unsafe extern "C" fn(*mut c_void, u64, *mut c_void, i32, i32, *mut bool) -> bool;
 type CountItems = unsafe extern "C" fn(*mut c_void, bool) -> u32;
 
 /// `steam_api64.dll` as the game installs it.
@@ -189,9 +190,30 @@ impl SteamSession {
         Err("Steam did not answer in time.".to_string())
     }
 
-    fn call_per_item(&self, name: &str, id: u64) -> Result<(), String> {
+    /// Subscribes or unsubscribes one item and reads Steam's verdict: a call that completes can
+    /// still be refused (a removed or private item), and that is not a success.
+    fn call_per_item(&self, name: &str, id: u64, callback_id: i32) -> Result<(), String> {
         let function: ItemCall = unsafe { std::mem::transmute(ffi::symbol(self.module, name)?) };
-        self.wait_for(unsafe { function(self.ugc, id) })
+        let call = unsafe { function(self.ugc, id) };
+        self.wait_for(call)?;
+        let Ok(get) = ffi::symbol(self.module, "SteamAPI_ISteamUtils_GetAPICallResult") else {
+            return Ok(());
+        };
+        let get: CallResult = unsafe { std::mem::transmute(get) };
+        // RemoteStorage(Un)SubscribePublishedFileResult_t: EResult, then the item id (pack 8).
+        let mut result = [0u8; 16];
+        let mut failed = false;
+        let read = unsafe { get(self.utils, call, result.as_mut_ptr().cast(), result.len() as i32, callback_id, &mut failed) };
+        if !read || failed {
+            return Ok(()); // Steam completed it and would not say more: as before.
+        }
+        let e_result = i32::from_le_bytes([result[0], result[1], result[2], result[3]]);
+        match e_result {
+            1 => Ok(()),
+            9 => Err("Steam says this item does not exist (removed or private).".to_string()),
+            15 => Err("Steam refused it: access denied (private or hidden item).".to_string()),
+            n => Err(format!("Steam refused it (result {}).", n)),
+        }
     }
 
     /// How many Workshop items this account is subscribed to (a read, to prove the link works).
@@ -220,10 +242,15 @@ pub fn set_subscriptions(pz_install_dir: &str, ids: &[String], subscribe: bool) 
         return Err("No Workshop item to subscribe to.".to_string());
     }
     let session = SteamSession::open(pz_install_dir)?;
-    let name = if subscribe { "SteamAPI_ISteamUGC_SubscribeItem" } else { "SteamAPI_ISteamUGC_UnsubscribeItem" };
+    // Callback ids: k_iSteamRemoteStorageCallbacks (1300) + 13 / + 15.
+    let (name, callback_id) = if subscribe {
+        ("SteamAPI_ISteamUGC_SubscribeItem", 1313)
+    } else {
+        ("SteamAPI_ISteamUGC_UnsubscribeItem", 1315)
+    };
     let mut outcome = SubscribeOutcome::default();
     for (text, id) in numbers {
-        match session.call_per_item(name, id) {
+        match session.call_per_item(name, id, callback_id) {
             Ok(()) => outcome.done.push(text),
             Err(e) => outcome.failed.push((text, e)),
         }

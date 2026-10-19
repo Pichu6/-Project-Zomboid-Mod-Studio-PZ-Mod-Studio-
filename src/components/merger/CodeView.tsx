@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { VfsConflict, ChangeRegion, ModChangeSummary } from '../../types';
 import { Info } from 'lucide-react';
 import i18next from 'i18next';
+import { tHtml } from '../../i18n/html';
 
 /** Lines shown around the point of interest; big vanilla files have tens of thousands. */
 const VIEW_WINDOW = 200;
@@ -77,7 +78,7 @@ export const ConflictSummaryCard: React.FC<{ conflict: VfsConflict; onFocus: (ba
       <div className="flex items-start gap-2 text-slate-200">
         <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
         <span>
-          <span dangerouslySetInnerHTML={{ __html: i18next.t(
+          <span dangerouslySetInnerHTML={{ __html: tHtml(
             conflict.file_type === 'TRANSLATION' ? 'merger.view.translationIntro' : conflict.file_type === 'SCRIPT_DEFINITION' ? 'merger.view.definitionIntro' : 'merger.view.fileIntro',
             { count: conflict.competing_mods.length, last: lastLoaded?.mod_name ?? '' }
           ) }} />

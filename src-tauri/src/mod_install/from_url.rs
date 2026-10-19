@@ -42,7 +42,12 @@ fn agent() -> ureq::Agent {
         .build();
     ureq::Agent::config_builder()
         .tls_config(tls)
-        .timeout_global(Some(std::time::Duration::from_secs(120)))
+        // A large release on a slow line takes minutes: the limit is on a stalled connection and
+        // on a whole download that goes on for too long, not on two minutes in total.
+        .timeout_connect(Some(std::time::Duration::from_secs(30)))
+        .timeout_recv_response(Some(std::time::Duration::from_secs(60)))
+        .timeout_recv_body(Some(std::time::Duration::from_secs(30 * 60)))
+        .timeout_global(Some(std::time::Duration::from_secs(30 * 60)))
         .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
         .build()
         .into()

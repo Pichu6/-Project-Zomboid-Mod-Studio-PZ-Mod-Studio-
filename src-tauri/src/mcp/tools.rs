@@ -9,7 +9,7 @@ use crate::sandbox::{
     list_available_log_files, read_game_ipc_response, read_log_file, translate_log_error,
     write_game_ipc_command, TranslatedErrorPayload,
 };
-use crate::vfs::{auto_detect_paths, scan_conflicts, StudioPaths};
+use crate::vfs::{scan_conflicts, StudioPaths};
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -635,7 +635,7 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
 }
 
 fn resolve_paths(args: &Value) -> StudioPaths {
-    let mut paths = auto_detect_paths();
+    let mut paths = crate::vfs::studio_paths();
     if let Some(pz) = args.get("pz_install_dir").and_then(|v| v.as_str()) {
         if !pz.is_empty() {
             paths.pz_install_dir = pz.to_string();
@@ -660,7 +660,7 @@ fn resolve_paths(args: &Value) -> StudioPaths {
 }
 
 fn handle_get_studio_paths() -> ToolCallResult {
-    let paths = auto_detect_paths();
+    let paths = crate::vfs::studio_paths();
     ToolCallResult {
         content: vec![ToolContent {
             content_type: "text".to_string(),

@@ -43,7 +43,8 @@ pub fn ini_list(content: &str, key: &str) -> Vec<String> {
         .find_map(|l| l.strip_prefix(&format!("{}=", key)))
         .map(|v| {
             v.split(';')
-                .map(|s| s.trim().to_string())
+                // B42 writes mod ids as `\ModId`; the id is what follows.
+                .map(|s| if key == "Mods" { s.trim().trim_start_matches('\\').to_string() } else { s.trim().to_string() })
                 .filter(|s| !s.is_empty())
                 .collect()
         })
@@ -125,11 +126,19 @@ pub fn lines_for(
         }
     }
 
-    // Whatever was already at the end and is not one of this list's map mods stays there.
+    // Whatever was already at the end and is not a mod's map stays there (the base map, a map
+    // the server has from elsewhere). A map of a mod switched off goes: the server no longer
+    // loads that mod, so the folder is not there for it.
     let vanilla = vanilla_maps(pz_install_dir);
+    let maps_of_any_mod: BTreeSet<String> = catalog
+        .mods
+        .iter()
+        .flat_map(|m| maps_in_mod(Path::new(&m.root_dir), game))
+        .filter(|m| !vanilla.contains(m))
+        .collect();
     let mut tail: Vec<String> = existing_map_line
         .iter()
-        .filter(|m| !mod_maps.contains(m))
+        .filter(|m| !mod_maps.contains(m) && !maps_of_any_mod.contains(*m))
         .cloned()
         .collect();
     if tail.is_empty() {
@@ -333,6 +342,8 @@ mod tests {
         assert_eq!(ini_list(ini, "Mods"), vec!["A", "B", "C"]);
         assert_eq!(ini_list(ini, "WorkshopItems"), vec!["1", "2"]);
         assert!(ini_list(ini, "Map").is_empty());
+        // B42's backslash-prefixed ids are the same ids.
+        assert_eq!(ini_list("Mods=\\ModA;\\ModB\r\n", "Mods"), vec!["ModA", "ModB"]);
     }
 
     #[test]

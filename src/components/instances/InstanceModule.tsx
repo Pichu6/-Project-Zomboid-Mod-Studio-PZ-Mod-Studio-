@@ -1,8 +1,10 @@
+import { freshProfile } from '../../utils/profiles';
 import React, { useState, useEffect } from 'react';
 import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw, Edit3, Share2, X, Save } from 'lucide-react';
 import { ModInfo, StudioPathsUI, AppInstance } from '../../types';
 import { TauriService, explainError } from '../../services/tauri';
 import { useTranslation } from 'react-i18next';
+import { tHtml } from '../../i18n/html';
 
 interface InstanceModuleProps {
   paths: StudioPathsUI;
@@ -135,8 +137,9 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
     if (!editingInstance || !editName.trim()) return;
 
     try {
+      const current = await freshProfile(paths.user_zomboid_dir, editingInstance);
       const updated: AppInstance = {
-        ...editingInstance,
+        ...current,
         name: editName.trim(),
         description: editDesc.trim() || undefined,
         target_build: editBuild || null,
@@ -248,7 +251,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
             </h2>
             {isLoading && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-2" />}
           </div>
-          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed" dangerouslySetInnerHTML={{ __html: t('profiles.blurb') }} />
+          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('profiles.blurb') }} />
         </div>
 
         <span className="text-xs font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 px-3 py-1.5 rounded-xl font-bold">

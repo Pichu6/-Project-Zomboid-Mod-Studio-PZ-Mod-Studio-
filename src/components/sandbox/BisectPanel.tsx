@@ -5,6 +5,7 @@ import { TauriService, explainError } from '../../services/tauri';
 import { Crosshair, Play, ThumbsDown, ThumbsUp, Undo2, ChevronDown, ChevronRight, Search, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cardText } from '../../i18n/backendText';
+import { tHtml } from '../../i18n/html';
 
 interface BisectPanelProps {
   paths: StudioPathsUI;
@@ -176,13 +177,13 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                 {session!.phase === 'Confirming' ? (
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: t('monitor.bisect.confirming', { mod: nameOf(session!.trial[0]) }),
+                      __html: tHtml('monitor.bisect.confirming', { mod: nameOf(session!.trial[0]) }),
                     }}
                   />
                 ) : (
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: t('monitor.bisect.trial', {
+                      __html: tHtml('monitor.bisect.trial', {
                         trial: session!.trial.length,
                         candidates: session!.candidates.length,
                         alwaysOn: session!.always_on.length,
@@ -252,7 +253,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                   <div
                     className="text-[11px] text-slate-200 leading-relaxed"
                     dangerouslySetInnerHTML={{
-                      __html: t('monitor.bisect.culprit', {
+                      __html: tHtml('monitor.bisect.culprit', {
                         mod: nameOf(session!.culprit),
                         launches: session!.history.length,
                       }),

@@ -4,6 +4,7 @@ import i18next from 'i18next';
 import { MissingModsReport } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
+import { tHtml } from '../../i18n/html';
 
 /** Whether an imported package's check has anything to say. */
 export const importCheckHasNews = (r: MissingModsReport | null | undefined): r is MissingModsReport =>
@@ -63,7 +64,7 @@ export const ImportCheck: React.FC<ImportCheckProps> = ({ packageName, report, p
         {buildDiffers && (
           <div
             className="p-3 bg-slate-950/60 border border-slate-700 rounded-xl text-[11px] text-slate-300 leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: t('merger.importCheck.build', { pack: report.pack_game_version, yours: report.your_game_version }) }}
+            dangerouslySetInnerHTML={{ __html: tHtml('merger.importCheck.build', { pack: report.pack_game_version, yours: report.your_game_version }) }}
           />
         )}
 

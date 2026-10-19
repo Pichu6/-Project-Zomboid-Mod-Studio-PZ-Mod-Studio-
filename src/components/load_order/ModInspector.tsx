@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { tHtml } from '../../i18n/html';
 
 /** The first problem of each kind the health check found for the selected mod, if any. */
 export interface InspectorProblems {
@@ -259,7 +260,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
                 {t('inspector.position', { n: position + 1 })}
               </span>
             </div>
-            <p className="text-[11px] text-slate-200 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('inspector.orderBody', { name: orderViolation.requiredModName, n: orderViolation.requiredModIndex + 1 }) }} />
+            <p className="text-[11px] text-slate-200 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('inspector.orderBody', { name: orderViolation.requiredModName, n: orderViolation.requiredModIndex + 1 }) }} />
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onFixLoadOrder(mod.mod_id, orderViolation.requiredModId)}
@@ -286,7 +287,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
               <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
               <span>{t('inspector.disabledTitle')}</span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('inspector.disabledBody', { name: disabledDependency.name }) }} />
+            <p className="text-[11px] text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('inspector.disabledBody', { name: disabledDependency.name }) }} />
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onToggleMod(disabledDependency.mod_id)}
@@ -313,7 +314,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
               <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
               <span>{t('inspector.incompatTitle')}</span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('inspector.incompatBody', { name: incompatibility.conflictingModName }) }} />
+            <p className="text-[11px] text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('inspector.incompatBody', { name: incompatibility.conflictingModName }) }} />
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onJumpToMod(incompatibility.conflictingModId)}

@@ -54,7 +54,9 @@ fn get_auto_paths() -> StudioPaths {
 
 #[tauri::command(async)]
 fn set_and_validate_paths(custom_paths: StudioPaths) -> StudioPaths {
-    validate_paths(custom_paths)
+    let paths = validate_paths(custom_paths);
+    vfs::remember_paths(&paths);
+    paths
 }
 
 #[tauri::command(async)]
@@ -182,7 +184,44 @@ fn propose_registry_cmd(mod_id: String, content: String) -> Result<rules::propos
     let name = registry.get("name").and_then(|v| v.as_str()).unwrap_or(&mod_id).to_string();
     let title = format!("Community index: {}", name);
     let body = format!("A registry for `{}`, proposed from PZ Mod Studio.\n\nWhat was tested, on which build, is in the file; the repository's check has run on it.", mod_id);
-    rules::propose::propose_file(&path, &title, &body, &|_existing| Ok(pretty.clone()))
+    rules::propose::propose_file(&path, &title, &body, &|existing| {
+        // A registry already there holds what others added (load-after, successor, their
+        // issues): the proposal adds to it instead of replacing it.
+        let Some(old) = existing.and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok()) else {
+            return Ok(pretty.clone());
+        };
+        let merged = merge_registry(old, registry.clone());
+        Ok(serde_json::to_string_pretty(&merged).map_err(|e| e.to_string())? + "\n")
+    })
+}
+
+/// `new` over `old`: new values win, lists keep every entry of both, and keys only `old` has stay.
+fn merge_registry(old: serde_json::Value, new: serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match (old, new) {
+        (Value::Object(mut o), Value::Object(n)) => {
+            for (k, v) in n {
+                let merged = match o.remove(&k) {
+                    Some(prev) => merge_registry(prev, v),
+                    None => v,
+                };
+                o.insert(k, merged);
+            }
+            Value::Object(o)
+        }
+        (Value::Array(mut o), Value::Array(n)) => {
+            for v in n {
+                if !o.contains(&v) {
+                    o.push(v);
+                }
+            }
+            Value::Array(o)
+        }
+        // An empty value in the draft (a prompt to fill in) does not erase what was there.
+        (prev, Value::Null) => prev,
+        (prev, Value::String(s)) if s.is_empty() => prev,
+        (_, n) => n,
+    }
 }
 
 /// Opens the pull request that adds one load-order rule to community/rules.json.
@@ -820,7 +859,19 @@ fn error_report_cmd(paths: StudioPaths, request: error_report::ErrorReportReques
 /// Writes that report where the user chose.
 #[tauri::command(async)]
 fn save_text_file_cmd(path: String, contents: String) -> Result<(), String> {
+    // Only a text report: a page that could call this with any name could otherwise drop a
+    // .bat or .lnk anywhere the user can write (the Startup folder, say).
+    if !has_extension(&path, &["md", "txt"]) {
+        return Err("Only .md and .txt files can be saved here.".to_string());
+    }
     std::fs::write(&path, contents).map_err(|e| format!("The file could not be saved: {}", e))
+}
+
+fn has_extension(path: &str, allowed: &[&str]) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| allowed.iter().any(|a| e.eq_ignore_ascii_case(a)))
 }
 
 /// Where the Studio's own MCP server sits, so the config the user copies is one that works.
@@ -900,6 +951,9 @@ fn list_available_log_files_cmd(user_zomboid_dir: String) -> Vec<sandbox::LogFil
 
 #[tauri::command(async)]
 fn read_log_file_cmd(file_path: String, max_lines: Option<usize>) -> Result<Vec<String>, String> {
+    if !has_extension(&file_path, &["txt", "log"]) {
+        return Err("Only .txt and .log files are read as logs.".to_string());
+    }
     sandbox::read_log_file(&file_path, max_lines)
 }
 

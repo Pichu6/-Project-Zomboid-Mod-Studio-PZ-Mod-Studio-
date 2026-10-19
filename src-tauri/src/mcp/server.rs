@@ -4,7 +4,7 @@ use crate::instance_manager::list_instances;
 use crate::load_order::mod_info::scan_all_installed_mods;
 use crate::patch_generator::get_master_patch_status;
 use crate::sandbox::{find_running_pz_pid, translate_log_error, TranslatedErrorPayload};
-use crate::vfs::{auto_detect_paths, scan_conflicts};
+use crate::vfs::scan_conflicts;
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
@@ -64,7 +64,7 @@ pub fn get_available_resources() -> Vec<McpResource> {
 }
 
 pub fn read_resource_by_uri(uri: &str) -> Result<ResourceReadResult, String> {
-    let paths = auto_detect_paths();
+    let paths = crate::vfs::studio_paths();
 
     match uri {
         "pz://monitor/console-log" => {

@@ -69,7 +69,7 @@ pub fn write_link_file(user_zomboid_dir: &Path, profile_name: &str, members: &[S
     if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
         return Ok(());
     }
-    std::fs::write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))
+    crate::load_order::ini_parser::atomic_write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))
 }
 
 /// The load order after the game reordered or switched mods: the inactive mods stay where they
@@ -111,7 +111,8 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         let mut last_seen: Option<(PathBuf, SystemTime)> = None;
         loop {
             thread::sleep(Duration::from_secs(2));
-            let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs("").into_iter().next() else {
+            let chosen = crate::vfs::saved_user_zomboid_dir();
+            let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&chosen).into_iter().next() else {
                 continue;
             };
             let default_txt = z_dir.join("mods").join("default.txt");
@@ -205,7 +206,7 @@ pub fn sync_java_agents(pz_install_dir: &Path, user_zomboid_dir: &Path, active_m
     // Two-space indent, as the game ships it.
     let new_text = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
     crate::load_order::ini_parser::write_file_with_backup(&json_path, &new_text, &user_zomboid_dir.join("PZModStudio_Backups"))?;
-    let _ = std::fs::write(
+    let _ = crate::load_order::ini_parser::atomic_write(
         removed_agents_file(user_zomboid_dir),
         serde_json::to_string_pretty(&removed_by_studio).unwrap_or_default(),
     );

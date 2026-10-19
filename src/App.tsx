@@ -21,9 +21,12 @@ import { ContextMenuProvider } from './components/common/ContextMenu';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
 const MergerModule = lazy(() => import('./components/merger/MergerModule').then((m) => ({ default: m.MergerModule })));
+/** The list set aside by Developer > launch with only this mod, until it is put back. */
+const DEV_LAUNCH_KEY = 'pzms_dev_launch';
 
 import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 import i18next from 'i18next';
+import { tHtml } from './i18n/html';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('PROFILES');
@@ -386,9 +389,10 @@ export const App: React.FC = () => {
     return localStorage.getItem('pz_skip_no_merge_warning') === 'true';
   });
 
-  const executeLaunch = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN') => {
+  const executeLaunch = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN', onlyIds?: string[]) => {
     try {
-      const activeModIds = mods.filter((m) => m.enabled).map((m) => m.mod_id);
+      // A caller that has just changed the list passes it: `mods` here is still the old render's.
+      const activeModIds = onlyIds ?? mods.filter((m) => m.enabled).map((m) => m.mod_id);
       await TauriService.writeModListIni(paths.mod_list_ini_path, activeModIds);
 
       await TauriService.launchSandbox({
@@ -569,9 +573,29 @@ export const App: React.FC = () => {
    * it too), the mod with what it requires and the Studio's bridge go on, the game starts in
    * Debug (Windowed), and the list comes back by itself once the game has closed.
    */
-  const [devLaunch, setDevLaunch] = useState<{ modId: string; since: string; saved: ModInfo[] } | null>(null);
+  // Kept in localStorage too: if the Studio is closed while the game runs, the list is put back
+  // the next time it opens instead of staying at one mod.
+  const [devLaunch, setDevLaunchState] = useState<{ modId: string; since: string; saved: ModInfo[] } | null>(() => {
+    try {
+      const raw = localStorage.getItem(DEV_LAUNCH_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setDevLaunch = (value: { modId: string; since: string; saved: ModInfo[] } | null) => {
+    setDevLaunchState(value);
+    try {
+      if (value) localStorage.setItem(DEV_LAUNCH_KEY, JSON.stringify(value));
+      else localStorage.removeItem(DEV_LAUNCH_KEY);
+    } catch {
+      // Private storage off: the list still comes back while the Studio stays open.
+    }
+  };
+  const devLaunchFromEarlierSession = useRef(devLaunch !== null);
   const restoreDevList = useCallback(() => {
     if (!devLaunch) return;
+    devLaunchFromEarlierSession.current = false;
     const saved = devLaunch.saved;
     setDevLaunch(null);
     handleApplyPresetLoadOrder(saved.map((m) => m.mod_id), saved.filter((m) => m.enabled).map((m) => m.mod_id));
@@ -592,11 +616,13 @@ export const App: React.FC = () => {
     }
     setDevLaunch({ modId, since: new Date().toLocaleTimeString(), saved: mods.map((m) => ({ ...m })) });
     handleApplyPresetLoadOrder(mods.map((m) => m.mod_id), [...wanted]);
-    await executeLaunch('DEBUG_WINDOWED');
+    await executeLaunch('DEBUG_WINDOWED', mods.map((m) => m.mod_id).filter((id) => wanted.has(id)));
   };
   useEffect(() => {
-    if (!devLaunch) return;
-    let seenRunning = false;
+    if (!devLaunch || mods.length === 0) return;
+    // Left from a session that closed while the game ran: once the game is not running, the
+    // list comes back at the first check.
+    let seenRunning = devLaunchFromEarlierSession.current;
     const t = setInterval(() => {
       void TauriService.gameStatus().then((pid) => {
         if (pid !== null) seenRunning = true;
@@ -916,7 +942,7 @@ export const App: React.FC = () => {
                 <h3 className="text-base font-bold text-slate-100">
                   {isOpenPackageWarning ? i18next.t('app.launch.openTitle') : i18next.t('app.launch.noneTitle')}
                 </h3>
-                <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: isOpenPackageWarning ? i18next.t('app.launch.openLine', { names: openPackageNames }) : i18next.t('app.launch.noneLine') }} />
+                <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: isOpenPackageWarning ? tHtml('app.launch.openLine', { names: openPackageNames }) : tHtml('app.launch.noneLine') }} />
               </div>
             </div>
 

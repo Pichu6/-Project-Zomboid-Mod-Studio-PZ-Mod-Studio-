@@ -76,7 +76,7 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
         eprintln!("[StudioLink] {}", e);
     }
     // Tests run on throwaway folders and must never edit the real game's launch file.
-    let install = if cfg!(test) { String::new() } else { crate::vfs::auto_detect_paths().pz_install_dir };
+    let install = if cfg!(test) { String::new() } else { crate::vfs::studio_paths().pz_install_dir };
     if !install.is_empty() {
         if let Err(e) = crate::studio_link::sync_java_agents(std::path::Path::new(&install), z_dir, &instance.active_mod_ids) {
             eprintln!("[StudioLink] {}", e);
@@ -90,7 +90,7 @@ fn read_instance(path: &std::path::Path) -> Option<AppInstance> {
 
 fn write_instance(path: &std::path::Path, instance: &AppInstance) -> Result<(), String> {
     let json = serde_json::to_string_pretty(instance).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())
+    crate::load_order::ini_parser::atomic_write(path, json).map_err(|e| e.to_string())
 }
 
 /// The active profile and its file, if there is one.
@@ -130,7 +130,7 @@ pub fn take_mod_list_from_game(z_dir: &std::path::Path, game_active: &[String]) 
         "active_profile_id": inst.id,
         "active_profile_name": inst.name
     });
-    let _ = fs::write(z_dir.join("PZModStudio_MasterLoadOrder.json"), serde_json::to_string_pretty(&master).unwrap_or_default());
+    let _ = crate::load_order::ini_parser::atomic_write(z_dir.join("PZModStudio_MasterLoadOrder.json"), serde_json::to_string_pretty(&master).unwrap_or_default());
     apply_link(z_dir, &inst);
     Ok(Some(inst))
 }
@@ -246,7 +246,7 @@ pub fn create_instance(
 
     let file_path = dir.join(format!("{}.json", id));
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
-    fs::write(&file_path, json).map_err(|e| e.to_string())?;
+    crate::load_order::ini_parser::atomic_write(&file_path, json).map_err(|e| e.to_string())?;
 
     Ok(instance)
 }
@@ -262,7 +262,22 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
     let content = fs::read_to_string(&instance_file).map_err(|e| e.to_string())?;
     let mut target_instance: AppInstance = serde_json::from_str(&content).map_err(|e| e.to_string())?;
 
-    // 1. Update active state across all instance JSON files
+    target_instance.is_active = true;
+    target_instance.with_link();
+
+    // 1. The game's list first: if it cannot be written, nothing has switched, and the profile
+    // still marked active is the one whose mods are on.
+    let z_dir = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&user_zomboid_dir)
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
+    let _ = fs::create_dir_all(z_dir.join("mods"));
+    crate::load_order::ini_parser::write_mod_list_ini(
+        &z_dir.join("ModListData.ini").to_string_lossy(),
+        &target_instance.active_mod_ids,
+    )?;
+
+    // 2. Update active state across all instance JSON files
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -270,29 +285,18 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
                 if let Ok(c) = fs::read_to_string(&path) {
                     if let Ok(mut inst) = serde_json::from_str::<AppInstance>(&c) {
                         inst.is_active = inst.id == instance_id;
-                        let _ = fs::write(&path, serde_json::to_string_pretty(&inst).unwrap_or_default());
+                        let _ = crate::load_order::ini_parser::atomic_write(&path, serde_json::to_string_pretty(&inst).unwrap_or_default());
                     }
                 }
             }
         }
     }
 
-    target_instance.is_active = true;
-    target_instance.with_link();
-    let _ = fs::write(&instance_file, serde_json::to_string_pretty(&target_instance).unwrap_or_default());
+    crate::load_order::ini_parser::atomic_write(&instance_file, serde_json::to_string_pretty(&target_instance).unwrap_or_default())
+        .map_err(|e| e.to_string())?;
 
-    // 2. Write the active mods into mods/default.txt and PZModStudio_MasterLoadOrder.json
-    let z_dir = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&user_zomboid_dir)
-        .into_iter()
-        .next()
-        .ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
     {
-        crate::load_order::ini_parser::write_mod_list_ini(
-            &z_dir.join("ModListData.ini").to_string_lossy(),
-            &target_instance.active_mod_ids,
-        )?;
-
-        // Write PZModStudio_MasterLoadOrder.json
+        // 3. PZModStudio_MasterLoadOrder.json
         let master_order_path = z_dir.join("PZModStudio_MasterLoadOrder.json");
         let master_json = serde_json::json!({
             "load_order": target_instance.load_order,
@@ -300,7 +304,7 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
             "active_profile_id": target_instance.id,
             "active_profile_name": target_instance.name
         });
-        let _ = fs::write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
+        let _ = crate::load_order::ini_parser::atomic_write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
         apply_link(&z_dir, &target_instance);
     }
 
@@ -366,7 +370,7 @@ pub fn save_master_load_order(
                                 }
                             }
                             inst.members = Some(members);
-                            let _ = fs::write(&path, serde_json::to_string_pretty(&inst).unwrap_or_default());
+                            let _ = crate::load_order::ini_parser::atomic_write(&path, serde_json::to_string_pretty(&inst).unwrap_or_default());
                             apply_link(&z_dir, &inst);
                         }
                     }
@@ -387,7 +391,7 @@ pub fn save_master_load_order(
         "load_order": load_order,
         "active_mod_ids": active_mod_ids
     });
-    let _ = fs::write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
+    let _ = crate::load_order::ini_parser::atomic_write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
 
     Ok(())
 }
@@ -396,8 +400,25 @@ pub fn save_master_load_order(
 pub fn delete_instance(user_zomboid_dir: String, instance_id: String) -> Result<(), String> {
     let dir = get_instances_dir(&user_zomboid_dir);
     let instance_file = instance_file_path(&dir, &instance_id)?;
-    if instance_file.exists() {
-        fs::remove_file(instance_file).map_err(|e| e.to_string())?;
+    if !instance_file.exists() {
+        return Ok(());
+    }
+    let was_active = read_instance(&instance_file).is_some_and(|i| i.is_active);
+    // Kept in the backups, not gone: a profile is a whole mod list put together by hand.
+    let backups = dir.parent().map(|z| z.join("PZModStudio_Backups").join("profiles"));
+    let kept = backups.as_ref().is_some_and(|b| {
+        let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+        fs::create_dir_all(b).is_ok()
+            && fs::rename(&instance_file, b.join(format!("{}.{}.json", instance_id, stamp))).is_ok()
+    });
+    if !kept {
+        fs::remove_file(&instance_file).map_err(|e| e.to_string())?;
+    }
+    if was_active {
+        // Without a profile the game's Mods screen and saves are no longer held to its mods.
+        if let Some(z_dir) = dir.parent() {
+            let _ = fs::remove_file(z_dir.join("Lua").join(crate::studio_link::LINK_FILE));
+        }
     }
     Ok(())
 }
@@ -419,7 +440,7 @@ pub fn update_instance(
     }
 
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
-    fs::write(&instance_file, json).map_err(|e| e.to_string())?;
+    crate::load_order::ini_parser::atomic_write(&instance_file, json).map_err(|e| e.to_string())?;
 
     // If updating active instance, also sync master load order
     if instance.is_active {
@@ -440,7 +461,7 @@ pub fn mark_instance_played(user_zomboid_dir: String, instance_id: String) -> Re
         .map(crate::catalog::modinfo::format_game_version);
     instance.last_played_build = build.clone();
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
-    fs::write(&instance_file, json).map_err(|e| e.to_string())?;
+    crate::load_order::ini_parser::atomic_write(&instance_file, json).map_err(|e| e.to_string())?;
     Ok(build)
 }
 

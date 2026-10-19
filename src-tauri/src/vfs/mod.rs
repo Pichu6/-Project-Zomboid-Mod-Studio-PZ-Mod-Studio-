@@ -304,6 +304,52 @@ pub fn steam_library_dirs() -> Vec<PathBuf> {
 }
 
 /// Auto-detects the Project Zomboid install and the user's Zomboid folder.
+/// Where the Studio keeps the folders the player chose, for the parts that do not run in the
+/// window: the MCP server, the default.txt watcher, the launch file edit.
+fn saved_paths_file() -> Option<PathBuf> {
+    dirs_next::config_dir().map(|d| d.join("PZModStudio").join("paths.json"))
+}
+
+/// Remembers the folders the window uses (called whenever it validates them).
+pub fn remember_paths(paths: &StudioPaths) {
+    if cfg!(test) || !paths.is_valid {
+        return;
+    }
+    if let Some(file) = saved_paths_file() {
+        if let Some(parent) = file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(paths) {
+            if std::fs::read_to_string(&file).ok().as_deref() != Some(json.as_str()) {
+                let tmp = file.with_extension("json.tmp");
+                if std::fs::write(&tmp, json).is_ok() {
+                    let _ = std::fs::rename(&tmp, &file);
+                }
+            }
+        }
+    }
+}
+
+fn saved_paths() -> Option<StudioPaths> {
+    if cfg!(test) {
+        return None;
+    }
+    saved_paths_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .and_then(|c| serde_json::from_str::<StudioPaths>(&c).ok())
+        .filter(|p| !p.user_zomboid_dir.is_empty() && Path::new(&p.user_zomboid_dir).is_dir())
+}
+
+/// The folders the player chose in the Studio, when they are still there; else what is detected.
+pub fn studio_paths() -> StudioPaths {
+    saved_paths().unwrap_or_else(auto_detect_paths)
+}
+
+/// The Zomboid folder the player chose, or "" for the usual places (cheap: no Steam scan).
+pub fn saved_user_zomboid_dir() -> String {
+    saved_paths().map(|p| p.user_zomboid_dir).unwrap_or_default()
+}
+
 pub fn auto_detect_paths() -> StudioPaths {
     // Zomboid sits in the home folder, or under Documents when that is where Windows (or
     // OneDrive) puts the user's documents. Take the first one that is actually there.

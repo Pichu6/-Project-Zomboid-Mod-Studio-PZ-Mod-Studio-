@@ -396,7 +396,10 @@ pub fn summarize_changes(base: &str, files: &[crate::vfs::CompetingModFileRaw]) 
                     let (a0, a1) = (ra.base_start, ra.base_end.max(ra.base_start));
                     let (b0, b1) = (rb.base_start, rb.base_end.max(rb.base_start));
                     if a0 <= b1 && b0 <= a1 {
-                        let same = files[i].content.lines().skip(ra.mod_start - 1).take(ra.mod_end + 1 - ra.mod_start).eq(
+                        // The same edit is the same vanilla lines replaced by the same text: two
+                        // deletions of different (overlapping) ranges both add nothing, and are not.
+                        let same = (ra.base_start, ra.base_end) == (rb.base_start, rb.base_end)
+                            && files[i].content.lines().skip(ra.mod_start - 1).take(ra.mod_end + 1 - ra.mod_start).eq(
                             files.iter().find(|f| f.mod_id == b.mod_id).map(|f| f.content.lines().skip(rb.mod_start - 1).take(rb.mod_end + 1 - rb.mod_start)).into_iter().flatten(),
                         );
                         if same {
@@ -783,6 +786,15 @@ mod tests {
         // Identical edits are not a collision.
         let same = [competing("ModA", &lua(&b)), competing("ModB", &lua(&b))];
         assert!(summarize_changes(&base, &same).1.is_empty());
+
+        // Two deletions of overlapping, different ranges both add nothing, and still collide.
+        let lines: Vec<String> = (1..=7).map(|n| format!("local l{} = {}", n, n)).collect();
+        let base7 = lines.join("\n") + "\n";
+        let del = |from: usize, to: usize| {
+            lines.iter().enumerate().filter(|(i, _)| *i + 1 < from || *i + 1 > to).map(|(_, l)| l.clone()).collect::<Vec<_>>().join("\n") + "\n"
+        };
+        let deletions = [competing("ModA", &del(3, 5)), competing("ModB", &del(4, 6))];
+        assert_eq!(summarize_changes(&base7, &deletions).1.len(), 1);
     }
 
     /// Read-only check that the parser accepts real game/mod Lua (the game itself runs it).

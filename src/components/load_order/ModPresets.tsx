@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { tHtml } from '../../i18n/html';
 
 const STORAGE_KEY = 'pz_mod_studio_saved_presets';
 
@@ -357,7 +358,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('presets.saveBlurb', { count: activeCount }) }} />
+            <p className="text-xs text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('presets.saveBlurb', { count: activeCount }) }} />
 
             <div className="space-y-3">
               <div>
@@ -507,7 +508,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 {/* Settings that came with the pack: saved only if the player wants them. */}
                 {importedPreset?.sandbox && (
                   <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
-                    <div className="text-[11px] text-slate-200" dangerouslySetInnerHTML={{ __html: t('presets.sandboxCarried', { name: importedPreset.sandbox.name, settings: importedPreset.sandbox.settings, mod: importedPreset.sandbox.mod_settings }) }} />
+                    <div className="text-[11px] text-slate-200" dangerouslySetInnerHTML={{ __html: tHtml('presets.sandboxCarried', { name: importedPreset.sandbox.name, settings: importedPreset.sandbox.settings, mod: importedPreset.sandbox.mod_settings }) }} />
                     <button
                       onClick={async () => {
                         if (!importedPreset?.sandbox) return;
@@ -530,7 +531,7 @@ export const ModPresets: React.FC<ModPresetsProps> = ({
                 {missingReport.pack_game_version &&
                   missingReport.your_game_version &&
                   missingReport.pack_game_version !== missingReport.your_game_version && (
-                    <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-slate-300" dangerouslySetInnerHTML={{ __html: t('presets.buildDiffers', { pack: missingReport.pack_game_version, yours: missingReport.your_game_version }) }} />
+                    <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-slate-300" dangerouslySetInnerHTML={{ __html: tHtml('presets.buildDiffers', { pack: missingReport.pack_game_version, yours: missingReport.your_game_version }) }} />
                   )}
 
                 {/* Installed, but not the copy the pack was made with. */}

@@ -123,7 +123,8 @@ pub fn always_on_set(mods: &[BisectMod]) -> Vec<String> {
     let mut keep: Vec<String> = Vec::new();
     let mut queue: Vec<String> = Vec::new();
     for m in &enabled {
-        if m.mod_id == "Z_PZModStudio_Bridge" {
+        // The bridge, and Studio Link which keeps the game on the active profile, are never suspects.
+        if m.mod_id == "Z_PZModStudio_Bridge" || m.mod_id == crate::studio_link::LINK_MOD_ID {
             keep.push(m.mod_id.clone());
         }
         for dep in &m.dependencies {
@@ -175,7 +176,7 @@ pub fn load(user_zomboid_dir: &str) -> Option<BisectSession> {
 fn save(user_zomboid_dir: &str, session: &BisectSession) -> Result<(), String> {
     let path = session_path(user_zomboid_dir);
     let text = serde_json::to_string_pretty(session).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))
+    crate::load_order::ini_parser::atomic_write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))
 }
 
 fn forget(user_zomboid_dir: &str) {
@@ -229,8 +230,9 @@ pub fn start(
         note: None,
     };
 
-    write_mod_list_ini(mod_list_ini_path, &trial_list(&session))?;
+    // The session (with the list to put back) is on disk before the list is touched.
     save(user_zomboid_dir, &session)?;
+    write_mod_list_ini(mod_list_ini_path, &trial_list(&session))?;
     Ok(session)
 }
 

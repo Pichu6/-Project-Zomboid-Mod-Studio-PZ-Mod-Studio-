@@ -14,7 +14,7 @@ CA = CA or {}
 CA.CMD = "claude_cmd.lua"
 CA.OUT = "claude_out.txt"
 CA.LOG = "claude_log.txt"
-CA.lastId = nil
+CA.lastId = CA.lastId -- kept across a hot reload, or the reload command would run again
 CA.lastPollMs = 0
 CA.tasks = CA.tasks or {}
 
@@ -965,6 +965,16 @@ local function runTasks()
     end
 end
 
+-- On a multiplayer server only admin/staff may run commands (the same rule as the bridge).
+function CA.refusedInMP()
+    if not (isClient and isClient()) then return false end
+    local player = getPlayer and getPlayer()
+    if not player then return true end
+    local ok, level = pcall(function() return player:getAccessLevel() end)
+    level = ok and level and tostring(level):lower() or "none"
+    return level == "none" or level == "" or level == "player"
+end
+
 function CA.poll()
     local t = now()
     if t - CA.lastPollMs < 100 then return end
@@ -979,7 +989,10 @@ function CA.poll()
     CA.lastId = id
     local fn, err = loadstring(src)
     local status, result
-    if not fn then
+    if CA.refusedInMP() then
+        -- the command file can be written by any local program: on a server it would be a cheat
+        status, result = "err", "refused: Claude Agent commands only run in single player or for admin/staff"
+    elseif not fn then
         status, result = "err", "syntax: " .. tostring(err)
     else
         local ok, res = pcall(fn)
@@ -997,6 +1010,9 @@ if not CA.registered then
     -- game; an agent probing APIs hits those all the time, so keep the debugger closed
     if isDebugEnabled() and UIManager.setShowLuaDebuggerOnError then UIManager.setShowLuaDebuggerOnError(false) end
     writeAll(CA.LOG, "boot " .. tostring(now()) .. "\n", false)
+    -- the command left over from the last session already ran then: never run it again at boot
+    local left = readAll(CA.CMD)
+    CA.lastId = left and left:match("^%-%-id:(%S+)") or nil
     local function pollProxy() CA.poll() end
     if Events.OnFETick then Events.OnFETick.Add(pollProxy) end
     if Events.OnTickEvenPaused then Events.OnTickEvenPaused.Add(pollProxy) end

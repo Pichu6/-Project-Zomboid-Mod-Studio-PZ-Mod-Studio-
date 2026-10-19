@@ -17,6 +17,7 @@ import {
 } from './common';
 import { DetailTarget, ModDetail } from './ModDetail';
 import { useContextMenu } from '../common/ContextMenu';
+import { tHtml } from '../../i18n/html';
 
 interface BrowseModuleProps {
   paths: StudioPathsUI;
@@ -248,7 +249,7 @@ const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSav
       <div className="flex items-start gap-2 text-[11px] text-slate-300">
         <KeyRound className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
         <span>
-          <b className="text-amber-200">{reason}</b><span dangerouslySetInnerHTML={{ __html: i18next.t('browse.steamKey.blurb') }} />
+          <b className="text-amber-200">{reason}</b><span dangerouslySetInnerHTML={{ __html: tHtml('browse.steamKey.blurb') }} />
         </span>
       </div>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
@@ -458,7 +459,7 @@ const WorkshopTab: React.FC<{
             {lookup.collection ? (
               <>
                 <Library className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
-                <span dangerouslySetInnerHTML={{ __html: i18next.t('browse.workshop.collectionLine', { title: lookup.collection.title, count: lookup.items.length }) }} />
+                <span dangerouslySetInnerHTML={{ __html: tHtml('browse.workshop.collectionLine', { title: lookup.collection.title, count: lookup.items.length }) }} />
                 <span className={lookupMissing ? 'text-amber-300' : 'text-emerald-300'}>{i18next.t('browse.workshop.notInstalled', { count: lookupMissing })}</span>
                 <button type="button" onClick={() => TauriService.openExternalUrl(lookup.collection!.page_url)}
                   className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer" title={i18next.t('browse.workshop.openCollectionTitle')}>
@@ -841,9 +842,13 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
   useEffect(() => {
     if (!paths.is_valid) return;
     let cancelled = false;
-    TauriService.steamClientReady(paths).then((ready) => !cancelled && setSteamReady(ready));
+    const check = () => TauriService.steamClientReady(paths).then((ready) => !cancelled && setSteamReady(ready));
+    void check();
+    // Steam started after the Studio: ask again when the window comes back to the front.
+    window.addEventListener('focus', check);
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', check);
     };
   }, [paths]);
 
@@ -854,13 +859,17 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
         if (outcome.failed.length > 0) {
           reportBackendError(
             subscribe ? 'Subscribing' : 'Unsubscribing',
-            `${outcome.failed.length} of ${ids.length} did not go through: ${outcome.failed[0][1]}`
+            i18next.t('browse.subscribePartial', { failed: outcome.failed.length, total: ids.length, reason: outcome.failed[0][1] })
           );
         }
         // Steam downloads in the background; pick up whatever has landed.
         onInstalled();
+        // Nothing went through: the button must not say it did.
+        if (outcome.done.length === 0) throw new Error('none subscribed');
       } catch (err) {
-        reportBackendError(subscribe ? 'Subscribing' : 'Unsubscribing', err);
+        if (!(err instanceof Error && err.message === 'none subscribed')) {
+          reportBackendError(subscribe ? 'Subscribing' : 'Unsubscribing', err);
+        }
         throw err;
       }
     },
@@ -929,7 +938,7 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
         {pendingOrigin && (
           <div className="flex items-center gap-2 text-[11px] text-orange-200 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-1.5">
             <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1" dangerouslySetInnerHTML={{ __html: t('browse.pendingNexus', { name: pendingOrigin.name }) }} />
+            <span className="flex-1" dangerouslySetInnerHTML={{ __html: tHtml('browse.pendingNexus', { name: pendingOrigin.name }) }} />
             <button type="button" onClick={() => setPendingOrigin(null)} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label={t('browse.noTag')}>
               <X className="w-3.5 h-3.5" />
             </button>

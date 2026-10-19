@@ -153,21 +153,51 @@ pub fn open_in_editor(file: &Path, line: Option<u32>, col: Option<u32>) -> Resul
     if !file.is_file() {
         return Err(format!("{} is not there.", file.display()));
     }
+    // A canonical path carries the \\?\ prefix, which editors do not expect.
+    let shown = file.display().to_string();
+    let shown = shown.strip_prefix(r"\\?\").unwrap_or(&shown).to_string();
     let target = match (line, col) {
-        (Some(l), Some(c)) => format!("{}:{}:{}", file.display(), l, c),
-        (Some(l), None) => format!("{}:{}", file.display(), l),
-        _ => file.display().to_string(),
+        (Some(l), Some(c)) => format!("{}:{}:{}", shown, l, c),
+        (Some(l), None) => format!("{}:{}", shown, l),
+        _ => shown.clone(),
     };
-    let code = if cfg!(windows) {
-        std::process::Command::new("cmd").args(["/C", "code", "--goto", &target]).spawn()
-    } else {
-        std::process::Command::new("code").args(["--goto", &target]).spawn()
-    };
-    if code.is_ok() {
-        return Ok("VS Code".to_string());
+    // VS Code's own executable, started directly: going through `cmd /C code` would hand the
+    // file name (a mod's, so anyone's) to cmd.exe, which runs whatever follows a `&` in it.
+    if let Some(code) = find_vscode() {
+        if std::process::Command::new(code).args(["--goto", &target]).spawn().is_ok() {
+            return Ok("VS Code".to_string());
+        }
     }
-    open::that(file).map_err(|e| format!("Windows could not open that file: {}", e))?;
+    open::that(&shown).map_err(|e| format!("Windows could not open that file: {}", e))?;
     Ok("the file's own program".to_string())
+}
+
+/// VS Code's executable: next to the `code` launcher on the PATH, or where its installers put it.
+fn find_vscode() -> Option<PathBuf> {
+    if !cfg!(windows) {
+        let path = std::env::var_os("PATH")?;
+        return std::env::split_paths(&path).map(|d| d.join("code")).find(|p| p.is_file());
+    }
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            if dir.join("code.cmd").is_file() {
+                if let Some(parent) = dir.parent() {
+                    candidates.push(parent.join("Code.exe"));
+                }
+            }
+        }
+    }
+    for (var, sub) in [
+        ("LOCALAPPDATA", r"Programs\Microsoft VS Code\Code.exe"),
+        ("ProgramFiles", r"Microsoft VS Code\Code.exe"),
+        ("ProgramFiles(x86)", r"Microsoft VS Code\Code.exe"),
+    ] {
+        if let Some(base) = std::env::var_os(var) {
+            candidates.push(PathBuf::from(base).join(sub));
+        }
+    }
+    candidates.into_iter().find(|p| p.is_file())
 }
 
 /// A folder is a mod's when it holds a mod.info, at its root or in a build folder.
@@ -399,15 +429,25 @@ pub struct CreatedMod {
     pub files: Vec<String>,
 }
 
+/// A field that goes on one line of mod.info or a Lua comment: a line break would start another key.
+fn one_line(s: &str) -> String {
+    s.trim().chars().map(|c| if c.is_control() { ' ' } else { c }).collect()
+}
+
+/// Text that sits inside a double-quoted Lua string.
+fn lua_quoted_body(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 /// The mod.info lines the game reads, in the order modders write them.
 pub fn mod_info_text(m: &NewMod, build: &str) -> String {
-    let mut lines = vec![format!("name={}", m.name.trim()), format!("id={}", m.id.trim())];
+    let mut lines = vec![format!("name={}", one_line(&m.name)), format!("id={}", m.id.trim())];
     for d in m.description.lines().map(str::trim).filter(|l| !l.is_empty()) {
         lines.push(format!("description={}", d));
     }
     lines.push("modversion=0.1".to_string());
     if !m.author.trim().is_empty() {
-        lines.push(format!("authors={}", m.author.trim()));
+        lines.push(format!("authors={}", one_line(&m.author)));
     }
     lines.push("poster=poster.png".to_string());
     if build == "42" {
@@ -467,8 +507,9 @@ pub fn create_mod(user_zomboid_dir: &str, m: &NewMod) -> Result<CreatedMod, Stri
     let hello = format!(
         "-- {name}: loaded on every client (and in single player). Shared code goes in\r\n\
          -- common/media/lua/shared, server-side code in 42/media/lua/server.\r\n\
-         print(\"[{id}] {name} loaded\")\r\n",
-        name = m.name.trim(),
+         print(\"[{id}] {quoted} loaded\")\r\n",
+        name = one_line(&m.name),
+        quoted = lua_quoted_body(&one_line(&m.name)),
         id = id
     );
     put(&format!("42/media/lua/client/{}_Client.lua", id), &hello)?;

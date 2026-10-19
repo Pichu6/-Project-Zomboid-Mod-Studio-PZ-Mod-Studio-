@@ -4,6 +4,7 @@ import { PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, setLanguage } from '../../i18n';
+import { tHtml } from '../../i18n/html';
 
 export interface StudioPathsUI {
   pz_install_dir: string;
@@ -374,7 +375,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.gameDirBlurb') }} />
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: tHtml('settings.gameDirBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -406,7 +407,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.workshopDirBlurb') }} />
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: tHtml('settings.workshopDirBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -441,7 +442,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.userDirBlurb') }} />
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: tHtml('settings.userDirBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -464,7 +465,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               <label className="text-xs font-bold text-slate-200">
                 {t('settings.modListFile')}
               </label>
-              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: t('settings.modListBlurb') }} />
+              <p className="text-[11px] text-slate-400" dangerouslySetInnerHTML={{ __html: tHtml('settings.modListBlurb') }} />
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -840,7 +841,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     ))}
                   </ul>
                   {patchNote && <p className="text-[11px] text-emerald-300 mt-2">{patchNote}</p>}
-                  <p className="text-[10px] text-slate-500 mt-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('settings.switchNote') }} />
+                  <p className="text-[10px] text-slate-500 mt-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('settings.switchNote') }} />
                 </div>
               )}
             </div>
@@ -1058,7 +1059,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>{t('settings.mcp.important')}</span>
                 </div>
-                <p className="text-[11px] text-amber-300/80 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('settings.mcp.importantBlurb') }} />
+                <p className="text-[11px] text-amber-300/80 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('settings.mcp.importantBlurb') }} />
               </div>
 
               <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/60">

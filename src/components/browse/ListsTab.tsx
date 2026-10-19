@@ -31,6 +31,7 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
   const showContextMenu = useContextMenu();
   const [selectedId, setSelectedId] = useState(FAVORITES);
   const [newName, setNewName] = useState('');
+  const [subscribing, setSubscribing] = useState(false);
   const [details, setDetails] = useState<Map<string, WorkshopItem>>(new Map());
   const [loading, setLoading] = useState(false);
 
@@ -129,8 +130,11 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
         {missing.length > 0 && (
           <button
             type="button"
-            disabled={!steamReady}
-            onClick={() => void onSubscribe(missing, true)}
+            disabled={!steamReady || subscribing}
+            onClick={() => {
+              setSubscribing(true);
+              onSubscribe(missing, true).catch(() => {}).finally(() => setSubscribing(false));
+            }}
             title={steamReady ? i18next.t('browse.lists.subscribeMissingTitle', { count: missing.length }) : i18next.t('browse.lists.steamNotRunning')}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50"
           >

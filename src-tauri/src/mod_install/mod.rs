@@ -185,6 +185,11 @@ fn describe_candidates(staging: &Path, fallback_name: &str) -> Result<Vec<Candid
             root.file_name().unwrap_or_default().to_string_lossy().to_string()
         };
         let folder = safe_folder_name(&raw_folder).ok_or_else(|| format!("Unusable mod folder name: {}", raw_folder))?;
+        // The Studio's own packages are rewritten and cleaned by the Studio from their metadata;
+        // a downloaded mod must not take their place.
+        if folder.to_ascii_lowercase().starts_with("z_pzmodstudio_") {
+            return Err(format!("{} is a name the Studio keeps for its own packages; it is not installed.", folder));
+        }
         candidates.push(Candidate { root, folder, mod_id, name });
     }
     Ok(candidates)

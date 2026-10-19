@@ -9,6 +9,7 @@ import { CommunityIndexSection } from './CommunityIndexSection';
 import { KeepActions, StarButton } from '../common/keep';
 import { registriesForItem, useCommunityIndex } from '../../services/communityIndex';
 import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
+import { tHtml } from '../../i18n/html';
 
 export type DetailTarget =
   | { kind: 'workshop'; id: string; preview?: WorkshopItem }
@@ -118,6 +119,8 @@ const SubscribeButton: React.FC<{
     try {
       await onSubscribe(ids, subscribing);
       setDone(subscribing ? 'subscribed' : 'unsubscribed');
+    } catch {
+      // Already shown; the button stays as it was.
     } finally {
       setBusy(false);
     }
@@ -279,7 +282,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {i18next.t('browse.detail.openNexus')}
             </ActionButton>
             {installed.length > 0 && <div className="text-[10px] font-mono text-emerald-400/80 break-all">{i18next.t('browse.detail.installedAs', { ids: installed.join(', ') })}</div>}
-            <p className="text-[10px] text-slate-500" dangerouslySetInnerHTML={{ __html: i18next.t('browse.detail.afterDownload') }} />
+            <p className="text-[10px] text-slate-500" dangerouslySetInnerHTML={{ __html: tHtml('browse.detail.afterDownload') }} />
           </div>
           {m && (
             <Section title={i18next.t('browse.detail.info')}>
@@ -510,9 +513,10 @@ export const ModDetail: React.FC<ModDetailProps> = (props) => {
           </button>
         </div>
         <div ref={scrollRef} className="overflow-y-auto p-5">
-          {target.kind === 'workshop' && <WorkshopDetail {...props} target={target} />}
-          {target.kind === 'collection' && <CollectionDetail {...props} target={target} />}
-          {target.kind === 'nexus' && <NexusDetail {...props} target={target} />}
+          {/* Keyed by item: a button's "subscribed" must not carry over to the next item opened. */}
+          {target.kind === 'workshop' && <WorkshopDetail key={`w:${target.id}`} {...props} target={target} />}
+          {target.kind === 'collection' && <CollectionDetail key={`c:${target.id}`} {...props} target={target} />}
+          {target.kind === 'nexus' && <NexusDetail key={`n:${target.modId}`} {...props} target={target} />}
         </div>
       </div>
     </div>

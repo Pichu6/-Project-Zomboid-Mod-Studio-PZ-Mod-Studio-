@@ -12,14 +12,21 @@ export const registryFileName = (modId: string) => `${modId.replace(/\//g, '__')
  * (with what the copy changed). Each is a known issue, verified, on the installed build. Nothing
  * seen means nothing to share, and the menu says so instead of opening an empty note.
  */
+/** A log line made fit to publish: the Windows (or other) user name in paths becomes `<user>`. */
+export function withoutUserName(line: string | null | undefined): string | undefined {
+  if (!line) return undefined;
+  // A user folder name can hold spaces ("Javier Pérez"): it runs to the next separator.
+  return line.replace(/([A-Za-z]:[\\/]+(?:Users|Documents and Settings)[\\/]+)[^\\/"'\r\n]+/gi, '$1<user>').replace(/(\/(?:home|Users)\/)[^/"'\r\n]+/g, '$1<user>');
+}
+
 export function knownIssues(catalog: CatalogModSummary | undefined, stat: ModErrorStat | undefined, installedBuild: string | null): CommunityIssue[] {
   const seen = { build: installedBuild ?? undefined, date: new Date().toISOString().slice(0, 10), source: "PZ Mod Studio, from the game's console.txt", status: 'verified' as const };
   const issues: CommunityIssue[] = [];
   if (stat && stat.exceptions > 0) {
-    issues.push({ title: `Threw ${stat.exceptions} error${stat.exceptions === 1 ? '' : 's'} in the last session`, log: stat.last_exception ?? undefined, fix: { kind: 'none' }, ...seen });
+    issues.push({ title: `Threw ${stat.exceptions} error${stat.exceptions === 1 ? '' : 's'} in the last session`, log: withoutUserName(stat.last_exception), fix: { kind: 'none' }, ...seen });
   }
   if (stat && stat.warnings > 0) {
-    issues.push({ title: `${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} in the last session (the game carried on)`, log: stat.last_warning ?? undefined, fix: { kind: 'none' }, ...seen });
+    issues.push({ title: `${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} in the last session (the game carried on)`, log: withoutUserName(stat.last_warning), fix: { kind: 'none' }, ...seen });
   }
   if (catalog?.origin?.kind === 'compat') {
     issues.push({

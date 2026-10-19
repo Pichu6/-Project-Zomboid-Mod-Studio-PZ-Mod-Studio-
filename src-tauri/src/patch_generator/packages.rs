@@ -264,6 +264,10 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
         return Err("Invalid Zomboid directory.".to_string());
     }
     let pkg_dir = user_dirs[0].join("mods").join(&folder_name);
+    // Making it again would reset its record and leave its published files untracked.
+    if pkg_dir.exists() {
+        return Err(format!("A package named '{}' already exists.", folder_name));
+    }
     fs::create_dir_all(&pkg_dir).map_err(|e| e.to_string())?;
 
     let mod_info_content = format!(
@@ -309,6 +313,15 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
     })
 }
 
+/// Two paths naming the same folder (Windows file names ignore case, so a rename that only
+/// changes case is not a clash).
+fn same_folder(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
 pub fn rename_merged_package(
     user_zomboid_dir: &str,
     mod_list_ini_path: &str,
@@ -345,8 +358,23 @@ pub fn rename_merged_package(
             let old_p = dir.join("mods").join(old_target);
             let new_p = dir.join("mods").join(&new_folder);
             if old_p.exists() {
-                let _ = fs::rename(&old_p, &new_p);
+                if new_p.exists() && !same_folder(&old_p, &new_p) {
+                    return Err(format!("A package named '{}' already exists.", new_folder));
+                }
+                fs::rename(&old_p, &new_p).map_err(|e| format!("Cannot rename the package: {}", e))?;
                 let _ = fs::write(new_p.join("mod.info"), &mod_info_content);
+                // B42 reads 42/mod.info: every copy has to carry the new id, or the game no
+                // longer finds the package under the name now in default.txt.
+                for copy in ["42/mod.info", "media/mod.info", "42/media/mod.info", "common/mod.info"] {
+                    let path = new_p.join(copy);
+                    if let Ok(text) = fs::read_to_string(&path) {
+                        let renamed: Vec<String> = text
+                            .lines()
+                            .map(|l| if l.trim_start().starts_with("id=") { format!("id={}", new_folder) } else { l.to_string() })
+                            .collect();
+                        let _ = fs::write(&path, renamed.join("\r\n") + "\r\n");
+                    }
+                }
                 let meta_path = new_p.join("patch_metadata.json");
                 if meta_path.exists() {
                     if let Ok(meta_str) = fs::read_to_string(&meta_path) {

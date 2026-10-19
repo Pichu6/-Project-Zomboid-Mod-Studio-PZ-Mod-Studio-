@@ -745,7 +745,8 @@ pub fn kill_pz_game(pid: Option<u32>, force: bool) -> Result<String, String> {
             cmd.arg("/F");
         }
         if let Some(p) = pid {
-            cmd.args(&["/PID", &p.to_string()]);
+            // Only ever the game: a stale or mistaken PID must not close another program.
+            cmd.args(&["/FI", "IMAGENAME eq ProjectZomboid64.exe", "/PID", &p.to_string()]);
         } else {
             cmd.args(&["/IM", "ProjectZomboid64.exe"]);
         }
@@ -757,7 +758,8 @@ pub fn kill_pz_game(pid: Option<u32>, force: bool) -> Result<String, String> {
             Ok(if msg.is_empty() { "Project Zomboid process terminated successfully.".to_string() } else { msg })
         } else {
             let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if err.contains("not found") || err.contains("no such process") {
+            // The message is in Windows' language: ask whether the game still runs instead.
+            if find_running_pz_pid().is_none() {
                 Ok("Project Zomboid is not running.".to_string())
             } else {
                 Err(format!("Taskkill error: {}", err))
@@ -1058,6 +1060,13 @@ mod tests {
         let parsed = crate::diff_engine::lua::validate_lua_syntax(BRIDGE_CLIENT_LUA);
         assert!(parsed.is_valid, "bridge Lua does not parse: {:?}", parsed.error_message);
         assert!(BRIDGE_CLIENT_LUA.contains("PRIVILEGED_ACTIONS"));
+        for (name, lua) in [
+            ("ClaudeAgent.lua", include_str!("../../../mods/Z_ClaudeAgent/42/media/lua/client/ClaudeAgent.lua")),
+            ("PZModStudio_Link.lua", include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_Link.lua")),
+        ] {
+            let parsed = crate::diff_engine::lua::validate_lua_syntax(lua);
+            assert!(parsed.is_valid, "{} does not parse: {:?}", name, parsed.error_message);
+        }
     }
 
     #[test]

@@ -254,7 +254,12 @@ pub fn clean_description(text: &str) -> String {
     while let Some(i) = rest.find('&') {
         out.push_str(&rest[..i]);
         rest = &rest[i..];
-        let end = rest[..rest.len().min(10)].find(';');
+        // Within the first 10 bytes, cut on a character boundary ("&Оружие" is not ASCII).
+        let mut window = rest.len().min(10);
+        while !rest.is_char_boundary(window) {
+            window -= 1;
+        }
+        let end = rest[..window].find(';');
         let decoded = end.and_then(|e| {
             let entity = &rest[1..e];
             let ch = match entity {
@@ -403,5 +408,7 @@ mod tests {
     fn cleans_nexus_descriptions() {
         assert_eq!(clean_description("[i]Hi[/i]\n<br />\n<br />Go to C:&#92;Users &amp; more&quot;"), "[i]Hi[/i]\n\nGo to C:\\Users & more\"");
         assert_eq!(clean_description("a &unknown; b & c"), "a &unknown; b & c");
+        // Non-ASCII right after "&" used to cut a character in two and panic.
+        assert_eq!(clean_description("Guns &Оружие mod"), "Guns &Оружие mod");
     }
 }

@@ -34,6 +34,7 @@ import { TauriService, explainError } from '../../services/tauri';
 import { MpCheckPanel } from '../common/MpCheckPanel';
 import { issueText } from '../../i18n/backendText';
 import { MpModReport } from '../../types';
+import { tHtml } from '../../i18n/html';
 
 interface ServerModuleProps {
   paths: StudioPathsUI;
@@ -469,7 +470,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
               })
             ) : (
               <div className="p-6 text-center space-y-3 border border-dashed border-slate-800 rounded-xl bg-slate-950/40">
-                <p className="text-xs text-slate-400" dangerouslySetInnerHTML={{ __html: t('servers.list.empty') }} />
+                <p className="text-xs text-slate-400" dangerouslySetInnerHTML={{ __html: tHtml('servers.list.empty') }} />
                 <button
                   onClick={async () => {
                     setNewServerName('servertest');
@@ -782,7 +783,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                     {/* Warning / Master Patch Inclusion */}
                     <div className="p-3 bg-indigo-950/50 border border-indigo-700/60 rounded-xl text-xs text-indigo-300 flex items-center gap-2.5">
                       <Shield className="w-5 h-5 text-indigo-400 shrink-0" />
-                      <div className="text-[11px] leading-relaxed" dangerouslySetInnerHTML={{ __html: t('servers.mods.syncNote') }} />
+                      <div className="text-[11px] leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('servers.mods.syncNote') }} />
                     </div>
                   </div>
 

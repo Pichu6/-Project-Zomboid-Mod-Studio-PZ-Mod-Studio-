@@ -113,7 +113,8 @@ function Bridge.ProcessQueueFile(queueFile, player)
             if success then
                 respWriter:write('{"status": "ok", "timestamp": "' .. tostring(getTimeInMillis()) .. '"}')
             else
-                respWriter:write('{"status": "error", "message": "' .. tostring(err):gsub('"', '\\"') .. '"}')
+                local msg = tostring(err):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r'):gsub('\t', '\\t')
+                respWriter:write('{"status": "error", "message": "' .. msg .. '"}')
             end
             respWriter:close()
         end
@@ -326,11 +327,14 @@ function Bridge.ExecuteCommand(jsonStr, player)
                     if not execOk then
                         print("[PZModStudio_Bridge] Lua runtime error in eval: " .. tostring(execErr))
                         safeHaloText(player, "Lua Error: " .. tostring(execErr), 255, 0, 0)
+                        -- the response must say it failed, not "ok"
+                        error("Lua runtime error: " .. tostring(execErr), 0)
                     else
                         safeHaloText(player, "Lua Executed", 100, 200, 255)
                     end
                 else
                     print("[PZModStudio_Bridge] Lua syntax error in eval: " .. tostring(loadErr))
+                    error("Lua syntax error: " .. tostring(loadErr), 0)
                 end
             else
                 print("[PZModStudio_Bridge] dynamic load/loadstring not supported in this Kahlua scope")

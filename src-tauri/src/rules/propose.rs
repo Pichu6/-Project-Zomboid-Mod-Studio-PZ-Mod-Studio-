@@ -162,7 +162,7 @@ impl Client {
 
     /// The file as it is on a branch: its text and the blob sha the update needs; None when absent.
     fn file(&self, repo: &str, path: &str, branch: &str) -> Result<Option<(String, String)>, String> {
-        let (status, v) = self.call("GET", &format!("/repos/{}/contents/{}?ref={}", repo, path, branch), None)?;
+        let (status, v) = self.call("GET", &format!("/repos/{}/contents/{}?ref={}", repo, encode_path(path), branch), None)?;
         match status {
             404 => Ok(None),
             200 => {
@@ -232,7 +232,7 @@ pub fn propose_file(path: &str, title: &str, body: &str, new_content: &dyn Fn(Op
     if let Some((_, file_sha)) = &existing {
         put["sha"] = Value::String(file_sha.clone());
     }
-    let (status, v) = client.call("PUT", &format!("/repos/{}/contents/{}", fork, path), Some(put))?;
+    let (status, v) = client.call("PUT", &format!("/repos/{}/contents/{}", fork, encode_path(path)), Some(put))?;
     if status != 200 && status != 201 {
         return Err(Client::refuse(status, &v, "write the file on the fork"));
     }
@@ -275,5 +275,32 @@ mod tests {
         assert!(merged.contains("\"mod_id\": \"A\""));
         assert!(merge_rule_into(&merged, &rule).is_err(), "the same rule twice is refused");
         assert!(merge_rule_into("{}", &rule).is_err());
+    }
+}
+
+/// A repository path for the contents API: each segment percent-encoded (mod ids carry spaces,
+/// brackets and parentheses), the slashes between them kept.
+fn encode_path(path: &str) -> String {
+    path.split('/')
+        .map(|seg| {
+            seg.bytes()
+                .map(|b| match b {
+                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+                    _ => format!("%{:02X}", b),
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+#[cfg(test)]
+mod encode_tests {
+    #[test]
+    fn a_mod_id_with_spaces_and_brackets_is_a_valid_path() {
+        assert_eq!(
+            super::encode_path("community/index/Arsenal(26)GunFighter[MAIN MOD 2.0].json"),
+            "community/index/Arsenal%2826%29GunFighter%5BMAIN%20MOD%202.0%5D.json"
+        );
     }
 }

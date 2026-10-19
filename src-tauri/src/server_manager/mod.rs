@@ -5,6 +5,7 @@ use std::process::Command;
 use crate::load_order::mod_info::get_all_user_zomboid_dirs;
 
 pub mod mod_sync;
+mod rcon;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PZServerConfig {
@@ -144,11 +145,59 @@ pub fn check_server_mods(
     Ok(mod_sync::check(&catalog, &content, &paths.pz_install_dir))
 }
 
+/// 32 hex characters from the process's random hash keys (no RNG crate needed for this).
+fn random_password() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    (0..2)
+        .map(|i| {
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0) + i);
+            format!("{:016x}", h.finish())
+        })
+        .collect()
+}
+
+/// A server name the game, the file system and cmd.exe all take as it is.
+fn is_valid_server_name(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Whether `Server/` already holds a server by this name (Windows file names ignore case).
+fn server_name_taken(server_dir: &Path, name: &str) -> bool {
+    let wanted = format!("{}.ini", name).to_lowercase();
+    fs::read_dir(server_dir)
+        .map(|rd| rd.flatten().any(|e| e.file_name().to_string_lossy().to_lowercase() == wanted))
+        .unwrap_or(false)
+}
+
+fn primary_dir(user_zomboid_dir: &str) -> PathBuf {
+    if !user_zomboid_dir.is_empty() {
+        PathBuf::from(user_zomboid_dir)
+    } else if let Some(home) = dirs_next::home_dir() {
+        home.join("Zomboid")
+    } else {
+        PathBuf::from(".")
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn server_pid_alive(pid: u32) -> bool {
+    is_tracked_server_alive(pid)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn server_pid_alive(_pid: u32) -> bool {
+    false
+}
+
 #[tauri::command]
 pub fn create_new_server_config(user_zomboid_dir: String, server_name: String) -> Result<PZServerConfig, String> {
     let clean_name = server_name.trim().replace(' ', "_");
-    if clean_name.is_empty() {
-        return Err("Invalid server name.".to_string());
+    if !is_valid_server_name(&clean_name) {
+        return Err(format!(
+            "Invalid server name '{}': use only letters, digits, '_' and '-'.",
+            server_name.trim()
+        ));
     }
 
     let user_path = if user_zomboid_dir.is_empty() {
@@ -163,6 +212,10 @@ pub fn create_new_server_config(user_zomboid_dir: String, server_name: String) -
     fs::create_dir_all(&server_dir).map_err(|e| e.to_string())?;
 
     let ini_path = server_dir.join(format!("{}.ini", clean_name));
+    // Never replace a server that is already there: its .ini is every setting the admin made.
+    if server_name_taken(&server_dir, &clean_name) {
+        return Err(format!("A server named '{}' already exists.", clean_name));
+    }
 
     let default_content = format!(
         "PVP=true\r\n\
@@ -174,11 +227,20 @@ PublicName={}\r\n\
 PublicDescription=Server managed by Project Zomboid Mod Studio\r\n\
 MaxPlayers=16\r\n\
 Mods=\r\n\
-WorkshopItems=\r\n",
-        clean_name
+WorkshopItems=\r\n\
+RCONPort=27015\r\n\
+RCONPassword={}\r\n",
+        clean_name,
+        // With RCON on, Stop can tell the server to save and quit instead of killing it.
+        random_password()
     );
 
-    fs::write(&ini_path, default_content).map_err(|e| e.to_string())?;
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&ini_path)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, default_content.as_bytes()))
+        .map_err(|e| e.to_string())?;
 
     Ok(PZServerConfig {
         name: clean_name,
@@ -195,22 +257,44 @@ pub fn delete_server_config(
     server_name: Option<String>,
 ) -> Result<bool, String> {
     let p = Path::new(&file_path);
-    if p.exists() && p.is_file() {
-        let _ = fs::remove_file(p);
+    let Some(server_dir) = p.parent().filter(|d| d.file_name().is_some_and(|n| n == "Server")) else {
+        return Err(format!("{} is not a server config.", file_path));
+    };
+    let srv_name = server_name
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
+    if srv_name.is_empty() || srv_name.contains(['/', '\\']) || srv_name.contains("..") {
+        return Err("Invalid server name.".to_string());
     }
 
-    let srv_name = server_name.unwrap_or_else(|| {
-        p.file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default()
-    });
+    let primary_user_dir = primary_dir(&user_zomboid_dir);
+    if let Some(state) = read_server_state(&primary_user_dir.join("pz_server_state.json")) {
+        if state.server_name.as_deref() == Some(srv_name.as_str()) && state.pid.is_some_and(server_pid_alive) {
+            return Err(format!("The server '{}' is running: stop it before deleting it.", srv_name));
+        }
+    }
 
-    if !srv_name.is_empty() {
-        for user_dir in get_all_user_zomboid_dirs(&user_zomboid_dir) {
-            let srv_dir = user_dir.join("Server");
-            let _ = fs::remove_file(srv_dir.join(format!("{}.ini", srv_name)));
-            let _ = fs::remove_file(srv_dir.join(format!("{}_SandboxVars.lua", srv_name)));
-            let _ = fs::remove_file(srv_dir.join(format!("{}_spawnregions.lua", srv_name)));
+    // Only this config's own folder, and into a backup rather than away: the .ini is every
+    // setting the admin made.
+    let zomboid_dir = server_dir.parent().unwrap_or(server_dir);
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let backup = zomboid_dir
+        .join("PZModStudio_Backups")
+        .join("deleted_servers")
+        .join(format!("{}.{}", srv_name, stamp));
+    for name in [
+        format!("{}.ini", srv_name),
+        format!("{}_SandboxVars.lua", srv_name),
+        format!("{}_spawnregions.lua", srv_name),
+    ] {
+        let src = server_dir.join(&name);
+        if !src.is_file() {
+            continue;
+        }
+        fs::create_dir_all(&backup).map_err(|e| e.to_string())?;
+        if fs::rename(&src, backup.join(&name)).is_err() {
+            fs::copy(&src, backup.join(&name)).map_err(|e| format!("Cannot back up {}: {}", name, e))?;
+            fs::remove_file(&src).map_err(|e| format!("Cannot delete {}: {}", name, e))?;
         }
     }
 
@@ -268,17 +352,16 @@ pub fn launch_dedicated_server(
     }
 
     let mem = memory_gb.unwrap_or(4).max(2).min(32);
-    let clean_name = server_name.trim().replace(' ', "_");
+    // Not rewritten: "My Server" launched as My_Server would start a fresh vanilla config.
+    let clean_name = server_name.trim().to_string();
     let is_nosteam = nosteam.unwrap_or(false);
     let clean_admin_pass = admin_password.unwrap_or_default().trim().to_string();
 
     // The name becomes a file name and, with the .bat fallbacks, part of a cmd.exe command
     // line, so only allow characters that are inert in both.
-    if clean_name.is_empty()
-        || !clean_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
+    if !is_valid_server_name(&clean_name) {
         return Err(format!(
-            "Invalid server name '{}': use only letters, digits, '_' and '-'.",
+            "Invalid server name '{}': use only letters, digits, '_' and '-' (rename its .ini in Zomboid/Server).",
             server_name
         ));
     }
@@ -298,6 +381,16 @@ pub fn launch_dedicated_server(
     } else {
         Path::new(".").to_path_buf()
     };
+
+    // A second server on the same port, with the first one's PID forgotten, could never be stopped.
+    if let Some(state) = read_server_state(&primary_user_dir.join("pz_server_state.json")) {
+        if let Some(pid) = state.pid.filter(|&p| server_pid_alive(p)) {
+            return Err(format!(
+                "A server is already running (PID {}): stop it before starting another.",
+                pid
+            ));
+        }
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -427,6 +520,21 @@ fn is_tracked_server_alive(pid: u32) -> bool {
     process_image_name(pid).is_some_and(|img| SERVER_PROCESS_IMAGES.contains(&img.as_str()))
 }
 
+/// Sends "quit" to the server over RCON when its .ini has a password for it. True when sent.
+#[cfg(target_os = "windows")]
+fn quit_over_rcon(zomboid_dir: &Path, server_name: &str) -> bool {
+    let ini = zomboid_dir.join("Server").join(format!("{}.ini", server_name));
+    let Ok(text) = fs::read_to_string(ini) else { return false };
+    let value = |key: &str| {
+        text.lines()
+            .find_map(|l| l.trim().strip_prefix(&format!("{}=", key)).map(|v| v.trim().to_string()))
+            .unwrap_or_default()
+    };
+    let password = value("RCONPassword");
+    let port = value("RCONPort").parse::<u16>().unwrap_or(27015);
+    !password.is_empty() && rcon::send(port, &password, "quit").is_ok()
+}
+
 fn read_server_state(state_file: &Path) -> Option<DedicatedServerStatus> {
     fs::read_to_string(state_file)
         .ok()
@@ -459,7 +567,22 @@ pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Res
         let mut stopped = false;
         if let Some(pid) = state.pid.filter(|&p| is_tracked_server_alive(p)) {
             // Automatically archive the full server session log with timestamp
-            let _ = save_server_log_snapshot(user_zomboid_dir.clone(), srv_name, None);
+            let _ = save_server_log_snapshot(user_zomboid_dir.clone(), srv_name.clone(), None);
+
+            // First the way an admin would: "quit" over RCON saves the world and exits. Only a
+            // server that does not answer, or does not go, is killed.
+            if quit_over_rcon(&primary_user_dir, &srv_name) {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+                while std::time::Instant::now() < deadline && is_tracked_server_alive(pid) {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+            }
+            if !is_tracked_server_alive(pid) {
+                let _ = fs::remove_file(primary_user_dir.join("Lua").join("pz_server_players.json"));
+                let _ = fs::remove_file(primary_user_dir.join("pz_server_players.json"));
+                let _ = fs::remove_file(&state_file);
+                return Ok(true);
+            }
 
             // /T also ends the java.exe child when the server was started through the .bat
             let output = Command::new("taskkill")
@@ -1128,8 +1251,73 @@ pub fn save_server_quick_settings(file_path: String, settings: ServerQuickSettin
     if !keys_found.contains("RCONPassword") { new_lines.push(format!("RCONPassword={}", settings.rcon_password)); }
     if !keys_found.contains("Map") && !settings.map_names.is_empty() { new_lines.push(format!("Map={}", settings.map_names)); }
 
-    fs::write(path, new_lines.join("\r\n")).map_err(|e| e.to_string())?;
+    let eol = if content.contains("\r\n") || !content.contains('\n') { "\r\n" } else { "\n" };
+    let mut updated = new_lines.join(eol);
+    if content.is_empty() || content.ends_with('\n') {
+        updated.push_str(eol);
+    }
+    let backups = path
+        .parent()
+        .and_then(Path::parent)
+        .map(|z| z.join("PZModStudio_Backups"))
+        .unwrap_or_else(|| PathBuf::from("PZModStudio_Backups"));
+    crate::load_order::ini_parser::write_file_with_backup(path, &updated, &backups)?;
 
     Ok(true)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_zomboid(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pzms-server-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("Server")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn creating_a_server_never_replaces_one_that_is_there() {
+        let z = temp_zomboid("create");
+        let ini = z.join("Server").join("servertest.ini");
+        fs::write(&ini, "Mods=MyMods\r\n").unwrap();
+        assert!(create_new_server_config(z.to_string_lossy().to_string(), "servertest".into()).is_err());
+        assert!(create_new_server_config(z.to_string_lossy().to_string(), "ServerTest".into()).is_err());
+        assert_eq!(fs::read_to_string(&ini).unwrap(), "Mods=MyMods\r\n");
+        assert!(create_new_server_config(z.to_string_lossy().to_string(), "../x".into()).is_err());
+        let made = create_new_server_config(z.to_string_lossy().to_string(), "My Server".into()).unwrap();
+        assert_eq!(made.name, "My_Server");
+        assert!(fs::read_to_string(&made.file_path).unwrap().contains("RCONPassword="));
+        let _ = fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn deleting_a_server_keeps_its_files_in_the_backups() {
+        let z = temp_zomboid("delete");
+        let ini = z.join("Server").join("srv.ini");
+        fs::write(&ini, "PVP=true\r\n").unwrap();
+        fs::write(z.join("Server").join("srv_SandboxVars.lua"), "SandboxVars = {}").unwrap();
+        delete_server_config(z.to_string_lossy().to_string(), ini.to_string_lossy().to_string(), None).unwrap();
+        assert!(!ini.exists());
+        let kept: Vec<_> = fs::read_dir(z.join("PZModStudio_Backups").join("deleted_servers")).unwrap().flatten().collect();
+        assert_eq!(kept.len(), 1);
+        assert!(kept[0].path().join("srv.ini").is_file() && kept[0].path().join("srv_SandboxVars.lua").is_file());
+        let _ = fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn quick_settings_keep_line_endings_and_back_up() {
+        let z = temp_zomboid("quick");
+        let ini = z.join("Server").join("srv.ini");
+        fs::write(&ini, "PVP=true\nCustom=1\n").unwrap();
+        let mut s = get_server_quick_settings(ini.to_string_lossy().to_string()).unwrap();
+        s.pvp = false;
+        save_server_quick_settings(ini.to_string_lossy().to_string(), s).unwrap();
+        let text = fs::read_to_string(&ini).unwrap();
+        assert!(text.starts_with("PVP=false\nCustom=1\n") && !text.contains('\r') && text.ends_with('\n'), "{:?}", text);
+        assert!(z.join("PZModStudio_Backups").read_dir().unwrap().count() >= 1);
+        let _ = fs::remove_dir_all(&z);
+    }
+}

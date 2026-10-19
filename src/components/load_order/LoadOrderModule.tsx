@@ -1,3 +1,4 @@
+import { freshProfile } from '../../utils/profiles';
 import React, { useState, useRef, useMemo } from 'react';
 import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat, profileMembers, STUDIO_LINK_MOD_ID } from '../../types';
 import { sourceOf } from '../common/SourceBadge';
@@ -41,6 +42,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import { tHtml } from '../../i18n/html';
 
 interface LoadOrderModuleProps {
   paths: StudioPathsUI;
@@ -574,7 +576,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
    */
   const setInProfile = async (mod: ModInfo, inside: boolean) => {
     if (!activeProfile) return;
-    const members = profileMembers(activeProfile).filter((id) => id !== mod.mod_id);
+    const current = await freshProfile(paths.user_zomboid_dir || '', activeProfile);
+    const members = profileMembers(current).filter((id) => id !== mod.mod_id);
     if (inside) members.push(mod.mod_id);
     try {
       await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, members);
@@ -590,7 +593,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
   const modRowMenu = (mod: ModInfo, index: number): MenuItem[] => [
     {
-      label: mod.enabled ? 'Switch off' : 'Switch on',
+      label: mod.enabled ? t('modList.menu.switchOff') : t('modList.menu.switchOn'),
       icon: mod.enabled ? EyeOff : Check,
       onSelect: () => onToggleMod(mod.mod_id),
     },
@@ -656,6 +659,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           const registry = draftRegistry(mod, catalogById?.get(mod.mod_id), installedBuild, knownIssues(catalogById?.get(mod.mod_id), errorStats?.get(mod.name), installedBuild));
           if (await TauriService.githubTokenStatus()) {
             // With a token: the Studio forks, writes the file on a branch and opens the pull request.
+            // That is public at once, so the person sees what goes out first.
+            if (!confirm(t('modList.menu.prConfirm', { name: mod.name, json: JSON.stringify(registry, null, 2).slice(0, 1500) }))) return;
             showToast(t('modList.menu.openingPr', { name: mod.name }), 20000);
             try {
               const r = await TauriService.proposeRegistry(mod.mod_id, JSON.stringify(registry, null, 2));
@@ -737,11 +742,22 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   const handleEnableAllWithoutDiscrimination = (enable: boolean) => {
+    // Only the rows on screen: with a profile, a filter or a search, "every mod" is what is shown,
+    // not the whole library (switched on, a mod joins the profile for good).
+    const shown = new Set(filteredMods.map((m) => m.mod_id));
+    const changing = mods.filter((m) => shown.has(m.mod_id) && m.enabled !== enable).length;
+    if (changing === 0) return;
+    if (!confirm(t(enable ? 'modList.enableAllConfirm' : 'modList.disableAllConfirm', { count: changing }))) return;
+    const isPackage = (id: string) => id.startsWith('Z_PZModStudio_') && !id.includes('Carrier') && id !== 'Z_PZModStudio_Bridge';
     const updated = mods.map((m) => {
-      if (enable && openedPackageFolder && m.mod_id === openedPackageFolder) {
-        return { ...m, enabled: false };
+      if (!shown.has(m.mod_id)) return m;
+      if (!enable) {
+        // With a profile active the Studio Link mod stays on: it is how the game shows the profile.
+        return activeProfile && m.mod_id === STUDIO_LINK_MOD_ID ? m : { ...m, enabled: false };
       }
-      return { ...m, enabled: enable };
+      // Packages keep their own rules: a draft never goes on, and only one goes on at a time.
+      if (isPackage(m.mod_id)) return m;
+      return { ...m, enabled: true };
     });
     triggerReorder(updated);
   };
@@ -1307,7 +1323,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </div>
 
             <ul className="text-xs text-slate-300 space-y-2 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-sans leading-relaxed">
-              <li dangerouslySetInnerHTML={{ __html: t('modList.sortRule1') }} />
+              <li dangerouslySetInnerHTML={{ __html: tHtml('modList.sortRule1') }} />
               <li>{t('modList.sortRule2')}</li>
               <li className="text-amber-300">{t('modList.sortRule3')}</li>
             </ul>

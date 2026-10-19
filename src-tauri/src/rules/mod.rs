@@ -56,7 +56,8 @@ fn save_rules(user_zomboid_dir: &str, rules: &[UserRule]) -> Result<(), String> 
     let path = rules_path(user_zomboid_dir)?;
     let file = RulesFile { load_after: rules.to_vec() };
     let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())
+    crate::load_order::ini_parser::keep_unreadable::<RulesFile>(&path);
+    crate::load_order::ini_parser::atomic_write(path, json).map_err(|e| e.to_string())
 }
 
 /// Adds "mod_id after after". The same pair twice is one rule; a mod after itself is refused.

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MergedPackageInfoUI } from '../../services/tauri';
 import { Edit2, Package, Unlock } from 'lucide-react';
 import i18next from 'i18next';
+import { tHtml } from '../../i18n/html';
 
 /** New package: a name and an optional description; it is created in draft. */
 export const CreatePackageModal: React.FC<{
@@ -164,8 +165,8 @@ export const UnpackageModal: React.FC<{
         </div>
 
         <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2 text-xs text-slate-300">
-          <p dangerouslySetInnerHTML={{ __html: i18next.t('merger.modals.unpackBody', { name: packageName ?? '' }) }} />
-          <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-mono leading-relaxed" dangerouslySetInnerHTML={{ __html: i18next.t('merger.modals.unpackNotice') }} />
+          <p dangerouslySetInnerHTML={{ __html: tHtml('merger.modals.unpackBody', { name: packageName ?? '' }) }} />
+          <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-mono leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('merger.modals.unpackNotice') }} />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">

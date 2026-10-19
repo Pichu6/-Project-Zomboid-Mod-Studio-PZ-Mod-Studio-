@@ -81,10 +81,16 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
             if now_writing.contains(&normalise_media_path(&old)) {
                 continue;
             }
+            // The list is read from the package's own metadata, which an installed archive can
+            // carry too: only paths that stay inside the package are touched.
+            let inner = old.trim_start_matches("media/").trim_start_matches("media\\");
             for root in [patch_mod_dir.clone(), patch_mod_dir.join("42")] {
-                let victim = root.join(old.trim_start_matches("media/").trim_start_matches("media\\"));
-                let _ = fs::remove_file(root.join(&old));
-                let _ = fs::remove_file(victim);
+                if let Ok(p) = safe_join(&root, &old) {
+                    let _ = fs::remove_file(p);
+                }
+                if let Ok(p) = safe_join(&root, inner) {
+                    let _ = fs::remove_file(p);
+                }
             }
         }
         // The shim is rewritten below; an older copy must not survive under another name.
@@ -115,6 +121,7 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
         let _ = fs::write(media_42_dir.join("mod.info"), &mod_info_content);
 
         // Write merged files to both top level and 42/ subfolder
+        let mut failed: Vec<String> = Vec::new();
         for file in &req.merged_files {
             if file.relative_path.contains("sandbox-options.txt") || file.content.starts_with("-- vanilla file not present") {
                 continue;
@@ -123,15 +130,24 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
             if let Some(parent) = dest_path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            let _ = fs::write(&dest_path, &file.content);
+            if let Err(e) = fs::write(&dest_path, &file.content) {
+                failed.push(format!("{} ({})", file.relative_path, e));
+            }
 
             let dest_42_path = safe_join(&dir_42, &file.relative_path)?;
             if let Some(parent) = dest_42_path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            let _ = fs::write(&dest_42_path, &file.content);
+            if let Err(e) = fs::write(&dest_42_path, &file.content) {
+                failed.push(format!("{} ({})", file.relative_path, e));
+            }
 
             files_written += 1;
+        }
+        // A package half written is not published: the game would load part of the merges.
+        if !failed.is_empty() {
+            failed.dedup();
+            return Err(format!("These files could not be written into the package: {}", failed.join(", ")));
         }
 
         // Polyfills in both media/lua/shared and 42/media/lua/shared

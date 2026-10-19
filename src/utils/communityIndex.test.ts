@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { draftRegistry, knownIssues, proposeUrl, registryFileName } from './communityIndex';
+import { draftRegistry, knownIssues, proposeUrl, registryFileName, withoutUserName } from './communityIndex';
 import { CatalogModSummary, ModErrorStat, ModInfo } from '../types';
 
 const mod = {
@@ -52,5 +52,13 @@ describe('proposeUrl', () => {
     expect(url).toContain('/new/main/community/index?filename=2858201402__dailystatisticsandgains.json&value=');
     expect(decodeURIComponent(url.split('&value=')[1])).toContain('"id": "2858201402/dailystatisticsandgains"');
     expect(registryFileName('Plain')).toBe('Plain.json');
+  });
+});
+
+describe('withoutUserName', () => {
+  it('keeps the Windows user name out of a shared log line', () => {
+    expect(withoutUserName('ERROR at C:\\Users\\Javier Pérez\\Zomboid\\mods\\X\\a.lua line 3')).toBe('ERROR at C:\\Users\\<user>\\Zomboid\\mods\\X\\a.lua line 3');
+    expect(withoutUserName('at C:/Users/bob/Zomboid/x.lua')).toBe('at C:/Users/<user>/Zomboid/x.lua');
+    expect(withoutUserName(null)).toBeUndefined();
   });
 });
