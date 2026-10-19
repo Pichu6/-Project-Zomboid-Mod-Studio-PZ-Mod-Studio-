@@ -340,7 +340,19 @@ export interface AppInstance {
   last_played_build?: string | null;
   /** The major build this profile is meant for ("41", "42"), set by hand; null = as last played. */
   target_build?: string | null;
+  /** The mods that belong to the profile, on or off; null for an older profile (= its active mods). */
+  members?: string[] | null;
 }
+
+/** The mod the Studio keeps on in every profile so the game's Mods screen shows the profile. */
+export const STUDIO_LINK_MOD_ID = 'Z_StudioLink';
+
+/** The profile's mods, on or off: the game's Mods screen shows these and nothing else. */
+export const profileMembers = (p: AppInstance): string[] => {
+  const set = new Set(p.members ?? p.active_mod_ids);
+  for (const id of p.active_mod_ids) set.add(id);
+  return [...set];
+};
 
 /** The major build a profile is for: set by hand, else the one it was last played on. */
 export const profileBuildMajor = (p: AppInstance | null | undefined): string | null =>

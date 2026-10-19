@@ -53,7 +53,7 @@ fn parse_ini_file(path: &Path) -> Vec<String> {
     active
 }
 
-fn parse_default_txt(path: &Path) -> Vec<String> {
+pub(crate) fn parse_default_txt(path: &Path) -> Vec<String> {
     let mut active = Vec::new();
     if let Ok(content) = fs::read_to_string(path) {
         let mut in_mods_block = false;
@@ -505,10 +505,19 @@ pub fn write_mod_list_ini(ini_path: &str, active_mods: &[String]) -> Result<(), 
     let maps = read_existing_maps(&default_txt_path);
     let content = build_default_txt(active_mods, &maps);
     write_file_with_backup(&default_txt_path, &content, &zomboid_dir.join("PZModStudio_Backups"))?;
+    *LAST_WRITTEN.lock().unwrap_or_else(|p| p.into_inner()) = Some(content);
     Ok(())
 }
 
 static MOD_LIST_WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static LAST_WRITTEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Whether `default.txt` holds exactly what this Studio last wrote into it, so that a watcher
+/// can tell its own writes from the game's.
+pub fn is_own_write(default_txt: &Path) -> bool {
+    let Ok(now) = fs::read_to_string(default_txt) else { return false };
+    LAST_WRITTEN.lock().unwrap_or_else(|p| p.into_inner()).as_deref() == Some(now.as_str())
+}
 
 #[cfg(test)]
 mod tests {

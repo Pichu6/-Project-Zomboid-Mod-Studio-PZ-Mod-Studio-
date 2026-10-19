@@ -350,7 +350,12 @@
       "openingPr": "Opening a pull request with {{name}}'s registry…",
       "prOpened": "Pull request opened: {{url}} (opening it in your browser so you can add what you tested).",
       "openingGithub": "Opening GitHub with {{name}}'s registry filled in (also on the clipboard). Add what you tested, then \"Propose changes\" opens the pull request.",
-      "copyId": "Copy the mod id"
+      "copyId": "Copy the mod id",
+      "addToProfile": "Add to the profile \"{{name}}\"",
+      "removeFromProfile": "Take out of the profile \"{{name}}\"",
+      "linkAlwaysOn": "PZ Mod Studio Link stays in every profile: it is how the game's Mods screen shows the profile.",
+      "addedToProfile": "{{mod}} is now in \"{{name}}\".",
+      "removedFromProfile": "{{mod}} is out of \"{{name}}\" and switched off."
     },
     "row": {
       "draftLocked": "This package is open in draft mode and deactivated. It cannot be enabled until it is packaged/published in Mod Merger.",

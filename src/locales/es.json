@@ -350,7 +350,12 @@
       "openingPr": "Abriendo un pull request con el registro de {{name}}…",
       "prOpened": "Pull request abierto: {{url}} (se abre en tu navegador para que agregues lo que probaste).",
       "openingGithub": "Abriendo GitHub con el registro de {{name}} ya completado (también está en el portapapeles). Agregá lo que probaste y \"Propose changes\" abre el pull request.",
-      "copyId": "Copiar el id del mod"
+      "copyId": "Copiar el id del mod",
+      "addToProfile": "Agregar al perfil \"{{name}}\"",
+      "removeFromProfile": "Sacar del perfil \"{{name}}\"",
+      "linkAlwaysOn": "PZ Mod Studio Link está en todos los perfiles: es lo que hace que la pantalla de Mods del juego muestre el perfil.",
+      "addedToProfile": "{{mod}} ahora está en \"{{name}}\".",
+      "removedFromProfile": "{{mod}} salió de \"{{name}}\" y quedó apagado."
     },
     "row": {
       "draftLocked": "Este paquete está abierto en modo borrador y desactivado. No se puede activar hasta empaquetarlo o publicarlo en el Fusionador.",

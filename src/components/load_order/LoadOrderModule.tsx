@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat } from '../../types';
+import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat, profileMembers, STUDIO_LINK_MOD_ID } from '../../types';
 import { sourceOf } from '../common/SourceBadge';
 import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -339,14 +339,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const activeProfile = profiles.find((p) => p.id === activeProfileId) ?? null;
   const keep = useKeepActions(paths, profiles, onProfilesChanged, showToast);
   const inActiveProfile = useMemo(
-    () => new Set(activeProfile ? activeProfile.active_mod_ids : []),
+    () => new Set(activeProfile ? profileMembers(activeProfile) : []),
     [activeProfile]
   );
-  /** mod id -> the profiles that have it switched on. */
+  /** mod id -> the profiles it belongs to, on or off. */
   const profilesByMod = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const p of profiles) {
-      for (const id of p.active_mod_ids) {
+      for (const id of profileMembers(p)) {
         map.set(id, [...(map.get(id) ?? []), p.name]);
       }
     }
@@ -491,12 +491,43 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   };
 
   /** What right-clicking a mod offers: the things people reach for most. */
+  /**
+   * Puts a mod in the active profile or takes it out (taken out, it is switched off too). The
+   * game's Mods screen shows the same set the next time it opens.
+   */
+  const setInProfile = async (mod: ModInfo, inside: boolean) => {
+    if (!activeProfile) return;
+    const members = profileMembers(activeProfile).filter((id) => id !== mod.mod_id);
+    if (inside) members.push(mod.mod_id);
+    try {
+      await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, members);
+      showToast(inside
+        ? t('modList.menu.addedToProfile', { mod: mod.name, name: activeProfile.name })
+        : t('modList.menu.removedFromProfile', { mod: mod.name, name: activeProfile.name }));
+      onProfilesChanged?.();
+      onRefreshMods();
+    } catch {
+      // Already shown by TauriService.
+    }
+  };
+
   const modRowMenu = (mod: ModInfo, index: number): MenuItem[] => [
     {
       label: mod.enabled ? 'Switch off' : 'Switch on',
       icon: mod.enabled ? EyeOff : Check,
       onSelect: () => onToggleMod(mod.mod_id),
     },
+    ...(activeProfile
+      ? [{
+          label: inActiveProfile.has(mod.mod_id)
+            ? t('modList.menu.removeFromProfile', { name: activeProfile.name })
+            : t('modList.menu.addToProfile', { name: activeProfile.name }),
+          icon: inActiveProfile.has(mod.mod_id) ? FolderX : Check,
+          onSelect: () => void setInProfile(mod, !inActiveProfile.has(mod.mod_id)),
+          disabled: mod.mod_id === STUDIO_LINK_MOD_ID,
+          disabledReason: t('modList.menu.linkAlwaysOn'),
+        } as MenuItem]
+      : []),
     { label: t('modList.menu.toTop'), icon: ChevronsUp, onSelect: () => moveToTop(index), disabled: index === 0,
       disabledReason: t('modList.menu.alreadyFirst') },
     { label: t('modList.menu.toBottom'), icon: ChevronsDown, onSelect: () => moveToBottom(index),

@@ -1,0 +1,5 @@
+name=PZ Mod Studio Link
+id=Z_StudioLink
+description=Shows the profile active in PZ Mod Studio on the Mods screen and keeps saves made with other mods from loading. Installed and kept up to date by PZ Mod Studio.
+modversion=1.0.0
+versionMin=42.0.0
