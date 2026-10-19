@@ -724,6 +724,7 @@
     "card": {
       "item": "Item {{id}}",
       "updated": "updated {{date}}",
+      "posted": "Posted: {{date}}",
       "notPublic": "Not public on Steam (removed, private or wrong id)",
       "subscribers": "Subscribers",
       "favorites": "Favorites",
@@ -799,7 +800,9 @@
       "steamNotRunning": "Steam is not running",
       "openPage": "Open its Workshop page",
       "copyLink": "Copy the link",
-      "copyId": "Copy the Workshop id"
+      "copyId": "Copy the Workshop id",
+      "subscribeMissing": "Subscribe to the missing ones ({{count}})",
+      "showCollection": "Show the collection"
     },
     "nexus": {
       "searchPlaceholder": "Search Nexus Mods (words in the mod name)",

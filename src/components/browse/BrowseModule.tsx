@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Copy, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Library, Link2, Loader2, Plus, Search, Trash2, Users, X,
+  AlertTriangle, CheckCircle2, Copy, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Layers, Library, Link2, Loader2, Plus, Search, Trash2, Users, X,
 } from 'lucide-react';
 import {
   CatalogModSummary, InstallResult, ModOrigin, NexusCategory, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort,
@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import {
-  BuildChips, CardGrid, CategoryBar, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
+  BuildChips, CardGrid, CardHover, CategoryBar, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
 } from './common';
 import { DetailTarget, ModDetail } from './ModDetail';
 import { useContextMenu } from '../common/ContextMenu';
@@ -180,6 +180,7 @@ const workshopCard = (
     subtitle={item.found ? i18next.t('browse.card.updated', { date: formatUnixDate(item.time_updated) }) : i18next.t('browse.card.notPublic')}
     chips={<>{installedIds.length > 0 && <InstalledChip />}<UpdateChips state={state} />{item.found && <BuildChips builds={item.builds} source={i18next.t('browse.card.workshopSource')} />}</>}
     summary={item.summary}
+    hover={item.found ? cardHover(item) : null}
     stats={item.found && (
       <>
         <span className="flex items-center gap-1" title={i18next.t('browse.card.subscribers')}><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
@@ -193,8 +194,14 @@ const workshopCard = (
 
 // The same four the Workshop's own Browse menu offers, in its wording.
 /** A collection: its picture, how many of its mods you already have, and a way in. */
-const collectionCard = (item: WorkshopItem, installedByItem: Map<string, string[]>, onOpen: (t: DetailTarget) => void) => {
-  const missing = item.children.filter((id) => !installedByItem.has(id)).length;
+const collectionCard = (
+  item: WorkshopItem,
+  installedByItem: Map<string, string[]>,
+  onOpen: (t: DetailTarget) => void,
+  menu?: (e: React.MouseEvent, item: WorkshopItem, missingIds: string[]) => void
+) => {
+  const missingIds = item.children.filter((id) => !installedByItem.has(id));
+  const missing = missingIds.length;
   return (
     <ModCard
       key={item.workshop_id}
@@ -219,9 +226,23 @@ const collectionCard = (item: WorkshopItem, installedByItem: Map<string, string[
         </>
       }
       onOpen={() => onOpen({ kind: 'collection', id: item.workshop_id, preview: item })}
+      onContextMenu={menu ? (e) => menu(e, item, missingIds) : undefined}
+      hover={cardHover(item)}
     />
   );
 };
+
+/** The Workshop's hover panel for a card: its description, when it was posted, its tags. */
+const cardHover = (item: WorkshopItem): CardHover => ({
+  title: item.title,
+  text: item.summary,
+  date: item.time_created
+    ? i18next.t('browse.card.posted', { date: formatUnixDate(item.time_created) })
+    : item.time_updated
+    ? i18next.t('browse.card.updated', { date: formatUnixDate(item.time_updated) })
+    : null,
+  tags: item.tags,
+});
 
 const WORKSHOP_SORTS: WorkshopSort[] = ['trending', 'top_rated', 'newest', 'recently_updated'];
 
@@ -388,6 +409,24 @@ const WorkshopTab: React.FC<{
       ...keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedByItem.get(item.workshop_id) ?? [] }),
     ]);
 
+  /** A collection card's menu: what is missing of it, its page, its link and id. */
+  const collectionMenu = (e: React.MouseEvent, item: WorkshopItem, missingIds: string[]) =>
+    showContextMenu(e, [
+      {
+        label: i18next.t('browse.workshop.subscribeMissing', { count: missingIds.length }),
+        icon: Plus,
+        onSelect: () => onSubscribe(missingIds, true),
+        disabled: !steamReady || missingIds.length === 0,
+        disabledReason: missingIds.length === 0 ? i18next.t('browse.card.allInstalled') : i18next.t('browse.workshop.steamNotRunning'),
+      },
+      { label: i18next.t('browse.workshop.showCollection'), icon: Layers, separatorBefore: true,
+        onSelect: () => onOpen({ kind: 'collection', id: item.workshop_id, preview: item }) },
+      { label: i18next.t('browse.workshop.openPage'), icon: ExternalLink,
+        onSelect: () => TauriService.openExternalUrl(item.page_url) },
+      { label: i18next.t('browse.workshop.copyLink'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
+      { label: i18next.t('browse.workshop.copyId'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+    ]);
+
   const lookupMissing = lookup ? lookup.items.filter((i) => !installedByItem.has(i.workshop_id)).length : 0;
   const lookupItems = lookup ? lookup.items.slice((lookupPage - 1) * PAGE_SIZE, lookupPage * PAGE_SIZE) : [];
 
@@ -491,7 +530,7 @@ const WorkshopTab: React.FC<{
           <CardGrid>
             {items.map((i) =>
               query.collections
-                ? collectionCard(i, installedByItem, onOpen)
+                ? collectionCard(i, installedByItem, onOpen, collectionMenu)
                 : workshopCard(i, installedByItem.get(i.workshop_id) ?? [], stateByItem.get(i.workshop_id), onOpen, cardMenu)
             )}
           </CardGrid>

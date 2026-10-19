@@ -23,6 +23,9 @@ pub struct WorkshopItem {
     pub preview_url: Option<String>,
     /// Unix seconds.
     pub time_updated: Option<u64>,
+    /// When it was first posted, unix seconds.
+    #[serde(default)]
+    pub time_created: Option<u64>,
     pub subscriptions: u64,
     pub favorited: u64,
     pub file_size: u64,
@@ -187,6 +190,7 @@ fn parse_item(v: &Value) -> Option<WorkshopItem> {
             .unwrap_or_default(),
         preview_url: v.get("preview_url").and_then(|x| x.as_str()).filter(|s| !s.is_empty()).map(str::to_string),
         time_updated: num("time_updated"),
+        time_created: num("time_created"),
         subscriptions: num("subscriptions").unwrap_or(0),
         favorited: num("favorited").unwrap_or(0),
         file_size: num("file_size").unwrap_or(0),

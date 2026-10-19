@@ -50,6 +50,48 @@ export const UpdateChips: React.FC<{ state: WorkshopInstallState | undefined | n
   </>
 );
 
+/** What a card shows in its hover panel, as the Workshop does: the description and when it was posted. */
+export interface CardHover {
+  title: string;
+  text: string;
+  /** "Posted: …", already worded. */
+  date?: string | null;
+  tags?: string[];
+}
+
+const HOVER_DELAY_MS = 350;
+const HOVER_WIDTH = 340;
+
+/**
+ * The panel beside a card while the pointer rests on it. It is placed against the window, to the
+ * right of the card or to its left when there is no room, and never takes the pointer, so moving
+ * on to the next card just moves the panel.
+ */
+const HoverPanel: React.FC<{ rect: DOMRect; hover: CardHover }> = ({ rect, hover }) => {
+  const gap = 8;
+  const right = rect.right + gap + HOVER_WIDTH <= window.innerWidth;
+  const left = right ? rect.right + gap : Math.max(gap, rect.left - gap - HOVER_WIDTH);
+  const top = Math.max(gap, Math.min(rect.top, window.innerHeight - 260));
+  return (
+    <div
+      role="tooltip"
+      className="fixed z-50 pointer-events-none rounded-lg border border-slate-600 bg-slate-800/95 shadow-2xl p-3 space-y-2 animate-fade-in"
+      style={{ left, top, width: HOVER_WIDTH }}
+    >
+      <div className="text-sm font-bold text-slate-100 leading-snug">{hover.title}</div>
+      {hover.text && <p className="text-xs text-slate-300 leading-relaxed line-clamp-[8]">{hover.text}</p>}
+      {hover.date && <div className="text-[11px] text-slate-400">{hover.date}</div>}
+      {hover.tags && hover.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {hover.tags.map((tag) => (
+            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-200">{tag}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /** A compact mod card; the whole card opens the detail page. */
 export const ModCard: React.FC<{
   image: string | null;
@@ -61,11 +103,36 @@ export const ModCard: React.FC<{
   onOpen?: () => void;
   /** Right-click menu for this card. */
   onContextMenu?: (e: React.MouseEvent) => void;
-}> = ({ image, title, subtitle, chips, stats, summary, onOpen, onContextMenu }) => (
+  /** The description panel shown while the pointer rests on the card. */
+  hover?: CardHover | null;
+}> = ({ image, title, subtitle, chips, stats, summary, onOpen, onContextMenu, hover }) => {
+  const [hoverRect, setHoverRect] = React.useState<DOMRect | null>(null);
+  const timer = React.useRef<number | null>(null);
+  const clear = () => {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = null;
+    setHoverRect(null);
+  };
+  React.useEffect(() => clear, []);
+  return (
   <button
     type="button"
-    onClick={onOpen}
-    onContextMenu={onContextMenu}
+    onClick={(e) => {
+      clear();
+      onOpen?.();
+      e.currentTarget.blur();
+    }}
+    onContextMenu={(e) => {
+      clear();
+      onContextMenu?.(e);
+    }}
+    onMouseEnter={(e) => {
+      if (!hover) return;
+      const el = e.currentTarget;
+      timer.current = window.setTimeout(() => setHoverRect(el.getBoundingClientRect()), HOVER_DELAY_MS);
+    }}
+    onMouseLeave={clear}
+    onWheel={() => hoverRect && clear()}
     disabled={!onOpen}
     className="group text-left flex flex-col rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden hover:border-slate-600 hover:bg-slate-900 transition cursor-pointer disabled:cursor-default"
   >
@@ -83,8 +150,10 @@ export const ModCard: React.FC<{
       {summary && <p className="text-[11px] text-slate-400 line-clamp-2">{summary}</p>}
       {stats && <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 mt-auto pt-1">{stats}</div>}
     </div>
+    {hover && hoverRect && <HoverPanel rect={hoverRect} hover={hover} />}
   </button>
-);
+  );
+};
 
 export const CardGrid: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>{children}</div>

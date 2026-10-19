@@ -724,6 +724,7 @@
     "card": {
       "item": "Ítem {{id}}",
       "updated": "actualizado {{date}}",
+      "posted": "Publicado: {{date}}",
       "notPublic": "No es público en Steam (quitado, privado o id incorrecto)",
       "subscribers": "Suscriptores",
       "favorites": "Favoritos",
@@ -799,7 +800,9 @@
       "steamNotRunning": "Steam no está abierto",
       "openPage": "Abrir su página del Workshop",
       "copyLink": "Copiar el enlace",
-      "copyId": "Copiar el id del Workshop"
+      "copyId": "Copiar el id del Workshop",
+      "subscribeMissing": "Suscribirse a los que faltan ({{count}})",
+      "showCollection": "Ver la colección"
     },
     "nexus": {
       "searchPlaceholder": "Buscar en Nexus Mods (palabras del nombre del mod)",

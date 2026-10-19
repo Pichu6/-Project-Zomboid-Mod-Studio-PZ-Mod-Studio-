@@ -696,6 +696,8 @@ export interface WorkshopItem {
   summary: string;
   preview_url: string | null;
   time_updated: number | null;
+  /** When it was first posted (unix seconds). */
+  time_created?: number | null;
   subscriptions: number;
   favorited: number;
   file_size: number;
