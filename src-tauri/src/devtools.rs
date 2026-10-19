@@ -18,6 +18,10 @@ pub struct FileProblem {
     pub message: String,
     /// `lua` or `script`.
     pub kind: String,
+    /// Which problem it is, for the app to say in the player's language: `script_extra_close`,
+    /// `script_unclosed`, `not_utf8`. Empty for the parser's own words, which stay as written.
+    #[serde(default)]
+    pub code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -48,10 +52,10 @@ pub fn lua_problems(path: &str, message: &str) -> Vec<FileProblem> {
         if let Some(e) = extra {
             text = format!("{} ({})", text, e);
         }
-        out.push(FileProblem { path: path.to_string(), line, col, message: text, kind: "lua".into() });
+        out.push(FileProblem { path: path.to_string(), line, col, message: text, kind: "lua".into(), code: String::new() });
     }
     if out.is_empty() {
-        out.push(FileProblem { path: path.to_string(), line: None, col: None, message: message.to_string(), kind: "lua".into() });
+        out.push(FileProblem { path: path.to_string(), line: None, col: None, message: message.to_string(), kind: "lua".into(), code: String::new() });
     }
     out
 }
@@ -94,14 +98,14 @@ pub fn script_problems(path: &str, text: &str) -> Vec<FileProblem> {
             '{' => open.push(line),
             '}' => {
                 if open.pop().is_none() {
-                    out.push(FileProblem { path: path.to_string(), line: Some(line), col: None, message: "a `}` with no block open; the game's script reader stops here".into(), kind: "script".into() });
+                    out.push(FileProblem { path: path.to_string(), line: Some(line), col: None, message: "a `}` with no block open; the game's script reader stops here".into(), kind: "script".into(), code: "script_extra_close".into() });
                 }
             }
             _ => {}
         }
     }
     for opened in open {
-        out.push(FileProblem { path: path.to_string(), line: Some(opened), col: None, message: "a `{` never closed; the rest of the file is lost to the game".into(), kind: "script".into() });
+        out.push(FileProblem { path: path.to_string(), line: Some(opened), col: None, message: "a `{` never closed; the rest of the file is lost to the game".into(), kind: "script".into(), code: "script_unclosed".into() });
     }
     out
 }
@@ -126,7 +130,7 @@ pub fn validate_mod(root: &Path) -> Result<ModValidation, String> {
         if lower.ends_with(".lua") {
             v.lua_files += 1;
             let Ok(text) = std::fs::read_to_string(path) else {
-                v.problems.push(FileProblem { path: rel, line: None, col: None, message: "not UTF-8 text; the game reads it, this check cannot".into(), kind: "lua".into() });
+                v.problems.push(FileProblem { path: rel, line: None, col: None, message: "not UTF-8 text; the game reads it, this check cannot".into(), kind: "lua".into(), code: "not_utf8".into() });
                 continue;
             };
             let result = crate::diff_engine::lua::validate_lua_syntax(&text);

@@ -171,6 +171,11 @@ pub fn merged_file_path(lang: &str, category: &str) -> String {
 
 /// `"Axe" (A) against "Hatchet" (B, C)`: each different text once, with who says it.
 pub fn distinct_values(c: &TranslationConflict) -> String {
+    distinct_value_list(c).join(" against ")
+}
+
+/// Each value once, with the mods that give it: `"Axe" (A, B)`.
+pub fn distinct_value_list(c: &TranslationConflict) -> Vec<String> {
     let mut seen: Vec<(String, Vec<String>)> = Vec::new();
     for (i, v) in c.values.iter().enumerate() {
         let v = v.trim().to_string();
@@ -179,7 +184,7 @@ pub fn distinct_values(c: &TranslationConflict) -> String {
             None => seen.push((v, vec![c.mods[i].clone()])),
         }
     }
-    seen.iter().map(|(v, who)| format!("\"{}\" ({})", v, who.join(", "))).collect::<Vec<_>>().join(" against ")
+    seen.iter().map(|(v, who)| format!("\"{}\" ({})", v, who.join(", "))).collect()
 }
 
 fn json_object(pairs: &[(String, String)]) -> String {

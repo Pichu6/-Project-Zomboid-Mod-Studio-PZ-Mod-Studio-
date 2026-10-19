@@ -18,7 +18,7 @@ use crate::load_order::mod_info::{
 };
 use modinfo::{format_game_version, parse_game_mod_info, GameModInfo};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -337,6 +337,29 @@ pub fn package_list_issue(package_id: &str, packaged: &[String], active: &[Strin
         fixes: vec![SuggestedFix::DisableMod { mod_id: package_id.to_string() }],
         related: Vec::new(),
         details: Vec::new(),
+        params: {
+            let shown = |list: &[&String]| list.iter().take(4).map(|s| s.as_str()).collect::<Vec<_>>().join(", ");
+            let count = |list: &[&String], one: &'static str, other: &'static str| match list.len() {
+                0 => "",
+                1 => one,
+                _ => other,
+            };
+            let more = |list: &[&String]| list.len().saturating_sub(4);
+            issue_params(&[
+                ("package", package_id),
+                ("missingN", &missing.len().to_string()),
+                ("missingList", &shown(&missing)),
+                ("missingMoreN", &more(&missing).to_string()),
+                ("missingMoreKey", if more(&missing) > 0 { "more_missing" } else { "" }),
+                ("missingKey", count(&missing, "pkg_missing_one", "pkg_missing_other")),
+                ("extraN", &extra.len().to_string()),
+                ("extraList", &shown(&extra)),
+                ("extraMoreN", &more(&extra).to_string()),
+                ("extraMoreKey", if more(&extra) > 0 { "more_extra" } else { "" }),
+                ("extraKey", count(&extra, "pkg_extra_one", "pkg_extra_other")),
+                ("sep", if missing.is_empty() || extra.is_empty() { "" } else { "; " }),
+            ])
+        },
     })
 }
 
@@ -395,6 +418,14 @@ pub fn issues_for_translation_conflicts(conflicts: &[crate::translations::Transl
             _ => (Severity::Info, "translation_conflict"),
         };
         list.push(severity, code, Some(&winner_id), message, fixes);
+        list.with(&[
+            ("template", "translation"),
+            ("losers", &others.join(", ")), ("winner", &winner), ("lang", &lang), ("category", &category),
+            ("what", if group.len() == 1 { &c.key } else { "" }), ("whatKey", if group.len() == 1 { "" } else { "things" }),
+            ("n", &group.len().to_string()), ("named", &named.join(", ")), ("ellipsis", if group.len() > 3 { ", ..." } else { "" }),
+            ("exKey", &c.key), ("exValuesVs", &crate::translations::distinct_value_list(c).join("\u{1f}")), ("exampleKey", "tr_example"),
+            ("settledKey", match state.as_str() { "merged" => "tr_merged", "stale" => "tr_stale", _ => "" }),
+        ]);
         if let Some(last) = list.0.last_mut() {
             last.related = mod_ids[..mod_ids.len().saturating_sub(1)].to_vec();
             last.details = group
@@ -603,7 +634,24 @@ pub fn issues_for_script_conflicts_with_state(
         } else {
             "script_definition_conflict"
         };
+        let example_params = group.iter().find_map(|(x, _)| x.clashing.first().map(|p| (x, p))).map(|(x, p)| {
+            let values: Vec<String> = p.values.iter().enumerate().filter_map(|(i, v)| v.as_ref().map(|v| format!("{} = {}", x.mods[i], short(v)))).collect();
+            (x.definition.clone(), values.join("\u{1f}"))
+        });
         list.push(severity, code, Some(&winner_id), message, fixes);
+        let many = c.mod_ids.len() > 2;
+        list.with(&[
+            ("template", if keys.is_empty() { "definition_nested" } else { "definition" }),
+            ("losers", &losers.join(", ")), ("winner", &winner), ("files", &c.files.join(" / ")), ("properties", &properties),
+            ("what", if group.len() == 1 { named[0] } else { "" }), ("whatKey", if group.len() == 1 { "" } else { "things" }),
+            ("n", &group.len().to_string()), ("named", &named.join(", ")), ("ellipsis", if group.len() > named.len() { ", ..." } else { "" }),
+            ("allKey", if many { "all" } else { "both" }), ("eachKey", if many { "each_all" } else { "each_both" }),
+            ("thingsKey", if group.len() == 1 { "thing_one" } else { "thing_other" }), ("propsKey", if keys.len() == 1 { "props_one" } else { "props_other" }),
+            ("exDef", example_params.as_ref().map(|e| e.0.as_str()).unwrap_or("")), ("exValuesVs", example_params.as_ref().map(|e| e.1.as_str()).unwrap_or("")),
+            ("exampleKey", if example_params.is_some() { "def_example" } else { "" }),
+            ("staleN", &group.len().to_string()),
+            ("settledKey", if settled { "def_settled" } else if stale { "def_stale" } else { "" }),
+        ]);
         if let Some(last) = list.0.last_mut() {
             last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
             last.details = details_by_file(group);
@@ -623,6 +671,7 @@ pub fn issues_for_script_conflicts_with_state(
             ),
             Vec::new(),
         );
+        list.with(&[("left", &left.to_string()), ("pairs", &(groups.len() - SHOWN).to_string())]);
     }
     list.0
 }
@@ -650,6 +699,10 @@ pub fn add_file_conflict_issues(report: &mut HealthReport, conflicts: &[crate::v
         fixes.push(SuggestedFix::OpenInMerger { relative_path: c.relative_path.clone() });
         let code = if c.state == "stale" { "file_conflict_stale" } else { "file_conflict" };
         list.push(Severity::Warning, code, c.mod_ids.last().map(String::as_str), message, fixes);
+        list.with(&[
+            ("path", &c.relative_path), ("mods", &c.mods.join(" / ")), ("others", &others.join(", ")), ("winner", &winner),
+            ("howKey", if c.auto_mergeable { "fc_auto" } else { "fc_manual" }),
+        ]);
         if let Some(last) = list.0.last_mut() {
             last.related = c.mod_ids[..c.mod_ids.len().saturating_sub(1)].to_vec();
         }
@@ -715,6 +768,11 @@ pub struct HealthIssue {
     /// which file, and where the merged block for each would live. Empty for most issues.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub details: Vec<IssueDetail>,
+    /// The values the message is made of, so the app can say it in the player's language: the
+    /// key is `code` (or `code_variant`, or `template`), and a `fooKey` param names a phrase the
+    /// app looks up for `{{foo}}`. The English `message` stays the text for everyone else.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
 }
 
 /// One file of one mod, and the things in it that another mod also declares.
@@ -734,6 +792,11 @@ pub struct DeclaredThing {
     pub merged_path: String,
     /// pending, merged or stale, as the file conflicts say it.
     pub state: String,
+}
+
+/// A message's values as `HealthIssue::params` holds them.
+pub fn issue_params(params: &[(&str, &str)]) -> BTreeMap<String, String> {
+    params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
 /// Collects issues; `related` is filled from the fixes (every fix names the other mod).
@@ -760,7 +823,14 @@ impl IssueList {
                 related.push(other.clone());
             }
         }
-        self.0.push(HealthIssue { severity, code: code.to_string(), mod_id: mod_id.map(str::to_string), message, fixes, related, details: vec![] });
+        self.0.push(HealthIssue { severity, code: code.to_string(), mod_id: mod_id.map(str::to_string), message, fixes, related, details: vec![], params: BTreeMap::new() });
+    }
+
+    /// The message's values, on the issue just pushed.
+    fn with(&mut self, params: &[(&str, &str)]) {
+        if let Some(last) = self.0.last_mut() {
+            last.params = issue_params(params);
+        }
     }
 
     fn relate_last(&mut self, other: &str) {
@@ -807,6 +877,7 @@ pub fn add_user_rule_issues(report: &mut HealthReport, catalog: &ModCatalog, act
                     name(&rule.mod_id), name(&rule.after),
                     rule.note.as_deref().map(|n| format!(" ({})", n)).unwrap_or_default()),
                 vec![SuggestedFix::MoveBefore { mod_id: rule.after.clone(), before: rule.mod_id.clone() }]);
+            list.with(&[("mod", &name(&rule.mod_id)), ("after", &name(&rule.after)), ("note", &rule.note.as_deref().map(|n| format!(" ({})", n)).unwrap_or_default())]);
         }
     }
     for issue in list.0 {
@@ -873,6 +944,10 @@ pub fn add_community_rule_issues(report: &mut HealthReport, catalog: &ModCatalog
         .collect();
     let position: HashMap<&str, usize> = active_ids.iter().enumerate().rev().map(|(i, id)| (id.as_str(), i)).collect();
     let name = |id: &str| catalog.get(id).map(describe).unwrap_or_else(|| id.to_string());
+    // The same, as values: the note as written, and the source behind a phrase of its own.
+    let why_params = |note: &Option<String>, source: &Option<String>| {
+        (note.as_deref().map(|n| format!(" ({})", n)).unwrap_or_default(), source.clone().unwrap_or_default())
+    };
     let why = |note: &Option<String>, source: &Option<String>| {
         let mut s = String::new();
         if let Some(n) = note {
@@ -891,6 +966,8 @@ pub fn add_community_rule_issues(report: &mut HealthReport, catalog: &ModCatalog
                 format!("The community has it that {} loads after {}{}, and it comes before it in the list",
                     name(&rule.mod_id), name(&rule.after), why(&rule.note, &rule.source)),
                 vec![SuggestedFix::MoveBefore { mod_id: rule.after.clone(), before: rule.mod_id.clone() }]);
+            let (note, source) = why_params(&rule.note, &rule.source);
+            list.with(&[("variant", "rules"), ("mod", &name(&rule.mod_id)), ("after", &name(&rule.after)), ("note", &note), ("source", &source), ("sourceTextKey", if source.is_empty() { "" } else { "source" })]);
         }
     }
     for pair in &community.incompatible {
@@ -899,6 +976,8 @@ pub fn add_community_rule_issues(report: &mut HealthReport, catalog: &ModCatalog
                 format!("The community has it that {} and {} do not go together{}, and both are on",
                     name(&pair.a), name(&pair.b), why(&pair.note, &pair.source)),
                 vec![SuggestedFix::DisableMod { mod_id: pair.b.clone() }, SuggestedFix::DisableMod { mod_id: pair.a.clone() }]);
+            let (note, source) = why_params(&pair.note, &pair.source);
+            list.with(&[("variant", "rules"), ("mod", &name(&pair.a)), ("other", &name(&pair.b)), ("note", &note), ("source", &source), ("sourceTextKey", if source.is_empty() { "" } else { "source" })]);
         }
     }
     for issue in list.0 {
@@ -940,6 +1019,16 @@ pub fn add_index_issues(
             None => who.to_string(),
         }
     };
+    // The same as the phrase the app looks up: verified, reported, verified_on or reported_on.
+    let seen_key = |build: &Option<String>, status: Status| {
+        match (status, build.is_some()) {
+            (Status::Verified, false) => "verified",
+            (Status::Reported, false) => "reported",
+            (Status::Verified, true) => "verified_on",
+            (Status::Reported, true) => "reported_on",
+        }
+    };
+    let note_semi = |note: &Option<String>| note.clone().map(|n| format!("{}; ", n)).unwrap_or_default();
     let mut list = IssueList(Vec::new());
     for id in &active_ids {
         let Some(registry) = index.get(id) else { continue };
@@ -955,6 +1044,8 @@ pub fn add_index_issues(
                     format!("The community index has it that {} and {} do not go together ({}{}), and both are on",
                         name(id), name(&rel.id), rel.note.clone().map(|n| format!("{}; ", n)).unwrap_or_default(), seen_on(&rel.build, rel.status)),
                     vec![SuggestedFix::DisableMod { mod_id: rel.id.clone() }, SuggestedFix::DisableMod { mod_id: id.clone() }]);
+                list.with(&[("variant", "index"), ("mod", &name(id)), ("other", &name(&rel.id)), ("note", &note_semi(&rel.note)),
+                    ("build", rel.build.as_deref().unwrap_or("")), ("seenKey", seen_key(&rel.build, rel.status))]);
             }
         }
         for rel in &registry.load_after {
@@ -964,6 +1055,8 @@ pub fn add_index_issues(
                         format!("The community index has it that {} loads after {} ({}{}), and it comes before it in the list",
                             name(id), name(&rel.id), rel.note.clone().map(|n| format!("{}; ", n)).unwrap_or_default(), seen_on(&rel.build, rel.status)),
                         vec![SuggestedFix::MoveBefore { mod_id: rel.id.clone(), before: id.clone() }]);
+                    list.with(&[("variant", "index"), ("mod", &name(id)), ("after", &name(&rel.id)), ("note", &note_semi(&rel.note)),
+                        ("build", rel.build.as_deref().unwrap_or("")), ("seenKey", seen_key(&rel.build, rel.status))]);
                 }
             }
         }
@@ -973,19 +1066,26 @@ pub fn add_index_issues(
             }
             let evidence = issue.file.as_deref().map(|f| match issue.line { Some(l) => format!(" ({}:{})", f, l), None => format!(" ({})", f) }).unwrap_or_default();
             let note = issue.note.clone().map(|n| format!(": {}", n)).unwrap_or_default();
-            let (severity, fixes, how) = match &issue.fix {
-                IssueFix::ShimPatch { name: patch } => (Severity::Warning, vec![SuggestedFix::EnableShimPatch { name: patch.clone() }], "; the shim's patch for it is off".to_string()),
+            let (severity, fixes, how, how_key) = match &issue.fix {
+                IssueFix::ShimPatch { name: patch } => (Severity::Warning, vec![SuggestedFix::EnableShimPatch { name: patch.clone() }], "; the shim's patch for it is off".to_string(), "shim_off"),
                 IssueFix::RequirePath { from, to } => (
                     Severity::Warning,
                     vec![SuggestedFix::MakeCompatibleCopy { mod_id: id.clone() }],
                     format!("; it requires \"{}\", which Build 42 has at \"{}\" (a compatible copy rewrites it; Fix the path in the Monitor Center publishes the one file)", from, to),
+                    "require_path",
                 ),
-                IssueFix::CompatibleCopy => (Severity::Warning, vec![SuggestedFix::MakeCompatibleCopy { mod_id: id.clone() }], "; a compatible copy fixes it".to_string()),
-                IssueFix::None => (Severity::Info, vec![], String::new()),
+                IssueFix::CompatibleCopy => (Severity::Warning, vec![SuggestedFix::MakeCompatibleCopy { mod_id: id.clone() }], "; a compatible copy fixes it".to_string(), "copy_fixes"),
+                IssueFix::None => (Severity::Info, vec![], String::new(), ""),
+            };
+            let (from, to) = match &issue.fix {
+                IssueFix::RequirePath { from, to } => (from.as_str(), to.as_str()),
+                _ => ("", ""),
             };
             list.push(severity, "community_known_issue", Some(id),
                 format!("{} has a known issue, per the community index: {}{}{}{} [{}]", name(id), issue.title, evidence, note, how, seen_on(&issue.build, issue.status)),
                 fixes);
+            list.with(&[("mod", &name(id)), ("title", &issue.title), ("evidence", &evidence), ("note", &note), ("howKey", how_key), ("from", from), ("to", to),
+                ("build", issue.build.as_deref().unwrap_or("")), ("seenKey", seen_key(&issue.build, issue.status))]);
         }
         if let Some(successor) = &registry.successor {
             let loadable = catalog.get(id).map(|m| matches!(m.loadability, Loadability::Loadable)).unwrap_or(true);
@@ -994,6 +1094,7 @@ pub fn add_index_issues(
                 list.push(Severity::Info, "community_successor", Some(id),
                     format!("{} has a version for this build, per the community index: {}{}", name(id), name(&successor.id), successor.note.clone().map(|n| format!(" ({})", n)).unwrap_or_default()),
                     fixes);
+                list.with(&[("mod", &name(id)), ("successor", &name(&successor.id)), ("note", &successor.note.clone().map(|n| format!(" ({})", n)).unwrap_or_default())]);
             }
         }
     }
@@ -1115,13 +1216,15 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
     let position: HashMap<&str, usize> = active_ids.iter().enumerate().rev().map(|(i, id)| (*id, i)).collect();
 
     // Availability like ChooseGameInfo.isAvailable (self + required mods, at any depth).
-    let mut unavailable_memo: HashMap<String, Option<String>> = HashMap::new();
+    // Why: the mod at fault and whether it is missing (`not_installed`) or not for this build
+    // (`cannot_load`).
+    let mut unavailable_memo: HashMap<String, Option<(&'static str, String)>> = HashMap::new();
     fn why_unavailable(
         catalog: &ModCatalog,
         id: &str,
         seen: &mut HashSet<String>,
-        memo: &mut HashMap<String, Option<String>>,
-    ) -> Option<String> {
+        memo: &mut HashMap<String, Option<(&'static str, String)>>,
+    ) -> Option<(&'static str, String)> {
         if let Some(r) = memo.get(id) {
             return r.clone();
         }
@@ -1129,8 +1232,8 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             return None; // cycle: the game stops following it as well
         }
         let reason = match catalog.get(id) {
-            None => Some(format!("{} is not installed", id)),
-            Some(m) if m.loadability != Loadability::Loadable => Some(format!("{} cannot load on this build", describe(m))),
+            None => Some(("not_installed", id.to_string())),
+            Some(m) if m.loadability != Loadability::Loadable => Some(("cannot_load", describe(m))),
             Some(m) => m.info.require.iter().find_map(|r| why_unavailable(catalog, r, seen, memo)),
         };
         memo.insert(id.to_string(), reason.clone());
@@ -1145,74 +1248,106 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
         if !seen_entries.insert(id) {
             list.push(Severity::Warning, "duplicate_entry", Some(id), format!("{} is in the active list more than once", id),
                 vec![SuggestedFix::RemoveFromList { entry: entry.to_string() }]);
+            list.with(&[("mod", id)]);
             continue;
         }
         let Some(m) = resolve_entry(catalog, entry) else {
             let mut fixes = vec![SuggestedFix::RemoveFromList { entry: entry.to_string() }];
-            let message = match near_match(catalog, id) {
+            let (message, params) = match near_match(catalog, id) {
                 Some(similar) => {
                     fixes.insert(0, SuggestedFix::EnableMod { mod_id: similar.id.clone() });
-                    format!("{} is not installed. Mod ids are case-sensitive: did you mean {}?", id, similar.id)
+                    (format!("{} is not installed. Mod ids are case-sensitive: did you mean {}?", id, similar.id),
+                        issue_params(&[("variant", "similar"), ("mod", id), ("similar", &similar.id)]))
                 }
                 None => {
                     fixes.push(SuggestedFix::SubscribeWorkshop { hint: id.to_string() });
-                    format!("{} is enabled but not installed (unsubscribed or deleted)", id)
+                    (format!("{} is enabled but not installed (unsubscribed or deleted)", id), issue_params(&[("variant", "gone"), ("mod", id)]))
                 }
             };
             list.push(Severity::Error, "missing_mod", Some(id), message, fixes);
+            list.0.last_mut().unwrap().params = params;
             continue;
         };
 
         // Mods from Workshop folders can get an adapted copy in Zomboid/mods.
         let compat_fix = (m.source != ModSource::Local).then(|| SuggestedFix::MakeCompatibleCopy { mod_id: m.id.clone() });
+        let name = describe(m);
+        let build = catalog.game_version.as_deref().unwrap_or("?");
         match &m.loadability {
             Loadability::Loadable => {}
-            Loadability::NoFolderForBuild { available_folders } => list.push(
+            Loadability::NoFolderForBuild { available_folders } => {
+                list.push(
                 Severity::Error, "not_for_build", Some(id),
                 format!("{} has no files for game build {} (it has: {}). The game will not load it.",
                     describe(m), catalog.game_version.as_deref().unwrap_or("?"),
                     if available_folders.is_empty() { "nothing usable".to_string() } else { available_folders.join(", ") }),
                 compat_fix.clone().into_iter().chain([SuggestedFix::DisableMod { mod_id: m.id.clone() }]).collect(),
-            ),
-            Loadability::OutsideVersionRange { version_min, version_max } => list.push(
+                );
+                let folders = available_folders.join(", ");
+                list.with(&[("variant", if available_folders.is_empty() { "none" } else { "some" }), ("mod", &name), ("build", build), ("folders", &folders)]);
+            }
+            Loadability::OutsideVersionRange { version_min, version_max } => {
+                list.push(
                 Severity::Error, "outside_version_range", Some(id),
                 format!("{} supports game versions {} to {}; you have {}. The game will not load it.",
                     describe(m), version_min.as_deref().unwrap_or("any"), version_max.as_deref().unwrap_or("any"),
                     catalog.game_version.as_deref().unwrap_or("?")),
                 compat_fix.clone().into_iter().chain([SuggestedFix::DisableMod { mod_id: m.id.clone() }]).collect(),
-            ),
-            Loadability::InvalidModInfo { reason } => list.push(
+                );
+                list.with(&[
+                    ("mod", &name), ("build", build),
+                    ("min", version_min.as_deref().unwrap_or("")), ("minKey", if version_min.is_none() { "any" } else { "" }),
+                    ("max", version_max.as_deref().unwrap_or("")), ("maxKey", if version_max.is_none() { "any" } else { "" }),
+                ]);
+            }
+            Loadability::InvalidModInfo { reason } => {
+                list.push(
                 Severity::Error, "invalid_mod_info", Some(id),
                 format!("{}: {}", describe(m), reason),
                 compat_fix.into_iter().chain([SuggestedFix::DisableMod { mod_id: m.id.clone() }]).collect(),
-            ),
+                );
+                list.with(&[("mod", &name), ("reason", reason)]);
+            }
         }
 
         for req in &m.info.require {
             match catalog.get(req) {
                 None => {
-                    let message = match near_match(catalog, req) {
+                    let similar = near_match(catalog, req);
+                    let message = match similar {
                         Some(similar) => format!("{} requires {}, which is not installed (an installed mod is called {}: ids are case-sensitive)", describe(m), req, similar.id),
                         None => format!("{} requires {}, which is not installed", describe(m), req),
                     };
                     list.push(Severity::Error, "missing_dependency", Some(id), message,
                         vec![SuggestedFix::SubscribeWorkshop { hint: req.clone() }, SuggestedFix::DisableMod { mod_id: m.id.clone() }]);
+                    match similar {
+                        Some(similar) => list.with(&[("variant", "similar"), ("mod", &name), ("dep", req), ("similar", &similar.id)]),
+                        None => list.with(&[("variant", "plain"), ("mod", &name), ("dep", req)]),
+                    }
                 }
                 Some(dep) => match position.get(req.as_str()) {
-                    None => list.push(Severity::Error, "dependency_not_enabled", Some(id),
+                    None => {
+                        list.push(Severity::Error, "dependency_not_enabled", Some(id),
                         format!("{} requires {}, which is installed but not enabled", describe(m), describe(dep)),
                         vec![
                             SuggestedFix::EnableMod { mod_id: dep.id.clone() },
                             // ...and place it before the mod that needs it.
                             SuggestedFix::MoveBefore { mod_id: dep.id.clone(), before: m.id.clone() },
-                        ]),
-                    Some(&dep_pos) if dep_pos > idx => list.push(Severity::Warning, "dependency_after", Some(id),
+                        ]);
+                        list.with(&[("mod", &name), ("dep", &describe(dep))]);
+                    }
+                    Some(&dep_pos) if dep_pos > idx => {
+                        list.push(Severity::Warning, "dependency_after", Some(id),
                         format!("{} requires {}, but {} loads after it", describe(m), dep.id, dep.id),
-                        vec![SuggestedFix::MoveBefore { mod_id: dep.id.clone(), before: m.id.clone() }]),
+                        vec![SuggestedFix::MoveBefore { mod_id: dep.id.clone(), before: m.id.clone() }]);
+                        list.with(&[("mod", &name), ("dep", &dep.id)]);
+                    }
                     Some(_) => {
-                        if let Some(reason) = why_unavailable(catalog, req, &mut HashSet::new(), &mut unavailable_memo) {
+                        if let Some((why, culprit)) = why_unavailable(catalog, req, &mut HashSet::new(), &mut unavailable_memo) {
+                            let reason = if why == "not_installed" { format!("{} is not installed", culprit) } else { format!("{} cannot load on this build", culprit) };
                             list.push(Severity::Error, "dependency_unavailable", Some(id),
                                 format!("{} requires {}, which is unavailable: {}", describe(m), dep.id, reason), vec![]);
+                            list.with(&[("variant", why), ("mod", &name), ("dep", &dep.id), ("culprit", &culprit)]);
                             list.relate_last(&dep.id);
                         }
                     }
@@ -1226,6 +1361,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                     list.push(Severity::Warning, "load_after_order", Some(id),
                         format!("{} asks to load after {}, but {} comes later in the list", describe(m), after, after),
                         vec![SuggestedFix::MoveBefore { mod_id: after.clone(), before: m.id.clone() }]);
+                    list.with(&[("mod", &name), ("other", after)]);
                 }
             }
         }
@@ -1235,6 +1371,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                     list.push(Severity::Warning, "load_before_order", Some(id),
                         format!("{} asks to load before {}, but {} comes earlier in the list", describe(m), before, before),
                         vec![SuggestedFix::MoveBefore { mod_id: m.id.clone(), before: before.clone() }]);
+                    list.with(&[("mod", &name), ("other", before)]);
                 }
             }
         }
@@ -1245,6 +1382,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                     list.push(Severity::Error, "incompatible", Some(id),
                         format!("{} is marked incompatible with {}, and both are enabled", describe(m), other),
                         vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }, SuggestedFix::DisableMod { mod_id: other.clone() }]);
+                    list.with(&[("mod", &name), ("other", other)]);
                 }
             }
         }
@@ -1254,8 +1392,9 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                 let when = state.latest_time.and_then(|t| chrono::DateTime::from_timestamp(t as i64, 0)).map(|d| d.format("%Y-%m-%d").to_string());
                 list.push(Severity::Warning, "workshop_update_pending", Some(id),
                     format!("Steam has a newer version of {}{} that is not downloaded yet. Let Steam download it (restart Steam if it is stuck): servers reject players whose mod versions differ (\"Workshop item version is different than the server's\").",
-                        describe(m), when.map(|w| format!(" (published {})", w)).unwrap_or_default()),
+                        describe(m), when.as_ref().map(|w| format!(" (published {})", w)).unwrap_or_default()),
                     vec![SuggestedFix::KeepVersion { mod_id: m.id.clone() }, SuggestedFix::OpenWorkshopPage { workshop_id: workshop_id.clone() }]);
+                list.with(&[("mod", &name), ("date", when.as_deref().unwrap_or("")), ("publishedKey", if when.is_some() { "published" } else { "" })]);
             }
             if state.updated_since_last_play {
                 updated_since_play.push(describe(m));
@@ -1268,11 +1407,13 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                 format!("{} runs from a compatible copy in Zomboid/mods ({}). It is used when the game is started from PZ Mod Studio; starting it from Steam needs the launch option -modfolders mods,workshop,steam.",
                     describe(m), changes.join(" ")),
                 vec![SuggestedFix::RemoveCompatibleCopy { folder }]);
+            list.with(&[("mod", &name), ("changes", &changes.join(" "))]);
         }
 
         for copy in catalog.mods.iter().filter(|c| c.id == m.id && c.shadowed_by.is_some()) {
             list.push(Severity::Info, "shadowed_copy", Some(id),
                 format!("Another copy of {} at {} is ignored: the game uses the one at {}", m.id, copy.root_dir, m.root_dir), vec![]);
+            list.with(&[("mod", &m.id), ("ignored", &copy.root_dir), ("used", &m.root_dir)]);
         }
     }
 
@@ -1283,6 +1424,7 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             format!("{} active mods were updated since you last played: {}{}. If a save misbehaves, start with these.",
                 updated_since_play.len(), shown.join(", "), if more > 0 { format!(" and {} more", more) } else { String::new() }),
             vec![]);
+        list.with(&[("n", &updated_since_play.len().to_string()), ("mods", &shown.join(", ")), ("more", &more.to_string()), ("andMoreKey", if more > 0 { "and_more" } else { "" })]);
     }
 
     let mut issues = list.0;

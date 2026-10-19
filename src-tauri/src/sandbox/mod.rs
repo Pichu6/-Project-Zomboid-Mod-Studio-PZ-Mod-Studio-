@@ -2,6 +2,7 @@ pub mod load_times;
 pub mod requires;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
@@ -32,6 +33,12 @@ pub struct TranslatedErrorPayload {
     pub mod_name: Option<String>,
     /// Whether the game threw (ERROR, or a stack trace) or complained and carried on (WARN).
     pub severity: Severity,
+    /// Which kind of card this is, so the app can say it in the player's language, with the
+    /// values its texts are made of (as `HealthIssue::params`). The English texts stay as they are.
+    #[serde(default)]
+    pub code: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
 }
 
 /// What the game itself said about the line a card came from.
@@ -476,6 +483,12 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
         let file = source_file.clone().unwrap_or_else(|| "a file".to_string());
         return TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "package_copy".to_string(),
+            params: crate::catalog::issue_params(&[
+                ("file", source_file.as_deref().unwrap_or("")),
+                ("fileKey", if source_file.is_none() { "a_file" } else { "" }),
+                ("package", package),
+            ]),
             raw_error: line.to_string(),
             source_file,
             line_number: None,
@@ -492,6 +505,12 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
     }
     TranslatedErrorPayload {
         id: format!("err_{}", counter),
+        code: match severity {
+            Severity::Exception => "mod_named_exception",
+            Severity::Warning => "mod_named_warning",
+        }
+        .to_string(),
+        params: crate::catalog::issue_params(&[("mod", mod_name)]),
         raw_error: line.to_string(),
         source_file,
         line_number: None,
@@ -536,6 +555,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     if line.contains("isLocalPlayer()") || line.contains("ToggleDoorActual") || line.contains("ToggleWindow") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "door_npc".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("zombie/iso/objects/IsoDoor.java".to_string()),
             line_number: None,
@@ -549,6 +570,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("BWORoomPrograms") || (line.contains("restaurant") && line.contains("getName")) {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "bandits_room".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("media/lua/shared/BWORoomPrograms.lua".to_string()),
             line_number: None,
@@ -562,6 +585,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("dSAG") || line.contains("onNewDay") || line.contains("ReportWindow") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "daily_report".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("media/lua/client/dSAG/dSAG_Window.lua".to_string()),
             line_number: None,
@@ -575,6 +600,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("UnknownFormatConversionException") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "translator_format".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("zombie/core/Translator.java".to_string()),
             line_number: None,
@@ -588,6 +615,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("attempted index of non-table") || line.contains("attempted index: getName of non-table") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "nil_table".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: None,
             line_number: None,
@@ -601,6 +630,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("NullPointerException") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "java_npe".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: None,
             line_number: None,
@@ -614,6 +645,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("KahluaThreadException") || line.contains("se.krka.kahlua.vm.KahluaException") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "kahlua".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: None,
             line_number: None,
@@ -627,6 +660,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("IndexOutOfBoundsException") || line.contains("Index 0 out of bounds") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "index_bounds".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("java/util/ArrayList.java".to_string()),
             line_number: None,
@@ -640,6 +675,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("FancyHandwork") || line.contains("fancyMP") || line.contains("aFancyHandwork") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "fancy_handwork".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("media/lua/client/aFancyHandwork.lua".to_string()),
             line_number: None,
@@ -653,6 +690,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("SaucedCarts") || line.contains("Pushable Carts") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "sauced_carts".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: Some("media/lua/client/SaucedCarts.lua".to_string()),
             line_number: None,
@@ -666,6 +705,8 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     } else if line.contains("duplicate recipe") || line.contains("duplicate item") {
         Some(TranslatedErrorPayload {
             id: format!("err_{}", counter),
+            code: "duplicate_id".to_string(),
+            params: BTreeMap::new(),
             raw_error: line.to_string(),
             source_file: None,
             line_number: None,

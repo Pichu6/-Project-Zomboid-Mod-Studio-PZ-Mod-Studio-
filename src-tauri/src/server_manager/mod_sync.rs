@@ -154,8 +154,9 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
     let game = catalog.game_version_int();
     let vanilla = vanilla_maps(pz_install_dir);
     let mut issues: Vec<HealthIssue> = Vec::new();
-    let mut add = |severity: Severity, code: &str, message: String| {
+    let mut add = |severity: Severity, code: &str, message: String, params: &[(&str, &str)]| {
         issues.push(HealthIssue {
+            params: crate::catalog::issue_params(params),
             details: vec![],
             severity,
             code: code.to_string(),
@@ -177,6 +178,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                     "Mods= lists {}, which is not installed on this machine. If the server does not have it either, it will not load.",
                     entry
                 ),
+                &[("entry", entry)],
             );
             continue;
         };
@@ -191,6 +193,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                             "{} is in Mods= but its Workshop id {} is not in WorkshopItems=, so the server never downloads it and the mod is missing in game.",
                             m.name, ws
                         ),
+                        &[("mod", &m.name), ("item", ws)],
                     );
                 }
             }
@@ -201,6 +204,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                     "{} did not come from the Workshop, so the server cannot download it: copy its folder into the server's Zomboid/mods itself.",
                     m.name
                 ),
+                &[("mod", &m.name)],
             ),
         }
         if m.loadability != crate::catalog::Loadability::Loadable {
@@ -208,6 +212,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                 Severity::Warning,
                 "server_mod_not_for_build",
                 format!("{} cannot be loaded by the build installed here ({}).", m.name, entry),
+                &[("mod", &m.name), ("entry", entry)],
             );
         }
         // Map mods have to be named in Map= as well, or the game ignores their map.
@@ -222,6 +227,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                     m.name,
                     forgotten.join(", ")
                 ),
+                &[("mod", &m.name), ("maps", &forgotten.join(", "))],
             );
         }
     }
@@ -250,7 +256,13 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                 if from_item.len() == 1 { "it" } else { "them" }
             )
         };
-        add(Severity::Warning, "server_item_unused", message);
+        let holds = from_item.join(", ");
+        let params: &[(&str, &str)] = if from_item.is_empty() {
+            &[("variant", "not_installed"), ("item", item)]
+        } else {
+            &[("variant", if from_item.len() == 1 { "holds_one" } else { "holds_many" }), ("item", item), ("mods", &holds)]
+        };
+        add(Severity::Warning, "server_item_unused", message, params);
     }
 
     // The base map goes last: the game reads Map= in order and the last entry is the base.
@@ -264,6 +276,7 @@ pub fn check(catalog: &ModCatalog, content: &str, pz_install_dir: &str) -> Serve
                     "Map= ends with {}, which is not one of the game's own maps. The base map (for example Muldraugh, KY) belongs last.",
                     last
                 ),
+                &[("map", last)],
             );
         }
     }
