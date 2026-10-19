@@ -500,6 +500,8 @@
       "moreAction": "Click: open Mod Health on them"
     },
     "statWorkshop": "from the Workshop",
+    "statWorkshopOf": "of {{total}} from the Workshop",
+    "workshopInProfileTitle": "{{shown}} of your {{total}} Workshop subscriptions have a mod in the profile \"{{name}}\". The others are installed and show with \"Showing everything\".",
     "statMods": "mods",
     "statActive": "active",
     "tagLabel": "Filter by tag",

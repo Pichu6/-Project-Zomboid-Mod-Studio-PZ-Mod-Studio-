@@ -387,6 +387,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }, [mods, activeProfile, showEveryMod, inActiveProfile]);
   /** The mod in the inspector: the one picked, else the first the list is about (none in an empty profile). */
   const selectedMod = scopeMods.find((m) => m.mod_id === selectedModId) || scopeMods[0] || null;
+  /** Workshop items installed in all, whichever profile: what Steam calls your subscribed items. */
+  const libraryWorkshopItems = useMemo(
+    () => new Set(mods.filter((m) => m.workshop_id && m.workshop_id !== '9999999999' && !m.mod_id.startsWith('Z_PZModStudio_')).map((m) => m.workshop_id)).size,
+    [mods]
+  );
   const headerStats = useMemo(() => {
     const workshop = new Set<string>();
     let mapCount = 0;
@@ -944,9 +949,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <code className="text-[11px] font-mono font-normal text-slate-500 truncate">Zomboid/mods/default.txt</code>
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-400">
-            <span title={t('modList.subscriptions')}>
-              <b className="text-cyan-400">{headerStats.workshop}</b> {t('modList.statWorkshop')}
-            </span>
+            {headerStats.workshop !== libraryWorkshopItems ? (
+              <span title={t('modList.workshopInProfileTitle', { shown: headerStats.workshop, total: libraryWorkshopItems, name: activeProfile?.name ?? '' })}>
+                <b className="text-cyan-400">{headerStats.workshop}</b> {t('modList.statWorkshopOf', { total: libraryWorkshopItems })}
+              </span>
+            ) : (
+              <span title={t('modList.subscriptions')}>
+                <b className="text-cyan-400">{headerStats.workshop}</b> {t('modList.statWorkshop')}
+              </span>
+            )}
             <span className="text-slate-700">|</span>
             <span>
               <b className="text-slate-200">{headerStats.total}</b> {t('modList.statMods')}

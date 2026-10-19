@@ -500,6 +500,8 @@
       "moreAction": "Clic: abrir Salud de mods en ellos"
     },
     "statWorkshop": "del Workshop",
+    "statWorkshopOf": "de {{total}} del Workshop",
+    "workshopInProfileTitle": "{{shown}} de tus {{total}} suscripciones del Workshop tienen algún mod en el perfil \"{{name}}\". Las otras están instaladas y se ven con \"Mostrando todo\".",
     "statMods": "mods",
     "statActive": "activos",
     "tagLabel": "Filtrar por etiqueta",
