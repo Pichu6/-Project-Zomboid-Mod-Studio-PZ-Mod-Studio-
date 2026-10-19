@@ -99,7 +99,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           <h1 className="text-sm font-bold text-slate-100 leading-none flex items-center gap-2">
             PZ Mod Studio
             <span className="text-[10px] font-normal text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.5 rounded font-mono">
-              v1.0.0
+              v{__APP_VERSION__}
             </span>
           </h1>
           <p className="text-[11px] text-slate-400 leading-tight mt-0.5 font-mono">

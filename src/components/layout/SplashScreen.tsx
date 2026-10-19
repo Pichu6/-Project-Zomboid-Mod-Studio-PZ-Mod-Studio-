@@ -107,7 +107,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping" />
           <span>Project Zomboid Mod Studio</span>
         </div>
-        <div>v1.0.0 • Standalone</div>
+        <div>v{__APP_VERSION__} • Standalone</div>
       </div>
 
       {/* Main Center Area: Iconic Project Zomboid Intro Typography */}

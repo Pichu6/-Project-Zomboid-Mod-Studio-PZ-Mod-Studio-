@@ -26,8 +26,8 @@ PZ Mod Studio is one window for all of that. It never touches the game's code: i
 
 ## Download and first start
 
-1. Go to the **[Releases page](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases)** and download `Project-Zomboid-Mod-Studio.exe`.
-2. Put it in any folder and double-click it. There is nothing to install.
+1. Go to the **[latest release](https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest)** and download `PZ-Mod-Studio-Portable-v1.1.0.zip` (or the installer, if you prefer one).
+2. Extract it anywhere and double-click `Project-Zomboid-Mod-Studio.exe`. There is nothing to install.
 3. It finds your game, your Steam Workshop folder and your `Zomboid` folder by itself. If you use a custom Steam library or GOG, set the folders in **App Settings**.
 
 Requirements: Windows 10/11 (64-bit). The app can be switched between **English and Spanish** in Settings.
