@@ -28,6 +28,35 @@ pub struct ModManifest {
     /// Whether the installed game build can load this mod (None: build unknown).
     #[serde(default)]
     pub loadable_on_installed_build: Option<bool>,
+    /// Switched on in the list the game reads, but no folder holds it (unsubscribed or deleted).
+    /// The Mod List keeps it as a row so Mod Health can say so and the player can drop it.
+    #[serde(default)]
+    pub not_installed: bool,
+}
+
+/// A row for a mod the active list names but nothing installed provides.
+fn not_installed_row(id: &str) -> ModManifest {
+    ModManifest {
+        id: id.to_string(),
+        name: id.to_string(),
+        description: None,
+        workshop_id: None,
+        author: None,
+        version: None,
+        pzversion: None,
+        url: None,
+        require: Vec::new(),
+        load_mod_after: Vec::new(),
+        incompatible: Vec::new(),
+        icon_path: None,
+        poster_url: None,
+        is_library: false,
+        is_map_mod: false,
+        enabled: true,
+        is_packaged: None,
+        loadable_on_installed_build: None,
+        not_installed: true,
+    }
 }
 
 /// Helper function to sanitize and clean raw mod ID strings.
@@ -313,6 +342,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         enabled: false,
         is_packaged: None,
         loadable_on_installed_build: None,
+        not_installed: false,
     };
 
     apply_known_dependency_heuristics(&mut manifest);
@@ -844,6 +874,7 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
 
     let mut result_mods = Vec::new();
     let mut processed_ids = HashSet::new();
+    let mut missing_seen: HashSet<String> = HashSet::new();
 
     if let Some(order) = saved_load_order {
         let active_set = saved_active_ids.unwrap_or_default();
@@ -857,6 +888,12 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                     result_mods.push(manifest);
                     processed_ids.insert(key);
                 }
+            } else if !clean_id.is_empty()
+                && !clean_id.starts_with("Z_PZModStudio_")
+                && (active_set.contains(&raw_id) || active_set.contains(&clean_id))
+                && missing_seen.insert(clean_id.clone())
+            {
+                result_mods.push(not_installed_row(&clean_id));
             }
         }
     } else if let Ok(mut ini_data) = read_mod_list_ini(&paths.mod_list_ini_path) {
@@ -883,8 +920,11 @@ pub fn scan_all_installed_mods(paths: &StudioPaths) -> Vec<ModManifest> {
                 // This synthetic package is currently in DRAFT (is_packaged = false) or was deleted.
                 // Do NOT include it in result_mods, and mark ini for pruning!
                 modified_ini = true;
+            } else if !active_id.is_empty() && missing_seen.insert(active_id.clone()) {
+                // Unsubscribed or deleted but still switched on: the game skips it with a line in
+                // console.txt. Keep it in the list so Mod Health reports it.
+                result_mods.push(not_installed_row(&active_id));
             }
-            // If mod was unsubscribed and no longer exists on disk, skip it so it is cleaned up!
         }
 
         if modified_ini && !paths.mod_list_ini_path.is_empty() {
@@ -1368,6 +1408,45 @@ mod tests {
         assert_eq!(on, vec!["ModC"]);
         let saved = fs::read_to_string(z.join("PZModStudio_MasterLoadOrder.json")).unwrap();
         assert!(saved.contains("\"ModC\"") && !saved.contains("\"active_mod_ids\": [\n    \"ModA\""), "{}", saved);
+        let _ = fs::remove_dir_all(&z);
+    }
+
+    /// A mod switched on in default.txt that nothing installed provides stays in the list, marked,
+    /// so Mod Health's missing_mod reaches the Mod List. Studio packages that are gone do not.
+    #[test]
+    fn switched_on_but_not_installed_mods_stay_as_rows() {
+        let z = std::env::temp_dir().join(format!("pzms-scan-missing-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&z);
+        let dir = z.join("mods").join("ModA");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("mod.info"), "name=ModA\nid=ModA\n").unwrap();
+        fs::write(
+            z.join("mods").join("default.txt"),
+            "VERSION = 1,\nmods\n{\n    mod = ModA,\n    mod = Gone,\n    mod = Z_PZModStudio_Old,\n}\n",
+        )
+        .unwrap();
+        let paths = StudioPaths {
+            pz_install_dir: String::new(),
+            workshop_dir: z.join("no-workshop").to_string_lossy().to_string(),
+            user_zomboid_dir: z.to_string_lossy().to_string(),
+            mod_list_ini_path: z.join("mods").join("default.txt").to_string_lossy().to_string(),
+            carrier_workshop_id: None,
+            is_valid: true,
+        };
+        let mods = scan_all_installed_mods(&paths);
+        let rows: Vec<(&str, bool, bool)> = mods.iter().map(|m| (m.id.as_str(), m.enabled, m.not_installed)).collect();
+        assert_eq!(rows, vec![("ModA", true, false), ("Gone", true, true)]);
+
+        // The same through a saved order.
+        fs::write(
+            z.join("PZModStudio_MasterLoadOrder.json"),
+            r#"{"load_order":["Gone","ModA"],"active_mod_ids":["Gone","ModA"]}"#,
+        )
+        .unwrap();
+        fs::write(z.join("mods").join("default.txt"), "VERSION = 1,\nmods\n{\n    mod = Gone,\n    mod = ModA,\n}\n").unwrap();
+        let mods = scan_all_installed_mods(&paths);
+        let rows: Vec<(&str, bool, bool)> = mods.iter().map(|m| (m.id.as_str(), m.enabled, m.not_installed)).collect();
+        assert_eq!(rows, vec![("Gone", true, true), ("ModA", true, false)]);
         let _ = fs::remove_dir_all(&z);
     }
 

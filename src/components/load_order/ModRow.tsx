@@ -196,6 +196,14 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             </span>
           )}
 
+          {mod.not_installed && (
+            <Tip content={<TipBody title={t('modList.row.notInstalled')} tone="red"><RichText text={t('modList.row.notInstalledBody')} /></TipBody>}>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/50 shrink-0">
+                {t('modList.row.notInstalled')}
+              </span>
+            </Tip>
+          )}
+
           {mod.loadable_on_installed_build === false && !mod.enabled && (
             <Tip content={<TipBody title={t('modList.row.notForBuild')} tone="amber"><RichText text={t('modList.row.notForBuildTitle')} /></TipBody>}>
               <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0">

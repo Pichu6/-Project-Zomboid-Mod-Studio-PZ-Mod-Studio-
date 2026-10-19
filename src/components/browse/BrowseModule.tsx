@@ -11,7 +11,7 @@ import { ListsTab } from './ListsTab';
 import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, reportBackendError } from '../../services/tauri';
+import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import {
   BuildChips, CardGrid, CategoryBar, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
 } from './common';
@@ -239,7 +239,7 @@ const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSav
       setKeyInput('');
       onSaved();
     } catch (err) {
-      setError(String(err));
+      setError(explainError(err));
     } finally {
       setSaving(false);
     }
@@ -333,7 +333,7 @@ const WorkshopTab: React.FC<{
       const next = { ...toBrowseQuery(q, p + 1) };
       if (p + 1 <= r.pages) TauriService.prefetch(TauriService.workshopSearchKey(next), () => TauriService.workshopSearch(next));
     } catch (err) {
-      setSearchError(String(err));
+      setSearchError(explainError(err));
       setItems([]);
       setTotal(0);
     } finally {

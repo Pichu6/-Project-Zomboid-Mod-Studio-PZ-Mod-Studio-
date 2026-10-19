@@ -4,7 +4,14 @@
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--mcp" || a == "--mcp-server" || a == "mcp") {
-        pz_mod_studio_lib::mcp::run_stdio_server();
+        // The same 8 MB stack as pz-mcp-server.exe: the main thread's 1 MB is not enough for the
+        // Lua parser on a deeply nested file.
+        let server = std::thread::Builder::new()
+            .name("pz-mcp-server-main".into())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(pz_mod_studio_lib::mcp::run_stdio_server)
+            .expect("Failed to spawn MCP server thread");
+        let _ = server.join();
         return;
     }
     // Steam's API may only be started once in a process, so the window asks a copy of itself to

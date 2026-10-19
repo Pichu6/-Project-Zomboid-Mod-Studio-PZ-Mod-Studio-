@@ -346,6 +346,9 @@ pub fn launch_dedicated_server(
     nosteam: Option<bool>,
     admin_password: Option<String>,
 ) -> Result<u32, String> {
+    // The server is started from the game folder the Studio saved, not one the page names.
+    let _ = pz_install_dir;
+    let pz_install_dir = crate::vfs::trusted_install_dir();
     let install_path = Path::new(&pz_install_dir);
     if !install_path.exists() {
         return Err(format!("Install directory not found: {}", pz_install_dir));

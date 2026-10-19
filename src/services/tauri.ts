@@ -80,20 +80,121 @@ export interface BackendErrorDetail {
 const errorMessage = (err: unknown): string =>
   typeof err === 'string' ? err : err instanceof Error ? err.message : JSON.stringify(err);
 
-/** Logs a failed backend call and tells the UI about it, so failures never look like success. */
+/**
+ * What Rust writes in English (errors, and a few notes such as the end of a bisect hunt), in the
+ * chosen language: the pattern of each known text, its values as named groups, and its key under
+ * `backend.say`. The first match wins, so the more specific patterns come first.
+ */
+const SAID: [RegExp, string][] = [
+  // Bisect
+  [/^There is nothing to halve: (?<on>\d+) of the (?<total>\d+) switched-on mods/, 'bisectNothingToHalve'],
+  [/^There is no hunt in progress to answer/, 'bisectNoHuntAnswer'],
+  [/^There is no hunt in progress to stop/, 'bisectNoHuntStop'],
+  [/^(?<mod>.+?) on its own does not do it\. Two mods together/s, 'bisectPair'],
+  [/^No mod under suspicion is doing it/, 'bisectNoSuspect'],
+  // Developer tools and the folders they may open
+  [/^That folder is outside your game and Zomboid folders/, 'outsideFolders'],
+  [/^That file is outside your game and Zomboid folders/, 'outsideFoldersFile'],
+  [/^That folder has no mod\.info/, 'noModInfo'],
+  [/^Windows could not open that file: (?<why>.+)$/s, 'cantOpenFile'],
+  [/^Windows could not open that folder: (?<why>.+)$/s, 'cantOpenFolder'],
+  [/^Nothing to reload\./, 'nothingToReload'],
+  [/^The id is the folder and the list entry/, 'badModId'],
+  [/^The mod needs a name/, 'modNeedsName'],
+  [/^There is already a folder (?<id>.+) in Zomboid\/mods/, 'folderExists'],
+  [/^Only TileZed\.exe and WorldEd\.exe/, 'onlyMapTools'],
+  // Servers
+  [/^Invalid server name '(?<name>[^']*)'/, 'badServerName'],
+  [/^Invalid server name\.$/, 'badServerNameShort'],
+  [/^A server named '(?<name>.+)' already exists/, 'serverExists'],
+  [/^The server '(?<name>.+)' is running: stop it before deleting it/, 'serverRunningDelete'],
+  [/^Invalid Zomboid directory/, 'badZomboidDir'],
+  [/^Failed to write server log snapshot: (?<why>.+)$/s, 'snapshotFailed'],
+  [/^Install directory not found: (?<what>.*)$/s, 'noInstallDir'],
+  [/^The admin password cannot contain any of/, 'badAdminPassword'],
+  [/^A server is already running \(PID (?<pid>\d+)\)/, 'serverAlreadyRunning'],
+  [/^Could not find java\.exe, ProjectZomboidServer\.bat/, 'noServerLauncher'],
+  [/^Failed to spawn dedicated server: (?<why>.+)$/s, 'serverSpawnFailed'],
+  [/^Could not stop server process (?<pid>\d+): (?<why>.+)$/s, 'serverStopFailed'],
+  [/^Failed to open log file '(?<what>.+)': (?<why>.+)$/s, 'logOpenFailed'],
+  [/^Server \.ini file not found/, 'serverIniMissing'],
+  [/^RCON refused the password/, 'rconPassword'],
+  [/^RCON: (?<why>.+)$/s, 'rcon'],
+  // Browse: links, downloads, archives, Steam and Nexus
+  [/^Only http and https links can be installed from/, 'onlyHttp'],
+  [/^That is a Steam Workshop link/, 'steamLink'],
+  [/^Nexus Mods does not allow downloading without/, 'nexusLink'],
+  [/^That link does not point at a \.zip/, 'notZipLink'],
+  [/^GitHub is rate-limiting this machine/, 'githubRateLimit'],
+  [/^GitHub could not be reached about (?<repo>\S+): (?<why>.+)$/s, 'githubUnreachable'],
+  [/^GitHub has no repository (?<repo>\S+?)\./, 'githubNoRepo'],
+  [/^Unexpected answer from (?<who>GitHub|Nexus Mods|Steam|the Steam Workshop|the Steam helper)\b/, 'unexpectedAnswer'],
+  [/^Cannot create a download folder: (?<why>.+)$/s, 'noDownloadFolder'],
+  [/^The download failed: (?<why>.+)$/s, 'downloadFailed'],
+  [/^That file is larger than (?<mb>\d+) MB/, 'tooLarge'],
+  [/^What came back is not a zip file/, 'notAZip'],
+  [/^Cannot save the download: (?<why>.+)$/s, 'cannotSaveDownload'],
+  [/^Not a readable zip archive/, 'badZip'],
+  [/^Not a readable 7z archive/, 'bad7z'],
+  [/^The archive has (?:\d+ entries \(limit (?<limit>\d+)\)|more than (?<limit2>\d+) entries)/, 'tooManyEntries'],
+  [/^Damaged archive entry/, 'damagedEntry'],
+  [/^Refusing unsafe path in archive: (?<what>.+)$/s, 'unsafePath'],
+  [/^The archive unpacks to more than 4 GB/, 'tooBigUnpacked'],
+  [/^Archive entry (?<what>.+) is larger than it claims/, 'entryLies'],
+  [/^No Project Zomboid mod found: there is no mod\.info/, 'noModFound'],
+  [/^Unusable mod folder name: (?<what>.+)$/s, 'badFolderName'],
+  [/^The source folder is inside Zomboid\/mods already/, 'sourceInside'],
+  [/^Cannot move the old (?<what>.+?) aside: (?<why>.+)$/s, 'cannotMoveAside'],
+  [/^Copying (?<what>.+?) failed: (?<why>.+)$/s, 'copyFailed'],
+  [/^Nexus Mods rejected the (?<what>.+?): (?<why>.+)$/s, 'nexusRejected'],
+  [/^Nexus Mods has no mod with this id/, 'nexusNoMod'],
+  [/^The Steam Workshop page could not be read/, 'workshopPageUnreadable'],
+  [/^Steam rejected the Web API key/, 'badApiKey'],
+  [/^Steam has no public item with this id/, 'noWorkshopItem'],
+  [/^Steam refused the request/, 'steamRefused'],
+  [/^The package is in use and could not be replaced/, 'packageInUse'],
+  // Files and folders, last: other texts start the same way
+  [/^(?<what>.+) is not there any more\.$/s, 'notThereAnyMore'],
+  [/^(?<what>.+) is not there\.$/s, 'notThere'],
+  [/^(?<what>.+) is not a folder\.$/s, 'notAFolder'],
+  [/^(?<name>TileZed\.exe|WorldEd\.exe) would not start: (?<why>.+)$/s, 'wouldNotStart'],
+  [/^Cannot write (?<what>.+?): (?<why>.+)$/s, 'cannotWrite'],
+  [/^Cannot read (?<what>.+?): (?<why>.+)$/s, 'cannotRead'],
+  [/^Cannot open (?<what>.+?): (?<why>.+)$/s, 'cannotOpen'],
+  [/^Cannot back up (?<what>.+?): (?<why>.+)$/s, 'cannotBackUp'],
+  [/^Cannot delete (?<what>.+?): (?<why>.+)$/s, 'cannotDelete'],
+];
+
+/** A text the backend wrote, in the chosen language when it is a known one; else as it came. */
+export function backendSays(text: string): string {
+  if (i18next.resolvedLanguage === 'en') return text;
+  for (const [pattern, key] of SAID) {
+    const match = pattern.exec(text);
+    if (match) {
+      const values: Record<string, string> = { ...(match.groups ?? {}) };
+      if (values.limit2) values.limit = values.limit2;
+      return i18next.t(`backend.say.${key}`, values);
+    }
+  }
+  return text;
+}
+
 /**
  * Backend errors are written for the log, not for a player. This turns the ones we know about
  * into something a person can act on, and leaves anything else as it came.
  */
 export function explainError(err: unknown): string {
   const raw = String(err ?? '').replace(/^Error:\s*/i, '').trim();
+  const said = backendSays(raw);
+  if (said !== raw) return said;
   const known: [RegExp, string][] = [
     [/Zomboid folder not found/i, 'noZomboid'],
     [/ProjectZomboid64\.exe not found/i, 'noExe'],
     [/steam_api64\.dll was not found/i, 'notPzFolder'],
     [/Steam is not running/i, 'steamNotRunning'],
     [/could not be reached|os error 10051|dns error/i, 'noConnection'],
-    [/rate-limit/i, 'rateLimit'],
+    // GitHub's own limit is said above: this one is Steam's.
+    [/Steam is rate-limiting|rate-limit/i, 'rateLimit'],
     [/Access is denied|os error 5/i, 'accessDenied'],
     [/os error 2|No such file/i, 'gone'],
   ];
@@ -103,6 +204,7 @@ export function explainError(err: unknown): string {
   return raw.replace(/^[A-Za-z_:]+Error\(|\)$/g, '') || i18next.t('backend.somethingWrong');
 }
 
+/** Logs a failed backend call and tells the UI about it, so failures never look like success. */
 export const reportBackendError = (action: string, err: unknown): void => {
   console.error(`${action} failed:`, err);
   window.dispatchEvent(
@@ -276,6 +378,7 @@ export const TauriService = {
         is_map_mod: m.is_map_mod ?? false,
         is_packaged: m.is_packaged,
         loadable_on_installed_build: m.loadable_on_installed_build,
+        not_installed: m.not_installed ?? false,
         load_order_index: idx + 1,
       }));
     } catch (err) {

@@ -72,16 +72,10 @@ pub fn read_resource_by_uri(uri: &str) -> Result<ResourceReadResult, String> {
             if !console_path.exists() {
                 return Err(format!("console.txt not found at: {}", console_path.display()));
             }
-            let content = std::fs::read_to_string(&console_path)
-                .map_err(|e| format!("Failed to read console.txt: {}", e))?;
-            
-            // Return last 2000 lines if too large to avoid huge payloads
-            let lines: Vec<&str> = content.lines().collect();
-            let truncated = if lines.len() > 2000 {
-                lines[lines.len() - 2000..].join("\n")
-            } else {
-                content
-            };
+            // The last 2000 lines, read from the end of the file, to keep the payload small.
+            let truncated = crate::sandbox::tail_lines(&console_path, 2000)
+                .map_err(|e| format!("Failed to read console.txt: {}", e))?
+                .join("\n");
 
             Ok(ResourceReadResult {
                 contents: vec![ResourceContent {
@@ -94,7 +88,7 @@ pub fn read_resource_by_uri(uri: &str) -> Result<ResourceReadResult, String> {
         "pz://mods/installed-summary" => {
             let manifests = scan_all_installed_mods(&paths);
             let json_str = serde_json::to_string_pretty(&json!({
-                "total_installed": manifests.len(),
+                "total_installed": manifests.iter().filter(|m| !m.not_installed).count(),
                 "mods": manifests
             })).map_err(|e| e.to_string())?;
 
@@ -228,19 +222,9 @@ pub fn run_stdio_server() {
             continue;
         }
 
-        let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
+        let request: JsonRpcRequest = match parse_request(trimmed) {
             Ok(req) => req,
-            Err(e) => {
-                let err_res = JsonRpcResponse {
-                    jsonrpc: "2.0".to_string(),
-                    id: None,
-                    result: None,
-                    error: Some(JsonRpcError {
-                        code: -32700,
-                        message: format!("Parse error: {}", e),
-                        data: None,
-                    }),
-                };
+            Err(err_res) => {
                 let _ = writeln!(stdout, "{}", serde_json::to_string(&err_res).unwrap());
                 let _ = stdout.flush();
                 continue;
@@ -261,6 +245,20 @@ pub fn run_stdio_server() {
     }
 }
 
+/// One line from the client as a request, or the error to answer it with: -32700 when it is not
+/// JSON, -32600 when it is JSON but not a request. The id is null unless it could be read.
+fn parse_request(line: &str) -> Result<JsonRpcRequest, JsonRpcResponse> {
+    let fail = |id: Option<Value>, code: i64, message: String| JsonRpcResponse {
+        jsonrpc: "2.0".to_string(),
+        id: Some(id.unwrap_or(Value::Null)),
+        result: None,
+        error: Some(JsonRpcError { code, message, data: None }),
+    };
+    let value: Value = serde_json::from_str(line).map_err(|e| fail(None, -32700, format!("Parse error: {}", e)))?;
+    let id = value.get("id").cloned();
+    serde_json::from_value(value).map_err(|e| fail(id, -32600, format!("Invalid request: {}", e)))
+}
+
 fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
     let req_id = req.id.clone();
 
@@ -271,7 +269,8 @@ fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
                 capabilities: ServerCapabilities {
                     tools: Some(json!({})),
                     resources: Some(json!({})),
-                    prompts: Some(json!({})),
+                    // No prompts are served, so none are offered.
+                    prompts: None,
                 },
                 server_info: ServerInfo {
                     name: "pz-mod-studio-mcp".to_string(),
@@ -357,5 +356,32 @@ fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
                 data: None,
             }),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unreadable_lines_are_answered_with_a_null_id() {
+        let not_json = serde_json::to_value(parse_request("{nope").unwrap_err()).unwrap();
+        assert_eq!(not_json["id"], Value::Null);
+        assert_eq!(not_json["error"]["code"], -32700);
+        assert!(not_json.as_object().unwrap().contains_key("id"));
+
+        let not_a_request = serde_json::to_value(parse_request(r#"{"jsonrpc":"2.0","id":7}"#).unwrap_err()).unwrap();
+        assert_eq!(not_a_request["id"], 7);
+        assert_eq!(not_a_request["error"]["code"], -32600);
+
+        assert!(parse_request(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#).is_ok());
+    }
+
+    #[test]
+    fn only_what_is_served_is_offered() {
+        let init = handle_request(parse_request(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#).unwrap());
+        let caps = &init.result.unwrap()["capabilities"];
+        assert!(caps.get("tools").is_some() && caps.get("resources").is_some());
+        assert!(caps.get("prompts").is_none());
     }
 }

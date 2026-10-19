@@ -710,39 +710,31 @@ fn handle_get_monitor_logs(args: Value) -> ToolCallResult {
 
     match File::open(&console_path) {
         Ok(file) => {
-            let reader = BufReader::new(file);
-            let mut collected = Vec::new();
-
-            for line_res in reader.lines() {
-                if let Ok(line) = line_res {
-                    if errors_only {
-                        let is_err = line.contains("ERROR")
-                            || line.contains("Exception")
-                            || line.contains("Kahlua")
-                            || line.contains("Callframe:")
-                            || line.contains("Stacktrace:")
-                            || line.contains("at zombie.");
-                        if is_err {
-                            collected.push(line);
-                        }
-                    } else {
-                        collected.push(line);
+            // Streamed, keeping only the last max_lines matches: the log can be tens of megabytes.
+            let mut kept: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+            let mut matched = 0usize;
+            for line in crate::sandbox::lossy_lines(BufReader::new(file)) {
+                let wanted = !errors_only
+                    || line.contains("ERROR")
+                    || line.contains("Exception")
+                    || line.contains("Kahlua")
+                    || line.contains("Callframe:")
+                    || line.contains("Stacktrace:")
+                    || line.contains("at zombie.");
+                if wanted {
+                    matched += 1;
+                    kept.push_back(line);
+                    if kept.len() > max_lines {
+                        kept.pop_front();
                     }
                 }
             }
 
-            let start = if collected.len() > max_lines {
-                collected.len() - max_lines
-            } else {
-                0
-            };
-            let slice = &collected[start..];
-
             let result = json!({
                 "log_file": console_path.to_string_lossy(),
-                "total_matched_lines": collected.len(),
-                "returned_lines_count": slice.len(),
-                "lines": slice
+                "total_matched_lines": matched,
+                "returned_lines_count": kept.len(),
+                "lines": kept
             });
 
             ToolCallResult {
@@ -981,7 +973,7 @@ fn handle_list_installed_mods(args: Value) -> ToolCallResult {
         content: vec![ToolContent {
             content_type: "text".to_string(),
             text: serde_json::to_string_pretty(&json!({
-                "total_installed_mods": manifests.len(),
+                "total_installed_mods": manifests.iter().filter(|m| !m.not_installed).count(),
                 "mods": manifests
             }))
             .unwrap_or_else(|e| format!("Error: {}", e)),

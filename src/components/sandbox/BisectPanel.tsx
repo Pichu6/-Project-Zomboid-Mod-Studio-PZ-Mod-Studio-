@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ModInfo, BisectSession, TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
-import { TauriService, explainError } from '../../services/tauri';
+import { TauriService, backendSays, explainError } from '../../services/tauri';
 import { Crosshair, Play, ThumbsDown, ThumbsUp, Undo2, ChevronDown, ChevronRight, Search, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cardText } from '../../i18n/backendText';
@@ -341,7 +341,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                 </>
               ) : (
                 <>
-                  <div className="text-[11px] text-slate-300 leading-relaxed">{session!.note}</div>
+                  <div className="text-[11px] text-slate-300 leading-relaxed">{backendSays(session!.note ?? '')}</div>
                   <button
                     onClick={() => setSession(null)}
                     className="w-full py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-medium transition cursor-pointer"

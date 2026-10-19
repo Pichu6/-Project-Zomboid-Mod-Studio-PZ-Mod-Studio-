@@ -21,6 +21,15 @@ interface SettingsModuleProps {
   onAutoDetect: () => void;
 }
 
+/** The setup guide of each MCP client: its key under settings.mcp.guides, how many steps, and the tip's colour. */
+const MCP_GUIDES: Record<string, { key: string; steps: number; tip?: 'cyan' | 'emerald' }> = {
+  CLAUDE: { key: 'claude', steps: 4, tip: 'cyan' },
+  CURSOR: { key: 'cursor', steps: 4, tip: 'cyan' },
+  VSCODE_LOCAL: { key: 'vscode', steps: 4, tip: 'emerald' },
+  ANTIGRAVITY: { key: 'antigravity', steps: 3, tip: 'cyan' },
+  OPENAI_CODEX: { key: 'openai', steps: 3 },
+};
+
 export const SettingsModule: React.FC<SettingsModuleProps> = ({
   paths,
   onSavePaths,
@@ -968,90 +977,30 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
 
               {/* Step-by-Step Instructions per Client */}
-              {selectedMcpClient === 'CLAUDE' && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
-                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                    <Info className="w-4 h-4 text-cyan-400" />
-                    <span>How to setup in Claude Desktop:</span>
+              {(() => {
+                const guide = MCP_GUIDES[selectedMcpClient];
+                if (!guide) return null;
+                const base = `settings.mcp.guides.${guide.key}`;
+                return (
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
+                    <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                      <Info className="w-4 h-4 text-cyan-400" />
+                      <span>{t(`${base}.title`)}</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px] [&_code]:bg-slate-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-cyan-300 [&_code]:font-mono [&_code]:text-[10px] [&_kbd]:px-1 [&_kbd]:py-0.5 [&_kbd]:rounded [&_kbd]:bg-slate-800 [&_kbd]:font-mono [&_kbd]:text-[10px] [&_kbd]:text-slate-200">
+                      {Array.from({ length: guide.steps }, (_, i) => (
+                        <li key={i} dangerouslySetInnerHTML={{ __html: tHtml(`${base}.s${i + 1}`, { path: mcpBinaryPath }) }} />
+                      ))}
+                    </ol>
+                    {guide.tip && (
+                      <div
+                        className={`p-2 rounded text-[11px] ${guide.tip === 'emerald' ? 'bg-emerald-950/30 border border-emerald-900/60 text-emerald-200' : 'bg-cyan-950/30 border border-cyan-900/60 text-cyan-200'}`}
+                        dangerouslySetInnerHTML={{ __html: tHtml(`${base}.tip`) }}
+                      />
+                    )}
                   </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
-                    <li>Open <b>Claude Desktop</b> and go to <b>File &gt; Settings</b> (or press <kbd className="px-1 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-200">Ctrl + ,</kbd>).</li>
-                    <li>Select the <b>Developer</b> tab and click <b>Edit Config</b> to open <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">claude_desktop_config.json</code>.</li>
-                    <li>Paste the JSON configuration above inside the file and save it.</li>
-                    <li>Restart Claude Desktop. In new chats, you will see a <b>🔨 Hammer</b> icon with the PZ Mod Studio tools.</li>
-                  </ol>
-                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
-                    💬 <b>Example Prompt:</b> <i>"Read console.txt to diagnose why Project Zomboid crashed"</i> or <i>"Sort my mod load order"</i>.
-                  </div>
-                </div>
-              )}
-
-              {selectedMcpClient === 'CURSOR' && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
-                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                    <Info className="w-4 h-4 text-cyan-400" />
-                    <span>How to setup in Cursor / Windsurf IDE:</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
-                    <li>Open <b>Cursor Settings</b> (Gear icon) &gt; <b>Features</b> &gt; <b>MCP</b>.</li>
-                    <li>Click <b>+ Add New MCP Server</b>.</li>
-                    <li>Set <b>Type</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">command</code>, <b>Name</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">pz-mod-studio</code>, and <b>Command</b>: <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono">{mcpBinaryPath}</code>.</li>
-                    <li>The status dot will turn green (Enabled), exposing Lua AST and live diagnostics to the Agent.</li>
-                  </ol>
-                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
-                    💬 <b>Example Prompt:</b> <i>"@pz-mod-studio scan active mod collisions in VFS and merge conflicting scripts"</i>.
-                  </div>
-                </div>
-              )}
-
-              {selectedMcpClient === 'VSCODE_LOCAL' && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
-                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                    <Info className="w-4 h-4 text-cyan-400" />
-                    <span>How to setup in VS Code (Roo Code / Cline with Local or Cloud LLMs):</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
-                    <li>Install the <b>Roo Code</b> or <b>Cline</b> extension from the VS Code Marketplace.</li>
-                    <li>Click the extension icon on the sidebar, click the <b>MCP Servers (Plugs)</b> tab at the top and choose <b>Configure MCP</b>.</li>
-                    <li>Paste the JSON snippet above into <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">cline_mcp_settings.json</code> / <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">roo_mcp_settings.json</code>.</li>
-                    <li>You can use Cloud models or 100% Offline with <b>Ollama / LM Studio</b> (e.g. <i>Qwen 2.5 Coder</i>).</li>
-                  </ol>
-                  <div className="p-2 rounded bg-emerald-950/30 border border-emerald-900/60 text-[11px] text-emerald-200">
-                    🔒 <b>100% Offline Modding:</b> Local models can query PZ Mod Studio VFS collision tools and parse Lua without needing any internet connection.
-                  </div>
-                </div>
-              )}
-
-              {selectedMcpClient === 'ANTIGRAVITY' && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
-                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                    <Info className="w-4 h-4 text-cyan-400" />
-                    <span>How to setup in Antigravity / Gemini CLI:</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
-                    <li>Open your Antigravity or Gemini CLI configuration file (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">.gemini/settings.json</code> or user settings).</li>
-                    <li>Paste the configuration snippet under the <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[10px]">"mcpServers"</code> section.</li>
-                    <li>Antigravity automatically discovers and connects every tool and resource without any manual intervention.</li>
-                  </ol>
-                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-900/60 text-[11px] text-cyan-200">
-                    💬 <b>Example Prompt:</b> <i>"Inspect console.txt and generate a master polyfill patch for missing tables"</i>.
-                  </div>
-                </div>
-              )}
-
-              {selectedMcpClient === 'OPENAI_CODEX' && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 space-y-2.5 text-xs">
-                  <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                    <Info className="w-4 h-4 text-cyan-400" />
-                    <span>How to setup in OpenAI / Codex / Custom GPT MCP Bridges:</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed pl-1 text-[11px]">
-                    <li>Configure your MCP-compatible client or local stdio bridge with the command executable.</li>
-                    <li>The server will expose tool definitions compliant with the <b>JSON-RPC 2.0 MCP standard (2024-11-05)</b>.</li>
-                    <li>Ensure the process is spawned with standard I/O pipes (stdio).</li>
-                  </ol>
-                </div>
-              )}
+                );
+              })()}
 
               {/* FAQ / How Stdio Works Card */}
               <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-lg text-xs text-amber-200 space-y-1.5">

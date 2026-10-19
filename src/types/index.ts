@@ -158,6 +158,8 @@ export interface ModInfo {
   is_packaged?: boolean;
   /** false: the installed game build cannot load this mod (B41-only or only newer folders). */
   loadable_on_installed_build?: boolean | null;
+  /** Switched on in default.txt but no installed folder provides it (unsubscribed or deleted). */
+  not_installed?: boolean;
   load_order_index: number;
 }
 

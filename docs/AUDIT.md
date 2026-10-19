@@ -115,13 +115,13 @@ listed. Tests added beside the fixes; `cargo test --lib`, `tsc` and `vitest` gre
 
 | | What | Where |
 |---|---|---|
-| ⬜ | Mods switched on but not installed vanish from the Mod List, so Health's `missing_mod` never shows there | `mod_info.rs` scan |
+| ✅ | Mods switched on but not installed vanish from the Mod List, so Health's `missing_mod` never shows there. Now kept as rows marked `not_installed` (red NOT INSTALLED badge, counted under Problems); Studio packages that are gone are still pruned | `mod_info.rs` scan |
 | ⬜ | Dev launch / bisect still go through the profile: during a hunt the profile follows the trial list (it comes back when the hunt ends) | `bisect`, `App.tsx` |
-| ⬜ | Publishing a package is not a swap: files are written in place (errors now fail the publish) | `publish.rs` |
-| ⬜ | Unpack deletes `media/` and `42/` whole, hand-placed files included; publish replaces the package description with a fixed text | `publish.rs` |
-| ⬜ | IPC commands still trust folder roots the page passes (`open_package_folder_cmd`, launch commands with an install dir); with the XSS fixed and a CSP set this needs a compromised page | `lib.rs` |
+| ✅ | Publishing a package is not a swap: files are written in place (errors now fail the publish). Now built in `Zomboid/PZModStudio_Staging/<pkg>.new` from a copy of the package, metadata and drafts included, then swapped in; the old one comes back if the swap fails | `publish.rs` |
+| ✅ | Unpack deletes `media/` and `42/` whole, hand-placed files included; publish replaces the package description with a fixed text. Unpack now removes only what the publish wrote (and empty folders); publish keeps the package's name, description and pictures | `publish.rs` |
+| ✅ | IPC commands still trust folder roots the page passes (`open_package_folder_cmd`, launch commands with an install dir); with the XSS fixed and a CSP set this needs a compromised page. Launch, dedicated server and the Steam helper use `vfs::trusted_install_dir()`; open-package goes through `to_package_folder` under the saved Zomboid folder; the folder allow-lists (validate, MP check, open in editor, open mod folder) read the saved paths | `lib.rs` |
 | ⬜ | Players tab shows a fixed ping and health; server log snapshot may pick the client's log | `server_manager` |
-| ⬜ | Bisect "Launch" forces fullscreen; one non-UTF-8 log line stops the per-mod stats; whole log read into memory | `sandbox` |
-| ⬜ | MCP: parse errors answered without `id: null`, `prompts` capability advertised but not served, `--mcp` on the main exe runs on a 1 MB stack | `mcp/` |
-| ⬜ | Backend messages of Browse, bisect, devtools and servers are English only; MCP setup guides in Settings are English only | i18n |
+| ✅ | Bisect "Launch" forces fullscreen; one non-UTF-8 log line stops the per-mod stats; whole log read into memory. Only a launch naming a screen mode touches `options.ini`; logs are read as bytes with lossy decoding (stats, live watcher, MCP); `tail_lines` reads the end of a log for line-limited reads | `sandbox` |
+| ✅ | MCP: parse errors answered without `id: null`, `prompts` capability advertised but not served, `--mcp` on the main exe runs on a 1 MB stack. `-32700`/`-32600` with `id: null` (or the id read), `prompts` dropped, `--mcp` on an 8 MB thread | `mcp/` |
+| ✅ | Backend messages of Browse, bisect, devtools and servers are English only; MCP setup guides in Settings are English only. `backendSays` (tauri.ts) matches the known texts and says them from `backend.say`; the guides come from `settings.mcp.guides` | i18n |
 | ⬜ | A GitHub "releases/tag" link installs the latest release | `from_url.rs` |

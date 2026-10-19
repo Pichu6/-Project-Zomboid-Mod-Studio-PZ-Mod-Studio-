@@ -345,6 +345,13 @@ pub fn studio_paths() -> StudioPaths {
     saved_paths().unwrap_or_else(auto_detect_paths)
 }
 
+/// The game folder programs are started from (the game, its server, the Steam helper): the one the
+/// Studio saved or detected, never a folder the page names. A page that could pick it could make
+/// the Studio run any program called ProjectZomboid64.exe, or load any steam_api64.dll.
+pub fn trusted_install_dir() -> String {
+    studio_paths().pz_install_dir
+}
+
 /// The Zomboid folder the player chose, or "" for the usual places (cheap: no Steam scan).
 pub fn saved_user_zomboid_dir() -> String {
     saved_paths().map(|p| p.user_zomboid_dir).unwrap_or_default()

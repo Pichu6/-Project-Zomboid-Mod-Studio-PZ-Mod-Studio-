@@ -4,7 +4,7 @@ pub mod requires;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -162,8 +162,11 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
     let is_normal = config.test_mode.contains("NORMAL");
     let is_windowed = config.test_mode.contains("WINDOWED");
 
-    // Configure options.ini for both fullscreen and windowed modes across user directories
-    configure_options_ini(&config.user_zomboid_dir, is_windowed);
+    // Only a launch that names a screen mode sets one. Bisect's "NORMAL" names none, and used to
+    // switch a player who plays in a window to fullscreen.
+    if is_windowed || config.test_mode.contains("FULLSCREEN") {
+        configure_options_ini(&config.user_zomboid_dir, is_windowed);
+    }
     sync_java_agents_for_launch(install_dir, &config.user_zomboid_dir);
 
     // Launch Project Zomboid directly with independent null stdio to ensure clean GUI instantiation
@@ -297,9 +300,9 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                 }
                 let mut reader = BufReader::new(file);
                 if reader.seek(SeekFrom::Start(offset)).is_ok() {
-                    let mut line_buf = String::new();
-                    while reader.read_line(&mut line_buf).unwrap_or(0) > 0 {
-                        let trimmed = line_buf.trim_end().to_string();
+                    let mut line_buf: Vec<u8> = Vec::new();
+                    while reader.read_until(b'\n', &mut line_buf).unwrap_or(0) > 0 {
+                        let trimmed = String::from_utf8_lossy(&line_buf).trim_end().to_string();
                         let is_error = trimmed.contains("ERROR")
                             || trimmed.contains("Exception")
                             || trimmed.contains("KahluaThreadException");
@@ -466,6 +469,57 @@ pub fn error_stats_per_mod(lines: impl Iterator<Item = String>) -> Vec<ModErrorS
 }
 
 /// The per-mod counts of the session in `console.txt` now.
+/// The lines of a log, each read as bytes and decoded leniently. A mod that prints a name in its
+/// own code page leaves a line that is not UTF-8; `BufRead::lines` stops at it with an error, and
+/// everything after it -- most of a session, sometimes -- was never read.
+pub fn lossy_lines<R: BufRead>(mut reader: R) -> impl Iterator<Item = String> {
+    let mut buf = Vec::new();
+    std::iter::from_fn(move || {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => {
+                while matches!(buf.last(), Some(b'\n') | Some(b'\r')) {
+                    buf.pop();
+                }
+                Some(String::from_utf8_lossy(&buf).into_owned())
+            }
+        }
+    })
+}
+
+/// The last `n` lines of a file, read from its end: a long session's console.txt runs to tens of
+/// megabytes, and asking for its last hundred lines no longer reads all of it.
+pub fn tail_lines(path: &Path, n: usize) -> std::io::Result<Vec<String>> {
+    let mut file = File::open(path)?;
+    let len = file.metadata()?.len();
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+    let mut window: u64 = 64 * 1024;
+    loop {
+        let start = len.saturating_sub(window);
+        file.seek(SeekFrom::Start(start))?;
+        let mut bytes = Vec::new();
+        file.by_ref().take(len - start).read_to_end(&mut bytes)?;
+        let newlines = bytes.iter().filter(|b| **b == b'\n').count();
+        // One line more than asked for, so the first (maybe cut) line can be dropped.
+        if start == 0 || newlines > n {
+            let mut slice = &bytes[..];
+            if start > 0 {
+                let cut = slice.iter().position(|b| *b == b'\n').map(|i| i + 1).unwrap_or(0);
+                slice = &slice[cut..];
+            }
+            let mut lines: Vec<String> = lossy_lines(slice).collect();
+            if lines.len() > n {
+                lines.drain(..lines.len() - n);
+            }
+            return Ok(lines);
+        }
+        window = window.saturating_mul(4);
+    }
+}
+
 pub fn error_stats_from_console(user_zomboid_dir: &str) -> Vec<ModErrorStat> {
     let Some(path) = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir)
         .into_iter()
@@ -475,7 +529,7 @@ pub fn error_stats_from_console(user_zomboid_dir: &str) -> Vec<ModErrorStat> {
         return Vec::new();
     };
     let Ok(file) = File::open(&path) else { return Vec::new() };
-    error_stats_per_mod(BufReader::new(file).lines().map_while(Result::ok))
+    error_stats_per_mod(lossy_lines(BufReader::new(file)))
 }
 
 /// A line worth showing even though it matches no known pattern, because the game named a mod.
@@ -1031,29 +1085,43 @@ pub fn read_log_file(file_path: &str, max_lines: Option<usize>) -> Result<Vec<St
         return Err(format!("File does not exist: {}", file_path));
     }
 
-    let file = File::open(path).map_err(|e| format!("Error opening file: {}", e))?;
-    let reader = BufReader::new(file);
-    let mut lines = Vec::new();
-    for line in reader.lines() {
-        if let Ok(l) = line {
-            lines.push(l);
-        }
-    }
-
     if let Some(limit) = max_lines {
-        if lines.len() > limit {
-            let start = lines.len() - limit;
-            return Ok(lines[start..].to_vec());
-        }
+        return tail_lines(path, limit).map_err(|e| format!("Error opening file: {}", e));
     }
-
-    Ok(lines)
+    let file = File::open(path).map_err(|e| format!("Error opening file: {}", e))?;
+    Ok(lossy_lines(BufReader::new(file)).collect())
 }
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_that_is_not_utf8_does_not_end_the_log() {
+        let log: &[u8] = b"LOG  : first\r\nERROR: Gen\xe9rico broke\nWARN : Lua f:0 at Lua((MOD:Late)).File.lua> later\n";
+        let lines: Vec<String> = lossy_lines(log).collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "LOG  : first");
+        assert!(lines[1].starts_with("ERROR: Gen") && lines[1].ends_with("rico broke"));
+        assert!(lines[2].contains("MOD:Late"));
+    }
+
+    #[test]
+    fn the_tail_of_a_log_is_read_from_its_end() {
+        let path = std::env::temp_dir().join(format!("pzms-tail-{}.txt", std::process::id()));
+        let mut text = Vec::new();
+        for i in 0..50_000 {
+            text.extend_from_slice(format!("line {}\r\n", i).as_bytes());
+        }
+        text.extend_from_slice(b"bad \xff byte\n");
+        std::fs::write(&path, &text).unwrap();
+        let tail = tail_lines(&path, 3).unwrap();
+        assert_eq!(tail, vec!["line 49998".to_string(), "line 49999".to_string(), "bad \u{fffd} byte".to_string()]);
+        assert_eq!(tail_lines(&path, 60_000).unwrap().len(), 50_001);
+        assert_eq!(read_log_file(&path.to_string_lossy(), Some(2)).unwrap().len(), 2);
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn bundled_bridge_script_is_valid_lua() {

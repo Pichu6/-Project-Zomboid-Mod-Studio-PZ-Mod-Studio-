@@ -414,7 +414,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         return !m.enabled;
       case 'problems':
         return Boolean(
-          missingActiveDependenciesMap[m.mod_id] ||
+          m.not_installed ||
+            missingActiveDependenciesMap[m.mod_id] ||
             missingUninstalledDependenciesMap[m.mod_id] ||
             loadOrderViolationsMap[m.mod_id] ||
             activeConflictsMap[m.mod_id]

@@ -271,7 +271,8 @@ fn workshop_subscribe_cmd(
     subscribe: bool,
 ) -> Result<steam_client::SubscribeOutcome, String> {
     let flag = if subscribe { "--steam-subscribe" } else { "--steam-unsubscribe" };
-    let output = steam_helper(flag, &paths.pz_install_dir, &ids)?;
+    let _ = paths;
+    let output = steam_helper(flag, &vfs::trusted_install_dir(), &ids)?;
     serde_json::from_str(&output).map_err(|e| format!("Unexpected answer from the Steam helper: {}", e))
 }
 
@@ -310,7 +311,8 @@ fn steam_helper(flag: &str, pz_install_dir: &str, ids: &[String]) -> Result<Stri
 /// Steam client). Does not start Steam's API, so it costs nothing and shows no in-game status.
 #[tauri::command(async)]
 fn steam_client_ready_cmd(paths: StudioPaths) -> Result<bool, String> {
-    Ok(steam_client::is_ready(&paths.pz_install_dir))
+    let _ = paths;
+    Ok(steam_client::is_ready(&vfs::trusted_install_dir()))
 }
 
 /// A mod's own poster/icon as a data URL, so the webview can show a file on disk.
@@ -389,16 +391,24 @@ fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
     sandbox::error_stats_from_console(&paths.user_zomboid_dir)
 }
 
+/// Whether a (canonical) path is inside the game, Workshop or Zomboid folder the Studio saved.
+/// The page's own idea of those folders is not asked: a page that could name them could open,
+/// or have the editor open, anything on the disk.
+fn inside_studio_folders(target: &std::path::Path) -> bool {
+    let paths = vfs::studio_paths();
+    [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
+        .iter()
+        .filter(|d| !d.is_empty())
+        .filter_map(|d| std::fs::canonicalize(d).ok())
+        .any(|root| target.starts_with(root))
+}
+
 /// Every Lua and script file of a mod, checked: one row per problem with file, line and column.
 #[tauri::command(async)]
 fn validate_mod_cmd(paths: StudioPaths, root_dir: String) -> Result<devtools::ModValidation, String> {
     let root = std::fs::canonicalize(&root_dir).map_err(|_| format!("{} is not there any more.", root_dir))?;
-    let allowed = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
-        .iter()
-        .filter(|d| !d.is_empty())
-        .filter_map(|d| std::fs::canonicalize(d).ok())
-        .any(|r| root.starts_with(r));
-    if !allowed {
+    let _ = &paths;
+    if !inside_studio_folders(&root) {
         return Err("That folder is outside your game and Zomboid folders.".to_string());
     }
     if !devtools::looks_like_a_mod(&root) {
@@ -411,12 +421,8 @@ fn validate_mod_cmd(paths: StudioPaths, root_dir: String) -> Result<devtools::Mo
 #[tauri::command(async)]
 fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: Option<u32>) -> Result<String, String> {
     let target = std::fs::canonicalize(&file).map_err(|_| format!("{} is not there.", file))?;
-    let allowed = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
-        .iter()
-        .filter(|d| !d.is_empty())
-        .filter_map(|d| std::fs::canonicalize(d).ok())
-        .any(|r| target.starts_with(r));
-    if !allowed {
+    let _ = &paths;
+    if !inside_studio_folders(&target) {
         return Err("That file is outside your game and Zomboid folders.".to_string());
     }
     devtools::open_in_editor(&target, line, col)
@@ -426,12 +432,8 @@ fn open_in_editor_cmd(paths: StudioPaths, file: String, line: Option<u32>, col: 
 #[tauri::command(async)]
 fn mp_check_mod_cmd(paths: StudioPaths, root_dir: String) -> Result<mplint::MpReport, String> {
     let root = std::fs::canonicalize(&root_dir).map_err(|_| format!("{} is not there any more.", root_dir))?;
-    let allowed = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
-        .iter()
-        .filter(|d| !d.is_empty())
-        .filter_map(|d| std::fs::canonicalize(d).ok())
-        .any(|r| root.starts_with(r));
-    if !allowed {
+    let _ = &paths;
+    if !inside_studio_folders(&root) {
         return Err("That folder is outside your game and Zomboid folders.".to_string());
     }
     mplint::check_mod(&root)
@@ -618,8 +620,9 @@ fn remove_load_rule_cmd(paths: StudioPaths, mod_id: String, after: String) -> Re
 #[tauri::command(async)]
 fn launch_sandbox_cmd<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
-    config: SandboxLaunchConfig,
+    mut config: SandboxLaunchConfig,
 ) -> Result<u32, String> {
+    config.pz_install_dir = vfs::trusted_install_dir();
     launch_sandbox_and_watch(app_handle, config)
 }
 
@@ -889,12 +892,8 @@ fn mcp_server_path_cmd() -> Result<String, String> {
 #[tauri::command(async)]
 fn open_mod_folder_cmd(paths: StudioPaths, folder: String) -> Result<(), String> {
     let target = std::fs::canonicalize(&folder).map_err(|_| format!("{} is not there any more.", folder))?;
-    let roots: Vec<std::path::PathBuf> = [&paths.workshop_dir, &paths.user_zomboid_dir, &paths.pz_install_dir]
-        .iter()
-        .filter(|d| !d.is_empty())
-        .filter_map(|d| std::fs::canonicalize(d).ok())
-        .collect();
-    if !roots.iter().any(|root| target.starts_with(root)) {
+    let _ = &paths;
+    if !inside_studio_folders(&target) {
         return Err("That folder is outside your game and Zomboid folders.".to_string());
     }
     open::that(&target).map_err(|e| format!("Windows could not open that folder: {}", e))?;
@@ -903,13 +902,12 @@ fn open_mod_folder_cmd(paths: StudioPaths, folder: String) -> Result<(), String>
 
 #[tauri::command(async)]
 fn open_package_folder_cmd(user_zomboid_dir: String, package_folder_name: String) -> Result<bool, String> {
-    let clean_pkg_name = if package_folder_name.starts_with("Z_PZModStudio_") {
-        package_folder_name
-    } else {
-        format!("Z_PZModStudio_{}", package_folder_name)
-    };
+    // One plain folder name in the package namespace, under the Zomboid folder the Studio saved:
+    // the page cannot point this at another folder, or at a program to open.
+    let _ = user_zomboid_dir;
+    let clean_pkg_name = patch_generator::to_package_folder(&package_folder_name)?;
 
-    let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(&user_zomboid_dir);
+    let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(&vfs::studio_paths().user_zomboid_dir);
     if user_dirs.is_empty() {
         return Err("User Zomboid folder not found.".to_string());
     }
