@@ -6,6 +6,7 @@ import { TauriService, reportBackendError } from '../../services/tauri';
 import { applyFix } from '../../utils/healthFix';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
+import { issueText } from '../../i18n/backendText';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -480,7 +481,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                 >
                   <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${style.iconColor}`} aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-slate-200 break-words">{issue.message}</div>
+                    <div className="text-xs text-slate-200 break-words">{issueText(issue)}</div>
                     <div className="text-[10px] font-mono text-slate-500 mt-0.5">{issue.code}</div>
                     {issue.details && issue.details.length > 0 && (
                       <details className="mt-1.5">

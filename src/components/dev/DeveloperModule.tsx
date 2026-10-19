@@ -5,6 +5,7 @@ import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Map as MapIcon, P
 import { CatalogModSummary, FileProblem, MapTools, ModInfo, ModValidation, MpReport } from '../../types';
 import { MpCheckPanel } from '../common/MpCheckPanel';
 import { TauriService } from '../../services/tauri';
+import { problemText } from '../../i18n/backendText';
 import { StudioPathsUI } from '../settings/SettingsModule';
 
 interface DeveloperModuleProps {
@@ -496,7 +497,7 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
                     title={t('developer.results.openTitle')}
                   >
                     <span className="font-mono text-amber-300 shrink-0 w-16">{p.line ? `${p.line}${p.col ? `:${p.col}` : ''}` : '—'}</span>
-                    <span className="flex-1">{p.message}</span>
+                    <span className="flex-1">{problemText(p)}</span>
                     <ExternalLink className="w-3 h-3 text-slate-500 shrink-0 mt-0.5" aria-hidden="true" />
                   </button>
                 ))}

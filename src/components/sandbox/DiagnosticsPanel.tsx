@@ -7,6 +7,7 @@ import { applyRequireFix, packageForPatch } from '../../utils/requireFix';
 import { errorShape } from '../../utils/errorShape';
 import { AlertCircle, AlertTriangle, Check, CheckCircle, Copy, Download, Search, Trash2, Wrench, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { cardText } from '../../i18n/backendText';
 
 /** The game names a Studio package when it read the package's patched copy of a mod's file. */
 const STUDIO_PACKAGE_PREFIX = 'PZ Mod Studio Patch: ';
@@ -420,7 +421,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <h4 className="text-xs font-bold text-slate-100">
-                      {card.title}
+                      {cardText(card, 'title')}
                       {isWarning(card) && (
                         <span
                           className="ml-2 align-middle text-[10px] font-mono font-normal px-1.5 py-0.5 rounded border border-amber-700/60 bg-amber-950/40 text-amber-300"
@@ -532,7 +533,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     </div>
                   )}
                   <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                    {card.explanation}
+                    {cardText(card, 'explanation')}
                   </p>
                 </div>
               </div>
@@ -572,7 +573,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               ) : card.mod_name ? (
                 /* The game named a mod: say what to do about that, not what the shim covers. */
                 <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
-                  {card.recommended_action}
+                  {cardText(card, 'action')}
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">

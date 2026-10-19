@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink } from 'lucide-react';
+import { backendText } from '../../i18n/backendText';
 import { MpFinding, MpModReport } from '../../types';
 
 /**
@@ -35,12 +36,12 @@ export const MpCheckPanel: React.FC<{ reports: MpModReport[]; onOpen?: (root: st
                 key={i}
                 type="button"
                 onClick={() => onOpen?.(report.root, f)}
-                title={`${t('mpCheck.rowTitle', { what: f.what, handler: f.handler, evidence: f.evidence })}${f.aware ? t('mpCheck.rowAware') : ''}${onOpen ? t('mpCheck.rowClick') : ''}`}
+                title={`${t('mpCheck.rowTitle', { what: backendText('mp', f.method, undefined, f.what), handler: f.handler, evidence: f.evidence })}${f.aware ? t('mpCheck.rowAware') : ''}${onOpen ? t('mpCheck.rowClick') : ''}`}
                 className={`w-full text-left px-3 py-1.5 text-[11px] flex items-start gap-2 ${onOpen ? 'hover:bg-slate-900 cursor-pointer' : 'cursor-default'}`}
               >
                 <span className={`font-mono shrink-0 w-6 text-center ${f.aware ? 'text-slate-500' : 'text-amber-300'}`}>{f.aware ? 'i' : '!'}</span>
                 <span className="flex-1 min-w-0">
-                  <span className="text-slate-200">{f.what}</span>
+                  <span className="text-slate-200">{backendText('mp', f.method, undefined, f.what)}</span>
                   <span className="text-slate-500"> — {f.handler}</span>
                   <div className="font-mono text-[10px] text-slate-500 truncate">{f.path}:{f.line}  {f.snippet}</div>
                 </span>

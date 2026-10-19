@@ -1730,5 +1730,206 @@
       "keepOn": "Keep it on",
       "close": "Close"
     }
+  },
+  "backendText": {
+    "health": {
+      "duplicate_entry": "{{mod}} is in the active list more than once",
+      "missing_mod_similar": "{{mod}} is not installed. Mod ids are case-sensitive: did you mean {{similar}}?",
+      "missing_mod_gone": "{{mod}} is enabled but not installed (unsubscribed or deleted)",
+      "not_for_build_some": "{{mod}} has no files for game build {{build}} (it has: {{folders}}). The game will not load it.",
+      "not_for_build_none": "{{mod}} has no files for game build {{build}} (it has: nothing usable{{folders}}). The game will not load it.",
+      "outside_version_range": "{{mod}} supports game versions {{min}} to {{max}}; you have {{build}}. The game will not load it.",
+      "invalid_mod_info": "{{mod}}: {{reason}}",
+      "missing_dependency_similar": "{{mod}} requires {{dep}}, which is not installed (an installed mod is called {{similar}}: ids are case-sensitive)",
+      "missing_dependency_plain": "{{mod}} requires {{dep}}, which is not installed",
+      "dependency_not_enabled": "{{mod}} requires {{dep}}, which is installed but not enabled",
+      "dependency_after": "{{mod}} requires {{dep}}, but {{dep}} loads after it",
+      "dependency_unavailable_not_installed": "{{mod}} requires {{dep}}, which is unavailable: {{culprit}} is not installed",
+      "dependency_unavailable_cannot_load": "{{mod}} requires {{dep}}, which is unavailable: {{culprit}} cannot load on this build",
+      "load_after_order": "{{mod}} asks to load after {{other}}, but {{other}} comes later in the list",
+      "load_before_order": "{{mod}} asks to load before {{other}}, but {{other}} comes earlier in the list",
+      "incompatible": "{{mod}} is marked incompatible with {{other}}, and both are enabled",
+      "workshop_update_pending": "Steam has a newer version of {{mod}}{{published}} that is not downloaded yet. Let Steam download it (restart Steam if it is stuck): servers reject players whose mod versions differ (\"Workshop item version is different than the server's\").",
+      "compatible_copy": "{{mod}} runs from a compatible copy in Zomboid/mods ({{changes}}). It is used when the game is started from PZ Mod Studio; starting it from Steam needs the launch option -modfolders mods,workshop,steam.",
+      "shadowed_copy": "Another copy of {{mod}} at {{ignored}} is ignored: the game uses the one at {{used}}",
+      "updated_since_last_play": "{{n}} active mods were updated since you last played: {{mods}}{{andMore}}. If a save misbehaves, start with these.",
+      "user_rule_order": "You asked for {{mod}} to load after {{after}}{{note}}, and it comes before it in the list",
+      "community_rule_order_rules": "The community has it that {{mod}} loads after {{after}}{{note}}{{sourceText}}, and it comes before it in the list",
+      "community_incompatible_rules": "The community has it that {{mod}} and {{other}} do not go together{{note}}{{sourceText}}, and both are on",
+      "community_rule_order_index": "The community index has it that {{mod}} loads after {{after}} ({{note}}{{seen}}), and it comes before it in the list",
+      "community_incompatible_index": "The community index has it that {{mod}} and {{other}} do not go together ({{note}}{{seen}}), and both are on",
+      "community_known_issue": "{{mod}} has a known issue, per the community index: {{title}}{{evidence}}{{note}}{{how}} [{{seen}}]",
+      "community_successor": "{{mod}} has a version for this build, per the community index: {{successor}}{{note}}",
+      "package_built_for_other_list": "{{package}} was built with a different list: {{missing}}{{sep}}{{extra}}. A package is a mod of its own, so it shows in every profile; its merges only settle the mods it was built with. In the Mod Merger, open it, rescan and publish to rebuild it for this list, or switch it off in this profile.",
+      "definition": "{{losers}} and {{winner}} {{all}} set {{properties}} on {{what}}, in different files ({{files}}). The game applies {{each}} to the same {{things}}, so everything else each of them sets is kept; only {{props}} decided by the load order, and {{winner}} loads last.{{example}}{{settled}}",
+      "definition_nested": "{{losers}} and {{winner}} all declare {{what}}, in different files ({{files}}), and their contents differ. What differs is inside nested blocks, which the Studio does not compare, so it cannot say what is at stake here — only that {{winner}} loads last.{{settled}}",
+      "script_definition_conflict_more": "{{left}} more things, across {{pairs}} other pairs of mods, have a property two mods set differently. Whichever mod loads last decides each one.",
+      "translation": "{{losers}} and {{winner}} name {{what}} differently in {{lang}} ({{category}}).{{example}} The game reads every mod's translations and keeps the last loaded, so {{winner}}'s words show today.{{settled}}",
+      "file_conflict": "{{others}} and {{winner}} both ship {{path}}. Without a merge the game only uses {{winner}}'s copy, so {{others}}'s version is ignored. {{how}}",
+      "file_conflict_stale": "{{path}} was merged, but {{mods}} changed since. Merge it again so the package matches the current versions.",
+      "server_mod_not_installed": "Mods= lists {{entry}}, which is not installed on this machine. If the server does not have it either, it will not load.",
+      "server_item_missing": "{{mod}} is in Mods= but its Workshop id {{item}} is not in WorkshopItems=, so the server never downloads it and the mod is missing in game.",
+      "server_mod_not_from_workshop": "{{mod}} did not come from the Workshop, so the server cannot download it: copy its folder into the server's Zomboid/mods itself.",
+      "server_mod_not_for_build": "{{mod}} cannot be loaded by the build installed here ({{entry}}).",
+      "server_map_missing": "{{mod}} adds the map(s) {{maps}}, which Map= does not list. The mod loads, the map does not.",
+      "server_item_unused_not_installed": "WorkshopItems= has {{item}}, which is not installed here, and nothing in Mods= uses it. The server downloads it and loads nothing from it.",
+      "server_item_unused_holds_one": "WorkshopItems= has {{item}}, which holds {{mods}}, but Mods= does not list it. It is downloaded and never loaded.",
+      "server_item_unused_holds_many": "WorkshopItems= has {{item}}, which holds {{mods}}, but Mods= does not list them. It is downloaded and never loaded.",
+      "server_base_map_last": "Map= ends with {{map}}, which is not one of the game's own maps. The base map (for example Muldraugh, KY) belongs last."
+    },
+    "fragments": {
+      "vs": " against ",
+      "any": "any",
+      "published": " (published {{date}})",
+      "and_more": " and {{more}} more",
+      "source": " [source: {{source}}]",
+      "verified": "verified",
+      "reported": "reported",
+      "verified_on": "verified on {{build}}",
+      "reported_on": "reported on {{build}}",
+      "shim_off": "; the shim's patch for it is off",
+      "require_path": "; it requires \"{{from}}\", which Build 42 has at \"{{to}}\" (a compatible copy rewrites it; Fix the path in the Monitor Center publishes the one file)",
+      "copy_fixes": "; a compatible copy fixes it",
+      "pkg_missing_one": "{{missingN}} mod is on in this profile that it never saw ({{missingList}}{{missingMore}})",
+      "pkg_missing_other": "{{missingN}} mods are on in this profile that it never saw ({{missingList}}{{missingMore}})",
+      "pkg_extra_one": "{{extraN}} mod it merged is off here, and its merged files stay in the package ({{extraList}}{{extraMore}})",
+      "pkg_extra_other": "{{extraN}} mods it merged are off here, and their merged files stay in the package ({{extraList}}{{extraMore}})",
+      "more_missing": ", and {{missingMoreN}} more",
+      "more_extra": ", and {{extraMoreN}} more",
+      "things": "{{n}} things ({{named}}{{ellipsis}})",
+      "all": "all",
+      "both": "both",
+      "each_all": "every one of them",
+      "each_both": "both mods",
+      "thing_one": "thing",
+      "thing_other": "things",
+      "props_one": "that property is",
+      "props_other": "those properties are",
+      "def_example": " On {{exDef}}, that is {{exValues}}.",
+      "def_settled": " Your package already settles this; it loads last, so what is in it wins.",
+      "def_stale": " {{staleN}} of these were merged into your package before one of the mods changed, so the package no longer matches them: merge them again.",
+      "tr_example": " {{exName}} is {{exValues}}.",
+      "tr_merged": " Your package already carries the words you chose; it loads last, so they show.",
+      "tr_stale": " The words you chose are in your package, but a mod changed since: look again.",
+      "fc_auto": "It can be merged automatically.",
+      "fc_manual": "They change the same lines differently: choose in the Mod Merger.",
+      "a_file": "a file"
+    },
+    "monitor": {
+      "door_npc": {
+        "title": "B42 IsoDoor / IsoWindow NPC Null Pointer Interop",
+        "explanation": "A non-player entity (zombie or NPC) interacted with a door or window, triggering a Build 42 JVM check for local players on a null character object.",
+        "action": "Apply Polyfill Rule: B42_OBJECT_INTERACT_SAFETY"
+      },
+      "bandits_room": {
+        "title": "Bandits Week One Dining Room Safety (B42)",
+        "explanation": "Bandits Week One room program attempted to query getName() on an outdoor/unzoned tile where getRoom() is nil, generating error floods on each AI tick.",
+        "action": "Apply Polyfill Rule: B42_BANDITS_ROOM_SAFETY"
+      },
+      "daily_report": {
+        "title": "Daily Report Journal Callback Protection",
+        "explanation": "Daily Report Journal rollover or player death event executed callbacks on an uninitialized UI window.",
+        "action": "Apply Polyfill Rule: B42_DAILY_REPORT_SAFETY"
+      },
+      "translator_format": {
+        "title": "Translator Format Exception (% character)",
+        "explanation": "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to collapse.",
+        "action": "Apply Polyfill Rule: SANITIZE_TRANSLATOR_FORMAT"
+      },
+      "nil_table": {
+        "title": "Uninitialized Global Table Access",
+        "explanation": "Mod code attempted to access properties of a nil/uninitialized table before PZ Build 42 instantiated it.",
+        "action": "Apply Polyfill Rule: SAFE_GLOBAL_TABLE_ACCESS"
+      },
+      "java_npe": {
+        "title": "Java Interop Null Pointer Exception",
+        "explanation": "A Java method returned null or received a null parameter from a legacy Lua mod call.",
+        "action": "Apply Universal Master Polyfills to handle null Java interop arguments safely."
+      },
+      "kahlua": {
+        "title": "Lua Runtime Execution Crash (Kahlua)",
+        "explanation": "An unhandled Lua runtime exception was thrown inside the PZ Kahlua VM.",
+        "action": "Apply Universal Master Polyfills to protect game loops and callframe stacktraces."
+      },
+      "index_bounds": {
+        "title": "Multiplayer Java ArrayList Out of Bounds (B42)",
+        "explanation": "A mod accessed IsoPlayer.getPlayers() or getOnlinePlayers() index 0 while the Java player collection was empty during a render/tick loop in Multiplayer.",
+        "action": "Apply Universal Master Polyfills (Safe ArrayList Proxy & getOnlinePlayers shield)."
+      },
+      "fancy_handwork": {
+        "title": "Fancy Handwork Multiplayer Hand Sync Safety",
+        "explanation": "Fancy Handwork fancyMP loop threw an uncaught error when evaluating local/remote player hand objects on tick.",
+        "action": "Apply Universal Master Polyfills to guard FancyHandwork callbacks safely."
+      },
+      "sauced_carts": {
+        "title": "SaucedCarts Pushable Carts Multiplayer Sync",
+        "explanation": "Pushable Carts vehicle/entity interaction threw a null pointer exception during multiplayer state updates.",
+        "action": "Apply Universal Master Polyfills to guard SaucedCarts interop."
+      },
+      "duplicate_id": {
+        "title": "Duplicate Item/Recipe ID Collision",
+        "explanation": "Multiple active mods registered the same script ID or recipe name, causing overwrite conflicts.",
+        "action": "Use Merger Module to merge script definitions into Master Patch."
+      },
+      "package_copy": {
+        "title": "{{file}}, the patched copy in {{package}}, reported a problem",
+        "action": "The game read {{package}}'s copy of this file, not the mod's. If the patch did not touch this line, the mod's own copy says the same thing, and a copy that changes nothing only freezes the file at today's version: unmerge it in the Merger. If it did, this is the line to look at there."
+      },
+      "mod_named_exception": {
+        "title": "{{mod}} reported a problem",
+        "action": "The game named {{mod}} on this line. If something is misbehaving in game, switching that mod off is the quickest way to tell whether it is the cause."
+      },
+      "mod_named_warning": {
+        "title": "{{mod}} reported a problem",
+        "action": "The game named {{mod}} here and carried on. Nothing to do unless something in that mod misbehaves in game; then this line is where to look."
+      }
+    },
+    "validate": {
+      "script_extra_close": "a `}` with no block open; the game's script reader stops here",
+      "script_unclosed": "a `{` never closed; the rest of the file is lost to the game",
+      "not_utf8": "not UTF-8 text; the game reads it, this check cannot"
+    },
+    "mp": {
+      "removeErosionObject": "removing a bush or erosion object",
+      "toggleCurtain": "opening or closing a curtain",
+      "setUsesExternalWaterSource": "plumbing an object",
+      "setExplosionTimer": "setting a bomb's timer",
+      "setFuelAmount": "fuelling a fireplace or barbecue",
+      "setMaxTemperature": "setting a stove",
+      "becomeCorpseItem": "turning a body into an item",
+      "triggerThunderEvent": "triggering thunder",
+      "disableErosion": "disabling erosion on a square",
+      "setKnownInSquares": "revealing map",
+      "killAnimal": "killing an animal",
+      "setWoolQuantity": "an animal's wool",
+      "setMilkQuantity": "an animal's milk",
+      "setPregnant": "an animal's pregnancy",
+      "setFertilized": "an animal's fertilisation",
+      "addAnimalInside": "putting an animal in a hutch",
+      "setHutchDirt": "a hutch's dirt",
+      "tryStartEngine": "starting a vehicle's engine",
+      "setHeadlightsOn": "a vehicle's headlights",
+      "setStoplightsOn": "a vehicle's stop lights",
+      "setTrunkLocked": "a vehicle's trunk lock",
+      "setTireInflation": "a tire's pressure",
+      "setLightbarLightsMode": "a lightbar's lights",
+      "setLightbarSirenMode": "a lightbar's siren",
+      "putKeyInIgnition": "a vehicle key in the ignition",
+      "removeKeyFromIgnition": "a vehicle key out of the ignition",
+      "putKeyOnDoor": "a vehicle key on the door",
+      "removeKeyFromDoor": "a vehicle key off the door",
+      "createVehicleKey": "making a vehicle key",
+      "permanentlyRemove": "removing a vehicle",
+      "setBloodIntensity": "blood on a vehicle",
+      "setRust": "rust on a vehicle",
+      "setColorHSV": "a vehicle's colour",
+      "setSkinIndex": "a vehicle's skin",
+      "setAlarmed": "a vehicle's alarm",
+      "addPointConstraint": "attaching a trailer",
+      "breakConstraint": "detaching a trailer",
+      "cheatHotwire": "hotwiring a vehicle",
+      "setFocusingUp": "a headlight's focus",
+      "damageObjects": "a vehicle damaging objects"
+    }
   }
 }

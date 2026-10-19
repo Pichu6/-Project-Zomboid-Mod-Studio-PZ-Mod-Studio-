@@ -209,6 +209,9 @@ export interface TranslatedErrorCard {
    * threw), WARNING for WARN lines (the game noticed and carried on).
    */
   severity: 'EXCEPTION' | 'WARNING';
+  /** Which kind of card, and the values its texts are made of, for the chosen language (`backendText`). */
+  code?: string;
+  params?: Record<string, string>;
 }
 
 export interface SandboxSession {
@@ -369,6 +372,8 @@ export interface FileProblem {
   col: number | null;
   message: string;
   kind: 'lua' | 'script';
+  /** Set for the Studio's own problems (script_extra_close, script_unclosed, not_utf8); empty for the parser's words. */
+  code?: string;
 }
 
 /** One call a mod's client code makes that the game routes through the server in multiplayer. */
@@ -472,6 +477,8 @@ export interface HealthIssue {
   related: string[];
   /** The same thing file by file, when the message lumps several (script conflicts). */
   details?: IssueDetail[];
+  /** The values `message` is made of, for saying it in the chosen language (`backendText`). */
+  params?: Record<string, string>;
 }
 
 /** One file of one mod, and the things in it another mod also declares. */

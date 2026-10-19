@@ -5,6 +5,7 @@ import { TauriService } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { applyFix } from '../../utils/healthFix';
 import i18next from 'i18next';
+import { issueText } from '../../i18n/backendText';
 
 /** What a row says for each code the health check can raise. Short: the row is narrow. */
 /** Settled things are Mod Health's record, not a row's problem. */
@@ -149,7 +150,7 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
               className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 border transition cursor-pointer shadow-sm ${style.chip} ${
                 fix ? 'rounded-l' : 'rounded'
               }`}
-              title={`${issue.message}${
+              title={`${issueText(issue)}${
                 other
                   ? i18next.t('modList.health.clickGoTo', { name: nameOf(other) })
                   : others.length > 1

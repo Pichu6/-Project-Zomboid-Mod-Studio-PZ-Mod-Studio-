@@ -1730,5 +1730,206 @@
       "keepOn": "Dejarlo activo",
       "close": "Cerrar"
     }
+  },
+  "backendText": {
+    "health": {
+      "duplicate_entry": "{{mod}} está más de una vez en la lista activa",
+      "missing_mod_similar": "{{mod}} no está instalado. Los ids de mod distinguen mayúsculas de minúsculas: ¿quisiste decir {{similar}}?",
+      "missing_mod_gone": "{{mod}} está activado pero no está instalado (se canceló la suscripción o se borró)",
+      "not_for_build_some": "{{mod}} no tiene archivos para la build {{build}} del juego (tiene: {{folders}}). El juego no lo va a cargar.",
+      "not_for_build_none": "{{mod}} no tiene archivos para la build {{build}} del juego (no tiene nada que sirva{{folders}}). El juego no lo va a cargar.",
+      "outside_version_range": "{{mod}} admite las versiones del juego {{min}} a {{max}}; tenés la {{build}}. El juego no lo va a cargar.",
+      "invalid_mod_info": "{{mod}}: {{reason}}",
+      "missing_dependency_similar": "{{mod}} requiere {{dep}}, que no está instalado (hay un mod instalado que se llama {{similar}}: los ids distinguen mayúsculas de minúsculas)",
+      "missing_dependency_plain": "{{mod}} requiere {{dep}}, que no está instalado",
+      "dependency_not_enabled": "{{mod}} requiere {{dep}}, que está instalado pero no activado",
+      "dependency_after": "{{mod}} requiere {{dep}}, pero {{dep}} carga después",
+      "dependency_unavailable_not_installed": "{{mod}} requiere {{dep}}, que no está disponible: {{culprit}} no está instalado",
+      "dependency_unavailable_cannot_load": "{{mod}} requiere {{dep}}, que no está disponible: {{culprit}} no puede cargar en esta build",
+      "load_after_order": "{{mod}} pide cargar después de {{other}}, pero {{other}} viene más abajo en la lista",
+      "load_before_order": "{{mod}} pide cargar antes de {{other}}, pero {{other}} viene más arriba en la lista",
+      "incompatible": "{{mod}} está marcado como incompatible con {{other}}, y los dos están activados",
+      "workshop_update_pending": "Steam tiene una versión más nueva de {{mod}}{{published}} que todavía no se descargó. Dejá que Steam la descargue (reiniciá Steam si se trabó): los servidores rechazan a los jugadores cuyas versiones de mods no coinciden (\"Workshop item version is different than the server's\").",
+      "compatible_copy": "{{mod}} corre desde una copia compatible en Zomboid/mods ({{changes}}). Se usa cuando el juego se inicia desde PZ Mod Studio; para iniciarlo desde Steam hace falta la opción de lanzamiento -modfolders mods,workshop,steam.",
+      "shadowed_copy": "Otra copia de {{mod}} en {{ignored}} queda ignorada: el juego usa la de {{used}}",
+      "updated_since_last_play": "{{n}} mods activos se actualizaron desde la última vez que jugaste: {{mods}}{{andMore}}. Si una partida se porta mal, empezá por estos.",
+      "user_rule_order": "Pediste que {{mod}} cargue después de {{after}}{{note}}, y en la lista viene antes",
+      "community_rule_order_rules": "Según la comunidad, {{mod}} carga después de {{after}}{{note}}{{sourceText}}, y en la lista viene antes",
+      "community_incompatible_rules": "Según la comunidad, {{mod}} y {{other}} no van juntos{{note}}{{sourceText}}, y los dos están activados",
+      "community_rule_order_index": "Según el índice comunitario, {{mod}} carga después de {{after}} ({{note}}{{seen}}), y en la lista viene antes",
+      "community_incompatible_index": "Según el índice comunitario, {{mod}} y {{other}} no van juntos ({{note}}{{seen}}), y los dos están activados",
+      "community_known_issue": "{{mod}} tiene un problema conocido, según el índice comunitario: {{title}}{{evidence}}{{note}}{{how}} [{{seen}}]",
+      "community_successor": "{{mod}} tiene una versión para esta build, según el índice comunitario: {{successor}}{{note}}",
+      "package_built_for_other_list": "{{package}} se armó con otra lista: {{missing}}{{sep}}{{extra}}. Un paquete es un mod en sí mismo, así que aparece en todos los perfiles; sus fusiones solo resuelven los mods con los que se armó. En el Fusionador de mods, abrilo, volvé a escanear y publicá para rearmarlo para esta lista, o apagalo en este perfil.",
+      "definition": "{{losers}} y {{winner}} {{all}} definen {{properties}} en {{what}}, en archivos distintos ({{files}}). El juego aplica {{each}} a {{things}}, así que se conserva todo lo demás que define cada uno; solo {{props}} el orden de carga, y {{winner}} carga último.{{example}}{{settled}}",
+      "definition_nested": "{{losers}} y {{winner}} declaran {{what}}, en archivos distintos ({{files}}), y su contenido difiere. Lo que difiere está dentro de bloques anidados, que el Studio no compara, así que no puede decir qué está en juego: solo que {{winner}} carga último.{{settled}}",
+      "script_definition_conflict_more": "{{left}} cosas más, en otros {{pairs}} pares de mods, tienen una propiedad que dos mods definen distinto. En cada una decide el mod que carga último.",
+      "translation": "{{losers}} y {{winner}} nombran {{what}} de forma distinta en {{lang}} ({{category}}).{{example}} El juego lee las traducciones de todos los mods y se queda con la última cargada, así que hoy se ven las palabras de {{winner}}.{{settled}}",
+      "file_conflict": "{{others}} y {{winner}} traen {{path}}. Sin una fusión el juego solo usa la copia de {{winner}}, así que la versión de {{others}} se ignora. {{how}}",
+      "file_conflict_stale": "{{path}} se fusionó, pero {{mods}} cambió desde entonces. Fusionalo de nuevo para que el paquete coincida con las versiones actuales.",
+      "server_mod_not_installed": "Mods= tiene {{entry}}, que no está instalado en esta máquina. Si el servidor tampoco lo tiene, no va a cargar.",
+      "server_item_missing": "{{mod}} está en Mods= pero su id del Workshop {{item}} no está en WorkshopItems=, así que el servidor nunca lo descarga y el mod falta en el juego.",
+      "server_mod_not_from_workshop": "{{mod}} no viene del Workshop, así que el servidor no lo puede descargar: copiá su carpeta en el Zomboid/mods del servidor.",
+      "server_mod_not_for_build": "La build instalada acá no puede cargar {{mod}} ({{entry}}).",
+      "server_map_missing": "{{mod}} agrega los mapas {{maps}}, que no están en Map=. El mod carga, el mapa no.",
+      "server_item_unused_not_installed": "WorkshopItems= tiene {{item}}, que no está instalado acá, y nada en Mods= lo usa. El servidor lo descarga y no carga nada de él.",
+      "server_item_unused_holds_one": "WorkshopItems= tiene {{item}}, que trae {{mods}}, pero Mods= no lo incluye. Se descarga y nunca se carga.",
+      "server_item_unused_holds_many": "WorkshopItems= tiene {{item}}, que trae {{mods}}, pero Mods= no los incluye. Se descarga y nunca se carga.",
+      "server_base_map_last": "Map= termina con {{map}}, que no es uno de los mapas del juego. El mapa base (por ejemplo Muldraugh, KY) va último."
+    },
+    "fragments": {
+      "vs": " contra ",
+      "any": "cualquiera",
+      "published": " (publicada el {{date}})",
+      "and_more": " y {{more}} más",
+      "source": " [fuente: {{source}}]",
+      "verified": "verificado",
+      "reported": "reportado",
+      "verified_on": "verificado en {{build}}",
+      "reported_on": "reportado en {{build}}",
+      "shim_off": "; el parche del shim para esto está apagado",
+      "require_path": "; requiere \"{{from}}\", que en Build 42 está en \"{{to}}\" (una copia compatible lo reescribe; Corregir la ruta en el Centro de monitoreo publica ese único archivo)",
+      "copy_fixes": "; una copia compatible lo arregla",
+      "pkg_missing_one": "{{missingN}} mod está activado en este perfil y el paquete nunca lo vio ({{missingList}}{{missingMore}})",
+      "pkg_missing_other": "{{missingN}} mods están activados en este perfil y el paquete nunca los vio ({{missingList}}{{missingMore}})",
+      "pkg_extra_one": "{{extraN}} mod que fusionó está apagado acá, y sus archivos fusionados siguen en el paquete ({{extraList}}{{extraMore}})",
+      "pkg_extra_other": "{{extraN}} mods que fusionó están apagados acá, y sus archivos fusionados siguen en el paquete ({{extraList}}{{extraMore}})",
+      "more_missing": ", y {{missingMoreN}} más",
+      "more_extra": ", y {{extraMoreN}} más",
+      "things": "{{n}} cosas ({{named}}{{ellipsis}})",
+      "all": "todos",
+      "both": "los dos",
+      "each_all": "lo de todos",
+      "each_both": "lo de los dos mods",
+      "thing_one": "a la misma cosa",
+      "thing_other": "a las mismas cosas",
+      "props_one": "esa propiedad la decide",
+      "props_other": "esas propiedades las decide",
+      "def_example": " En {{exDef}}, eso es {{exValues}}.",
+      "def_settled": " Tu paquete ya resuelve esto; carga último, así que gana lo que tiene.",
+      "def_stale": " {{staleN}} de estas se fusionaron en tu paquete antes de que cambiara uno de los mods, así que el paquete ya no coincide con ellos: fusionalas de nuevo.",
+      "tr_example": " {{exName}} es {{exValues}}.",
+      "tr_merged": " Tu paquete ya lleva las palabras que elegiste; carga último, así que se ven.",
+      "tr_stale": " Las palabras que elegiste están en tu paquete, pero un mod cambió desde entonces: revisalas de nuevo.",
+      "fc_auto": "Se puede fusionar automáticamente.",
+      "fc_manual": "Cambian las mismas líneas de forma distinta: elegí en el Fusionador de mods.",
+      "a_file": "un archivo"
+    },
+    "monitor": {
+      "door_npc": {
+        "title": "Null de NPC en IsoDoor / IsoWindow (B42)",
+        "explanation": "Una entidad que no es jugador (zombi o NPC) interactuó con una puerta o ventana, y el chequeo de jugador local de Build 42 en la JVM saltó con un personaje nulo.",
+        "action": "Aplicá la regla de polyfill B42_OBJECT_INTERACT_SAFETY"
+      },
+      "bandits_room": {
+        "title": "Protección del comedor de Bandits Week One (B42)",
+        "explanation": "El programa de habitaciones de Bandits Week One llamó a getName() en una casilla exterior o sin zona, donde getRoom() es nil, y llena el log de errores en cada tick de la IA.",
+        "action": "Aplicá la regla de polyfill B42_BANDITS_ROOM_SAFETY"
+      },
+      "daily_report": {
+        "title": "Protección de callbacks de Daily Report Journal",
+        "explanation": "El cambio de día de Daily Report Journal o la muerte del jugador ejecutó callbacks sobre una ventana de la interfaz que no estaba inicializada.",
+        "action": "Aplicá la regla de polyfill B42_DAILY_REPORT_SAFETY"
+      },
+      "translator_format": {
+        "title": "Excepción de formato en Translator (carácter %)",
+        "explanation": "Un mod llamó a Translator.getText() con un % o un . sin escapar, y el formateo de cadenas de Java se rompió.",
+        "action": "Aplicá la regla de polyfill SANITIZE_TRANSLATOR_FORMAT"
+      },
+      "nil_table": {
+        "title": "Acceso a una tabla global sin inicializar",
+        "explanation": "El código de un mod intentó leer propiedades de una tabla nil o sin inicializar antes de que Build 42 la creara.",
+        "action": "Aplicá la regla de polyfill SAFE_GLOBAL_TABLE_ACCESS"
+      },
+      "java_npe": {
+        "title": "NullPointerException en la interoperabilidad con Java",
+        "explanation": "Un método de Java devolvió null o recibió un parámetro null desde la llamada de un mod Lua viejo.",
+        "action": "Aplicá los Universal Master Polyfills para manejar sin riesgo los argumentos null de Java."
+      },
+      "kahlua": {
+        "title": "Error de ejecución de Lua (Kahlua)",
+        "explanation": "Se lanzó una excepción de Lua no manejada dentro de la VM Kahlua de PZ.",
+        "action": "Aplicá los Universal Master Polyfills para proteger los bucles del juego y los stack traces."
+      },
+      "index_bounds": {
+        "title": "ArrayList de Java fuera de rango en multijugador (B42)",
+        "explanation": "Un mod leyó el índice 0 de IsoPlayer.getPlayers() o getOnlinePlayers() mientras la colección de jugadores de Java estaba vacía, en un bucle de render o tick en multijugador.",
+        "action": "Aplicá los Universal Master Polyfills (proxy seguro de ArrayList y escudo de getOnlinePlayers)."
+      },
+      "fancy_handwork": {
+        "title": "Protección de la sincronización de manos de Fancy Handwork en multijugador",
+        "explanation": "El bucle fancyMP de Fancy Handwork lanzó un error no capturado al evaluar los objetos en las manos de jugadores locales o remotos en cada tick.",
+        "action": "Aplicá los Universal Master Polyfills para proteger los callbacks de FancyHandwork."
+      },
+      "sauced_carts": {
+        "title": "Sincronización de SaucedCarts (Pushable Carts) en multijugador",
+        "explanation": "La interacción de Pushable Carts con vehículos o entidades lanzó un NullPointerException al actualizar el estado en multijugador.",
+        "action": "Aplicá los Universal Master Polyfills para proteger la interoperabilidad de SaucedCarts."
+      },
+      "duplicate_id": {
+        "title": "Choque de IDs de ítem o receta duplicados",
+        "explanation": "Varios mods activos registraron el mismo ID de script o nombre de receta, y se pisan entre sí.",
+        "action": "Usá el Fusionador de mods para fusionar las definiciones de scripts en el paquete."
+      },
+      "package_copy": {
+        "title": "{{file}}, la copia parcheada en {{package}}, reportó un problema",
+        "action": "El juego leyó la copia de este archivo de {{package}}, no la del mod. Si el parche no tocó esta línea, la copia del mod dice lo mismo, y una copia que no cambia nada solo congela el archivo en la versión de hoy: desfusionalo en el Fusionador. Si la tocó, esta es la línea a revisar ahí."
+      },
+      "mod_named_exception": {
+        "title": "{{mod}} reportó un problema",
+        "action": "El juego nombró a {{mod}} en esta línea. Si algo anda mal en el juego, apagar ese mod es la forma más rápida de saber si es la causa."
+      },
+      "mod_named_warning": {
+        "title": "{{mod}} reportó un problema",
+        "action": "El juego nombró a {{mod}} acá y siguió. No hay nada que hacer salvo que algo de ese mod ande mal en el juego; en ese caso, esta es la línea a mirar."
+      }
+    },
+    "validate": {
+      "script_extra_close": "una `}` sin bloque abierto; el lector de scripts del juego se detiene acá",
+      "script_unclosed": "una `{` que nunca se cierra; el resto del archivo se pierde para el juego",
+      "not_utf8": "no es texto UTF-8; el juego lo lee, este chequeo no puede"
+    },
+    "mp": {
+      "removeErosionObject": "sacar un arbusto u objeto de erosión",
+      "toggleCurtain": "abrir o cerrar una cortina",
+      "setUsesExternalWaterSource": "conectar un objeto a la cañería",
+      "setExplosionTimer": "programar el temporizador de una bomba",
+      "setFuelAmount": "cargar combustible en una chimenea o parrilla",
+      "setMaxTemperature": "regular una cocina",
+      "becomeCorpseItem": "convertir un cuerpo en ítem",
+      "triggerThunderEvent": "provocar un trueno",
+      "disableErosion": "desactivar la erosión en una casilla",
+      "setKnownInSquares": "revelar el mapa",
+      "killAnimal": "matar un animal",
+      "setWoolQuantity": "la lana de un animal",
+      "setMilkQuantity": "la leche de un animal",
+      "setPregnant": "la preñez de un animal",
+      "setFertilized": "la fertilización de un animal",
+      "addAnimalInside": "meter un animal en un gallinero",
+      "setHutchDirt": "la suciedad de un gallinero",
+      "tryStartEngine": "arrancar el motor de un vehículo",
+      "setHeadlightsOn": "las luces delanteras de un vehículo",
+      "setStoplightsOn": "las luces de freno de un vehículo",
+      "setTrunkLocked": "la traba del baúl de un vehículo",
+      "setTireInflation": "la presión de una rueda",
+      "setLightbarLightsMode": "las luces de una barra de balizas",
+      "setLightbarSirenMode": "la sirena de una barra de balizas",
+      "putKeyInIgnition": "poner la llave de un vehículo en el encendido",
+      "removeKeyFromIgnition": "sacar la llave de un vehículo del encendido",
+      "putKeyOnDoor": "poner la llave de un vehículo en la puerta",
+      "removeKeyFromDoor": "sacar la llave de un vehículo de la puerta",
+      "createVehicleKey": "hacer una llave de vehículo",
+      "permanentlyRemove": "eliminar un vehículo",
+      "setBloodIntensity": "la sangre en un vehículo",
+      "setRust": "el óxido de un vehículo",
+      "setColorHSV": "el color de un vehículo",
+      "setSkinIndex": "la skin de un vehículo",
+      "setAlarmed": "la alarma de un vehículo",
+      "addPointConstraint": "enganchar un trailer",
+      "breakConstraint": "desenganchar un trailer",
+      "cheatHotwire": "hacer un puente a un vehículo",
+      "setFocusingUp": "el enfoque de un faro",
+      "damageObjects": "un vehículo que daña objetos"
+    }
   }
 }

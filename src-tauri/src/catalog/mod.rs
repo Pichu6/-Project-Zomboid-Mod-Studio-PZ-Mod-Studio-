@@ -423,7 +423,7 @@ pub fn issues_for_translation_conflicts(conflicts: &[crate::translations::Transl
             ("losers", &others.join(", ")), ("winner", &winner), ("lang", &lang), ("category", &category),
             ("what", if group.len() == 1 { &c.key } else { "" }), ("whatKey", if group.len() == 1 { "" } else { "things" }),
             ("n", &group.len().to_string()), ("named", &named.join(", ")), ("ellipsis", if group.len() > 3 { ", ..." } else { "" }),
-            ("exKey", &c.key), ("exValuesVs", &crate::translations::distinct_value_list(c).join("\u{1f}")), ("exampleKey", "tr_example"),
+            ("exName", &c.key), ("exValuesVs", &crate::translations::distinct_value_list(c).join("\u{1f}")), ("exampleKey", "tr_example"),
             ("settledKey", match state.as_str() { "merged" => "tr_merged", "stale" => "tr_stale", _ => "" }),
         ]);
         if let Some(last) = list.0.last_mut() {

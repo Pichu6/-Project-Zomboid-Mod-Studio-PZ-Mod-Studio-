@@ -32,6 +32,7 @@ import {
 } from '../../types';
 import { TauriService, explainError } from '../../services/tauri';
 import { MpCheckPanel } from '../common/MpCheckPanel';
+import { issueText } from '../../i18n/backendText';
 import { MpModReport } from '../../types';
 
 interface ServerModuleProps {
@@ -739,7 +740,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                                   }`}
                                   aria-hidden="true"
                                 />
-                                <span className="text-slate-300">{issue.message}</span>
+                                <span className="text-slate-300">{issueText(issue)}</span>
                               </div>
                             ))}
                           </div>

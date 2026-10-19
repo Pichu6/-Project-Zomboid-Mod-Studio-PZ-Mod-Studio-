@@ -4,6 +4,7 @@ import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
 import { Crosshair, Play, ThumbsDown, ThumbsUp, Undo2, ChevronDown, ChevronRight, Search, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { cardText } from '../../i18n/backendText';
 
 interface BisectPanelProps {
   paths: StudioPathsUI;
@@ -279,7 +280,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                               {card.severity === 'WARNING' ? t('monitor.bisect.warning') : t('monitor.bisect.exception')}
                             </span>
                             <span className="text-[10px] text-slate-300 truncate flex-1" title={card.raw_error}>
-                              {card.explanation}
+                              {cardText(card, 'explanation')}
                             </span>
                             {onPatchMod && fileNamed(card) && (
                               <button
