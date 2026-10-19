@@ -6,6 +6,7 @@ import { TauriService, explainError, reportBackendError } from '../../services/t
 import { applyRequireFix, packageForPatch } from '../../utils/requireFix';
 import { errorShape } from '../../utils/errorShape';
 import { AlertCircle, AlertTriangle, Check, CheckCircle, Copy, Download, Search, Trash2, Wrench, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 /** The game names a Studio package when it read the package's patched copy of a mod's file. */
 const STUDIO_PACKAGE_PREFIX = 'PZ Mod Studio Patch: ';
@@ -57,6 +58,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   onInspect,
   onStatus,
 }) => {
+  const { t } = useTranslation();
   const [copiedCardId, setCopiedCardId] = useState<string | null>(null);
 
   /**
@@ -78,7 +80,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
         logContext: lines.slice(from, to),
       });
     } catch (err) {
-      reportBackendError('Writing the error report', err);
+      reportBackendError(t('monitor.errors.writingReport'), err);
       return null;
     }
   };
@@ -87,13 +89,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
     const report = await buildReportFor(card);
     if (!report) return;
     const slug = (card.mod_name ?? 'error').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const path = await TauriService.pickSaveFile(`pz-error-${slug || 'report'}.md`, 'Markdown (.md)', 'md');
+    const path = await TauriService.pickSaveFile(`pz-error-${slug || 'report'}.md`, t('monitor.cards.mdFilter'), 'md');
     if (!path) return;
     try {
       await TauriService.saveTextFile(path, report);
-      onStatus(`Saved to ${path}`);
+      onStatus(t('monitor.cards.savedTo', { path }));
     } catch (err) {
-      reportBackendError('Saving the error report', err);
+      reportBackendError(t('monitor.errors.savingReport'), err);
     }
   };
 
@@ -101,7 +103,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
     const report = await buildReportFor(card);
     if (!report) return;
     await navigator.clipboard.writeText(report);
-    onStatus('Report copied to the clipboard');
+    onStatus(t('monitor.cards.reportCopied'));
   };
 
   const handleInspectInConsole = (card: TranslatedErrorCard) => {
@@ -192,7 +194,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
       if (asking.length === 0) {
         setFixNotes((prev) => ({
           ...prev,
-          [card.id]: `No file of any active mod asks for ${fix.from} in a way the Studio can rewrite, so there is nothing to change.`,
+          [card.id]: t('monitor.fixes.noFileAsks', { module: fix.from }),
         }));
         return;
       }
@@ -205,15 +207,19 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
         const fixed = applyRequireFix(opened.merged_output || opened.base_content, fix);
         if (!fixed) continue;
         await TauriService.publishFileIntoPackage(paths, folder, opened.relative_path, fixed.content);
-        done.push(`${file.relative_path.split('/').pop()} of ${mod_name} (line ${fixed.line})`);
+        done.push(t('monitor.fixes.doneItem', { file: file.relative_path.split('/').pop(), mod: mod_name, line: fixed.line }));
       }
       if (done.length === 0) {
-        setFixNotes((prev) => ({ ...prev, [card.id]: `Nothing to rewrite for ${fix.from}.` }));
+        setFixNotes((prev) => ({ ...prev, [card.id]: t('monitor.fixes.nothingToRewrite', { module: fix.from }) }));
         return;
       }
       // Done: the card goes, and one line above the list says what happened and what is left.
       setFixedBanner(
-        `${done.join(', ')} now ${done.length === 1 ? 'asks' : 'ask'} for ${fix.to}, published in ${display}. Relaunch the game; this warning should not come back.`
+        t(done.length === 1 ? 'monitor.fixes.pathFixedOne' : 'monitor.fixes.pathFixedMany', {
+          files: done.join(', '),
+          to: fix.to,
+          package: display,
+        })
       );
       onDismissErrorCard?.(card.id);
       onRefreshMods();
@@ -234,9 +240,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
     const display = (card.mod_name ?? '').slice(STUDIO_PACKAGE_PREFIX.length);
     if (!file || !display) return;
     if (
-      !window.confirm(
-        `Take ${file} out of ${display}?\n\nThe package is published again without it, and the game reads the mod's own ${file} on its next launch. If you edited the copy, those edits go.`
-      )
+      !window.confirm(t('monitor.fixes.removeCopyConfirm', { file, package: display }))
     )
       return;
     setFixing(card.id);
@@ -244,9 +248,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
       const packages = await TauriService.listMergedPackages(paths.user_zomboid_dir || '', paths.mod_list_ini_path || '');
       const folder = packages.find((p) => p.display_name === display)?.folder_name ?? `Z_PZModStudio_${display.replace(/ /g, '_')}`;
       const result = await TauriService.removeFileFromPackage(paths, folder, file);
-      setFixedBanner(
-        `${file} is out of ${display} (${result.files_written} files left). Relaunch the game; it reads the mod's own copy again, and if the mod's line still warns, the card names the mod.`
-      );
+      setFixedBanner(t('monitor.fixes.copyRemoved', { file, package: display, count: result.files_written }));
       onDismissErrorCard?.(card.id);
       onRefreshMods();
     } catch (err) {
@@ -306,51 +308,44 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
       <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
         <div>
           <h3 className="text-xs font-bold text-slate-200 flex items-center gap-2">
-            <span>DIAGNOSTICS</span>
+            <span>{t('monitor.cards.heading')}</span>
             {exceptionCards.length > 0 && (
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono"
-                title="Something threw: the game wrote these at ERROR level or as a stack trace"
+                title={t('monitor.cards.exceptionsBadgeTitle')}
               >
-                {exceptionCards.length} {exceptionCards.length === 1 ? 'exception' : 'exceptions'} · Action Required
+                {t('monitor.cards.exceptionsBadge', { count: exceptionCards.length })}
               </span>
             )}
             {warningCards.length > 0 && (
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono"
-                title="The game noticed and carried on: WARN lines that name a mod"
+                title={t('monitor.cards.warningsBadgeTitle')}
               >
-                {warningCards.length} {warningCards.length === 1 ? 'warning' : 'warnings'}
+                {t('monitor.cards.warningsBadge', { count: warningCards.length })}
               </span>
             )}
           </h3>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            {exceptionCards.length > 0 ? (
-              <>
-                {errorCounts.total.toLocaleString()} error lines in this log are{' '}
-                {errorCounts.distinct} different problems: the game writes the same failure
-                again every time it happens.
-              </>
-            ) : warningCards.length > 0 ? (
-              <>
-                Nothing threw in this log: the game carried on past every line below.
-                {errorCounts.total > 0 && (
-                  <>
-                    {' '}It also wrote {errorCounts.total.toLocaleString()} ERROR lines of{' '}
-                    {errorCounts.distinct} {errorCounts.distinct === 1 ? 'shape' : 'shapes'} that
-                    name no mod and match no rule here; the Errors filter on the left shows them.
-                  </>
-                )}
-              </>
-            ) : errorCounts.total > 0 ? (
-              <>
-                {errorCounts.total.toLocaleString()} ERROR lines of {errorCounts.distinct}{' '}
-                {errorCounts.distinct === 1 ? 'shape' : 'shapes'}, none naming a mod or matching a
-                rule here; the Errors filter on the left shows them.
-              </>
-            ) : (
-              <>Exceptions the game throws and warnings it names a mod on, as they happen.</>
-            )}
+            {exceptionCards.length > 0
+              ? t('monitor.cards.summaryExceptions', {
+                  total: errorCounts.total.toLocaleString(),
+                  distinct: errorCounts.distinct,
+                })
+              : warningCards.length > 0
+              ? t('monitor.cards.summaryNothingThrew') +
+                (errorCounts.total > 0
+                  ? t('monitor.cards.summaryAlsoErrorLines', {
+                      total: errorCounts.total.toLocaleString(),
+                      distinct: errorCounts.distinct,
+                    })
+                  : '')
+              : errorCounts.total > 0
+              ? t('monitor.cards.summaryErrorLinesOnly', {
+                  total: errorCounts.total.toLocaleString(),
+                  distinct: errorCounts.distinct,
+                })
+              : t('monitor.cards.summaryIdle')}
           </p>
         </div>
 
@@ -358,14 +353,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
           <button
             onClick={onClearErrorCards}
             className="text-[10px] text-slate-400 hover:text-slate-200 font-mono bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
-            title="Discard all cards"
+            title={t('monitor.cards.discardTitle')}
           >
             <Trash2 className="w-3 h-3 text-slate-400" />
-            <span>Discard</span>
+            <span>{t('monitor.cards.discard')}</span>
           </button>
         ) : (
           <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-            <CheckCircle className="w-3.5 h-3.5" /> Nothing threw
+            <CheckCircle className="w-3.5 h-3.5" /> {t('monitor.cards.nothingThrew')}
           </span>
         )}
       </div>
@@ -378,7 +373,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
             type="button"
             onClick={() => setFixedBanner(null)}
             className="text-emerald-400 hover:text-emerald-200 cursor-pointer"
-            title="Dismiss"
+            title={t('monitor.cards.dismiss')}
           >
             <X className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
@@ -402,11 +397,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <CheckCircle className="w-6 h-6" />
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-300">Nothing to report</p>
-              <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
-                A card appears when the game throws, or when it writes a warning and names the
-                mod. Everything else in the console stays on the left.
-              </p>
+              <p className="text-xs font-bold text-slate-300">{t('monitor.cards.emptyTitle')}</p>
+              <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">{t('monitor.cards.emptyBody')}</p>
             </div>
           </div>
         ) : (
@@ -432,20 +424,24 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                       {isWarning(card) && (
                         <span
                           className="ml-2 align-middle text-[10px] font-mono font-normal px-1.5 py-0.5 rounded border border-amber-700/60 bg-amber-950/40 text-amber-300"
-                          title="The game wrote this at WARN level: it noticed and carried on"
+                          title={t('monitor.cards.warningChipTitle')}
                         >
-                          warning · the game carried on
+                          {t('monitor.cards.warningChip')}
                         </span>
                       )}
                     </h4>
                     {timesSeen(card) > 1 && (
                       <span
                         className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded border border-red-800/70 bg-red-950/50 text-red-300"
-                        title={`This error is in the log ${timesSeen(card)} times${
-                          errorCounts.total > 0
-                            ? ` — ${Math.round((timesSeen(card) / errorCounts.total) * 100)}% of every error line`
-                            : ''
-                        }. The ones that repeat are the ones worth fixing first.`}
+                        title={t('monitor.cards.timesSeenTitle', {
+                          count: timesSeen(card),
+                          share:
+                            errorCounts.total > 0
+                              ? t('monitor.cards.timesSeenShare', {
+                                  pct: Math.round((timesSeen(card) / errorCounts.total) * 100),
+                                })
+                              : '',
+                        })}
                       >
                         {timesSeen(card).toLocaleString()}×
                       </span>
@@ -456,9 +452,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                       <span
                         className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-300"
                         title={
-                          card.mod_name
-                            ? 'The game named this mod on the log line'
-                            : 'The game named this mod in the stack trace under the error'
+                          card.mod_name ? t('monitor.cards.modOnLine') : t('monitor.cards.modInStack')
                         }
                       >
                         {card.mod_name ?? modFromStack(card)}
@@ -472,10 +466,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                             onClick={() => void handleRemoveCopy(card)}
                             disabled={fixing === card.id}
                             className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1 disabled:opacity-50"
-                            title={`Take ${fileNamed(card)} out of ${card.mod_name!.slice(STUDIO_PACKAGE_PREFIX.length)}, published in place. The game reads the mod's own copy again on its next launch. Any edit you made to the copy goes with it.`}
+                            title={t('monitor.fixes.removeCopyTitle', {
+                              file: fileNamed(card),
+                              package: card.mod_name!.slice(STUDIO_PACKAGE_PREFIX.length),
+                            })}
                           >
                             <Wrench className="w-3 h-3" aria-hidden="true" />
-                            {fixing === card.id ? 'Removing…' : `Remove the copy of ${fileNamed(card)}`}
+                            {fixing === card.id
+                              ? t('monitor.fixes.removing')
+                              : t('monitor.fixes.removeCopy', { file: fileNamed(card) })}
                           </button>
                         )
                       ) : onPatchMod &&
@@ -497,22 +496,22 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                           className="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1 disabled:opacity-50"
                           title={
                             knownFix(card)
-                              ? `Rewrite the require in every file of this mod that asks for ${knownFix(card)!.from}, to the path the module has now, and publish them into the package in place. The mod stays on; relaunch the game afterwards.`
+                              ? t('monitor.fixes.rewriteTitle', { module: knownFix(card)!.from })
                               : fileNamed(card)
-                              ? `Open ${fileNamed(card)} from this mod in the Merger and patch it. The mod stays on; the package loads last, so the game reads your copy of that one file.`
-                              : 'Open this mod in the Merger and pick a file to patch. The mod stays on; the package loads last.'
+                              ? t('monitor.fixes.patchFileTitle', { file: fileNamed(card) })
+                              : t('monitor.fixes.patchAnyTitle')
                           }
                         >
                           <Wrench className="w-3 h-3" aria-hidden="true" />
                           {fixing === card.id
-                            ? 'Fixing…'
+                            ? t('monitor.fixes.fixing')
                             : knownFix(card)
                             ? fileNamed(card)
-                              ? `Fix the path in ${fileNamed(card)}`
-                              : 'Fix the path'
+                              ? t('monitor.fixes.fixPathIn', { file: fileNamed(card) })
+                              : t('monitor.fixes.fixPath')
                             : fileNamed(card)
-                            ? `Patch ${fileNamed(card)}`
-                            : 'Patch a file of it'}
+                            ? t('monitor.fixes.patchFile', { file: fileNamed(card) })
+                            : t('monitor.fixes.patchAFile')}
                         </button>
                       )}
                       {fixNotes[card.id] && (
@@ -525,9 +524,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                           type="button"
                           onClick={() => onSwitchOffMod((card.mod_name ?? modFromStack(card))!)}
                           className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
-                          title={`Switch ${card.mod_name ?? modFromStack(card)} off in the Mod List, to see whether it is the cause`}
+                          title={t('monitor.fixes.switchOffTitle', { mod: card.mod_name ?? modFromStack(card) })}
                         >
-                          Switch it off
+                          {t('monitor.fixes.switchOff')}
                         </button>
                       )}
                     </div>
@@ -539,7 +538,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               </div>
 
               <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-slate-800 select-text">
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Log Snippet</div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{t('monitor.cards.logSnippet')}</div>
                 <div className="truncate">{card.raw_error}</div>
               </div>
 
@@ -565,10 +564,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <button
                   onClick={onOpenMerger}
                   className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
-                  title="The Build 42 shim ships inside a merge package: build one in the Mod Merger"
+                  title={t('monitor.fixes.openMergerTitle')}
                 >
                   <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>A merge package may fix this — open the Mod Merger</span>
+                  <span>{t('monitor.fixes.openMerger')}</span>
                 </button>
               ) : card.mod_name ? (
                 /* The game named a mod: say what to do about that, not what the shim covers. */
@@ -578,7 +577,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
-                  <span>The Build 42 shim already covers this</span>
+                  <span>{t('monitor.fixes.shimCovers')}</span>
                 </div>
               )}
 
@@ -586,18 +585,18 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <button
                   onClick={() => handleSaveReport(card)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
-                  title="Writes a file with the error, your game build, the mod and the code, ready to hand to someone or to an AI assistant"
+                  title={t('monitor.cards.saveReportTitle')}
                 >
                   <Download className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Save report</span>
+                  <span>{t('monitor.cards.saveReport')}</span>
                 </button>
                 <button
                   onClick={() => handleCopyReport(card)}
                   className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
-                  title="Copies the same report to the clipboard"
+                  title={t('monitor.cards.copyReportTitle')}
                 >
                   <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Copy report</span>
+                  <span>{t('monitor.cards.copyReport')}</span>
                 </button>
               </div>
 
@@ -605,25 +604,25 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <button
                   onClick={() => handleInspectInConsole(card)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
-                  title="Jump to this error in the console logs"
+                  title={t('monitor.cards.inspectTitle')}
                 >
                   <Search className="w-3 h-3 text-cyan-400" />
-                  <span>🔍 Inspect in Logs</span>
+                  <span>{t('monitor.cards.inspect')}</span>
                 </button>
                 <button
                   onClick={() => handleCopyCardSnippet(card.id, card.raw_error)}
                   className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-medium transition cursor-pointer"
-                  title="Copy error snippet to clipboard"
+                  title={t('monitor.cards.copyLineTitle')}
                 >
                   {copiedCardId === card.id ? (
                     <>
                       <Check className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
+                      <span className="text-emerald-400">{t('monitor.cards.copied')}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="w-3 h-3 text-slate-400" />
-                      <span>Copy the line</span>
+                      <span>{t('monitor.cards.copyLine')}</span>
                     </>
                   )}
                 </button>

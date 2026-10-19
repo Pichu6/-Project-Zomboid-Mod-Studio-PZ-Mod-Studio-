@@ -4,10 +4,13 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
 import { liveConsoleLines, startLiveConsole, subscribeLiveConsole } from '../../services/liveConsole';
+import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
 
-const LIVE_CONSOLE_HEADER = [
-  '[PZ Monitor Center] Realtime client session monitor ready.',
-  '[PZ Monitor Center] Click "Launch Game (Monitored)" to start ProjectZomboid64.exe (-debug) and stream live output here.',
+const liveConsoleHeader = () => [i18next.t('monitor.console.header1'), i18next.t('monitor.console.header2')];
+const serverConsoleHeader = () => [
+  i18next.t('monitor.console.serverHeader1'),
+  i18next.t('monitor.console.serverHeader2'),
 ];
 import {
   FolderX,
@@ -83,7 +86,7 @@ export const formatLogDisplayName = (file: LogFileInfoUI): string => {
       const dateStr = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
       return `console.txt (${dateStr})`;
     }
-    return 'console.txt (On Disk)';
+    return i18next.t('monitor.console.onDisk');
   }
   return file.file_name;
 };
@@ -100,6 +103,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   onDismissErrorCard,
   onGoToSettings,
 }) => {
+  const { t } = useTranslation();
   // The companion bridge is a developer feature; its log filter follows the same switch.
   const [showAdvanced, setShowAdvanced] = useState<boolean>(() => localStorage.getItem('pz_show_advanced') === 'true');
   useEffect(() => {
@@ -121,19 +125,16 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
   const [tabs, setTabs] = useState<LogTab[]>([
     {
       id: 'live_console',
-      title: '🔴 console.txt (Client)',
+      title: t('monitor.console.clientTab'),
       isLive: true,
       // What the app has streamed so far: leaving this tab and coming back loses nothing.
-      lines: [...LIVE_CONSOLE_HEADER, ...liveConsoleLines()],
+      lines: [...liveConsoleHeader(), ...liveConsoleLines()],
     },
     {
       id: 'live_server',
-      title: '🖥️ Dedicated Server (Live)',
+      title: t('monitor.console.serverTab'),
       isLive: true,
-      lines: [
-        '[PZ Monitor Center] Dedicated server monitor ready.',
-        '[PZ Monitor Center] Dedicated server is currently offline. Start the server in "SERVERS" tab to begin live monitoring.',
-      ],
+      lines: serverConsoleHeader(),
     },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('live_console');
@@ -177,10 +178,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               t.id === 'live_server' && t.lines.length > 2
                 ? {
                     ...t,
-                    lines: [
-                      '[PZ Monitor Center] Dedicated server monitor ready.',
-                      '[PZ Monitor Center] Dedicated server is currently offline. Start the server in "SERVERS" tab to begin live monitoring.',
-                    ],
+                    lines: serverConsoleHeader(),
                   }
                 : t
             )
@@ -205,7 +203,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
     return subscribeLiveConsole(() => {
       setTabs((prev) =>
         prev.map((t) =>
-          t.id === 'live_console' ? { ...t, lines: [...LIVE_CONSOLE_HEADER, ...liveConsoleLines()] } : t
+          t.id === 'live_console' ? { ...t, lines: [...liveConsoleHeader(), ...liveConsoleLines()] } : t
         )
       );
     });
@@ -236,7 +234,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       title: displayName,
       isLive: false,
       filePath: logFile.absolute_path,
-      lines: lines.length > 0 ? lines : ['(The log file is empty)'],
+      lines: lines.length > 0 ? lines : [t('monitor.console.emptyLog')],
     };
 
     setTabs((prev) => [...prev, newTab]);
@@ -245,17 +243,17 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
   const handlePickCustomLog = async () => {
     setIsAddMenuOpen(false);
-    const filePath = await TauriService.pickOpenFile('PZ Log File', 'txt');
+    const filePath = await TauriService.pickOpenFile(t('monitor.logs.logFileFilter'), 'txt');
     if (!filePath) return;
 
-    const fileName = filePath.split(/[/\\]/).pop() || 'External Log';
+    const fileName = filePath.split(/[/\\]/).pop() || t('monitor.logs.externalLog');
     const lines = await TauriService.readLogFile(filePath, 2000);
     const newTab: LogTab = {
       id: `custom_${Date.now()}`,
       title: fileName,
       isLive: false,
       filePath,
-      lines: lines.length > 0 ? lines : ['(The log file is empty)'],
+      lines: lines.length > 0 ? lines : [t('monitor.console.emptyLog')],
     };
 
     setTabs((prev) => [...prev, newTab]);
@@ -289,7 +287,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
       const files = await TauriService.listAvailableLogFiles(paths.user_zomboid_dir);
       setAvailableLogs(files);
     } catch (err: any) {
-      alert(`Error saving log snapshot: ${explainError(err)}`);
+      alert(t('monitor.logs.saveSnapshotError', { error: explainError(err) }));
     }
   };
 
@@ -359,16 +357,14 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             <FolderX className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Setup Required: Game Directory</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Project Zomboid installation directory must be configured in App Settings before launching a Monitored Game Session.
-            </p>
+            <h3 className="text-base font-bold text-slate-100">{t('monitor.launch.setupTitle')}</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">{t('monitor.launch.setupBody')}</p>
           </div>
           <button
             onClick={onGoToSettings}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs py-2.5 rounded-lg shadow transition cursor-pointer"
           >
-            Configure Directory Paths in Settings
+            {t('monitor.launch.setupButton')}
           </button>
         </div>
       </div>
@@ -382,11 +378,9 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <Activity className="w-5 h-5 text-emerald-400" />
-            <span>Monitor Center & Crash Diagnostics</span>
+            <span>{t('monitor.console.title')}</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Real-time monitoring, multi-tab log viewer, and automated repair of Java/Lua exceptions.
-          </p>
+          <p className="text-xs text-slate-400 mt-0.5">{t('monitor.console.subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -394,10 +388,10 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
           <button
             onClick={() => TauriService.openLogsFolder(paths.user_zomboid_dir)}
             className="px-3 py-1.5 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg transition cursor-pointer flex items-center gap-1.5 shadow"
-            title="Open the physical logs folder (console.txt and Logs/ subfolder) in Windows Explorer"
+            title={t('monitor.console.logsFolderTitle')}
           >
             <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-            <span>📁 Logs Folder</span>
+            <span>{t('monitor.console.logsFolder')}</span>
           </button>
 
           {/* Spam Filter Toggle */}
@@ -408,10 +402,10 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700 shadow-emerald-950/40'
                 : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
             }`}
-            title="Filter or hide missing translation spam"
+            title={t('monitor.console.spamFilterTitle')}
           >
             <Filter className={`w-3.5 h-3.5 ${filterSpam ? 'text-emerald-400' : 'text-slate-500'}`} />
-            <span>{filterSpam ? 'Spam Filter: ACTIVE' : 'Filter: SHOW ALL'}</span>
+            <span>{filterSpam ? t('monitor.console.spamActive') : t('monitor.console.spamShowAll')}</span>
           </button>
         </div>
       </div>
@@ -441,7 +435,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                       <span
                         onClick={(e) => handleCloseTab(tab.id, e)}
                         className="text-slate-500 hover:text-red-400 rounded-full p-0.5"
-                        title="Close tab"
+                        title={t('monitor.console.closeTab')}
                       >
                         <X className="w-3 h-3" />
                       </span>
@@ -454,8 +448,8 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             {/* Fixed Right Actions (Add Log Button + Menu + Save Snapshot + Copy + Clear) */}
             <div className="flex items-center gap-1.5 pb-1 shrink-0 relative">
               {saveStatus && (
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-1 rounded border border-emerald-700/60 animate-fade-in truncate max-w-[130px]" title={`Saved: ${saveStatus}`}>
-                  ✅ Saved
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-1 rounded border border-emerald-700/60 animate-fade-in truncate max-w-[130px]" title={t('monitor.logs.savedTitle', { name: saveStatus })}>
+                  {t('monitor.logs.saved')}
                 </span>
               )}
 
@@ -464,22 +458,22 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                 <button
                   onClick={handleOpenAddMenu}
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-md transition cursor-pointer"
-                  title="Open or load another log file"
+                  title={t('monitor.logs.loadLogTitle')}
                 >
                   <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Load Log</span>
+                  <span>{t('monitor.logs.loadLog')}</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
 
                 {isAddMenuOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 p-2 space-y-1 animate-fade-in text-xs select-none">
                     <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-                      Available Logs in Zomboid/
+                      {t('monitor.logs.availableLogs')}
                     </div>
 
                     <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
                       {availableLogs.length === 0 ? (
-                        <div className="p-2 text-slate-500 text-center">Searching for logs on disk...</div>
+                        <div className="p-2 text-slate-500 text-center">{t('monitor.logs.searchingLogs')}</div>
                       ) : (
                         availableLogs.map((item) => (
                           <button
@@ -505,7 +499,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                         className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-emerald-950/60 text-emerald-300 font-medium transition cursor-pointer text-left"
                       >
                         <FolderOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>📂 Browse another file (.txt)...</span>
+                        <span>{t('monitor.logs.browseFile')}</span>
                       </button>
                     </div>
                   </div>
@@ -516,7 +510,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               <button
                 onClick={handleSaveSnapshot}
                 className="p-1.5 text-slate-400 hover:text-emerald-400 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition cursor-pointer"
-                title="Save current log snapshot to Zomboid/Logs/ as 'servertest - YYYY-MM-DD_HH-mm-ss.txt'"
+                title={t('monitor.logs.saveSnapshotTitle')}
               >
                 <Save className="w-3.5 h-3.5 text-emerald-400" />
               </button>
@@ -525,7 +519,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               <button
                 onClick={handleCopyLogs}
                 className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition cursor-pointer"
-                title="Copy visible log to clipboard"
+                title={t('monitor.console.copyTitle')}
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
@@ -534,7 +528,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
               <button
                 onClick={handleClearActiveTab}
                 className="p-1.5 text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition cursor-pointer"
-                title="Clear viewer for this tab"
+                title={t('monitor.console.clearTitle')}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -550,7 +544,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search keyword (e.g., isCorpse, NullPointer, M4, GunFighter)..."
+                placeholder={t('monitor.console.searchPlaceholder')}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
               />
               {searchQuery && (
@@ -573,7 +567,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                All
+                {t('monitor.console.filterAll')}
               </button>
               <button
                 onClick={() => setSeverityFilter('ERRORS')}
@@ -583,7 +577,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     : 'text-slate-400 hover:text-red-400'
                 }`}
               >
-                🚨 Errors
+                {t('monitor.console.filterErrors')}
               </button>
               <button
                 onClick={() => setSeverityFilter('LUA')}
@@ -593,7 +587,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     : 'text-slate-400 hover:text-blue-400'
                 }`}
               >
-                🌙 Lua
+                {t('monitor.console.filterLua')}
               </button>
               <button
                 onClick={() => setSeverityFilter('JAVA')}
@@ -603,7 +597,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     : 'text-slate-400 hover:text-amber-400'
                 }`}
               >
-                ☕ Java
+                {t('monitor.console.filterJava')}
               </button>
               {showAdvanced && (
               <button
@@ -614,7 +608,7 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
                     : 'text-slate-400 hover:text-purple-400'
                 }`}
               >
-                ⚡ Bridge
+                {t('monitor.console.filterBridge')}
               </button>
               )}
             </div>
@@ -625,10 +619,10 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
             {filteredLines.length === 0 ? (
               <div className="p-6 text-center text-slate-500 space-y-1">
                 <Search className="w-6 h-6 mx-auto text-slate-600 mb-1" />
-                <p>No lines found matching the filters.</p>
+                <p>{t('monitor.console.noLines')}</p>
                 {searchQuery && (
                   <p className="text-[11px] text-slate-600">
-                    Try changing or clearing the search term: "{searchQuery}"
+                    {t('monitor.console.tryChangingSearch', { query: searchQuery })}
                   </p>
                 )}
               </div>
@@ -660,13 +654,9 @@ export const SandboxModule: React.FC<SandboxModuleProps> = ({
 
           {/* Terminal Footer Bar */}
           <div className="bg-slate-900 px-3 py-1.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono shrink-0">
-            <span>
-              Lines: {filteredLines.length} / {activeTab.lines.length}
-            </span>
+            <span>{t('monitor.console.linesCount', { shown: filteredLines.length, total: activeTab.lines.length })}</span>
             {searchQuery && (
-              <span className="text-emerald-400">
-                Active filter: "{searchQuery}"
-              </span>
+              <span className="text-emerald-400">{t('monitor.console.activeFilter', { query: searchQuery })}</span>
             )}
             {activeTab.filePath && (
               <span className="truncate max-w-xs text-slate-500" title={activeTab.filePath}>

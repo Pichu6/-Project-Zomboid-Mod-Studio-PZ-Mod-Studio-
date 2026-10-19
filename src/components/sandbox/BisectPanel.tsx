@@ -3,6 +3,7 @@ import { ModInfo, BisectSession, TranslatedErrorCard } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
 import { Crosshair, Play, ThumbsDown, ThumbsUp, Undo2, ChevronDown, ChevronRight, Search, Wrench } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface BisectPanelProps {
   paths: StudioPathsUI;
@@ -30,6 +31,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
   onInspect,
   onPatchMod,
 }) => {
+  const { t } = useTranslation();
   const [session, setSession] = useState<BisectSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,12 +70,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
   const handleStart = () =>
     run(async () => {
       const active = mods.filter((m) => m.enabled).length;
-      const ok = window.confirm(
-        `Start halving your mod list?\n\n` +
-          `${active} mods are switched on. The hunt switches half of them off, you play, and it ` +
-          `halves again until one mod is left — about 8 launches for a list this size.\n\n` +
-          `Your list is kept and put back when the hunt ends, whichever way it ends.`
-      );
+      const ok = window.confirm(t('monitor.bisect.startConfirm', { count: active }));
       if (!ok) return;
       const started = await TauriService.bisectStart(paths, mods);
       setSession(started);
@@ -149,10 +146,10 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
           <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         )}
         <Crosshair className={`w-3.5 h-3.5 shrink-0 ${hunting ? 'text-cyan-400' : 'text-slate-400'}`} />
-        <span className="text-xs font-bold text-slate-200">Find the mod that does it</span>
+        <span className="text-xs font-bold text-slate-200">{t('monitor.bisect.title')}</span>
         {hunting && (
           <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/70">
-            round {session!.round} · {session!.launches_left} launches left
+            {t('monitor.bisect.roundBadge', { round: session!.round, left: session!.launches_left })}
           </span>
         )}
       </button>
@@ -161,17 +158,13 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
         <div className="px-3 pb-3 space-y-2.5">
           {!session && (
             <>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                For what the log cannot tell you: a freeze, a recipe that never appears, a save that
-                will not open. Half your mods go off, you play, and the half that still does it is
-                halved again. About 8 launches find one mod among a hundred.
-              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">{t('monitor.bisect.intro')}</p>
               <button
                 onClick={handleStart}
                 disabled={busy}
                 className="w-full py-1.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900/70 border border-cyan-800 text-cyan-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
               >
-                Start halving the list
+                {t('monitor.bisect.start')}
               </button>
             </>
           )}
@@ -180,30 +173,31 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
             <>
               <div className="text-[11px] text-slate-300 leading-relaxed">
                 {session!.phase === 'Confirming' ? (
-                  <>
-                    One mod is left: <b className="text-cyan-300">{nameOf(session!.trial[0])}</b>, and
-                    it is the only suspect switched on. Play, then say whether it still happens.
-                  </>
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: t('monitor.bisect.confirming', { mod: nameOf(session!.trial[0]) }),
+                    }}
+                  />
                 ) : (
-                  <>
-                    <b className="text-cyan-300">{session!.trial.length}</b> of{' '}
-                    <b className="text-slate-200">{session!.candidates.length}</b> suspects are
-                    switched on, plus the {session!.always_on.length} mods another mod requires. Play
-                    the way you did when it happened, then answer.
-                  </>
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: t('monitor.bisect.trial', {
+                        trial: session!.trial.length,
+                        candidates: session!.candidates.length,
+                        alwaysOn: session!.always_on.length,
+                      }),
+                    }}
+                  />
                 )}
               </div>
 
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                The hunt owns the mod list until it ends: switching mods on or off in the Mod List
-                while it runs makes the next answer mean nothing.
-              </p>
+              <p className="text-[10px] text-slate-500 leading-relaxed">{t('monitor.bisect.owns')}</p>
 
               <button
                 onClick={() => setShowTrial((v) => !v)}
                 className="text-[10px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
               >
-                {showTrial ? 'Hide' : 'Show'} the {session!.trial.length} mods on trial
+                {t(showTrial ? 'monitor.bisect.hideTrial' : 'monitor.bisect.showTrial', { count: session!.trial.length })}
               </button>
               {showTrial && (
                 <div className="max-h-28 overflow-y-auto rounded border border-slate-800 bg-slate-950/70 p-1.5 space-y-0.5">
@@ -220,7 +214,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                 disabled={busy}
                 className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/70 border border-emerald-800 text-emerald-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
               >
-                <Play className="w-3.5 h-3.5" /> Launch the game
+                <Play className="w-3.5 h-3.5" /> {t('monitor.bisect.launch')}
               </button>
 
               <div className="flex items-center gap-2">
@@ -229,14 +223,14 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                   disabled={busy}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/60 border border-red-800/80 text-red-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
                 >
-                  <ThumbsDown className="w-3.5 h-3.5" /> It still happens
+                  <ThumbsDown className="w-3.5 h-3.5" /> {t('monitor.bisect.stillHappens')}
                 </button>
                 <button
                   onClick={() => handleAnswer(false)}
                   disabled={busy}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
                 >
-                  <ThumbsUp className="w-3.5 h-3.5" /> It is gone
+                  <ThumbsUp className="w-3.5 h-3.5" /> {t('monitor.bisect.gone')}
                 </button>
               </div>
 
@@ -245,7 +239,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                 disabled={busy}
                 className="w-full flex items-center justify-center gap-1.5 py-1 text-[10px] text-slate-400 hover:text-slate-200 transition cursor-pointer disabled:opacity-50"
               >
-                <Undo2 className="w-3 h-3" /> Stop and put my list back
+                <Undo2 className="w-3 h-3" /> {t('monitor.bisect.giveUp')}
               </button>
             </>
           )}
@@ -254,18 +248,24 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
             <>
               {session!.culprit ? (
                 <>
-                  <div className="text-[11px] text-slate-200 leading-relaxed">
-                    It is <b className="text-emerald-300">{nameOf(session!.culprit)}</b>. It was the
-                    only suspect switched on and it still happened, in{' '}
-                    {session!.history.length} launches. Your list is back on.
-                  </div>
+                  <div
+                    className="text-[11px] text-slate-200 leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: t('monitor.bisect.culprit', {
+                        mod: nameOf(session!.culprit),
+                        launches: session!.history.length,
+                      }),
+                    }}
+                  />
 
                   {/* What the log has on it, before deciding what to do with it. */}
                   <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 space-y-1.5">
                     {culpritCards.length > 0 ? (
                       <>
                         <div className="text-[10px] text-slate-400">
-                          The log names it {culpritCards.length === 1 ? 'once' : `${culpritCards.length} times`}:
+                          {culpritCards.length === 1
+                            ? t('monitor.bisect.logNamesOnce')
+                            : t('monitor.bisect.logNamesTimes', { count: culpritCards.length })}
                         </div>
                         {culpritCards.map((card) => (
                           <div key={card.id} className="flex items-center gap-2">
@@ -276,7 +276,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                                   : 'border-red-800/70 text-red-300'
                               }`}
                             >
-                              {card.severity === 'WARNING' ? 'warning' : 'exception'}
+                              {card.severity === 'WARNING' ? t('monitor.bisect.warning') : t('monitor.bisect.exception')}
                             </span>
                             <span className="text-[10px] text-slate-300 truncate flex-1" title={card.raw_error}>
                               {card.explanation}
@@ -286,20 +286,17 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                                 type="button"
                                 onClick={() => onPatchMod(session!.culprit!, fileNamed(card))}
                                 className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-950/40 cursor-pointer flex items-center gap-1"
-                                title={`Open ${fileNamed(card)} in the Merger and patch it`}
+                                title={t('monitor.bisect.patchFileTitle', { file: fileNamed(card) })}
                               >
                                 <Wrench className="w-3 h-3" aria-hidden="true" />
-                                Patch {fileNamed(card)}
+                                {t('monitor.bisect.patchFile', { file: fileNamed(card) })}
                               </button>
                             )}
                           </div>
                         ))}
                       </>
                     ) : (
-                      <div className="text-[10px] text-slate-400 leading-relaxed">
-                        The log never names it, which is what the hunt is for. There is no line to
-                        point at, so what to patch is yours to find: its files can still be opened.
-                      </div>
+                      <div className="text-[10px] text-slate-400 leading-relaxed">{t('monitor.bisect.logNeverNames')}</div>
                     )}
                     {onInspect && (
                       <button
@@ -308,7 +305,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                         className="text-[10px] text-cyan-300 hover:text-cyan-200 underline cursor-pointer flex items-center gap-1"
                       >
                         <Search className="w-3 h-3" aria-hidden="true" />
-                        Show its lines in the console
+                        {t('monitor.bisect.showLines')}
                       </button>
                     )}
                   </div>
@@ -319,10 +316,10 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                         onClick={() => onPatchMod(session!.culprit!, null)}
                         disabled={busy}
                         className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-950/50 hover:bg-amber-900/50 border border-amber-800/70 text-amber-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
-                        title="Open its files in the Merger. The mod stays on; the package loads last, so the game reads your copy of the file you patch."
+                        title={t('monitor.bisect.patchAnyTitle')}
                       >
                         <Wrench className="w-3.5 h-3.5" aria-hidden="true" />
-                        Patch a file of it
+                        {t('monitor.bisect.patchAFile')}
                       </button>
                     )}
                     <button
@@ -330,13 +327,13 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                       disabled={busy}
                       className="flex-1 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
                     >
-                      Switch it off
+                      {t('monitor.bisect.switchOff')}
                     </button>
                     <button
                       onClick={() => setSession(null)}
                       className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-medium transition cursor-pointer"
                     >
-                      Keep it on
+                      {t('monitor.bisect.keepOn')}
                     </button>
                   </div>
                 </>
@@ -347,7 +344,7 @@ export const BisectPanel: React.FC<BisectPanelProps> = ({
                     onClick={() => setSession(null)}
                     className="w-full py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-medium transition cursor-pointer"
                   >
-                    Close
+                    {t('monitor.bisect.close')}
                   </button>
                 </>
               )}
