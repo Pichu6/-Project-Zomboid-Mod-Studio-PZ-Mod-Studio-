@@ -518,6 +518,8 @@
     "position": "Posición #{{n}}",
     "noMatch": "Ningún mod coincide con",
     "noneFiltered": "Ningún mod cumple estos filtros.",
+    "emptyProfile": "El perfil \"{{name}}\" todavía no tiene mods.",
+    "emptyProfileShowAll": "Ver todos tus mods para agregar",
     "understood": "Entendido",
     "enableAllConfirm": "¿Activar los {{count}} mod(s) que se ven acá y están apagados?",
     "disableAllConfirm": "¿Desactivar los {{count}} mod(s) que se ven acá y están prendidos?"

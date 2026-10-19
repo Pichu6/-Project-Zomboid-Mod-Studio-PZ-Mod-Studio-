@@ -518,6 +518,8 @@
     "position": "Position #{{n}}",
     "noMatch": "No mod matches",
     "noneFiltered": "No mod passes these filters.",
+    "emptyProfile": "The profile \"{{name}}\" has no mods yet.",
+    "emptyProfileShowAll": "See all your mods to add some",
     "understood": "Understood",
     "enableAllConfirm": "Switch on the {{count}} mod(s) shown here that are off?",
     "disableAllConfirm": "Switch off the {{count}} mod(s) shown here that are on?"

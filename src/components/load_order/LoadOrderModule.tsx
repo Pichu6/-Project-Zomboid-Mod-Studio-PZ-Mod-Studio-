@@ -201,9 +201,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
-  const selectedMod = mods.find((m) => m.mod_id === selectedModId) || (mods.length > 0 ? mods[0] : null);
 
-  const { multiModPackageMap, workshopColorMap, uniqueWorkshopIds } = useMemo(() => {
+  const { multiModPackageMap, workshopColorMap } = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const m of mods) {
       if (m.workshop_id && m.workshop_id !== '9999999999' && !m.mod_id.startsWith('Z_PZModStudio_')) {
@@ -224,23 +223,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       }
     }
 
-    const uniqueWorkshopCount = Object.keys(counts).length;
-
-    return { multiModPackageMap: multiMap, workshopColorMap: colorMap, uniqueWorkshopIds: uniqueWorkshopCount };
-  }, [mods]);
-
-  const modCategoryCounts = useMemo(() => {
-    let mapCount = 0;
-    let libCount = 0;
-    let scriptCount = 0;
-
-    for (const m of mods) {
-      if (m.is_map_mod) mapCount++;
-      else if (m.is_library) libCount++;
-      else scriptCount++;
-    }
-
-    return { mapCount, libCount, scriptCount };
+    return { multiModPackageMap: multiMap, workshopColorMap: colorMap };
   }, [mods]);
 
   // Dependency, order and compatibility problems come from the Rust health check (game-exact
@@ -389,6 +372,36 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     () => new Set(activeProfile ? profileMembers(activeProfile) : []),
     [activeProfile]
   );
+  /**
+   * The mods the list is about: with a profile active and "everything" off, that profile's mods
+   * (and anything switched on); otherwise every installed mod. The header's numbers and the
+   * filters' counts are about these, so an empty profile says it is empty. The Studio Link mod is
+   * the Studio's own plumbing, on in every profile, and is left out while a profile is active,
+   * as the game's Mods screen leaves it out.
+   */
+  const scopeMods = useMemo(() => {
+    if (!activeProfile) return mods;
+    return mods.filter(
+      (m) => m.mod_id !== STUDIO_LINK_MOD_ID && (showEveryMod || inActiveProfile.has(m.mod_id) || m.enabled)
+    );
+  }, [mods, activeProfile, showEveryMod, inActiveProfile]);
+  /** The mod in the inspector: the one picked, else the first the list is about (none in an empty profile). */
+  const selectedMod = scopeMods.find((m) => m.mod_id === selectedModId) || scopeMods[0] || null;
+  const headerStats = useMemo(() => {
+    const workshop = new Set<string>();
+    let mapCount = 0;
+    let libCount = 0;
+    let scriptCount = 0;
+    let active = 0;
+    for (const m of scopeMods) {
+      if (m.workshop_id && m.workshop_id !== '9999999999' && !m.mod_id.startsWith('Z_PZModStudio_')) workshop.add(m.workshop_id);
+      if (m.enabled) active++;
+      if (m.is_map_mod) mapCount++;
+      else if (m.is_library) libCount++;
+      else scriptCount++;
+    }
+    return { workshop: workshop.size, total: scopeMods.length, active, mapCount, libCount, scriptCount };
+  }, [scopeMods]);
   /** mod id -> the profiles it belongs to, on or off. */
   const profilesByMod = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -440,12 +453,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const filterCounts = useMemo(() => {
     const counts = {} as Record<ModFilterId, number>;
     for (const id of MOD_FILTERS) counts[id] = 0;
-    for (const m of mods) {
+    for (const m of scopeMods) {
       for (const id of MOD_FILTERS) if (matchesFilter(m, id)) counts[id] += 1;
     }
     return counts;
   }, [
-    mods,
+    scopeMods,
     catalogById,
     missingActiveDependenciesMap,
     missingUninstalledDependenciesMap,
@@ -477,15 +490,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }, [mods, errorStats, loadTimes, catalogById, issuesByMod]);
   const tagOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const tags of modTags.values()) for (const tag of tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    for (const m of scopeMods) for (const tag of modTags.get(m.mod_id) ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     const label = (tag: string) => (tag.startsWith('health:') ? labelFor({ code: tag.slice(7) }) : t(`modList.tags.${tag}`, { min: SLOW_LOAD_MS }));
     return [...counts.entries()].map(([id, count]) => ({ id, count, label: label(id) })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [modTags, t]);
+  }, [modTags, scopeMods, t]);
 
   const filteredMods = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    return mods.filter((m) => {
-      if (activeProfile && !showEveryMod && !inActiveProfile.has(m.mod_id) && !m.enabled) return false;
+    return scopeMods.filter((m) => {
       if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
       if (!matchesFilter(m, stateFilter)) return false;
       if (tagFilter !== 'all' && !(modTags.get(m.mod_id) ?? []).includes(tagFilter)) return false;
@@ -497,7 +509,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       );
     });
   }, [
-    mods,
+    scopeMods,
     searchQuery,
     sourceFilter,
     stateFilter,
@@ -890,7 +902,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     );
   }
 
-  const activeCount = mods.filter((m) => m.enabled).length;
   const anyFilter = stateFilter !== 'all' || sourceFilter !== 'all' || tagFilter !== 'all' || searchQuery !== '';
   const clearFilters = () => {
     setStateFilter('all');
@@ -934,25 +945,25 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-400">
             <span title={t('modList.subscriptions')}>
-              <b className="text-cyan-400">{uniqueWorkshopIds}</b> {t('modList.statWorkshop')}
+              <b className="text-cyan-400">{headerStats.workshop}</b> {t('modList.statWorkshop')}
             </span>
             <span className="text-slate-700">|</span>
             <span>
-              <b className="text-slate-200">{mods.length}</b> {t('modList.statMods')}
+              <b className="text-slate-200">{headerStats.total}</b> {t('modList.statMods')}
             </span>
             <span className="text-slate-700">|</span>
             <span>
-              <b className="text-emerald-400">{activeCount}</b> {t('modList.statActive')}
+              <b className="text-emerald-400">{headerStats.active}</b> {t('modList.statActive')}
             </span>
             <span className="text-slate-700">|</span>
             <span className="flex items-center gap-1" title={t('modList.mapTitle')}>
-              <MapPin className="w-3 h-3 text-amber-400" /> <b className="text-amber-400">{modCategoryCounts.mapCount}</b> {t('modList.map')}
+              <MapPin className="w-3 h-3 text-amber-400" /> <b className="text-amber-400">{headerStats.mapCount}</b> {t('modList.map')}
             </span>
             <span className="flex items-center gap-1" title={t('modList.libraryTitle')}>
-              <Package className="w-3 h-3 text-purple-400" /> <b className="text-purple-400">{modCategoryCounts.libCount}</b> {t('modList.library')}
+              <Package className="w-3 h-3 text-purple-400" /> <b className="text-purple-400">{headerStats.libCount}</b> {t('modList.library')}
             </span>
             <span className="flex items-center gap-1" title={t('modList.scriptTitle')}>
-              <ListOrdered className="w-3 h-3 text-cyan-400" /> <b className="text-cyan-400">{modCategoryCounts.scriptCount}</b> {t('modList.script')}
+              <ListOrdered className="w-3 h-3 text-cyan-400" /> <b className="text-cyan-400">{headerStats.scriptCount}</b> {t('modList.script')}
             </span>
             {cycleButton(missingUninstalledModIds.length, missingUninstalledCycleIdx, handleCycleMissingUninstalled, t('modList.missing'), t('modList.cycleMissing'), 'red')}
             {cycleButton(missingDepModIds.length, missingDepCycleIdx, handleCycleMissingDeps, t('modList.depsOff'), t('modList.cycleOff'), 'red')}
@@ -1117,9 +1128,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <div className="w-8 shrink-0 text-center">{t('modList.colActive')}</div>
             <div className="flex-1 min-w-0 pl-8">
               {t('modList.colName')}
-              {filteredMods.length !== mods.length && (
+              {filteredMods.length !== scopeMods.length && (
                 <span className="ml-2 normal-case tracking-normal font-normal text-cyan-400">
-                  {t('modList.showingCount', { shown: filteredMods.length, total: mods.length })}
+                  {t('modList.showingCount', { shown: filteredMods.length, total: scopeMods.length })}
                 </span>
               )}
             </div>
@@ -1137,7 +1148,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {filteredMods.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
-                {searchQuery ? (
+                {activeProfile && !showEveryMod && scopeMods.length === 0 ? (
+                  <>
+                    {t('modList.emptyProfile', { name: activeProfile.name })}
+                    <button
+                      onClick={() => setShowEveryMod(true)}
+                      className="ml-2 underline text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                    >
+                      {t('modList.emptyProfileShowAll')}
+                    </button>
+                  </>
+                ) : searchQuery ? (
                   <>{t('modList.noMatch')} "<b className="text-slate-400">{searchQuery}</b>"</>
                 ) : (
                   <>{t('modList.noneFiltered')}</>
