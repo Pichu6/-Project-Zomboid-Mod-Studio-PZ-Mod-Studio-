@@ -8,6 +8,8 @@ import {
 } from '../../types';
 import { KeepActions, useKeepActions } from '../common/keep';
 import { ListsTab } from './ListsTab';
+import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
 import {
@@ -70,7 +72,7 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
         const text = String(err);
         if (!text.startsWith(CONFLICT_PREFIX)) throw err;
         const { existing_folders } = JSON.parse(text.slice(CONFLICT_PREFIX.length)) as { existing_folders: string[] };
-        if (!confirm(`Already installed in Zomboid/mods: ${existing_folders.join(', ')}.\n\nReplace? The current copy is moved to Zomboid/PZModStudio_Backups/mods first.`)) return;
+        if (!confirm(i18next.t('browse.alreadyInstalled', { folders: existing_folders.join(', ') }))) return;
         res = await TauriService.installMods(source, paths, true, origin);
       }
       setResult(res);
@@ -88,7 +90,7 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
     result,
     clearResult: () => setResult(null),
     pickZip: async () => {
-      const file = await TauriService.pickOpenFile('Mod archive (.zip, .7z)', 'zip,7z');
+      const file = await TauriService.pickOpenFile(i18next.t('browse.archiveFilter'), 'zip,7z');
       if (file) await install(file);
     },
     pickFolder: async () => {
@@ -105,7 +107,7 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
       try {
         const plan = await TauriService.resolveUrlInstall(url);
         const size = plan.size ? ` (${(plan.size / (1024 * 1024)).toFixed(1)} MB)` : '';
-        if (!confirm(`Download ${plan.file_name}${size} from ${plan.source}?\n\n${plan.download_url}`)) {
+        if (!confirm(i18next.t('browse.downloadConfirm', { file: plan.file_name, size, source: plan.source, url: plan.download_url }))) {
           return false;
         }
         let res: InstallResult;
@@ -115,7 +117,7 @@ function useInstaller(paths: StudioPathsUI, pendingOrigin: (ModOrigin & { kind: 
           const text = String(err);
           if (!text.startsWith(CONFLICT_PREFIX)) throw err;
           const { existing_folders } = JSON.parse(text.slice(CONFLICT_PREFIX.length)) as { existing_folders: string[] };
-          if (!confirm(`Already installed in Zomboid/mods: ${existing_folders.join(', ')}.\n\nReplace? The current copy is moved to Zomboid/PZModStudio_Backups/mods first.`)) return false;
+          if (!confirm(i18next.t('browse.alreadyInstalled', { folders: existing_folders.join(', ') }))) return false;
           res = await TauriService.installFromUrl(paths, url, true);
         }
         setResult(res);
@@ -139,8 +141,8 @@ const InstallResultBanner: React.FC<{ result: InstallResult; onClose: () => void
         <div key={m.destination} className="flex items-center gap-2 text-emerald-300">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>
-            {m.replaced ? 'Replaced' : 'Installed'} <b>{m.name || m.folder}</b>
-            {m.mod_id && <span className="font-mono text-emerald-400/70"> ({m.mod_id})</span>}: enable it in the Mod List.
+            {m.replaced ? i18next.t('browse.replaced') : i18next.t('browse.installed')} <b>{m.name || m.folder}</b>
+            {m.mod_id && <span className="font-mono text-emerald-400/70"> ({m.mod_id})</span>}{i18next.t('browse.enableInList')}
           </span>
         </div>
       ))}
@@ -151,7 +153,7 @@ const InstallResultBanner: React.FC<{ result: InstallResult; onClose: () => void
         </div>
       ))}
     </div>
-    <button type="button" onClick={onClose} className="p-0.5 rounded hover:bg-emerald-900/50 text-slate-400 cursor-pointer" aria-label="Close">
+    <button type="button" onClick={onClose} className="p-0.5 rounded hover:bg-emerald-900/50 text-slate-400 cursor-pointer" aria-label={i18next.t('browse.close')}>
       <X className="w-3.5 h-3.5" />
     </button>
   </div>
@@ -171,14 +173,14 @@ const workshopCard = (
   <ModCard
     key={item.workshop_id}
     image={item.preview_url}
-    title={item.found ? item.title : `Item ${item.workshop_id}`}
-    subtitle={item.found ? `updated ${formatUnixDate(item.time_updated)}` : 'Not public on Steam (removed, private or wrong id)'}
-    chips={<>{installedIds.length > 0 && <InstalledChip />}<UpdateChips state={state} />{item.found && <BuildChips builds={item.builds} source="The Workshop page" />}</>}
+    title={item.found ? item.title : i18next.t('browse.card.item', { id: item.workshop_id })}
+    subtitle={item.found ? i18next.t('browse.card.updated', { date: formatUnixDate(item.time_updated) }) : i18next.t('browse.card.notPublic')}
+    chips={<>{installedIds.length > 0 && <InstalledChip />}<UpdateChips state={state} />{item.found && <BuildChips builds={item.builds} source={i18next.t('browse.card.workshopSource')} />}</>}
     summary={item.summary}
     stats={item.found && (
       <>
-        <span className="flex items-center gap-1" title="Subscribers"><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
-        <span className="flex items-center gap-1" title="Favorites"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
+        <span className="flex items-center gap-1" title={i18next.t('browse.card.subscribers')}><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
+        <span className="flex items-center gap-1" title={i18next.t('browse.card.favorites')}><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
       </>
     )}
     onOpen={item.found ? () => onOpen({ kind: 'workshop', id: item.workshop_id, preview: item }) : undefined}
@@ -195,22 +197,22 @@ const collectionCard = (item: WorkshopItem, installedByItem: Map<string, string[
       key={item.workshop_id}
       image={item.preview_url}
       title={item.title}
-      subtitle={`${item.children.length} mods · updated ${formatUnixDate(item.time_updated)}`}
+      subtitle={i18next.t('browse.card.modsUpdated', { count: item.children.length, date: formatUnixDate(item.time_updated) })}
       chips={
         <>
-          <Chip className="border-violet-600/60 text-violet-300">Collection</Chip>
+          <Chip className="border-violet-600/60 text-violet-300">{i18next.t('browse.card.collection')}</Chip>
           {item.children.length > 0 && (
             missing === 0
-              ? <Chip className="border-emerald-500/60 text-emerald-300">All installed</Chip>
-              : <Chip className="border-amber-500/60 text-amber-300">{missing} missing</Chip>
+              ? <Chip className="border-emerald-500/60 text-emerald-300">{i18next.t('browse.card.allInstalled')}</Chip>
+              : <Chip className="border-amber-500/60 text-amber-300">{i18next.t('browse.card.missing', { count: missing })}</Chip>
           )}
         </>
       }
       summary={item.summary}
       stats={
         <>
-          <span className="flex items-center gap-1" title="Subscribers"><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
-          <span className="flex items-center gap-1" title="Favorites"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
+          <span className="flex items-center gap-1" title={i18next.t('browse.card.subscribers')}><Users className="w-3 h-3" aria-hidden="true" />{formatCount(item.subscriptions)}</span>
+          <span className="flex items-center gap-1" title={i18next.t('browse.card.favorites')}><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(item.favorited)}</span>
         </>
       }
       onOpen={() => onOpen({ kind: 'collection', id: item.workshop_id, preview: item })}
@@ -218,20 +220,10 @@ const collectionCard = (item: WorkshopItem, installedByItem: Map<string, string[
   );
 };
 
-const WORKSHOP_SORTS: { id: WorkshopSort; label: string }[] = [
-  { id: 'trending', label: 'Most Popular' },
-  { id: 'top_rated', label: 'Top Rated All Time' },
-  { id: 'newest', label: 'Most Recent' },
-  { id: 'recently_updated', label: 'Last Updated' },
-];
+const WORKSHOP_SORTS: WorkshopSort[] = ['trending', 'top_rated', 'newest', 'recently_updated'];
 
 /** The time window the Workshop offers next to "Most Popular". */
-const POPULAR_DAYS: { id: number; label: string }[] = [
-  { id: 1, label: 'Today' },
-  { id: 7, label: 'One Week' },
-  { id: 90, label: 'Three Months' },
-  { id: 365, label: 'One Year' },
-];
+const POPULAR_DAYS = [1, 7, 90, 365];
 
 /** Fallback when the public Workshop page cannot be read: the user's own Steam Web API key. */
 const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSaved, reason }) => {
@@ -256,22 +248,20 @@ const SteamKeyForm: React.FC<{ onSaved: () => void; reason: string }> = ({ onSav
       <div className="flex items-start gap-2 text-[11px] text-slate-300">
         <KeyRound className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
         <span>
-          <b className="text-amber-200">{reason}</b> You can still paste Workshop links or a collection above. To search anyway, add a
-          personal <b>Steam Web API key</b> (free; any domain name works, for example <code>localhost</code>): it is checked with
-          Steam and kept in Windows Credential Manager on this PC only.
+          <b className="text-amber-200">{reason}</b><span dangerouslySetInnerHTML={{ __html: i18next.t('browse.steamKey.blurb') }} />
         </span>
       </div>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/dev/apikey')}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
-          <ExternalLink className="w-3 h-3" aria-hidden="true" /> Get a key
+          <ExternalLink className="w-3 h-3" aria-hidden="true" /> {i18next.t('browse.steamKey.get')}
         </button>
         <input type="password" autoComplete="off" spellCheck={false} value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
-          placeholder="Paste your Steam Web API key" aria-label="Steam Web API key"
+          placeholder={i18next.t('browse.steamKey.paste')} aria-label={i18next.t('browse.steamKey.label')}
           className="flex-1 min-w-[220px] px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-sky-700 text-[11px] text-slate-100 outline-none placeholder:text-slate-600 font-mono" />
         <button type="submit" disabled={saving || !keyInput.trim()}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
-          {saving && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} Check and save
+          {saving && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} {i18next.t('browse.steamKey.save')}
         </button>
       </form>
       {error && <p className="text-[11px] text-red-300">{error}</p>}
@@ -319,7 +309,7 @@ const WorkshopTab: React.FC<{
 
   /** Takes the saved key out of Windows Credential Manager. */
   const removeKey = async () => {
-    if (!confirm('Remove the saved Steam Web API key from this PC?')) return;
+    if (!confirm(i18next.t('browse.steamKey.removeConfirm'))) return;
     try {
       await TauriService.deleteSteamKey();
       setHasSavedKey(false);
@@ -382,16 +372,16 @@ const WorkshopTab: React.FC<{
   const cardMenu = (e: React.MouseEvent, item: WorkshopItem, installed: boolean) =>
     showContextMenu(e, [
       {
-        label: installed ? 'Unsubscribe' : 'Subscribe',
+        label: installed ? i18next.t('browse.workshop.unsubscribe') : i18next.t('browse.workshop.subscribe'),
         icon: installed ? Trash2 : Plus,
         onSelect: () => onSubscribe([item.workshop_id], !installed),
         disabled: !steamReady,
-        disabledReason: 'Steam is not running',
+        disabledReason: i18next.t('browse.workshop.steamNotRunning'),
       },
-      { label: 'Open its Workshop page', icon: ExternalLink, separatorBefore: true,
+      { label: i18next.t('browse.workshop.openPage'), icon: ExternalLink, separatorBefore: true,
         onSelect: () => TauriService.openExternalUrl(item.page_url) },
-      { label: 'Copy the link', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
-      { label: 'Copy the Workshop id', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+      { label: i18next.t('browse.workshop.copyLink'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
+      { label: i18next.t('browse.workshop.copyId'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
       ...keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedByItem.get(item.workshop_id) ?? [] }),
     ]);
 
@@ -403,45 +393,45 @@ const WorkshopTab: React.FC<{
       <Toolbar onSubmit={submit}>
         <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-sky-700">
           <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-          <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Search the Workshop or paste links"
-            placeholder="Search the Workshop, or paste links / a collection link"
+          <input value={text} onChange={(e) => setText(e.target.value)} aria-label={i18next.t('browse.workshop.searchLabel')}
+            placeholder={i18next.t('browse.workshop.searchPlaceholder')}
             className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
           {(text || lookup) && (
-            <button type="button" onClick={() => { setText(''); setLookup(null); if (query.text) setFilter({ text: '' }); }} aria-label="Clear"
+            <button type="button" onClick={() => { setText(''); setLookup(null); if (query.text) setFilter({ text: '' }); }} aria-label={i18next.t('browse.workshop.clear')}
               className="text-slate-500 hover:text-slate-300 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
           )}
         </div>
-        <select value={query.text ? 'relevance' : query.sort} onChange={(e) => setFilter({ sort: e.target.value as WorkshopSort })} aria-label="Sort"
-          disabled={!!query.text} title={query.text ? 'Text searches are ordered by relevance' : undefined} className={selectClass}>
-          {query.text && <option value="relevance">Relevance</option>}
-          {WORKSHOP_SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        <select value={query.text ? 'relevance' : query.sort} onChange={(e) => setFilter({ sort: e.target.value as WorkshopSort })} aria-label={i18next.t('browse.workshop.sort')}
+          disabled={!!query.text} title={query.text ? i18next.t('browse.workshop.relevanceOnly') : undefined} className={selectClass}>
+          {query.text && <option value="relevance">{i18next.t('browse.sorts.relevance')}</option>}
+          {WORKSHOP_SORTS.map((id) => <option key={id} value={id}>{i18next.t(`browse.sorts.${id}`)}</option>)}
         </select>
         {query.sort === 'trending' && !query.text && (
-          <select value={query.days} onChange={(e) => setFilter({ days: Number(e.target.value) })} aria-label="Most popular over" className={selectClass}>
-            {POPULAR_DAYS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          <select value={query.days} onChange={(e) => setFilter({ days: Number(e.target.value) })} aria-label={i18next.t('browse.workshop.popularOver')} className={selectClass}>
+            {POPULAR_DAYS.map((d) => <option key={d} value={d}>{i18next.t(`browse.days.${d}`)}</option>)}
           </select>
         )}
         {!query.collections && (
-          <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label="Game build" className={selectClass}>
-            <option value="42">Build 42</option>
-            <option value="41">Build 41</option>
-            <option value="">Any build</option>
+          <select value={query.build} onChange={(e) => setFilter({ build: e.target.value })} aria-label={i18next.t('browse.workshop.build')} className={selectClass}>
+            <option value="42">{i18next.t('browse.workshop.build42')}</option>
+            <option value="41">{i18next.t('browse.workshop.build41')}</option>
+            <option value="">{i18next.t('browse.workshop.anyBuild')}</option>
           </select>
         )}
         <button type="submit" disabled={searching} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-60">
-          Search
+          {i18next.t('browse.workshop.search')}
         </button>
-        <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')} title="Open the Workshop in your browser"
+        <button type="button" onClick={() => TauriService.openExternalUrl('https://steamcommunity.com/app/108600/workshop/')} title={i18next.t('browse.workshop.webTitle')}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
-          <Globe className="w-3.5 h-3.5" aria-hidden="true" /> Web
+          <Globe className="w-3.5 h-3.5" aria-hidden="true" /> {i18next.t('browse.workshop.web')}
         </button>
       </Toolbar>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800" role="group" aria-label="What to list">
+        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800" role="group" aria-label={i18next.t('browse.workshop.whatToList')}>
           {[
-            { id: false, label: 'Mods' },
-            { id: true, label: 'Collections' },
+            { id: false, label: i18next.t('browse.workshop.mods') },
+            { id: true, label: i18next.t('browse.workshop.collections') },
           ].map((o) => (
             <button key={String(o.id)} type="button" onClick={() => setFilter({ collections: o.id })} aria-pressed={query.collections === o.id}
               className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition ${query.collections === o.id ? 'bg-sky-800/80 text-sky-100' : 'text-slate-400 hover:text-slate-200'}`}>
@@ -457,8 +447,8 @@ const WorkshopTab: React.FC<{
       {hasSavedKey && (
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
           <KeyRound className="w-3 h-3" aria-hidden="true" />
-          <span>A Steam Web API key is saved on this PC. Browsing does not need it; it is only a fallback.</span>
-          <button type="button" onClick={removeKey} className="underline hover:text-slate-300 cursor-pointer">Remove it</button>
+          <span>{i18next.t('browse.steamKey.saved')}</span>
+          <button type="button" onClick={removeKey} className="underline hover:text-slate-300 cursor-pointer">{i18next.t('browse.steamKey.removeIt')}</button>
         </div>
       )}
 
@@ -468,15 +458,15 @@ const WorkshopTab: React.FC<{
             {lookup.collection ? (
               <>
                 <Library className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
-                Collection <b>{lookup.collection.title}</b>: {lookup.items.length} items,{' '}
-                <span className={lookupMissing ? 'text-amber-300' : 'text-emerald-300'}>{lookupMissing} not installed</span>
+                <span dangerouslySetInnerHTML={{ __html: i18next.t('browse.workshop.collectionLine', { title: lookup.collection.title, count: lookup.items.length }) }} />
+                <span className={lookupMissing ? 'text-amber-300' : 'text-emerald-300'}>{i18next.t('browse.workshop.notInstalled', { count: lookupMissing })}</span>
                 <button type="button" onClick={() => TauriService.openExternalUrl(lookup.collection!.page_url)}
-                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer" title="Opens the collection page in your browser, where Subscribe to all is">
-                  Open collection (Subscribe to all)
+                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer" title={i18next.t('browse.workshop.openCollectionTitle')}>
+                  {i18next.t('browse.workshop.openCollection')}
                 </button>
               </>
             ) : (
-              <>{lookup.items.length} items, {lookupMissing} not installed</>
+              <>{i18next.t('browse.workshop.itemsNotInstalled', { count: lookup.items.length, missing: lookupMissing })}</>
             )}
           </div>
           <Pagination page={lookupPage} pageCount={pageCountOf(lookup.items.length)} onPage={setLookupPage} />
@@ -488,11 +478,11 @@ const WorkshopTab: React.FC<{
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
             <span>
               {searching && items.length === 0
-                ? 'Searching...'
-                : `${total.toLocaleString()} ${query.collections ? 'collections' : 'mods'}${query.text ? ` for "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}`}
+                ? i18next.t('browse.workshop.searching')
+                : i18next.t('browse.workshop.results', { total: total.toLocaleString(), what: query.collections ? i18next.t('browse.workshop.collections').toLowerCase() : i18next.t('browse.workshop.mods').toLowerCase(), text: query.text ? i18next.t('browse.workshop.forText', { text: query.text }) : '', category: query.category ? i18next.t('browse.workshop.inCategory', { category: query.category }) : '' })}
               {searching && items.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
             </span>
-            <span>page {page} of {pages.toLocaleString()}</span>
+            <span>{i18next.t('browse.workshop.page', { page, pages: pages.toLocaleString() })}</span>
           </div>
           <Pagination page={page} pageCount={pages} onPage={(p) => runSearch(query, p)} disabled={searching} />
           <CardGrid>
@@ -513,25 +503,20 @@ const WorkshopTab: React.FC<{
 // Nexus Mods
 // ---------------------------------------------------------------------------------------------
 
-const NEXUS_SORTS: { id: NexusSort; label: string }[] = [
-  { id: 'updated', label: 'Recently updated' },
-  { id: 'downloads', label: 'Most downloaded' },
-  { id: 'endorsements', label: 'Most endorsed' },
-  { id: 'newest', label: 'Newest' },
-];
+const NEXUS_SORTS: NexusSort[] = ['updated', 'downloads', 'endorsements', 'newest'];
 
 const nexusCard = (m: NexusMod, installed: boolean, onOpen: (t: DetailTarget) => void, menu?: (e: React.MouseEvent, m: NexusMod) => void) => (
   <ModCard
     key={m.mod_id}
     image={m.thumbnail_url}
     title={m.name}
-    subtitle={`by ${m.author || m.uploader || 'unknown'}${m.version ? ` · v${m.version}` : ''} · ${formatIsoDate(m.updated_at)}`}
-    chips={<>{installed && <InstalledChip />}<BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source="The Nexus name/summary" />{m.category && <Chip className="border-orange-700/60 text-orange-300">{m.category}</Chip>}</>}
+    subtitle={`${i18next.t('browse.card.by', { author: m.author || m.uploader || i18next.t('browse.card.unknown') })}${m.version ? ` · v${m.version}` : ''} · ${formatIsoDate(m.updated_at)}`}
+    chips={<>{installed && <InstalledChip />}<BuildChips builds={m.build_hint ? m.build_hint.split('+') : []} source={i18next.t('browse.card.nexusSource')} />{m.category && <Chip className="border-orange-700/60 text-orange-300">{m.category}</Chip>}</>}
     summary={m.summary}
     stats={
       <>
-        <span className="flex items-center gap-1" title="Downloads"><Download className="w-3 h-3" aria-hidden="true" />{formatCount(m.downloads)}</span>
-        <span className="flex items-center gap-1" title="Endorsements"><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(m.endorsements)}</span>
+        <span className="flex items-center gap-1" title={i18next.t('browse.card.downloads')}><Download className="w-3 h-3" aria-hidden="true" />{formatCount(m.downloads)}</span>
+        <span className="flex items-center gap-1" title={i18next.t('browse.card.endorsements')}><Heart className="w-3 h-3" aria-hidden="true" />{formatCount(m.endorsements)}</span>
       </>
     }
     onOpen={() => onOpen({ kind: 'nexus', modId: m.mod_id, preview: m })}
@@ -587,25 +572,25 @@ const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t
       <Toolbar onSubmit={() => setQuery((q) => ({ ...q, text: text.trim() }))}>
         <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-orange-700">
           <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search Nexus Mods (words in the mod name)" aria-label="Search Nexus Mods"
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder={i18next.t('browse.nexus.searchPlaceholder')} aria-label={i18next.t('browse.nexus.searchLabel')}
             className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
           {text && (
-            <button type="button" onClick={() => { setText(''); setQuery((q) => ({ ...q, text: '' })); }} aria-label="Clear" className="text-slate-500 hover:text-slate-300 cursor-pointer">
+            <button type="button" onClick={() => { setText(''); setQuery((q) => ({ ...q, text: '' })); }} aria-label={i18next.t('browse.workshop.clear')} className="text-slate-500 hover:text-slate-300 cursor-pointer">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
-        <select value={query.sort} onChange={(e) => setQuery((q) => ({ ...q, sort: e.target.value as NexusSort }))} aria-label="Sort" className={selectClass}>
-          {NEXUS_SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        <select value={query.sort} onChange={(e) => setQuery((q) => ({ ...q, sort: e.target.value as NexusSort }))} aria-label={i18next.t('browse.workshop.sort')} className={selectClass}>
+          {NEXUS_SORTS.map((id) => <option key={id} value={id}>{i18next.t(`browse.nexusSorts.${id}`)}</option>)}
         </select>
-        <button type="submit" className="px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-700 hover:bg-orange-600 text-white cursor-pointer">Search</button>
+        <button type="submit" className="px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-700 hover:bg-orange-600 text-white cursor-pointer">{i18next.t('browse.workshop.search')}</button>
         <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
           <input type="checkbox" checked={showAdult} onChange={(e) => setShowAdult(e.target.checked)} className="w-3.5 h-3.5" />
-          Adult content
+          {i18next.t('browse.nexus.adult')}
         </label>
-        <button type="button" onClick={() => TauriService.openExternalUrl('https://www.nexusmods.com/games/projectzomboid/mods')} title="Open Nexus Mods in your browser"
+        <button type="button" onClick={() => TauriService.openExternalUrl('https://www.nexusmods.com/games/projectzomboid/mods')} title={i18next.t('browse.nexus.webTitle')}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
-          <Globe className="w-3.5 h-3.5" aria-hidden="true" /> Web
+          <Globe className="w-3.5 h-3.5" aria-hidden="true" /> {i18next.t('browse.workshop.web')}
         </button>
       </Toolbar>
       {categories.length > 0 && (
@@ -613,10 +598,10 @@ const NexusTab: React.FC<{ installedByNexusId: Map<number, string[]>; onOpen: (t
       )}
       <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
         <span>
-          {loading && mods.length === 0 ? 'Loading...' : `${total} mods${query.text ? ` matching "${query.text}"` : ''}${query.category ? ` in ${query.category}` : ''}${hiddenAdult ? ` (${hiddenAdult} adult hidden on this page)` : ''}`}
+          {loading && mods.length === 0 ? i18next.t('browse.nexus.loading') : i18next.t('browse.nexus.results', { total, text: query.text ? i18next.t('browse.nexus.matching', { text: query.text }) : '', category: query.category ? i18next.t('browse.workshop.inCategory', { category: query.category }) : '', adult: hiddenAdult ? i18next.t('browse.nexus.adultHidden', { count: hiddenAdult }) : '' })}
           {loading && mods.length > 0 && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" aria-hidden="true" />}
         </span>
-        <span>page {page} of {pageCountOf(total)}</span>
+        <span>{i18next.t('browse.workshop.page', { page, pages: pageCountOf(total) })}</span>
       </div>
       <Pagination page={page} pageCount={pageCountOf(total)} onPage={load} disabled={loading} />
       <CardGrid>{visible.map((m) => nexusCard(m, installedByNexusId.has(m.mod_id), onOpen, nexusMenu))}</CardGrid>
@@ -637,7 +622,7 @@ type MineSource = 'all' | 'workshop' | 'nexus' | 'local';
 type MineStatus = 'all' | 'new' | 'pending';
 
 const localLabel = (m: CatalogModSummary) =>
-  m.origin?.kind === 'nexus' ? 'Nexus' : m.origin?.kind === 'compat' ? 'Compatible copy' : m.source.kind === 'workshop_upload' ? 'Your Workshop upload' : 'Local';
+  m.origin?.kind === 'nexus' ? i18next.t('browse.mine.labels.nexus') : m.origin?.kind === 'compat' ? i18next.t('browse.mine.labels.compat') : m.source.kind === 'workshop_upload' ? i18next.t('browse.mine.labels.upload') : i18next.t('browse.mine.labels.local');
 
 const MyModsTab: React.FC<{
   catalog: CatalogModSummary[];
@@ -720,16 +705,16 @@ const MyModsTab: React.FC<{
   const mineMenu = (e: React.MouseEvent, item: WorkshopItem) =>
     showContextMenu(e, [
       {
-        label: 'Unsubscribe',
+        label: i18next.t('browse.workshop.unsubscribe'),
         icon: Trash2,
         danger: true,
         onSelect: () => onSubscribe([item.workshop_id], false),
         disabled: !steamReady,
-        disabledReason: 'Steam is not running',
+        disabledReason: i18next.t('browse.workshop.steamNotRunning'),
       },
-      { label: 'Open its Workshop page', icon: ExternalLink, separatorBefore: true,
+      { label: i18next.t('browse.workshop.openPage'), icon: ExternalLink, separatorBefore: true,
         onSelect: () => TauriService.openExternalUrl(item.page_url) },
-      { label: 'Copy the Workshop id', icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+      { label: i18next.t('browse.workshop.copyId'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
       ...keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedByItem.get(item.workshop_id) ?? [] }),
     ]);
 
@@ -751,33 +736,33 @@ const MyModsTab: React.FC<{
       <Toolbar onSubmit={() => undefined}>
         <div className="flex items-center gap-2 flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 focus-within:border-emerald-700">
           <Search className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Filter by name, mod id or Workshop id" aria-label="Filter your mods"
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder={i18next.t('browse.mine.filterPlaceholder')} aria-label={i18next.t('browse.mine.filterLabel')}
             className="flex-1 bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-600" />
         </div>
-        <select value={source} onChange={(e) => setSource(e.target.value as MineSource)} aria-label="Source" className={selectClass}>
-          <option value="all">All sources ({rows.length})</option>
-          <option value="workshop">Steam Workshop ({counts.workshop})</option>
-          <option value="nexus">Nexus ({counts.nexus})</option>
-          <option value="local">Local / other ({counts.local})</option>
+        <select value={source} onChange={(e) => setSource(e.target.value as MineSource)} aria-label={i18next.t('browse.mine.source')} className={selectClass}>
+          <option value="all">{i18next.t('browse.mine.allSources', { count: rows.length })}</option>
+          <option value="workshop">{i18next.t('browse.mine.workshop', { count: counts.workshop })}</option>
+          <option value="nexus">{i18next.t('browse.mine.nexus', { count: counts.nexus })}</option>
+          <option value="local">{i18next.t('browse.mine.local', { count: counts.local })}</option>
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as 'updated' | 'name')} aria-label="Sort" className={selectClass}>
-          <option value="updated">Recently updated</option>
-          <option value="name">Name</option>
+        <select value={sort} onChange={(e) => setSort(e.target.value as 'updated' | 'name')} aria-label={i18next.t('browse.workshop.sort')} className={selectClass}>
+          <option value="updated">{i18next.t('browse.mine.recentlyUpdated')}</option>
+          <option value="name">{i18next.t('browse.mine.name')}</option>
         </select>
-        {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" aria-label="Loading" />}
+        {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" aria-label={i18next.t('browse.detail.loading')} />}
       </Toolbar>
       {(counts.newSincePlay > 0 || counts.pending > 0) && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {statusChip('new', 'New since last play', counts.newSincePlay, 'border-sky-600 bg-sky-900/50 text-sky-200')}
-          {statusChip('pending', 'Update waiting in Steam', counts.pending, 'border-amber-600 bg-amber-900/50 text-amber-200')}
+          {statusChip('new', i18next.t('browse.mine.newSincePlay'), counts.newSincePlay, 'border-sky-600 bg-sky-900/50 text-sky-200')}
+          {statusChip('pending', i18next.t('browse.mine.updateWaiting'), counts.pending, 'border-amber-600 bg-amber-900/50 text-amber-200')}
         </div>
       )}
       {categories.length > 0 && <CategoryBar categories={categories} value={category} onChange={setCategory} accent="border-emerald-600 bg-emerald-900/50 text-emerald-200" />}
       <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
-        <span>{filtered.length} of {rows.length} mods</span>
-        <span>page {page} of {pageCountOf(filtered.length)}</span>
+        <span>{i18next.t('browse.mine.count', { shown: filtered.length, total: rows.length })}</span>
+        <span>{i18next.t('browse.workshop.page', { page, pages: pageCountOf(filtered.length) })}</span>
       </div>
-      {rows.length === 0 && !loading && <p className="text-xs text-slate-500">No installed mods found. Check your folders in App Settings.</p>}
+      {rows.length === 0 && !loading && <p className="text-xs text-slate-500">{i18next.t('browse.mine.none')}</p>}
       <Pagination page={page} pageCount={pageCountOf(filtered.length)} onPage={setPage} />
       <CardGrid>
         {pageRows.map((r) => {
@@ -791,7 +776,7 @@ const MyModsTab: React.FC<{
               title={r.mod.name}
               subtitle={<span className="font-mono">{r.mod.id}</span>}
               chips={<Chip className={nexusId !== null ? 'border-orange-700/60 text-orange-300' : 'border-slate-600 text-slate-300'}>{localLabel(r.mod)}</Chip>}
-              summary={r.mod.loadability.status !== 'loadable' ? 'Your game build does not load this mod as it is (see Mod Health).' : null}
+              summary={r.mod.loadability.status !== 'loadable' ? i18next.t('browse.mine.notLoadable') : null}
               onOpen={nexusId !== null ? () => onOpen({ kind: 'nexus', modId: nexusId }) : undefined}
               onContextMenu={(e) => showContextMenu(e, keep.menuItems({ mod_id: r.mod.id, nexus_id: nexusId, name: r.mod.name, installedModIds: [r.mod.id] }).map((i, n) => ({ ...i, separatorBefore: n === 0 ? false : i.separatorBefore })))}
             />
@@ -805,14 +790,15 @@ const MyModsTab: React.FC<{
 
 // ---------------------------------------------------------------------------------------------
 
-const TABS: { id: SourceTab; label: string; active: string }[] = [
-  { id: 'workshop', label: 'Steam Workshop', active: 'bg-sky-950/80 text-sky-200 border-sky-700' },
-  { id: 'nexus', label: 'Nexus Mods', active: 'bg-orange-950/80 text-orange-200 border-orange-700' },
-  { id: 'mine', label: 'My mods', active: 'bg-emerald-950/80 text-emerald-200 border-emerald-700' },
-  { id: 'lists', label: 'My lists', active: 'bg-amber-950/80 text-amber-200 border-amber-700' },
+const TABS: { id: SourceTab; active: string }[] = [
+  { id: 'workshop', active: 'bg-sky-950/80 text-sky-200 border-sky-700' },
+  { id: 'nexus', active: 'bg-orange-950/80 text-orange-200 border-orange-700' },
+  { id: 'mine', active: 'bg-emerald-950/80 text-emerald-200 border-emerald-700' },
+  { id: 'lists', active: 'bg-amber-950/80 text-amber-200 border-amber-700' },
 ];
 
 export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null, profiles = [], onProfilesChanged }) => {
+  const { t } = useTranslation();
   const keep = useKeepActions(paths, profiles, onProfilesChanged);
   const [tab, setTab] = useState<SourceTab>('workshop');
   // Tabs stay mounted once visited, so switching keeps their page and filters.
@@ -899,44 +885,42 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 px-6 py-3 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
         <div className="flex items-center gap-2 mr-2">
           <Globe className="w-5 h-5 text-emerald-400" aria-hidden="true" />
-          <h1 className="text-sm font-bold text-slate-100">Browse Mods</h1>
+          <h1 className="text-sm font-bold text-slate-100">{t('browse.title')}</h1>
         </div>
-        <div role="tablist" aria-label="Mod source" className="flex gap-1.5">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => openTab(t.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${tab === t.id ? t.active : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'}`}>
-              {t.label}
-              {t.id === 'mine' && <span className="ml-1.5 font-mono text-[10px] opacity-70">{myCount}</span>}
+        <div role="tablist" aria-label={t('browse.sourceLabel')} className="flex gap-1.5">
+          {TABS.map((tab_) => (
+            <button key={tab_.id} type="button" role="tab" aria-selected={tab === tab_.id} onClick={() => openTab(tab_.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${tab === tab_.id ? tab_.active : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'}`}>
+              {t(`browse.tabs.${tab_.id}`)}
+              {tab_.id === 'mine' && <span className="ml-1.5 font-mono text-[10px] opacity-70">{myCount}</span>}
             </button>
           ))}
         </div>
         <div className="flex-1" />
-        <div className="flex items-center gap-1.5" title="Install a mod you downloaded (Nexus, forums, GitHub...): the Studio finds the mod inside and puts it in Zomboid/mods">
+        <div className="flex items-center gap-1.5" title={t('browse.installTitle')}>
           <button type="button" onClick={installer.pickZip} disabled={installer.busy || !paths.is_valid}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
             {installer.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FileArchive className="w-3.5 h-3.5" aria-hidden="true" />}
-            Install .zip / .7z
+            {t('browse.installZip')}
           </button>
           <button type="button" onClick={installer.pickFolder} disabled={installer.busy || !paths.is_valid}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
-            title="For .rar, or anything already extracted: choose the folder">
+            title={t('browse.folderTitle')}>
             <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
-            Folder
+            {t('browse.folder')}
           </button>
           <button
             type="button"
             onClick={async () => {
-              const url = window.prompt(
-                'Paste a link to the mod: a direct .zip, or a GitHub repository or release page.'
-              );
+              const url = window.prompt(t('browse.linkPrompt'));
               if (url && url.trim()) await installer.fromUrl(url.trim());
             }}
             disabled={installer.busy || !paths.is_valid}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
-            title="Downloads a mod from a link (a direct .zip, or a GitHub repository or release) and installs it"
+            title={t('browse.linkTitle')}
           >
             <Link2 className="w-3.5 h-3.5" aria-hidden="true" />
-            From a link
+            {t('browse.fromLink')}
           </button>
         </div>
       </div>
@@ -945,10 +929,8 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
         {pendingOrigin && (
           <div className="flex items-center gap-2 text-[11px] text-orange-200 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-1.5">
             <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1">
-              Downloading <b>{pendingOrigin.name}</b> from Nexus: when it finishes, press <b>Install .zip / .7z</b> and it will be tagged as a Nexus mod.
-            </span>
-            <button type="button" onClick={() => setPendingOrigin(null)} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label="Do not tag the next install">
+            <span className="flex-1" dangerouslySetInnerHTML={{ __html: t('browse.pendingNexus', { name: pendingOrigin.name }) }} />
+            <button type="button" onClick={() => setPendingOrigin(null)} className="p-0.5 rounded hover:bg-orange-900/60 cursor-pointer" aria-label={t('browse.noTag')}>
               <X className="w-3.5 h-3.5" />
             </button>
           </div>

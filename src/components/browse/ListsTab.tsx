@@ -7,6 +7,7 @@ import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatUnixDate } from './common';
 import { DetailTarget } from './ModDetail';
+import i18next from 'i18next';
 
 interface ListsTabProps {
   paths: StudioPathsUI;
@@ -58,21 +59,21 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
     showContextMenu(e, [
       ...extra,
       {
-        label: `Take out of ${list.name}`,
+        label: i18next.t('browse.lists.takeOut', { list: list.name }),
         icon: X,
         danger: true,
         separatorBefore: extra.length > 0,
         onSelect: () => void lists.removeFrom(list.id, key).catch(() => undefined),
-        title: `Removes ${name} from this list; nothing is uninstalled`,
+        title: i18next.t('browse.lists.takeOutTitle', { name }),
       },
     ]);
 
   const rename = async () => {
-    const name = window.prompt(`A new name for ${list.name}:`, list.name);
+    const name = window.prompt(i18next.t('browse.lists.renamePrompt', { name: list.name }), list.name);
     if (name && name.trim() && name.trim() !== list.name) await lists.rename(list.id, name.trim()).catch(() => undefined);
   };
   const remove = async () => {
-    if (!window.confirm(`Delete the list ${list.name}? The mods stay installed.`)) return;
+    if (!window.confirm(i18next.t('browse.lists.deleteConfirm', { name: list.name }))) return;
     await lists.remove(list.id).catch(() => undefined);
     setSelectedId(FAVORITES);
   };
@@ -109,11 +110,11 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="New list…"
-            aria-label="New list name"
+            placeholder={i18next.t('browse.lists.newPlaceholder')}
+            aria-label={i18next.t('browse.lists.newLabel')}
             className="w-36 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
           />
-          <button type="submit" disabled={!newName.trim()} className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50" title="Makes a list of yours">
+          <button type="submit" disabled={!newName.trim()} className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50" title={i18next.t('browse.lists.newTitle')}>
             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         </form>
@@ -121,8 +122,8 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
 
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
         <span className="text-slate-400">
-          {list.items.length} mod{list.items.length === 1 ? '' : 's'}
-          {missing.length > 0 && <span className="text-amber-300"> · {missing.length} not installed</span>}
+          {i18next.t('browse.lists.count', { count: list.items.length })}
+          {missing.length > 0 && <span className="text-amber-300">{i18next.t('browse.lists.notInstalled', { count: missing.length })}</span>}
         </span>
         <div className="flex-1" />
         {missing.length > 0 && (
@@ -130,27 +131,27 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
             type="button"
             disabled={!steamReady}
             onClick={() => void onSubscribe(missing, true)}
-            title={steamReady ? `Subscribes to the ${missing.length} Workshop item${missing.length === 1 ? '' : 's'} of this list you do not have` : 'Steam is not running'}
+            title={steamReady ? i18next.t('browse.lists.subscribeMissingTitle', { count: missing.length }) : i18next.t('browse.lists.steamNotRunning')}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50"
           >
-            <Plus className="w-3 h-3" aria-hidden="true" /> Subscribe to all missing
+            <Plus className="w-3 h-3" aria-hidden="true" /> {i18next.t('browse.lists.subscribeMissing')}
           </button>
         )}
         {onMakeProfile && workshopIds.length > 0 && (
           <button
             type="button"
             onClick={() => onMakeProfile(list.name, workshopIds)}
-            title="A profile with the installed mods of this list's Workshop items switched on (mods not installed yet are left out: subscribe first)"
+            title={i18next.t('browse.lists.makeProfileTitle')}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-700 hover:bg-emerald-600 text-white cursor-pointer"
           >
-            <FolderPlus className="w-3 h-3" aria-hidden="true" /> Make a profile
+            <FolderPlus className="w-3 h-3" aria-hidden="true" /> {i18next.t('browse.lists.makeProfile')}
           </button>
         )}
-        <button type="button" onClick={() => void rename()} className="p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer" title="Rename this list">
+        <button type="button" onClick={() => void rename()} className="p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 cursor-pointer" title={i18next.t('browse.lists.rename')}>
           <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
         {list.id !== FAVORITES && (
-          <button type="button" onClick={() => void remove()} className="p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-red-300 hover:border-red-900 cursor-pointer" title="Delete this list (the mods stay installed)">
+          <button type="button" onClick={() => void remove()} className="p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-red-300 hover:border-red-900 cursor-pointer" title={i18next.t('browse.lists.delete')}>
             <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         )}
@@ -158,7 +159,7 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
 
       {list.items.length === 0 && (
         <p className="text-xs text-slate-500 py-6 text-center">
-          Nothing here yet. The star on a card, or right-click → Add to a list…, on any mod in Browse Mods or the Mod List puts it here.
+          {i18next.t('browse.lists.empty')}
         </p>
       )}
 
@@ -173,14 +174,14 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
                 key={key}
                 image={item?.preview_url ?? null}
                 title={item?.title ?? entry.name}
-                subtitle={item ? `updated ${formatUnixDate(item.time_updated)}` : loading ? 'Loading…' : `Workshop item ${entry.workshop_id}`}
-                chips={<>{installedIds.length > 0 ? <InstalledChip /> : <Chip className="border-amber-500/60 text-amber-300">Not installed</Chip>}<UpdateChips state={stateByItem.get(entry.workshop_id)} /></>}
+                subtitle={item ? i18next.t('browse.lists.updated', { date: formatUnixDate(item.time_updated) }) : loading ? i18next.t('browse.lists.loading') : i18next.t('browse.lists.workshopItem', { id: entry.workshop_id })}
+                chips={<>{installedIds.length > 0 ? <InstalledChip /> : <Chip className="border-amber-500/60 text-amber-300">{i18next.t('browse.lists.notInstalledChip')}</Chip>}<UpdateChips state={stateByItem.get(entry.workshop_id)} /></>}
                 summary={item?.summary ?? null}
                 onOpen={() => onOpen({ kind: 'workshop', id: entry.workshop_id!, preview: item })}
                 onContextMenu={(e) =>
                   itemMenu(e, key, entry.name, [
-                    { label: installedIds.length > 0 ? 'Unsubscribe' : 'Subscribe', icon: installedIds.length > 0 ? Trash2 : Plus, onSelect: () => void onSubscribe([entry.workshop_id!], installedIds.length === 0), disabled: !steamReady, disabledReason: 'Steam is not running' },
-                    { label: 'Open its Workshop page', icon: ExternalLink, onSelect: () => TauriService.openExternalUrl(item?.page_url ?? `https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.workshop_id}`) },
+                    { label: installedIds.length > 0 ? i18next.t('browse.lists.unsubscribe') : i18next.t('browse.lists.subscribe'), icon: installedIds.length > 0 ? Trash2 : Plus, onSelect: () => void onSubscribe([entry.workshop_id!], installedIds.length === 0), disabled: !steamReady, disabledReason: i18next.t('browse.lists.steamNotRunning') },
+                    { label: i18next.t('browse.lists.openPage'), icon: ExternalLink, onSelect: () => TauriService.openExternalUrl(item?.page_url ?? `https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.workshop_id}`) },
                   ])
                 }
               />
@@ -192,8 +193,8 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
                 key={key}
                 image={null}
                 title={entry.name}
-                subtitle={<span className="font-mono">Nexus mod {entry.nexus_id}</span>}
-                chips={<Chip className="border-orange-700/60 text-orange-300">Nexus</Chip>}
+                subtitle={<span className="font-mono">{i18next.t('browse.lists.nexusMod', { id: entry.nexus_id })}</span>}
+                chips={<Chip className="border-orange-700/60 text-orange-300">{i18next.t('browse.lists.nexus')}</Chip>}
                 onOpen={() => onOpen({ kind: 'nexus', modId: entry.nexus_id! })}
                 onContextMenu={(e) => itemMenu(e, key, entry.name)}
               />
@@ -206,7 +207,7 @@ export const ListsTab: React.FC<ListsTabProps> = ({ paths, catalog, installedByI
               image={null}
               title={mod?.name ?? entry.name}
               subtitle={<span className="font-mono">{entry.mod_id}</span>}
-              chips={mod ? <InstalledChip /> : <Chip className="border-amber-500/60 text-amber-300">Not installed</Chip>}
+              chips={mod ? <InstalledChip /> : <Chip className="border-amber-500/60 text-amber-300">{i18next.t('browse.lists.notInstalledChip')}</Chip>}
               onContextMenu={(e) => itemMenu(e, key, entry.name)}
             />
           );

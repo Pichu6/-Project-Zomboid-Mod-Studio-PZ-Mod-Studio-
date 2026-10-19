@@ -18,32 +18,34 @@ export const formatBytes = (n: number | null | undefined) => {
 
 export const scrollBrowseToTop = () => document.getElementById(SCROLL_ID)?.scrollTo({ top: 0 });
 
+import i18next from 'i18next';
+
 export const Chip: React.FC<{ className: string; title?: string; children: React.ReactNode }> = ({ className, title, children }) => (
   <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap ${className}`} title={title}>{children}</span>
 );
 
 export const BuildChips: React.FC<{ builds: string[]; source: string }> = ({ builds, source }) =>
   builds.length === 0 ? (
-    <Chip className="border-slate-700 text-slate-500" title={`${source} does not say which game build it is for`}>build ?</Chip>
+    <Chip className="border-slate-700 text-slate-500" title={i18next.t('browse.chips.buildUnknownTitle', { source })}>{i18next.t('browse.chips.buildUnknown')}</Chip>
   ) : (
     <>
       {builds.map((b) => (
-        <Chip key={b} className={b === '42' ? 'border-emerald-600/60 text-emerald-300' : 'border-amber-600/60 text-amber-300'} title={`Tagged for Build ${b} (${source})`}>
+        <Chip key={b} className={b === '42' ? 'border-emerald-600/60 text-emerald-300' : 'border-amber-600/60 text-amber-300'} title={i18next.t('browse.chips.buildTitle', { build: b, source })}>
           B{b}
         </Chip>
       ))}
     </>
   );
 
-export const InstalledChip: React.FC = () => <Chip className="border-emerald-500/60 text-emerald-300 bg-emerald-950/40">Installed</Chip>;
+export const InstalledChip: React.FC = () => <Chip className="border-emerald-500/60 text-emerald-300 bg-emerald-950/40">{i18next.t('browse.chips.installed')}</Chip>;
 
 export const UpdateChips: React.FC<{ state: WorkshopInstallState | undefined | null }> = ({ state }) => (
   <>
     {state?.update_pending && (
-      <Chip className="border-amber-500/60 text-amber-300 bg-amber-950/40" title="Steam has a newer version that is not downloaded yet">Update waiting</Chip>
+      <Chip className="border-amber-500/60 text-amber-300 bg-amber-950/40" title={i18next.t('browse.chips.updateWaitingTitle')}>{i18next.t('browse.chips.updateWaiting')}</Chip>
     )}
     {state?.updated_since_last_play && !state.update_pending && (
-      <Chip className="border-sky-500/60 text-sky-300 bg-sky-950/40" title="This version was published after you last played">New since last play</Chip>
+      <Chip className="border-sky-500/60 text-sky-300 bg-sky-950/40" title={i18next.t('browse.chips.newSinceTitle')}>{i18next.t('browse.chips.newSince')}</Chip>
     )}
   </>
 );
@@ -71,7 +73,7 @@ export const ModCard: React.FC<{
       {image ? (
         <img src={image} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform" />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-slate-700 text-[11px]">No image</div>
+        <div className="w-full h-full flex items-center justify-center text-slate-700 text-[11px]">{i18next.t('browse.chips.noImage')}</div>
       )}
       {chips && <div className="absolute top-1.5 left-1.5 right-1.5 flex flex-wrap gap-1 [&>span]:bg-slate-950/85">{chips}</div>}
     </div>
@@ -105,8 +107,8 @@ export const Pagination: React.FC<{ page: number; pageCount: number; onPage: (pa
   };
   const btn = 'min-w-[30px] h-[30px] px-2 rounded-md text-[11px] font-bold font-mono border cursor-pointer disabled:opacity-40 disabled:cursor-default';
   return (
-    <nav className="flex flex-wrap items-center justify-center gap-1 py-2" aria-label="Pages">
-      <button type="button" className={`${btn} border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800`} onClick={() => go(page - 1)} disabled={disabled || page <= 1} aria-label="Previous page">
+    <nav className="flex flex-wrap items-center justify-center gap-1 py-2" aria-label={i18next.t('browse.chips.pages')}>
+      <button type="button" className={`${btn} border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800`} onClick={() => go(page - 1)} disabled={disabled || page <= 1} aria-label={i18next.t('browse.chips.previous')}>
         <ChevronLeft className="w-3.5 h-3.5" />
       </button>
       {pages.map((p, i) =>
@@ -119,7 +121,7 @@ export const Pagination: React.FC<{ page: number; pageCount: number; onPage: (pa
           </button>
         )
       )}
-      <button type="button" className={`${btn} border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800`} onClick={() => go(page + 1)} disabled={disabled || page >= pageCount} aria-label="Next page">
+      <button type="button" className={`${btn} border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800`} onClick={() => go(page + 1)} disabled={disabled || page >= pageCount} aria-label={i18next.t('browse.chips.next')}>
         <ChevronRight className="w-3.5 h-3.5" />
       </button>
     </nav>
@@ -133,13 +135,13 @@ export const CategoryBar: React.FC<{
   onChange: (name: string) => void;
   accent: string;
 }> = ({ categories, value, onChange, accent }) => (
-  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Categories">
+  <div className="flex flex-wrap gap-1.5" role="group" aria-label={i18next.t('browse.chips.categories')}>
     {[{ name: '' }, ...categories].map((c) => {
       const active = c.name === value;
       return (
         <button key={c.name || 'all'} type="button" onClick={() => onChange(c.name)} aria-pressed={active}
           className={`px-2 py-0.5 rounded-full text-[11px] border cursor-pointer transition ${active ? accent : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-700'}`}>
-          {c.name || 'All'}
+          {c.name || i18next.t('browse.chips.all')}
           {'count' in c && c.count !== undefined && <span className="ml-1 font-mono text-[10px] opacity-60">{c.count}</span>}
         </button>
       );
