@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PZ Mod Studio forum post</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px; line-height: 1.55; color: #1b1f24; background: #fff; }
+  img { max-width: 100%; border: 1px solid #ccd; border-radius: 6px; margin: 8px 0 4px; }
+  h1 { font-size: 26px; } h2 { font-size: 21px; margin-top: 28px; border-bottom: 1px solid #e3e6ea; padding-bottom: 4px; }
+  code { background: #f1f3f5; padding: 1px 4px; border-radius: 3px; font-size: 90%; }
+  hr { border: 0; border-top: 1px solid #e3e6ea; margin: 24px 0; }
+  .howto { background: #fff8e1; border: 1px solid #f0d27a; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+</style></head><body>
+<p class="howto"><b>How to post this:</b> press Ctrl+A, Ctrl+C here, then Ctrl+V in the forum editor. Images load from GitHub once the repository has them.</p>
+<h1>PZ Mod Studio — a mod manager and fixer for Project Zomboid (Build 42)</h1>
+<p>Free and open source · Windows · no installer · works with your Steam Workshop mods</p>
+<p>Hello everyone!</p>
+<p>Back in August I shared the first version of <strong>PZ Mod Studio</strong> here. It has changed a lot since, so here is a fresh walkthrough of what it does now, one screen at a time.</p>
+<p>A quick, honest note first: I am not a programmer. The app is built with AI assistance, and I test every change on my own install (B42.21, 120+ mods). Everything is open source, so anyone who knows the code can review it, fix it or improve it — that is very welcome.</p>
+<p><strong>▶ Video tour (1 minute):</strong> <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/pz-mod-studio-tour.mp4">pz-mod-studio-tour.mp4</a></p>
+<hr>
+<h2>What it is for</h2>
+<p>If you play with many mods you have probably met at least one of these:</p>
+<ul>
+<li>the game crashes or throws red errors and you don&#39;t know <strong>which mod</strong> did it;</li>
+<li>two mods change the <strong>same file</strong>, and one of them silently stops working;</li>
+<li>a mod made for <strong>Build 41</strong> half-works in Build 42;</li>
+<li>you want a &quot;vanilla+&quot; setup and a &quot;100 mods&quot; setup <strong>without unsubscribing</strong> from anything;</li>
+<li>a friend sends you a mod list and nothing matches.</li>
+</ul>
+<p>PZ Mod Studio is one window for all of that. It never touches the game&#39;s code: it only reads your logs and mod folders and writes the same files you would write by hand (your mod list, and a normal mod folder for its fixes).</p>
+<h2>Download and first start</h2>
+<ol>
+<li>Go to the <strong><a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases">Releases page</a></strong> and download <code>Project-Zomboid-Mod-Studio.exe</code>.</li>
+<li>Put it in any folder and double-click it. There is nothing to install.</li>
+<li>It finds your game, your Steam Workshop folder and your <code>Zomboid</code> folder by itself. If you use a custom Steam library or GOG, set the folders in <strong>App Settings</strong>.</li>
+</ol>
+<p>Requirements: Windows 10/11 (64-bit). The app can be switched between <strong>English and Spanish</strong> in Settings.</p>
+<hr>
+<h2>1. Profiles — one click, a whole mod setup</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/01-profiles.png" alt="Profiles"></p>
+<p>A <strong>profile</strong> is a set of mods (switched on or off) and their load order. Make one for each way you play — &quot;Vanilla+&quot;, &quot;Hardcore 120 mods&quot;, &quot;Server with friends&quot; — and switch between them with one click.</p>
+<ul>
+<li><strong>Start one</strong> from what is on now, from everything installed, from a hand-picked list, or empty.</li>
+<li><strong>The game follows the profile.</strong> A small companion mod (<em>PZ Mod Studio Link</em>, added to every profile automatically) makes the game&#39;s own <strong>Mods screen show only that profile&#39;s mods</strong>, and <strong>refuses to load a save that uses mods the profile doesn&#39;t have</strong> — the same way the game blocks a save with missing mods.</li>
+<li><strong>It works both ways.</strong> Switch a mod on or reorder it in the game&#39;s Mods screen, and the profile in the app updates by itself.</li>
+<li><strong>Mods that load outside the mod list</strong> (Zombie Buddy&#39;s Java core) are switched on or off with the profile too.</li>
+<li><strong>Share</strong> a profile as a <code>.pzpack</code> file (see section 9).</li>
+</ul>
+<h2>2. Mod List — your load order, and what is wrong with it</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/02-mod-list.png" alt="Mod List"></p>
+<p>Every mod of the active profile, in the order the game loads them.</p>
+<ul>
+<li><strong>Drag</strong> to reorder, or use the arrows and &quot;Pos #&quot;.</li>
+<li><strong>Auto-Sort</strong> puts every mod after what it requires, exactly the way the game itself would, and keeps the rest of your order.</li>
+<li><strong>Chips on each row</strong> say what matters: where it comes from (Steam, Nexus, local, compatible copy), how long it took to load last session, and any problem Mod Health found — click a chip to fix it or to jump to the details.</li>
+<li><strong>Filters</strong>: on/off, problems, maps, libraries, &quot;won&#39;t load on this build&quot;, &quot;updated since you last played&quot;, by source, and by tag.</li>
+<li><strong>Earlier lists</strong>: every previous version of your mod list is kept, and you can go back to any of them.</li>
+<li>The panel on the right shows the mod&#39;s description, poster, what it requires and what requires it.</li>
+</ul>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/03-mod-list-menu.png" alt="Right-click menu"></p>
+<p><strong>Right-click any mod</strong> for everything else: add it to or take it out of the profile, load-order rules (&quot;this mod loads after that one&quot;), <strong>keep this version</strong> (a copy of the mod as it is today, to bring back if a Workshop update breaks your save), favorites and lists, open its folder or its Workshop page.</p>
+<h2>3. Mod Health — your list checked with the game&#39;s own rules</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/04-mod-health.png" alt="Mod Health"></p>
+<p>One page that answers &quot;will my list load?&quot; before you start the game. It uses the same rules the game uses (read from the game&#39;s own code), so it doesn&#39;t guess:</p>
+<ul>
+<li>mods your build can&#39;t load, missing or switched-off requirements, wrong order, incompatible mods switched on together, duplicates;</li>
+<li><strong>file conflicts</strong>: two mods shipping the same file, where the game only keeps one of them;</li>
+<li><strong>known issues</strong> from a small <strong>community index</strong> (shared facts like &quot;this mod needs X on 42.21&quot;), with the fix the app can apply.</li>
+</ul>
+<p>Most issues come with a <strong>button that fixes them</strong>: switch a mod on or off, move it, make a compatible copy, merge the files, open the Merger.</p>
+<p><strong>Compatible copies:</strong> for many Build 41 mods (or B42 mods broken by a game update), the app can make a local copy that rewrites what changed — old <code>require</code> paths that moved in Build 42, the old <code>Type =</code> item field — and the game uses that copy instead of the Workshop one. The original is never touched, and you can remove the copy any time.</p>
+<h2>4. Browse Mods — the Workshop and Nexus, inside the app</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/05-browse.png" alt="Browse Mods"></p>
+<p>Search and browse the <strong>Steam Workshop</strong> the way Steam shows it (Most Popular, Top Rated, Most Recent, Last Updated, categories, build), without a Steam key.</p>
+<ul>
+<li><strong>Subscribe and unsubscribe from the app</strong>, through your own Steam client. When Steam finishes downloading, the mod joins your active profile by itself.</li>
+<li>Open a mod for its full description, screenshots, requirements and what the community index says about it.</li>
+</ul>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/06-browse-hover.png" alt="Hover"></p>
+<p>Rest the pointer on a card to read its description, like on the Workshop.</p>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/07-browse-collections.png" alt="Collections"></p>
+<ul>
+<li><strong>Collections</strong>: see how many of its mods you already have, subscribe to the missing ones in one click, or turn a collection into a profile.</li>
+<li><strong>Nexus Mods</strong>: search and open mod pages; install the <code>.zip</code> / <code>.7z</code> you download, or install from a folder or a link (GitHub too).</li>
+<li><strong>My mods / My lists</strong>: everything you have installed, plus your own lists and favorites.</li>
+</ul>
+<h2>5. Mod Merger — making conflicting mods work together</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/08-merger-packages.png" alt="Merge packages"></p>
+<p>When two mods ship the same file, the game only reads the one that loads last, and the other mod loses that part. The Merger puts <strong>both mods&#39; changes into one file</strong>, inside a <strong>package</strong>: a normal mod folder (<code>Zomboid/mods/Z_PZModStudio_...</code>) that loads last, so the game reads the merged version.</p>
+<ul>
+<li><strong>Merge automatically</strong> what can be merged safely (a real three-way merge against the vanilla file), and decide the rest by hand in a side-by-side code editor: keep both, keep one mod, keep vanilla, or write your own.</li>
+<li>Item, recipe and profession <strong>script blocks</strong> that two mods declare are settled into one complete block.</li>
+<li><strong>Patch a mod&#39;s own file</strong>: fix a bug in someone else&#39;s mod without touching the mod — the fixed copy goes in your package.</li>
+<li>Packages belong to profiles: each profile shows its own packages.</li>
+</ul>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/09-merger-package.png" alt="Published package"></p>
+<p><strong>Package &amp; Publish</strong> writes it for the game. A published package is read-only until you open it again to edit — while it is open (a draft), the game doesn&#39;t load it, and the app tells you so.</p>
+<p>The package also carries a small <strong>Build 42 compatibility shim</strong> (safe guards for common B41-style calls), with per-mod patches you can switch on or off in Settings.</p>
+<h2>6. Monitor Center — what went wrong, and whose fault it is</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/10-monitor.png" alt="Monitor Center"></p>
+<p>The game&#39;s <code>console.txt</code>, live, whether you start the game from the app or from Steam.</p>
+<ul>
+<li><strong>Error cards</strong> for each problem, with <strong>the mod the game blamed</strong> on its own log lines, how many times it happened, and whether it was a real exception or just a warning (the game carried on).</li>
+<li><strong>Fix buttons</strong> where a fix is known: switch the mod off, fix a moved <code>require</code> path (publishes just that file into your package), patch the file.</li>
+<li><strong>Save report</strong>: writes everything needed to fix one error into a Markdown file — the log lines, your build, the mod (version, Workshop link, requirements) and the source of the file that failed. Hand it to the mod author, or to an AI assistant.</li>
+<li><strong>Find the mod that does it</strong>: a guided search that switches half of your mods off at a time, asks you &quot;does it still happen?&quot;, and narrows down to the mod that causes it. Your list comes back when you are done.</li>
+</ul>
+<h2>7. Servers — a dedicated server with your mods</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/11-servers.png" alt="Servers"></p>
+<ul>
+<li>Create and run a dedicated server (memory, Steam or no-Steam) and watch its console live.</li>
+<li><strong>Mods &amp; Sync</strong> writes your profile&#39;s mods into the server&#39;s <code>.ini</code> (<code>Mods=</code>, <code>WorkshopItems=</code>, <code>Map=</code>) and checks the <code>.ini</code> for mods it can&#39;t find.</li>
+<li>Quick settings (name, password, players, PvP, port), the players connected, and <strong>Stop</strong> saves the world before closing.</li>
+<li>A <strong>multiplayer check</strong> lists calls in a mod&#39;s client code that only work in single player.</li>
+</ul>
+<h2>8. Developer — for people who make mods</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/12-developer.png" alt="Developer"></p>
+<p>(Switch it on in Settings &gt; Developer features.)</p>
+<ul>
+<li><strong>New mod</strong>: makes the Build 42 folder structure with a working <code>mod.info</code>.</li>
+<li><strong>Check every file</strong>: every Lua file through a parser and every script file through a brace check, before the game reads them; click an error to open that line in VS Code.</li>
+<li><strong>Start the game with only this mod</strong> (and what it requires) to test it alone; your list comes back when the game closes.</li>
+<li><strong>Reload in the game while it runs</strong>: save a Lua file and the game reloads it, no restart.</li>
+<li><strong>Multiplayer check</strong>, and <strong>TileZed / WorldEd</strong> launchers.</li>
+</ul>
+<p>It works on other people&#39;s mods too, for checking and testing. To fix someone else&#39;s mod, use <strong>Patch a mod file</strong> in the Merger, so a Workshop update doesn&#39;t wipe your fix.</p>
+<h2>9. Sharing your setup</h2>
+<ul>
+<li><strong>Mod list (<code>.pzpack</code>)</strong>: from Mod List &gt; Presets, or the Share button of a profile. It records each mod&#39;s version and Workshop date and the game build, and can carry your sandbox settings. When your friend imports it, the app lists what they are missing (with <strong>Subscribe to all</strong>), which mods are a different version than yours, and whether their build differs.</li>
+<li><strong>Merge package (<code>.pzmerge</code>)</strong>: from the Merger. It records which mod copies it was made with, and warns on import if the other person&#39;s copies differ — publishing a merge made from other versions can put old code over new.</li>
+<li>Friends without the app can still use your package: zip the <code>Zomboid/mods/Z_PZModStudio_&lt;name&gt;</code> folder; it is a normal mod that has to load last.</li>
+</ul>
+<h2>10. App Settings</h2>
+<p><img src="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/docs/forum/images/13-settings.png" alt="Settings"></p>
+<p>Folders, language (English / Español), which warnings you see, the community index downloads, the Build 42 shim and its per-mod patches, and (optional) the AI agent server.</p>
+<hr>
+<h2>A typical session</h2>
+<ol>
+<li><strong>Profiles</strong>: make or pick a profile.</li>
+<li><strong>Mod List</strong>: switch mods on, then <strong>Auto-Sort</strong>.</li>
+<li><strong>Mod Health</strong>: fix what it shows (most issues have a button).</li>
+<li><strong>Mod Merger</strong>: if Mod Health found file conflicts, <em>Merge automatically</em>, decide the rest, <strong>Package &amp; Publish</strong>.</li>
+<li><strong>Launch</strong> from the header (normal or debug, fullscreen or windowed).</li>
+<li><strong>Monitor Center</strong>: if something goes wrong, read the card, use its fix, or <strong>Save report</strong>.</li>
+</ol>
+<h2>For AI-assisted modding (optional)</h2>
+<p>The download includes <code>pz-mcp-server.exe</code>, a <strong>Model Context Protocol</strong> server. Connect it to an AI assistant (Claude, Cursor, Cline…) and the assistant can read your logs and error reports, check your mod list, merge files, launch the game and, with the optional companion mods, run Lua in the game and even play through menus. Setup snippets are in Settings &gt; MCP Agent Server and in <code>AGENTS.md</code>.</p>
+<h2>How it touches the game</h2>
+<ul>
+<li><strong>Mod list</strong>: it writes <code>Zomboid/mods/default.txt</code> (the file the game reads), always keeping a backup of the previous one.</li>
+<li><strong>Fixes</strong>: they live in normal mod folders in <code>Zomboid/mods</code> (packages, compatible copies). Workshop mods are never edited.</li>
+<li><strong>Logs</strong>: it only reads <code>console.txt</code> and <code>Zomboid/Logs</code>.</li>
+<li><strong>Zombie Buddy only</strong>: it adds or removes Zombie Buddy&#39;s line in the game&#39;s <code>ProjectZomboid64.json</code>, with a backup every time. Steam&#39;s &quot;Verify integrity&quot; puts the original file back.</li>
+<li>No DLLs, no memory editing, nothing is sent anywhere. The app talks to the internet only to browse the Workshop/Nexus and to download the community index (which you can switch off).</li>
+</ul>
+<h2>FAQ</h2>
+<p><strong>Is it safe for my saves?</strong> It never edits saves. The Link mod only <em>blocks</em> loading a save whose mods aren&#39;t in the profile, so you don&#39;t load it with the wrong list by accident.</p>
+<p><strong>Do I have to launch the game from the app?</strong> No. Mod list, profiles and packages work from Steam too. Compatible copies need the launch option <code>-modfolders mods,workshop,steam</code> when you start from Steam (the app adds it for you when it launches the game).</p>
+<p><strong>Does it work on Build 41?</strong> It is made for Build 42, and it can help many B41 mods run on B42. The B41 game itself is not the target.</p>
+<p><strong>Something broke / I found a bug.</strong> Please post here or open an issue on GitHub, with the <strong>Save report</strong> file if it is about an error. That report is exactly what is needed to fix it.</p>
+<p><strong>Links</strong>: <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-">GitHub</a> · <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases">Releases</a> · <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/tree/main/docs">Technical docs</a></p>
+<p>Thanks for reading, and happy surviving!</p>
+
+</body></html>

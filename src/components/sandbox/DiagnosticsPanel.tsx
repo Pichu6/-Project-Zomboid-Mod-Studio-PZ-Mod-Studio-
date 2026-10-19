@@ -322,6 +322,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
    * are read for the name.
    */
   const modFromStack = (card: TranslatedErrorCard): string | null => {
+    // A mod's translated text, or a line in one of the game's own files, says whose it is (or
+    // that it is nobody's): a mod named on a line nearby is someone else.
+    if (card.code === 'translator_text' || card.raw_error.includes('Lua(Vanilla)')) return null;
     const at = logLines.findIndex((l) => l.includes(card.raw_error.trim()));
     if (at < 0) return null;
     for (const line of logLines.slice(at, at + 30)) {

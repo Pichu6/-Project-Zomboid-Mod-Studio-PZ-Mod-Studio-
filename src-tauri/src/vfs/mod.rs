@@ -482,6 +482,10 @@ pub fn scan_conflicts_for_package(
     active: &[String],
     package_folder: Option<&str>,
 ) -> Vec<VfsConflictRaw> {
+    // Found in the list as the game reads it: the Studio packages are taken out just below, and
+    // looked for afterwards the active package was never there, so with no package named every
+    // conflict read as pending even with all of them merged and published.
+    let list_package = active_package_dir(catalog, active).map(|(id, _)| id);
     let active: Vec<String> = active
         .iter()
         .filter(|s| !s.starts_with("Z_PZModStudio_") && s.as_str() != "PZModStudioCarrier")
@@ -553,9 +557,7 @@ pub fn scan_conflicts_for_package(
     let user_dirs = crate::load_order::mod_info::get_all_user_zomboid_dirs(&paths.user_zomboid_dir);
     // Saved merges belong to one package. Reading every package's at once used to show, and
     // then publish, another package's code.
-    let wanted = package_folder
-        .map(str::to_string)
-        .or_else(|| active_package_dir(catalog, &active).map(|(id, _)| id));
+    let wanted = package_folder.map(str::to_string).or(list_package);
     let mut draft_map: HashMap<String, (String, String)> = HashMap::new();
     if let Some(wanted) = wanted {
         for u_dir in &user_dirs {

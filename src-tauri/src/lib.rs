@@ -1248,3 +1248,45 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod fixture_dump {
+    /// Writes what the app's main commands answer on this machine to PZMS_DUMP (JSON), for
+    /// screenshots with the real data. Read-only. PZMS_ZOMBOID_DIR, PZMS_DUMP.
+    #[test]
+    #[ignore]
+    fn dump_the_main_commands() {
+        let (Ok(_), Ok(out)) = (std::env::var("PZMS_ZOMBOID_DIR"), std::env::var("PZMS_DUMP")) else { return };
+        let paths = crate::vfs::auto_detect_paths();
+        let active = crate::load_order::ini_parser::read_mod_list_ini(&paths.mod_list_ini_path).map(|d| d.active_mods).unwrap_or_default();
+        let dump = serde_json::json!({
+            "paths": paths,
+            "scan_all_installed_mods_cmd": super::scan_all_installed_mods_cmd(paths.clone()),
+            "get_mod_health_cmd": super::get_mod_health_cmd(paths.clone(), active.clone()),
+            "scan_conflicts_cmd": super::scan_conflicts_cmd(paths.clone(), None),
+            "scan_conflicts_for_package": super::scan_conflicts_cmd(paths.clone(), Some("Z_PZModStudio_MergedPatch".to_string())),
+            "list_merged_packages_cmd": super::list_merged_packages_cmd(paths.user_zomboid_dir.clone(), paths.mod_list_ini_path.clone()),
+            "mod_error_stats_cmd": super::mod_error_stats_cmd(paths.clone()),
+            "mod_load_times_cmd": super::mod_load_times_cmd(paths.clone()),
+            "polyfill_sections_cmd": super::polyfill_sections_cmd(),
+            "shim_patches_cmd": super::shim_patches_cmd(paths.user_zomboid_dir.clone()),
+            "community_index_cmd": super::community_index_cmd(paths.clone()),
+            "list_instances": crate::instance_manager::list_instances(paths.user_zomboid_dir.clone()).unwrap_or_default(),
+            "mod_lists_cmd": super::mod_lists_cmd(paths.user_zomboid_dir.clone()),
+        });
+        std::fs::write(out, serde_json::to_string(&dump).unwrap()).unwrap();
+    }
+
+    /// One page of the public Workshop browse, mods and collections, for the Browse screenshots.
+    #[test]
+    #[ignore]
+    fn dump_a_workshop_page() {
+        let Ok(out) = std::env::var("PZMS_DUMP_WS") else { return };
+        let mods: crate::workshop::BrowseQuery = serde_json::from_value(serde_json::json!({"perPage": 12, "sort": "trending", "build": "42", "days": 7, "collections": false, "page": 1})).unwrap();
+        let colls: crate::workshop::BrowseQuery = serde_json::from_value(serde_json::json!({"perPage": 8, "sort": "trending", "days": 7, "collections": true, "page": 1})).unwrap();
+        let dump = serde_json::json!({
+            "mods": super::workshop_search_cmd(mods).ok(),
+            "collections": super::workshop_search_cmd(colls).ok(),
+        });
+        std::fs::write(out, serde_json::to_string(&dump).unwrap()).unwrap();
+    }}
