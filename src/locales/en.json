@@ -1,0 +1,52 @@
+{
+  "nav": {
+    "modules": "Studio Modules",
+    "profiles": "Profiles",
+    "monitor": "Monitor Center",
+    "modList": "Mod List",
+    "health": "Mod Health",
+    "browse": "Browse Mods",
+    "merger": "Mod Merger",
+    "developer": "Developer",
+    "servers": "Servers",
+    "settings": "App Settings",
+    "locked": "You must activate or create a profile first"
+  },
+  "header": {
+    "tagline": "Project Zomboid • Build 42+ Suite",
+    "profile": "Profile:",
+    "noProfile": "None",
+    "profileTitle": "Click to view or change Mod Profiles",
+    "build": "Build",
+    "profileOn": "· profile on {{build}}",
+    "buildTargetCrossed": "This profile is set for build {{target}}; the game installed now is {{installed}}. Saves never cross a major build. Switch Steam's beta branch to play it, or change the profile's build in Profiles.",
+    "buildCrossed": "This profile was last played on build {{played}}; the game installed now is {{installed}}. Saves never cross a major build: a {{playedMajor}} save will not open on {{installedMajor}}. Switch Steam's beta branch back to play it.",
+    "buildOther": "This profile was last played on build {{played}}; the game installed now is {{installed}}. A save from an earlier build usually opens on a later one of the same major; the other way round it does not.",
+    "buildSame": "Installed build {{installed}}; this profile was last played on it.{{steam}}",
+    "buildUnknown": "Installed build {{installed}}, from Zomboid/version.txt.{{steam}} Play this profile from the Studio once and it remembers the build.",
+    "steamBranch": " Steam branch: {{branch}}{{updated}}.",
+    "steamUpdated": ", last updated {{date}}",
+    "conflictsTitle": "Files several active mods ship at the same path. {{pending}} still need a decision, {{resolved}} are resolved or merged automatically. Click to open the Mod Merger.",
+    "conflicts": "Conflicts:",
+    "pending": "{{count}} pending",
+    "resolved": "· {{count}} resolved",
+    "executeIn": "Execute in {{mode}}",
+    "selectMode": "Select launch mode",
+    "launchModes": "Launch Modes",
+    "debugModes": "🐞 Debug & Monitored Modes",
+    "normalModes": "⚡ Normal Gameplay (No Debug)",
+    "modes": {
+      "DEBUG_FULLSCREEN": { "title": "Debug Mode (Fullscreen)", "badge": "Recommended", "description": "Launches in fullscreen with debugging (-debug), captures live logs and detects crashes.", "button": "Launch Debug (Fullscreen)" },
+      "DEBUG_WINDOWED": { "title": "Debug Mode (Windowed)", "badge": "Multitasking", "description": "Same live debugging (-debug), but in windowed mode to view the app and game in parallel.", "button": "Launch Debug (Windowed)" },
+      "NORMAL_FULLSCREEN": { "title": "Normal Game (Fullscreen)", "badge": "Standard", "description": "Standard native game in full screen (without -debug flag) for regular gameplay.", "button": "Launch Normal (Fullscreen)" },
+      "NORMAL_WINDOWED": { "title": "Normal Game (Windowed)", "badge": "Windowed", "description": "Standard native game in windowed mode (without -debug flag) for regular gameplay.", "button": "Launch Normal (Windowed)" }
+    }
+  },
+  "settings": {
+    "language": {
+      "title": "Language",
+      "blurb": "The language the Studio speaks. English is the source; a language that misses a line shows it in English. The game's own messages (errors, warnings, the Monitor's log lines) stay as the game writes them.",
+      "contribute": "Another language is one file: src/locales/<code>.json in the Studio's repository, proposed like anything else there."
+    }
+  }
+}

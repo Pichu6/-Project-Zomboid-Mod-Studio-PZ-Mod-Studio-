@@ -1,0 +1,52 @@
+{
+  "nav": {
+    "modules": "Módulos del Studio",
+    "profiles": "Perfiles",
+    "monitor": "Centro de monitoreo",
+    "modList": "Lista de mods",
+    "health": "Salud de mods",
+    "browse": "Explorar mods",
+    "merger": "Fusionador de mods",
+    "developer": "Desarrollador",
+    "servers": "Servidores",
+    "settings": "Configuración",
+    "locked": "Primero hay que activar o crear un perfil"
+  },
+  "header": {
+    "tagline": "Project Zomboid • Suite para Build 42+",
+    "profile": "Perfil:",
+    "noProfile": "Ninguno",
+    "profileTitle": "Clic para ver o cambiar los perfiles de mods",
+    "build": "Build",
+    "profileOn": "· perfil en {{build}}",
+    "buildTargetCrossed": "Este perfil está marcado para la build {{target}}; el juego instalado ahora es {{installed}}. Las partidas nunca pasan de una build mayor a otra. Cambiá la rama beta de Steam para jugarlo, o cambiá la build del perfil en Perfiles.",
+    "buildCrossed": "Este perfil se jugó por última vez en la build {{played}}; el juego instalado ahora es {{installed}}. Las partidas nunca pasan de una build mayor a otra: una partida de {{playedMajor}} no abre en {{installedMajor}}. Volvé a la rama beta de Steam para jugarla.",
+    "buildOther": "Este perfil se jugó por última vez en la build {{played}}; el juego instalado ahora es {{installed}}. Una partida de una build anterior suele abrir en una posterior de la misma mayor; al revés no.",
+    "buildSame": "Build instalada {{installed}}; este perfil se jugó por última vez en ella.{{steam}}",
+    "buildUnknown": "Build instalada {{installed}}, según Zomboid/version.txt.{{steam}} Jugá este perfil desde el Studio una vez y recuerda la build.",
+    "steamBranch": " Rama de Steam: {{branch}}{{updated}}.",
+    "steamUpdated": ", última actualización {{date}}",
+    "conflictsTitle": "Archivos que varios mods activos traen en la misma ruta. {{pending}} todavía necesitan una decisión, {{resolved}} están resueltos o fusionados automáticamente. Clic para abrir el Fusionador.",
+    "conflicts": "Conflictos:",
+    "pending": "{{count}} pendientes",
+    "resolved": "· {{count}} resueltos",
+    "executeIn": "Ejecutar en {{mode}}",
+    "selectMode": "Elegir modo de inicio",
+    "launchModes": "Modos de inicio",
+    "debugModes": "🐞 Modos con depuración y monitoreo",
+    "normalModes": "⚡ Juego normal (sin depuración)",
+    "modes": {
+      "DEBUG_FULLSCREEN": { "title": "Modo depuración (pantalla completa)", "badge": "Recomendado", "description": "Inicia en pantalla completa con depuración (-debug), captura el registro en vivo y detecta errores.", "button": "Iniciar depuración (pantalla completa)" },
+      "DEBUG_WINDOWED": { "title": "Modo depuración (ventana)", "badge": "Multitarea", "description": "La misma depuración en vivo (-debug), pero en ventana para ver la app y el juego a la vez.", "button": "Iniciar depuración (ventana)" },
+      "NORMAL_FULLSCREEN": { "title": "Juego normal (pantalla completa)", "badge": "Estándar", "description": "El juego tal cual, en pantalla completa (sin -debug), para jugar normalmente.", "button": "Iniciar normal (pantalla completa)" },
+      "NORMAL_WINDOWED": { "title": "Juego normal (ventana)", "badge": "Ventana", "description": "El juego tal cual, en ventana (sin -debug), para jugar normalmente.", "button": "Iniciar normal (ventana)" }
+    }
+  },
+  "settings": {
+    "language": {
+      "title": "Idioma",
+      "blurb": "El idioma en que habla el Studio. El inglés es el original; si a un idioma le falta una línea, se muestra en inglés. Los mensajes del propio juego (errores, avisos, las líneas del registro en el Monitor) quedan como el juego los escribe.",
+      "contribute": "Otro idioma es un archivo: src/locales/<código>.json en el repositorio del Studio, propuesto como todo lo demás allí."
+    }
+  }
+}

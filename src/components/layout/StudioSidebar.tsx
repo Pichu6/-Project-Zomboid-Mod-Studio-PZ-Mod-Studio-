@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActiveTab } from '../../types';
+import { useTranslation } from 'react-i18next';
 import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2 } from 'lucide-react';
 
 interface StudioSidebarProps {
@@ -20,6 +21,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   errorCardCount,
   healthErrorCount = 0,
 }) => {
+  const { t } = useTranslation();
   // The Developer screen shows with "Developer features" in Settings, the way the MCP tab does.
   const [developer, setDeveloper] = useState(() => localStorage.getItem('pz_show_advanced') === 'true');
   useEffect(() => {
@@ -30,7 +32,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   const navItems = [
     {
       id: 'PROFILES' as ActiveTab,
-      label: 'Profiles',
+      label: t('nav.profiles'),
       icon: Layers,
       badge: null,
       badgeColor: '',
@@ -38,7 +40,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     },
     {
       id: 'MONITOR' as ActiveTab,
-      label: 'Monitor Center',
+      label: t('nav.monitor'),
       icon: Activity,
       badge: errorCardCount > 0 ? errorCardCount : null,
       badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40',
@@ -46,7 +48,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     },
     {
       id: 'MOD_LIST' as ActiveTab,
-      label: 'Mod List',
+      label: t('nav.modList'),
       icon: ListOrdered,
       badge: null,
       badgeColor: '',
@@ -54,7 +56,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     },
     {
       id: 'HEALTH' as ActiveTab,
-      label: 'Mod Health',
+      label: t('nav.health'),
       icon: HeartPulse,
       badge: healthErrorCount > 0 ? healthErrorCount : null,
       badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40',
@@ -62,7 +64,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     },
     {
       id: 'BROWSE' as ActiveTab,
-      label: 'Browse Mods',
+      label: t('nav.browse'),
       icon: Globe,
       badge: null,
       badgeColor: '',
@@ -70,7 +72,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     },
     {
       id: 'MERGER' as ActiveTab,
-      label: 'Mod Merger',
+      label: t('nav.merger'),
       icon: GitCompare,
       badge: null,
       badgeColor: '',
@@ -79,7 +81,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
     ...(developer
       ? [{
           id: 'DEVELOPER' as ActiveTab,
-          label: 'Developer',
+          label: t('nav.developer'),
           icon: Code2,
           badge: null,
           badgeColor: '',
@@ -88,7 +90,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       : []),
     {
       id: 'SERVERS' as ActiveTab,
-      label: 'Servers',
+      label: t('nav.servers'),
       icon: Server,
       badge: null,
       badgeColor: '',
@@ -101,7 +103,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       {/* Top Nav List */}
       <div className="space-y-4">
         <div className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
-          Studio Modules
+          {t('nav.modules')}
         </div>
 
         <nav className="space-y-1">
@@ -119,7 +121,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
                   }
                 }}
                 disabled={isLocked}
-                title={isLocked ? 'You must activate or create a profile first' : item.label}
+                title={isLocked ? t('nav.locked') : item.label}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition ${
                   isLocked
                     ? 'text-slate-600 opacity-40 cursor-not-allowed border border-transparent select-none'
@@ -157,7 +159,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
           }`}
         >
           <Settings className="w-4 h-4 text-slate-400" />
-          <span>App Settings</span>
+          <span>{t('nav.settings')}</span>
         </button>
       </div>
     </aside>

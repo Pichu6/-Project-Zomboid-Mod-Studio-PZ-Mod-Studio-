@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb, KeyRound, ExternalLink, Loader2 } from 'lucide-react';
 import { PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
+import { useTranslation } from 'react-i18next';
+import { LANGUAGES, setLanguage } from '../../i18n';
 
 export interface StudioPathsUI {
   pz_install_dir: string;
@@ -78,6 +80,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [noMergeWarningSilenced, setNoMergeWarningSilenced] = useState<boolean>(
     localStorage.getItem('pz_skip_no_merge_warning') === 'true'
   );
+  const { t, i18n } = useTranslation();
   /** Whether the launch button starts on the mode used last time (on) or always on Debug (off). */
   const [rememberLaunchMode, setRememberLaunchMode] = useState<boolean>(
     localStorage.getItem('pz_remember_launch_mode') !== 'false'
@@ -644,6 +647,24 @@ The file the game reads to know which mods are on and in what order. Found autom
         )}
 
         {/* SUB-TAB 2: what the Build 42 compatibility shim covers */}
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200">{t('settings.language.title')}</div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">{t('settings.language.blurb')}</p>
+              <p className="text-[11px] text-slate-500 max-w-2xl">{t('settings.language.contribute')}</p>
+            </div>
+            <select
+              value={i18n.language.slice(0, 2)}
+              onChange={(e) => setLanguage(e.target.value)}
+              aria-label={t('settings.language.title')}
+              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer"
+            >
+              {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+            </select>
+          </div>
+        )}
+
         {activeSubTab === 'PATHS' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
             <div className="space-y-1">
