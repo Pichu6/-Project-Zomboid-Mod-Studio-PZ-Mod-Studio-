@@ -21,6 +21,7 @@ pub mod sandbox;
 pub mod scripts;
 pub mod secrets;
 pub mod steam_client;
+pub mod studio_link;
 pub mod server_manager;
 pub mod snapshots;
 pub mod translations;
@@ -1029,6 +1030,8 @@ pub fn run() {
         .setup(|app| {
             // Follow console.txt from the start: the game is often launched from Steam.
             sandbox::watch_console_log(app.handle().clone());
+            // What the game's Mods screen changes comes back to the active profile.
+            studio_link::watch_mod_list(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1163,7 +1166,8 @@ pub fn run() {
             activate_instance,
             delete_instance,
             update_instance,
-            save_master_load_order
+            save_master_load_order,
+            instance_manager::set_profile_members
         ])
         // A dedicated server outlives this window on purpose: people close the Studio and keep
         // playing. Stopping it is the Servers tab's button, where the user means it.

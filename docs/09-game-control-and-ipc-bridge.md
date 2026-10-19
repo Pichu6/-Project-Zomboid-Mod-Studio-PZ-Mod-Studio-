@@ -190,3 +190,20 @@ The MCP server writes the command atomically (temp file + rename) with a fresh i
 - **Click to start:** after Continue/Play the game sits on a black "click to start" screen (GameLoadingState) that suppresses Lua callbacks, so the mod is silent there. `agent_enter_game` polls `CA.state()` (2 s timeout); once the mod has been silent >20 s it posts a centre click every ~3 s via `game_click_window` (WM_MOUSEMOVE + WM_LBUTTONDOWN/UP, no focus) until `"ingame":true`. Clicks are only sent while the mod is silent, so nothing in game gets clicked. `agent_ui_click` retries while `CA.click` answers "not found" (`retry_ms`, default 20 s), because menus build over several frames.
 - `game_send_key` posts `WM_KEYDOWN` / `WM_KEYUP` to the game window (lParam = repeat 1 + `MapVirtualKeyW` scan code, extended bit for arrows/navigation keys); modifiers go down first and up last, so `SHIFT+O` works while the window is parked and unfocused.
 - `launch_game` with `agent_mode: true` starts without `-debug` (under `-debug` the Lua debugger halts on any error, even inside `pcall`), adds `-windowed`, and runs a background guard that waits for the window, keeps it parked and hands focus back to the previously focused window for about 45 s while the game boots (`park` / `no_focus_steal` toggle each part).
+
+
+## 6. Studio Link (`Z_StudioLink`)
+
+Makes the game's Mods screen show the profile that is active in the Studio, and brings what the player changes there back to that profile. Source: `mods/Z_StudioLink/` (B42 only), compiled into the app and installed into `Zomboid/mods` whenever a profile is activated or changed (`studio_link::install_link_mod`). Every profile has it on and counts it as one of its mods; the Mod List does not let it be switched off while a profile is active.
+
+**Profile members.** A profile holds `members` (its mods, on or off) besides `active_mod_ids`; anything else installed is outside it. Profiles from before have no `members` and are read as "the mods it has on". A mod switched on becomes a member; "Take out of the profile" in a Mod List row removes it and switches it off (`set_profile_members`).
+
+| File | Writer | Content |
+| :--- | :--- | :--- |
+| `Zomboid/Lua/PZModStudio_Link.txt` | Studio | `profile=<name>` then `member=<mod id>` per member, in load order. Missing = no profile active: the mod leaves the game's screens alone. |
+| `Zomboid/mods/default.txt` | both | The game rewrites it when its Mods screen is accepted. `studio_link::watch_mod_list` polls it every 2 s; a change that is not the Studio's own last write updates the active profile (active mods, order merged with `merge_game_order`, new members) and emits `profile-changed-in-game`. |
+| `Zomboid/PZModStudio_JavaAgents.json` | Studio | The Java-agent VM args the Studio took out of `ProjectZomboid64.json`, so it only ever puts back its own. |
+
+**In the game** (`PZModStudio_Link.lua`): wraps `ModSelector.Model:filterMods` to keep only members (and anything switched on), hides itself, adds a "Show all subscribed mods" tick and the profile name next to the game's "enabled only" tick, and wraps `MainScreen.checkSaveFile`: after the game's own checks pass, a save whose `mods.txt` uses a mod outside the profile is refused with the game's own error dialog (`displayCheckSavefileModal(text, true)`), naming the mods. A save without `mods.txt` uses the default list and is never refused.
+
+**Zombie Buddy.** Its core is loaded by `-agentlib:zbNative` in the game's `ProjectZomboid64.json` (with `zbNative.dll` in the game folder), not through the mod list, so it ran with every profile; the mod list only decides which of its Java mods load (`[ZB] java mod list to load:` in `console.txt`). `studio_link::sync_java_agents` takes the line out when the active list lacks `ZombieBuddy` and puts it back first in `vmArgs` when it has it, at profile activation and at every launch from the Studio. Each change keeps the previous file in `Zomboid/PZModStudio_Backups`. Steam's "Verify integrity" restores the shipped file, which has no agent line at all.

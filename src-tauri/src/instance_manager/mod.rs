@@ -20,15 +20,147 @@ pub struct AppInstance {
     /// played; None means "whatever it was last played on".
     #[serde(default)]
     pub target_build: Option<String>,
+    /// The mods that belong to the profile, on or off; every other installed mod is outside it
+    /// and neither the Mod List nor the game's Mods screen shows it. None for a profile from
+    /// before this existed: its mods are the ones it has on.
+    #[serde(default)]
+    pub members: Option<Vec<String>>,
 }
 
 impl AppInstance {
+    /// The profile's mods, on or off, in its load order (mods it has but cannot place go last).
+    pub fn member_ids(&self) -> Vec<String> {
+        let mut set: Vec<String> = self.members.clone().unwrap_or_else(|| self.active_mod_ids.clone());
+        for id in &self.active_mod_ids {
+            if !set.contains(id) {
+                set.push(id.clone());
+            }
+        }
+        let mut out: Vec<String> = self.load_order.iter().filter(|id| set.contains(id)).cloned().collect();
+        for id in set {
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+        out
+    }
+
+    /// The Studio Link mod is on in every profile and belongs to it.
+    fn with_link(&mut self) {
+        let link = crate::studio_link::LINK_MOD_ID.to_string();
+        if !self.active_mod_ids.contains(&link) {
+            self.active_mod_ids.push(link.clone());
+        }
+        let mut members = self.members.clone().unwrap_or_else(|| self.active_mod_ids.clone());
+        if !members.contains(&link) {
+            members.push(link);
+        }
+        self.members = Some(members);
+    }
+
     /// The major build the profile is for: the one set by hand, else the one it was last played on.
     pub fn build_major(&self) -> Option<String> {
         self.target_build
             .clone()
             .or_else(|| self.last_played_build.as_ref().map(|b| b.split('.').next().unwrap_or(b).to_string()))
     }
+}
+
+/// What the game needs for the active profile: the Link mod installed, the file it reads, and
+/// the Java agents of the profile's mods (Zombie Buddy) in or out of the game's launch file.
+fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
+    if let Err(e) = crate::studio_link::install_link_mod(z_dir) {
+        eprintln!("[StudioLink] {}", e);
+    }
+    if let Err(e) = crate::studio_link::write_link_file(z_dir, &instance.name, &instance.member_ids()) {
+        eprintln!("[StudioLink] {}", e);
+    }
+    // Tests run on throwaway folders and must never edit the real game's launch file.
+    let install = if cfg!(test) { String::new() } else { crate::vfs::auto_detect_paths().pz_install_dir };
+    if !install.is_empty() {
+        if let Err(e) = crate::studio_link::sync_java_agents(std::path::Path::new(&install), z_dir, &instance.active_mod_ids) {
+            eprintln!("[StudioLink] {}", e);
+        }
+    }
+}
+
+fn read_instance(path: &std::path::Path) -> Option<AppInstance> {
+    fs::read_to_string(path).ok().and_then(|c| serde_json::from_str::<AppInstance>(&c).ok())
+}
+
+fn write_instance(path: &std::path::Path, instance: &AppInstance) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(instance).map_err(|e| e.to_string())?;
+    fs::write(path, json).map_err(|e| e.to_string())
+}
+
+/// The active profile and its file, if there is one.
+fn find_active(dir: &std::path::Path) -> Option<(std::path::PathBuf, AppInstance)> {
+    fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find_map(|path| {
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            return None;
+        }
+        read_instance(&path).filter(|i| i.is_active).map(|i| (path, i))
+    })
+}
+
+/// The game wrote `default.txt` (its Mods screen was accepted): the active profile takes the
+/// mods it switched on and their order, and every mod switched on becomes one of its mods.
+/// Returns the profile when it changed; None when it already matched (the Studio's own write).
+pub fn take_mod_list_from_game(z_dir: &std::path::Path, game_active: &[String]) -> Result<Option<AppInstance>, String> {
+    let dir = z_dir.join("PZModStudio_Instances");
+    let Some((path, mut inst)) = find_active(&dir) else { return Ok(None) };
+    if inst.active_mod_ids == game_active {
+        return Ok(None);
+    }
+    inst.load_order = crate::studio_link::merge_game_order(&inst.load_order, game_active);
+    inst.active_mod_ids = game_active.to_vec();
+    let mut members = inst.member_ids();
+    for id in game_active {
+        if !members.contains(id) {
+            members.push(id.clone());
+        }
+    }
+    inst.members = Some(members);
+    write_instance(&path, &inst)?;
+
+    // The Studio's saved order follows, so the Mod List opens the way the game left it.
+    let master = serde_json::json!({
+        "load_order": inst.load_order,
+        "active_mod_ids": inst.active_mod_ids,
+        "active_profile_id": inst.id,
+        "active_profile_name": inst.name
+    });
+    let _ = fs::write(z_dir.join("PZModStudio_MasterLoadOrder.json"), serde_json::to_string_pretty(&master).unwrap_or_default());
+    apply_link(z_dir, &inst);
+    Ok(Some(inst))
+}
+
+/// Sets which mods belong to a profile. A mod taken out of it is switched off too.
+#[tauri::command(async)]
+pub fn set_profile_members(user_zomboid_dir: String, instance_id: String, members: Vec<String>) -> Result<AppInstance, String> {
+    let dir = get_instances_dir(&user_zomboid_dir);
+    let path = instance_file_path(&dir, &instance_id)?;
+    let mut inst = read_instance(&path).ok_or_else(|| "Selected profile does not exist.".to_string())?;
+    let mut members = members;
+    let link = crate::studio_link::LINK_MOD_ID.to_string();
+    if !members.contains(&link) {
+        members.push(link);
+    }
+    inst.active_mod_ids.retain(|id| members.contains(id));
+    for id in &members {
+        if !inst.load_order.contains(id) {
+            inst.load_order.push(id.clone());
+        }
+    }
+    inst.members = Some(members);
+    write_instance(&path, &inst)?;
+    if inst.is_active {
+        if let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&user_zomboid_dir).into_iter().next() {
+            crate::load_order::ini_parser::write_mod_list_ini(&z_dir.join("ModListData.ini").to_string_lossy(), &inst.active_mod_ids)?;
+            apply_link(&z_dir, &inst);
+        }
+    }
+    Ok(inst)
 }
 
 /// Path of a profile's JSON file. Profile IDs come from the UI and are joined onto a folder
@@ -97,17 +229,20 @@ pub fn create_instance(
     let id = format!("inst_{}", now.as_millis());
     let created_at = format!("{}", timestamp);
 
-    let instance = AppInstance {
+    // A new profile holds the mods it starts with switched on, and the Studio Link mod.
+    let mut instance = AppInstance {
         id: id.clone(),
         name: clean_name.to_string(),
         description,
         created_at,
         is_active: false,
+        members: Some(active_mod_ids.clone()),
         active_mod_ids,
         load_order,
         last_played_build: None,
         target_build: None,
     };
+    instance.with_link();
 
     let file_path = dir.join(format!("{}.json", id));
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
@@ -143,6 +278,8 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
     }
 
     target_instance.is_active = true;
+    target_instance.with_link();
+    let _ = fs::write(&instance_file, serde_json::to_string_pretty(&target_instance).unwrap_or_default());
 
     // 2. Write the active mods into mods/default.txt and PZModStudio_MasterLoadOrder.json
     let z_dir = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&user_zomboid_dir)
@@ -164,6 +301,7 @@ pub fn activate_instance(user_zomboid_dir: String, instance_id: String) -> Resul
             "active_profile_name": target_instance.name
         });
         let _ = fs::write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
+        apply_link(&z_dir, &target_instance);
     }
 
     Ok(())
@@ -180,24 +318,17 @@ pub fn save_master_load_order(
         .into_iter()
         .next()
         .ok_or_else(|| format!("Zomboid folder not found: {}", user_zomboid_dir))?;
-    {
-        // 1. mods/default.txt, the list the game reads
-        crate::load_order::ini_parser::write_mod_list_ini(
-            &z_dir.join("ModListData.ini").to_string_lossy(),
-            &active_mod_ids,
-        )?;
 
-        // 2. Write PZModStudio_MasterLoadOrder.json
-        let master_order_path = z_dir.join("PZModStudio_MasterLoadOrder.json");
-        let master_json = serde_json::json!({
-            "load_order": load_order,
-            "active_mod_ids": active_mod_ids
-        });
-        let _ = fs::write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
+    // With a profile active, the Studio Link mod stays on whatever the list says.
+    let dir = get_instances_dir(&user_zomboid_dir);
+    let mut active_mod_ids = active_mod_ids;
+    let link = crate::studio_link::LINK_MOD_ID.to_string();
+    if find_active(&dir).is_some() && !active_mod_ids.contains(&link) {
+        active_mod_ids.push(link);
     }
 
-    // 5. If there is an active profile, update its load_order and active_mod_ids
-    let dir = get_instances_dir(&user_zomboid_dir);
+    // 1. The active profile first, so that when default.txt changes it already matches and the
+    // watcher does not take the Studio's own write for one made in the game.
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -227,13 +358,36 @@ pub fn save_master_load_order(
                             inst.load_order.extend(remembered);
                             inst.active_mod_ids = active_mod_ids.clone();
                             inst.active_mod_ids.extend(still_wanted);
+                            // A mod switched on is one of the profile's mods from then on.
+                            let mut members = inst.member_ids();
+                            for id in &inst.active_mod_ids {
+                                if !members.contains(id) {
+                                    members.push(id.clone());
+                                }
+                            }
+                            inst.members = Some(members);
                             let _ = fs::write(&path, serde_json::to_string_pretty(&inst).unwrap_or_default());
+                            apply_link(&z_dir, &inst);
                         }
                     }
                 }
             }
         }
     }
+
+    // 2. mods/default.txt, the list the game reads
+    crate::load_order::ini_parser::write_mod_list_ini(
+        &z_dir.join("ModListData.ini").to_string_lossy(),
+        &active_mod_ids,
+    )?;
+
+    // 3. Write PZModStudio_MasterLoadOrder.json
+    let master_order_path = z_dir.join("PZModStudio_MasterLoadOrder.json");
+    let master_json = serde_json::json!({
+        "load_order": load_order,
+        "active_mod_ids": active_mod_ids
+    });
+    let _ = fs::write(master_order_path, serde_json::to_string_pretty(&master_json).unwrap_or_default());
 
     Ok(())
 }
@@ -305,5 +459,42 @@ mod build_tests {
         p.last_played_build = None;
         p.target_build = None;
         assert_eq!(p.build_major(), None);
+    }
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn an_old_profile_holds_the_mods_it_has_on_in_load_order() {
+        let text = r#"{"id":"a","name":"A","created_at":"","is_active":false,"active_mod_ids":["C","A"],"load_order":["A","B","C"]}"#;
+        let p: AppInstance = serde_json::from_str(text).unwrap();
+        assert_eq!(p.member_ids(), ids(&["A", "C"]));
+    }
+
+    #[test]
+    fn what_the_game_switches_on_comes_back_to_the_active_profile() {
+        let z = std::env::temp_dir().join(format!("pzms-profile-game-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&z);
+        let dir = z.join("PZModStudio_Instances");
+        fs::create_dir_all(&dir).unwrap();
+        let mut p: AppInstance = serde_json::from_str(
+            r#"{"id":"a","name":"A","created_at":"","is_active":true,"active_mod_ids":["A"],"load_order":["A","B","C"],"members":["A","B"]}"#,
+        ).unwrap();
+        write_instance(&dir.join("a.json"), &p).unwrap();
+
+        // The same list the profile has is not a change.
+        assert!(take_mod_list_from_game(&z, &ids(&["A"])).unwrap().is_none());
+
+        // The game switched C on before A, and B off was already off.
+        let after = take_mod_list_from_game(&z, &ids(&["C", "A"])).unwrap().expect("changed");
+        assert_eq!(after.active_mod_ids, ids(&["C", "A"]));
+        assert_eq!(after.load_order, ids(&["C", "B", "A"]));
+        assert_eq!(after.member_ids(), ids(&["C", "B", "A"]));
+        p = read_instance(&dir.join("a.json")).unwrap();
+        assert_eq!(p.active_mod_ids, ids(&["C", "A"]));
+        let link = fs::read_to_string(z.join("Lua").join(crate::studio_link::LINK_FILE)).unwrap();
+        assert_eq!(link, "profile=A\nmember=C\nmember=B\nmember=A\n");
+        let _ = fs::remove_dir_all(&z);
     }
 }

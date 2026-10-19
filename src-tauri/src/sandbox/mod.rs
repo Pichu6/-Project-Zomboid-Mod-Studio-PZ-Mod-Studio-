@@ -128,6 +128,18 @@ pub fn configure_options_ini(user_zomboid_dir: &str, is_windowed: bool) {
     }
 }
 
+/// Java agents of mods (Zombie Buddy) in the game's launch file only when the mod list has the mod
+/// on: they load outside the mod list, so otherwise they run with any profile.
+fn sync_java_agents_for_launch(install_dir: &Path, user_zomboid_dir: &str) {
+    let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next() else {
+        return;
+    };
+    let active = crate::load_order::ini_parser::parse_default_txt(&z_dir.join("mods").join("default.txt"));
+    if let Err(e) = crate::studio_link::sync_java_agents(install_dir, &z_dir, &active) {
+        eprintln!("[StudioLink] {}", e);
+    }
+}
+
 /// Spawns or attaches to an active Project Zomboid process and monitors console.txt in real time.
 pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
@@ -145,6 +157,7 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
 
     // Configure options.ini for both fullscreen and windowed modes across user directories
     configure_options_ini(&config.user_zomboid_dir, is_windowed);
+    sync_java_agents_for_launch(install_dir, &config.user_zomboid_dir);
 
     // Launch Project Zomboid directly with independent null stdio to ensure clean GUI instantiation
     let is_already_running = find_running_pz_pid().is_some();
@@ -735,6 +748,7 @@ pub fn launch_pz_direct(
     if windowed {
         configure_options_ini(user_zomboid_dir, true);
     }
+    sync_java_agents_for_launch(install_path, user_zomboid_dir);
 
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(install_path);

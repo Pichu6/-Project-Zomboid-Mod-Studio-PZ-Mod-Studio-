@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor } from './types';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor, STUDIO_LINK_MOD_ID } from './types';
 import { DeveloperModule } from './components/dev/DeveloperModule';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -204,6 +204,25 @@ export const App: React.FC = () => {
       if (unlistenSession) unlistenSession();
     };
   }, []);
+
+  // Accepting the game's Mods screen changes the active profile: show it the way the game left it.
+  const pathsRef = useRef(paths);
+  pathsRef.current = paths;
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    TauriService.listenProfileChangedInGame(async () => {
+      const current = pathsRef.current;
+      if (!current.is_valid) return;
+      await refreshActiveProfile(current.user_zomboid_dir);
+      const scanned = await TauriService.scanAllInstalledMods(current);
+      if (scanned.length > 0) setMods([...scanned]);
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [refreshActiveProfile]);
 
 
 
@@ -476,6 +495,8 @@ export const App: React.FC = () => {
   const handleToggleMod = (modId: string) => {
     const target = mods.find((m) => m.mod_id === modId);
     if (!target) return;
+    // With a profile active the Studio Link mod stays on: it is how the game shows the profile.
+    if (modId === STUDIO_LINK_MOD_ID && activeProfile && target.enabled) return;
 
     const isSyntheticFusionPackage =
       modId.startsWith('Z_PZModStudio_') &&

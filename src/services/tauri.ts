@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { VfsConflict, ModInfo, TranslatedErrorCard, DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { AppInstance, VfsConflict, ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -1501,6 +1501,21 @@ export const TauriService = {
 
   updateInstance: async (userZomboidDir: string, instance: any): Promise<any> => {
     return await invoke('update_instance', { userZomboidDir, instance });
+  },
+
+  /** Which mods belong to a profile, on or off; one taken out is switched off too. */
+  setProfileMembers: async (userZomboidDir: string, instanceId: string, members: string[]): Promise<AppInstance> => {
+    try {
+      return await invoke<AppInstance>('set_profile_members', { userZomboidDir, instanceId, members });
+    } catch (err) {
+      reportBackendError('Changing the mods of the profile', err);
+      throw err;
+    }
+  },
+
+  /** The game's Mods screen changed the active profile (mods switched on or off, or reordered). */
+  listenProfileChangedInGame: async (callback: (profile: AppInstance) => void): Promise<UnlistenFn> => {
+    return await listen<AppInstance>('profile-changed-in-game', (event) => callback(event.payload));
   },
 
   saveMasterLoadOrder: async (
