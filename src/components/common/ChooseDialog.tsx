@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export interface ChooseOption {
   id: string;
@@ -22,6 +23,7 @@ interface ChooseDialogProps {
 
 /** A short list of things to pick one of: a profile, a list. */
 export const ChooseDialog: React.FC<ChooseDialogProps> = ({ title, blurb, options, onPick, onClose, allowNew }) => {
+  const { t } = useTranslation();
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   return (
@@ -32,11 +34,11 @@ export const ChooseDialog: React.FC<ChooseDialogProps> = ({ title, blurb, option
             <h3 className="text-sm font-bold text-slate-100">{title}</h3>
             {blurb && <p className="text-[11px] text-slate-400 mt-0.5">{blurb}</p>}
           </div>
-          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer" aria-label="Close">
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer" aria-label={t('dialogs.keep.close')}>
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
-        {options.length === 0 && !allowNew && <p className="text-xs text-slate-400 py-2 text-center">Nothing to pick from yet.</p>}
+        {options.length === 0 && !allowNew && <p className="text-xs text-slate-400 py-2 text-center">{t('dialogs.keep.nothingToPick')}</p>}
         {options.length > 0 && (
           <div className="rounded-xl border border-slate-800 divide-y divide-slate-900 max-h-72 overflow-y-auto">
             {options.map((o) => (
@@ -74,7 +76,7 @@ export const ChooseDialog: React.FC<ChooseDialogProps> = ({ title, blurb, option
               className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             />
             <button type="submit" disabled={busy || !newName.trim()} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer disabled:opacity-50">
-              New list
+              {t('dialogs.keep.newList')}
             </button>
           </form>
         )}
