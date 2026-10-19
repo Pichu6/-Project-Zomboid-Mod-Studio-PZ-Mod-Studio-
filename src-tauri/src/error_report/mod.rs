@@ -62,6 +62,91 @@ fn media_path(file: &Path) -> Option<String> {
     Some(text[at + 1..].to_string())
 }
 
+/// The text key in `... ERROR: Formatting "Sandbox_NeatLockpicking_X"`.
+fn formatting_key(line: &str) -> Option<String> {
+    let rest = line.split("Formatting \"").nth(1)?;
+    let key = rest.split('"').next()?.trim();
+    (!key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')).then(|| key.to_string())
+}
+
+/// Where a translation key is defined: which mod, which file, the line.
+#[derive(Debug, Clone, PartialEq)]
+struct KeyHit {
+    key: String,
+    mod_id: String,
+    mod_name: String,
+    file: String,
+    line: String,
+}
+
+/// The game's language (`language=` in Zomboid/options.ini), "EN" when it says nothing.
+fn game_language(user_zomboid_dir: &str) -> String {
+    crate::load_order::mod_info::get_existing_user_zomboid_dirs(user_zomboid_dir)
+        .into_iter()
+        .next()
+        .and_then(|d| std::fs::read_to_string(d.join("options.ini")).ok())
+        .and_then(|t| t.lines().find_map(|l| l.strip_prefix("language=").map(|v| v.trim().to_uppercase())))
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| "EN".to_string())
+}
+
+/// Looks for each key in the translation files of the active mods (`media/lua/shared/Translate`
+/// of the folders the build loads, .txt and .json), last-loading mod first as the game reads them,
+/// and within a mod the player's language first, then English, then the rest.
+fn find_translation_keys(catalog: &crate::catalog::ModCatalog, active: &[String], keys: &[String], language: &str) -> Vec<KeyHit> {
+    let mut hits: Vec<KeyHit> = Vec::new();
+    let game = catalog.game_version_int();
+    let rank = |lower: &str| {
+        if lower.contains(&format!("/translate/{}/", language.to_lowercase())) {
+            0
+        } else if lower.contains("/translate/en/") {
+            1
+        } else {
+            2
+        }
+    };
+    for entry in active.iter().rev() {
+        if hits.len() == keys.len() {
+            break;
+        }
+        let Some(m) = catalog.resolve(entry.trim()) else { continue };
+        let mut files: Vec<(usize, PathBuf)> = Vec::new();
+        for layer in crate::load_order::mod_info::media_layers_for_build(Path::new(&m.root_dir), game) {
+            let dir = layer.join("media").join("lua").join("shared").join("Translate");
+            for e in walkdir::WalkDir::new(&dir).into_iter().filter_map(|e| e.ok()) {
+                let lower = e.path().to_string_lossy().replace('\\', "/").to_lowercase();
+                if e.file_type().is_file() && (lower.ends_with(".txt") || lower.ends_with(".json")) {
+                    files.push((rank(&lower), e.path().to_path_buf()));
+                }
+            }
+        }
+        files.sort_by_key(|(r, _)| *r);
+        for (_, path) in &files {
+            let path = path.as_path();
+            let Ok(text) = std::fs::read_to_string(path) else { continue };
+            for key in keys {
+                if hits.iter().any(|h| &h.key == key) {
+                    continue;
+                }
+                let quoted = format!("\"{}\"", key);
+                if let Some(line) = text.lines().find(|l| {
+                    let t = l.trim_start();
+                    (t.starts_with(key.as_str()) && t[key.len()..].trim_start().starts_with('=')) || t.starts_with(&quoted)
+                }) {
+                    hits.push(KeyHit {
+                        key: key.clone(),
+                        mod_id: m.id.clone(),
+                        mod_name: m.name.clone(),
+                        file: media_path(path).unwrap_or_else(|| path.to_string_lossy().to_string()),
+                        line: line.to_string(),
+                    });
+                }
+            }
+        }
+    }
+    hits
+}
+
 /// One Markdown file: what broke, on what, in which mod, with the code.
 pub fn build(paths: &StudioPaths, req: &ErrorReportRequest) -> Result<String, String> {
     let catalog = crate::catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
@@ -215,11 +300,43 @@ pub fn build(paths: &StudioPaths, req: &ErrorReportRequest) -> Result<String, St
                 Err(e) => out.push_str(&format!("The file could not be read: {}\n\n", e)),
             }
         }
-    } else if let Some(file) = &req.source_file {
+    } else if let Some(file) = req.source_file.as_ref().filter(|f| !f.ends_with(".java")) {
+        // A .java name is the game's own class the stack went through, never a mod's file.
         out.push_str(&format!(
             "## The file\n\nThe error names `{}`, which was not found inside the mod's folder.\n\n",
             file
         ));
+    }
+
+    // ---------------------------------------------------------------- translation texts
+    // `Formatting "Sandbox_X_Y"` names the text, not the mod: the mod is whoever ships that key.
+    let mut keys: Vec<String> = Vec::new();
+    for line in std::iter::once(req.raw_error.as_str()).chain(req.log_context.iter().map(String::as_str)) {
+        if let Some(key) = formatting_key(line) {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+    }
+    if !keys.is_empty() {
+        let found = find_translation_keys(&catalog, &active, &keys, &game_language(&paths.user_zomboid_dir));
+        out.push_str("## The texts\n\n");
+        out.push_str(
+            "The game formats every translated text with Java's String.format, where `%` starts a \
+             placeholder. A text with a bare `%` (\"50%\", \"(%)\") makes that throw; the game catches \
+             it, logs this warning and shows the text unformatted, so nothing else breaks. The fix \
+             is in the mod's translation file: write `%%` for a literal percent sign.\n\n",
+        );
+        for key in &keys {
+            match found.iter().find(|f| &f.key == key) {
+                Some(f) => out.push_str(&format!(
+                    "- `{}`: **{}** (`{}`), `{}`:\n  ```\n  {}\n  ```\n",
+                    key, f.mod_name, f.mod_id, f.file, f.line.trim()
+                )),
+                None => out.push_str(&format!("- `{}`: not found in the translation files of the mods switched on\n", key)),
+            }
+        }
+        out.push('\n');
     }
 
     out.push_str("---\n\nWritten by PZ Mod Studio.\n");
@@ -351,4 +468,26 @@ mod tests {
         assert!(report.contains("something broke"));
         let _ = std::fs::remove_dir_all(&root);
     }
-}
+
+    /// The Translator `%` report on this machine: which mods ship the keys. PZMS_ZOMBOID_DIR.
+    #[test]
+    #[ignore]
+    fn the_real_translator_report_names_the_mods() {
+        if std::env::var("PZMS_ZOMBOID_DIR").is_err() { return; }
+        let paths = crate::vfs::auto_detect_paths();
+        let req = ErrorReportRequest {
+            title: "Translator Format Exception (% character)".into(),
+            explanation: String::new(),
+            raw_error: "WARN : General      f:0> Translator.reportMissingArgumentsFromPastAbuse> Exception thrown java.util.UnknownFormatConversionException: Conversion = ')' at Formatter.parse(null:-1). Message: ERROR: Formatting \"Sandbox_NeatLockpicking_ReinforcedYellowHitValue\"".into(),
+            log_context: vec![
+                "WARN : General      f:0> Translator.reportMissingArgumentsFromPastAbuse> Exception thrown java.util.UnknownFormatConversionException: Conversion = '.' at Formatter.parse(null:-1). Message: ERROR: Formatting \"Sandbox_InteractiveTailoring_BonusXP_tooltip\"".into(),
+                "WARN : General      f:0> Translator.reportMissingArgumentsFromPastAbuse> Exception thrown java.util.UnknownFormatConversionException: Conversion = ')' at Formatter.parse(null:-1). Message: ERROR: Formatting \"Sandbox_ReactiveSE_EventChance\"".into(),
+            ],
+            mod_name: None,
+            source_file: Some("zombie/core/Translator.java".into()),
+        };
+        let text = build(&paths, &req).unwrap();
+        let at = text.find("## The texts").expect("a texts section");
+        println!("{}", &text[at..]);
+        assert!(!text.contains("Translator.java"));
+    }}

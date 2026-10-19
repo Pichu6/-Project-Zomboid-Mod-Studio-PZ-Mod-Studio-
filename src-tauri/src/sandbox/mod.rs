@@ -383,6 +383,9 @@ impl ModBlame {
         };
         if let Some(name) = Self::named_in(line) {
             self.recent = Some((name, 0));
+        } else if Self::is_vanilla_frame(line) {
+            // The game's own file is the nearer frame: what follows is not the mod's.
+            self.recent = None;
         }
         let Some(rest) = line.split("> mod \"").nth(1) else { return };
         let Some((mod_name, tail)) = rest.split_once("\" overrides ") else { return };
@@ -397,8 +400,18 @@ impl ModBlame {
         (!name.is_empty()).then(|| name.to_string())
     }
 
+    /// `Lua(Vanilla)`: the game says the file is its own, not a mod's.
+    fn is_vanilla_frame(line: &str) -> bool {
+        line.contains("Lua(Vanilla)")
+    }
+
     /// The mod this line is about, if the game said.
     pub fn of(&self, line: &str) -> Option<String> {
+        // A line in one of the game's own files is the game's, whatever mod was named above it
+        // (42.21's own TakeSameType.lua requires a module that no longer exists, for one).
+        if Self::is_vanilla_frame(line) && !line.contains("(MOD:") {
+            return None;
+        }
         if let Some(rest) = line.split("(MOD:").nth(1) {
             if let Some((name, _)) = rest.split_once(')') {
                 let name = name.trim();
@@ -1381,6 +1394,25 @@ mod blame_window_tests {
         for _ in 0..5 {
             blame.observe("LOG  : General      f:0> something else entirely");
         }
+        assert_eq!(blame.of("ERROR: General      f:9> Exception thrown"), None);
+    }
+
+    #[test]
+    fn a_line_in_the_games_own_file_is_not_blamed_on_the_mod_above_it() {
+        // Seen in a real 42.21 log: Nomad Grid RV's line, then two of the game's own.
+        let mut blame = ModBlame::default();
+        let lines = [
+            "WARN : Lua          f:0 at Lua((MOD:Nomad Grid RV)).GridRVMoveables.lua> require(\"TimedActions/ISTimedActionQueue\") failed",
+            "WARN : Lua          f:0 at Lua(Vanilla).ISAnimalContextMenu    > require(\"BuildingObjects/ISAnimalPickMateCursor\") failed",
+            "WARN : Lua          f:0 at Lua(Vanilla).TakeSameType           > require(\"ISUI/InventoryWindow/ISLootWindowControlHandler\") failed",
+        ];
+        blame.observe(lines[0]);
+        assert_eq!(blame.of(lines[0]).as_deref(), Some("Nomad Grid RV"));
+        blame.observe(lines[1]);
+        assert_eq!(blame.of(lines[1]), None);
+        blame.observe(lines[2]);
+        assert_eq!(blame.of(lines[2]), None);
+        // Nor does the name come back for an anonymous line after them.
         assert_eq!(blame.of("ERROR: General      f:9> Exception thrown"), None);
     }
 }
