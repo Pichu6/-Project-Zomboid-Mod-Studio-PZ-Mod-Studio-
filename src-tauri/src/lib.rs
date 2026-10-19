@@ -418,8 +418,8 @@ fn mp_check_mods_cmd(paths: StudioPaths, mod_ids: Vec<String>) -> Vec<MpModRepor
 
 /// Where TileZed and WorldEd are, if anywhere: the named folder first, then the usual places.
 #[tauri::command(async)]
-fn map_tools_cmd(configured: Option<String>) -> devtools::MapTools {
-    devtools::find_map_tools(configured.as_deref())
+fn map_tools_cmd(configured: Vec<String>) -> devtools::MapTools {
+    devtools::find_map_tools(&configured)
 }
 
 /// Starts TileZed or WorldEd (only those) from its own folder.

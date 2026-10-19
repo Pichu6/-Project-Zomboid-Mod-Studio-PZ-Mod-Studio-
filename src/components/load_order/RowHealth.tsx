@@ -35,7 +35,13 @@ const LABELS: Record<string, string> = {
   translation_conflict: 'Names things differently from another mod',
   translation_stale: 'Chosen words out of date',
   translation_settled: 'Words settled in your package',
+  package_built_for_other_list: 'Built for another list',
 };
+
+/** Settled things are Mod Health's record, not a row's problem. */
+const SETTLED_CODES = new Set(['script_definition_settled', 'translation_settled', 'compatible_copy']);
+/** A row has room for this many chips; the rest fold into one that opens Mod Health. */
+const MAX_CHIPS = 2;
 
 /** Issues about a group of files and mods, which only Mod Health shows whole. */
 const HEALTH_ONLY_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'script_definition_conflict_more', 'translation_conflict', 'translation_stale', 'translation_settled']);
@@ -88,7 +94,8 @@ interface RowHealthChipsProps {
   onApplyList: (mods: ModInfo[]) => void;
   onJumpToMod: (modId: string) => void;
   onOpenMerger?: (relativePath: string) => void;
-  onGoToHealth?: () => void;
+  /** Opens Mod Health, scrolled to the issue when one is given. */
+  onGoToHealth?: (issue?: HealthIssue) => void;
   /** A line for the list's toast, for a fix that happened on disk. */
   onNote?: (message: string) => void;
 }
@@ -102,13 +109,19 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
   if (issues.length === 0) return null;
   const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
 
-  // One chip per kind of problem; the message of the first is the tooltip.
+  // One chip per kind of problem, worst first; the message of the first is the tooltip. What is
+  // already settled stays off the row, and past two chips the rest fold into one, so the mod's
+  // name stays readable.
   const seen = new Set<string>();
-  const shown = [...issues]
+  const all = [...issues]
+    .filter((i) => !SETTLED_CODES.has(i.code))
     .sort((a, b) => ORDER[a.severity] - ORDER[b.severity])
     .filter((i) => (seen.has(i.code) ? false : (seen.add(i.code), true)));
+  if (all.length === 0) return null;
+  const shown = all.slice(0, MAX_CHIPS);
+  const folded = all.slice(MAX_CHIPS);
 
-  const runFix = (fix: HealthFix) => {
+  const runFix = (fix: HealthFix, issue: HealthIssue) => {
     switch (fix.action) {
       case 'subscribe_workshop':
         TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`);
@@ -133,7 +146,7 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
       case 'merge_files':
       case 'make_compatible_copy':
       case 'remove_compatible_copy':
-        onGoToHealth?.();
+        onGoToHealth?.(issue);
         return;
       case 'disable_mod':
         if (!confirm(`Switch off ${nameOf(fix.mod_id)}?\n\nIt stays installed, and you can switch it back on here.`)) return;
@@ -162,7 +175,7 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
               onClick={(e) => {
                 e.stopPropagation();
                 if (other) onJumpToMod(other);
-                else onGoToHealth?.();
+                else onGoToHealth?.(issue);
               }}
               className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 border transition cursor-pointer shadow-sm ${style.chip} ${
                 fix ? 'rounded-l' : 'rounded'
@@ -171,8 +184,8 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
                 other
                   ? `\n\nClick: go to ${nameOf(other)}`
                   : others.length > 1
-                    ? `\n\nClick: open Mod Health, which shows all ${others.length + 1} mods, the files and the fixes`
-                    : '\n\nClick: open Mod Health'
+                    ? `\n\nClick: open Mod Health on this, which shows all ${others.length + 1} mods, the files and the fixes`
+                    : '\n\nClick: open Mod Health on this'
               }`}
             >
               <Icon className={`w-3 h-3 shrink-0 ${style.iconColor}`} aria-hidden="true" />
@@ -183,12 +196,16 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  runFix(fix);
+                  runFix(fix, issue);
                 }}
                 className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-r border border-l-0 transition cursor-pointer shadow-sm ${style.chip}`}
                 title={
                   LIST_FIX_ACTIONS.has(fix.action)
                     ? `${fixLabel(fix, nameOf)} — changes your list; Earlier lists can undo it`
+                    : fix.action === 'open_in_merger'
+                    ? `Opens ${fix.relative_path} in the Mod Merger, in the package the game uses, with what each mod says side by side. A packaged package shows it read-only; Save publishes the decision into it.`
+                    : fix.action === 'merge_files' || fix.action === 'make_compatible_copy' || fix.action === 'remove_compatible_copy'
+                    ? `${fixLabel(fix, nameOf)}: opens Mod Health on this, where the button is`
                     : fixLabel(fix, nameOf)
                 }
               >
@@ -199,6 +216,19 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
           </span>
         );
       })}
+      {folded.length > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onGoToHealth?.(folded[0]);
+          }}
+          className="flex items-center text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border transition cursor-pointer shadow-sm bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-600 shrink-0"
+          title={`${folded.length} more: ${folded.map(labelFor).join('; ')}\n\nClick: open Mod Health on them`}
+        >
+          +{folded.length}
+        </button>
+      )}
     </>
   );
 };

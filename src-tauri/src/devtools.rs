@@ -532,10 +532,10 @@ pub struct MapTools {
 
 const MAP_TOOL_EXES: [&str; 2] = ["TileZed.exe", "WorldEd.exe"];
 
-/// The folders worth a look: the one named, then the usual unzip spots.
-fn map_tool_dirs(configured: Option<&str>) -> Vec<PathBuf> {
+/// The folders worth a look: the ones named (TileZed's, WorldEd's), then the usual unzip spots.
+fn map_tool_dirs(configured: &[String]) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(c) = configured.map(str::trim).filter(|c| !c.is_empty()) {
+    for c in configured.iter().map(|c| c.trim()).filter(|c| !c.is_empty()) {
         dirs.push(PathBuf::from(c));
     }
     let homes: Vec<PathBuf> = [std::env::var_os("USERPROFILE"), std::env::var_os("HOME")].into_iter().flatten().map(PathBuf::from).collect();
@@ -552,7 +552,7 @@ fn map_tool_dirs(configured: Option<&str>) -> Vec<PathBuf> {
 
 /// Looks for the two programs: in each folder and one level down (the zip unpacks into a
 /// folder of its own more often than not).
-pub fn find_map_tools(configured: Option<&str>) -> MapTools {
+pub fn find_map_tools(configured: &[String]) -> MapTools {
     let mut tools = MapTools::default();
     for dir in map_tool_dirs(configured) {
         tools.searched.push(dir.to_string_lossy().to_string());
@@ -602,7 +602,7 @@ mod map_tool_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("TileZed-2024")).unwrap();
         std::fs::write(dir.join("TileZed-2024/TileZed.exe"), b"").unwrap();
-        let found = find_map_tools(Some(&dir.to_string_lossy()));
+        let found = find_map_tools(&[dir.to_string_lossy().to_string()]);
         assert!(found.tilezed.as_deref().map(|p| p.ends_with("TileZed.exe")).unwrap_or(false), "{:?}", found);
         assert!(found.worlded.is_none());
         assert_eq!(found.searched[0], dir.to_string_lossy());

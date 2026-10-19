@@ -65,7 +65,7 @@ interface LoadOrderModuleProps {
   /** Opens the Mod Merger on this conflicting file (a row chip's fix). */
   onOpenMerger?: (relativePath: string) => void;
   /** Opens Mod Health, for a fix a row cannot apply by itself. */
-  onGoToHealth?: () => void;
+  onGoToHealth?: (issue?: HealthIssue) => void;
   /** The player's load-order rules changed: the health check reads them again. */
   onRulesChanged?: () => void;
   /** Every saved profile, so the list can show which of them a mod belongs to. */

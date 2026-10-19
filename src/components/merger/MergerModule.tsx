@@ -765,6 +765,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
     const hit = conflicts.find((c) => c.relative_path === focusRelativePath);
     if (hit && isPackageOpened) {
+      setPeekConflictId(hit.id);
       handleSelectConflict(hit);
       setFocusScanDone(false);
       onFocusHandled?.();
@@ -870,7 +871,10 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
   const isCurrentlyPackaged = patchStatus?.is_packaged ?? currentPackage?.is_packaged ?? false;
   // A packaged package is read-only, except for a mod's own file opened to patch: that one is
   // edited and published in place, since unpacking for it would empty the package in the game.
-  const editorLocked = isCurrentlyPackaged && !isPatchTarget(currentConflict);
+  // A packaged package hides its files until unpacked -- except the one Mod Health or the Monitor
+  // sent the player to, which is shown read-only, with Save publishing in place like a patch.
+  const [peekConflictId, setPeekConflictId] = useState<string | null>(null);
+  const editorLocked = isCurrentlyPackaged && !isPatchTarget(currentConflict) && currentConflict?.id !== peekConflictId;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 text-slate-200 select-none">

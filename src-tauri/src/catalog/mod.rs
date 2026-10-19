@@ -287,7 +287,57 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
     }
     let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
     add_file_conflict_issues(&mut report, &conflicts);
+    // A package is a mod of its own, in every profile's list: it was built for one list, and this
+    // profile's may not be it.
+    if let Some((package_id, root)) = crate::vfs::active_package_dir(&catalog, active) {
+        if let Some(meta) = std::fs::read_to_string(root.join("patch_metadata.json")).ok().and_then(|t| serde_json::from_str::<crate::patch_generator::MasterPatchMetadata>(&t).ok()) {
+            let active_ids: Vec<String> = active
+                .iter()
+                .map(|e| resolve_entry(&catalog, e.trim()).map(|m| m.id.clone()).unwrap_or_else(|| e.trim().to_string()))
+                .collect();
+            if let Some(issue) = package_list_issue(&package_id, &meta.packaged_mod_ids, &active_ids) {
+                report.issues.push(issue);
+            }
+        }
+    }
     ModHealth { catalog, report }
+}
+
+/// The package was built with one list and this profile has another: the mods it merged that
+/// are off here still have their merged files in it, and the mods on here that it never saw
+/// are not covered. Info: nothing breaks by itself, but the Merger's rescan and publish
+/// settle it. None when the lists agree.
+pub fn package_list_issue(package_id: &str, packaged: &[String], active: &[String]) -> Option<HealthIssue> {
+    let is_mod = |id: &String| !id.starts_with("Z_PZModStudio_") && id != "PZModStudioCarrier";
+    let missing: Vec<&String> = active.iter().filter(|id| is_mod(id) && !packaged.contains(id)).collect();
+    let extra: Vec<&String> = packaged.iter().filter(|id| is_mod(id) && !active.contains(id)).collect();
+    if missing.is_empty() && extra.is_empty() {
+        return None;
+    }
+    let few = |list: &[&String]| {
+        let shown: Vec<&str> = list.iter().take(4).map(|s| s.as_str()).collect();
+        format!("{}{}", shown.join(", "), if list.len() > 4 { format!(", and {} more", list.len() - 4) } else { String::new() })
+    };
+    let mut parts = Vec::new();
+    if !missing.is_empty() {
+        parts.push(format!("{} mod{} on in this profile that it never saw ({})", missing.len(), if missing.len() == 1 { " is" } else { "s are" }, few(&missing)));
+    }
+    if !extra.is_empty() {
+        parts.push(format!("{} mod{} it merged {} off here, and its merged files stay in the package ({})", extra.len(), if extra.len() == 1 { "" } else { "s" }, if extra.len() == 1 { "is" } else { "are" }, few(&extra)));
+    }
+    Some(HealthIssue {
+        severity: Severity::Info,
+        code: "package_built_for_other_list".to_string(),
+        mod_id: Some(package_id.to_string()),
+        message: format!(
+            "{} was built with a different list: {}. A package is a mod of its own, so it shows in every profile; its merges only settle the mods it was built with. In the Mod Merger, open it, rescan and publish to rebuild it for this list, or switch it off in this profile.",
+            package_id,
+            parts.join("; ")
+        ),
+        fixes: vec![SuggestedFix::DisableMod { mod_id: package_id.to_string() }],
+        related: Vec::new(),
+        details: Vec::new(),
+    })
 }
 
 /// The quiet conflict: two mods defining the same item, recipe or vehicle in differently named
@@ -772,6 +822,17 @@ pub fn add_user_rule_issues(report: &mut HealthReport, catalog: &ModCatalog, act
 #[cfg(test)]
 mod user_rule_tests {
     use super::*;
+
+    #[test]
+    fn a_package_built_for_another_list_is_an_info_and_a_matching_one_is_nothing() {
+        let packaged = vec!["A".to_string(), "B".to_string(), "Z_PZModStudio_Bridge".to_string()];
+        let active = vec!["A".to_string(), "C".to_string(), "Z_PZModStudio_MergedPatch".to_string()];
+        let issue = package_list_issue("Z_PZModStudio_MergedPatch", &packaged, &active).unwrap();
+        assert_eq!(issue.code, "package_built_for_other_list");
+        assert!(issue.message.contains("1 mod is on in this profile that it never saw (C)"), "{}", issue.message);
+        assert!(issue.message.contains("1 mod it merged is off here"), "{}", issue.message);
+        assert!(package_list_issue("P", &["A".to_string()], &["A".to_string(), "Z_PZModStudio_MergedPatch".to_string()]).is_none());
+    }
 
     #[test]
     fn a_broken_rule_is_a_warning_with_the_move_that_mends_it() {

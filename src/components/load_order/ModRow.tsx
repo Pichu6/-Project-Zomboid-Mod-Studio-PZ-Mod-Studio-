@@ -35,7 +35,7 @@ export interface ModRowBodyProps {
   triggerReorder: (mods: ModInfo[]) => void;
   handleJumpToMod: (modId: string) => void;
   onOpenMerger?: (relativePath: string) => void;
-  onGoToHealth?: () => void;
+  onGoToHealth?: (issue?: HealthIssue) => void;
   moveToTop: (index: number) => void;
   moveUp: (index: number) => void;
   moveDown: (index: number) => void;
@@ -196,10 +196,13 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
                   threw ? 'bg-red-950/60 text-red-300 border-red-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
                 }`}
                 title={
-                  (threw ? `Threw ${stat.exceptions} time${stat.exceptions === 1 ? '' : 's'} last session` : '') +
-                  (threw && stat.warnings > 0 ? ', and ' : '') +
-                  (stat.warnings > 0 ? `${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} last session` : '') +
-                  `.\n\n${stat.last_exception ?? stat.last_warning ?? ''}\n\nFrom console.txt as it is now; the Monitor has the cards.`
+                  (threw
+                    ? `Last session the game logged ${stat.exceptions} error${stat.exceptions === 1 ? '' : 's'} from this mod: something in its code threw, and whatever it was doing at that moment did not finish.`
+                    : `Last session the game logged ${stat.warnings} warning${stat.warnings === 1 ? '' : 's'} about this mod: the game noticed something odd and carried on, so nothing broke by itself.`) +
+                  (threw && stat.warnings > 0 ? ` Also ${stat.warnings} warning${stat.warnings === 1 ? '' : 's'}.` : '') +
+                  `\n\nThe last line:\n${stat.last_exception ?? stat.last_warning ?? ''}` +
+                  ((stat.last_exception ?? stat.last_warning ?? '').includes('require(') ? '\n\n(require(...) failed: the mod asked for a file the game could not find at that path. Harmless unless a feature is missing; the Monitor Center can fix the path.)' : '') +
+                  `\n\nFrom console.txt as it is now; the Monitor Center has the full cards.`
                 }
               >
                 {threw ? `${stat.exceptions}× threw` : `${stat.warnings} warn`}
@@ -217,9 +220,9 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
               className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
                 slow ? 'bg-amber-950/50 text-amber-300 border-amber-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
               }`}
-              title={`Its files took ${(ms / 1000).toFixed(1)} s to load last session (the game's DebugLog: from its "loading" line to the next mod's). The Lua that runs after is loaded in one pass and is not timed per mod. Most mods take a few ms; tile and model packs take the most.`}
+              title={`Loading time: of the time the game spent on the loading screen last session, ${ms >= 1000 ? `${(ms / 1000).toFixed(1)} seconds` : `${ms} milliseconds`} went to reading this mod's files.\n\nMost mods take a few milliseconds; tile and model packs take seconds. It says nothing about how the mod runs once loaded.\n\nMeasured from the game's own DebugLog (Zomboid/Logs), from this mod's "loading" line to the next mod's; the Lua phase after that is one pass and is not timed per mod.`}
             >
-              {ms >= 1000 ? `${(ms / 1000).toFixed(1)} s to load` : `${ms} ms to load`}
+              {ms >= 1000 ? `loads in ${(ms / 1000).toFixed(1)} s` : `loads in ${ms} ms`}
             </span>
           );
         })()}

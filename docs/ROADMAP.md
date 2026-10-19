@@ -108,12 +108,19 @@ sources is the `mod.info` id **plus** source/author and a content hash, with exp
 | ✅ | The old block merger, which dropped every kind it did not know and ended a definition at the first nested `}`, was dead code and is gone. `src-tauri/src/scripts` parses scripts properly instead; merging a script file is diff3 over its text, as for Lua | It truncated nested blocks |
 | ✅ | Translation merge (JSON) | Done 2026-10-18 (`translations.rs`). The game's Translator reads every active mod's `Translate/<LANG>/<Category>.json` (checked in 42.20.4), so same-path files never collide and the file scan rightly leaves them alone; what collides is a **key** two mods translate differently (`ItemName`/`Recipes`/`EvolvedRecipeName` keys bare, the rest prefixed; both forms read, compared with the prefix stripped). Those are listed in the game's own language (`options.ini` `language=`): in Mod Health as Info `translation_conflict` (one row per category and set of mods, with the words side by side and who says which; `translation_settled` / `translation_stale` once the package carries the file) and in the Merger as a `TRANSLATION` conflict per category whose sides are each mod's clashing keys and whose proposal is the last mod's words, saved as a JSON into the package, which loads last. Found live on the real list: Neat Building packs say "-- ALL --" and Neat Crafting "All" for `CraftCat_ALL`; `Mod.json` (each mod's own name/description) is left out |
 
+## Phase 9: The app in Spanish, and a language switch (asked 2026-10-18)
+
+| | Item | Notes |
+|---|---|---|
+| ⬜ | Every string of the UI through one translation layer, English and neutral Spanish shipped, a switch in Settings, the language remembered (~2 days) | Hundreds of strings across the screens, tooltips and toasts, plus the backend's messages (errors, Health issues, Monitor cards), which come from Rust and need their own table. Other languages as contributions: one JSON per language in `src/locales/`, the same way the community files are proposed. Dates and numbers follow the language |
+
 ## Phase 8: Keeping mods you like (asked 2026-10-18)
 
 | | Item | Notes |
 |---|---|---|
 | ✅ | **Favorites and lists** (shipped 2026-10-18; `lists.rs`, `Zomboid/PZModStudio_Lists.json`, `services/modLists.ts`, `common/keep.tsx`, `browse/ListsTab.tsx`): a star on a Browse card, in the detail page and on a Mod List row; "Add to a list…" with lists of the player's own (by Workshop id and mod id, kept in `Zomboid/PZModStudio_Lists.json`); a **My lists** tab in Browse beside My mods, each list with Subscribe all and Make a profile | What a Workshop collection is, but the player's, offline, mixing sources. Later: import a Workshop collection into a list, export a list as one |
 | ✅ | **Add to a profile…** from a Browse card (when installed) and a Mod List row: pick a profile, the mod is appended to its list, switched on | Shipped 2026-10-18 with the lists: the same three items (Favorite, Add to a list…, Add to a profile…) on every card, the detail page's star, and the row's menu |
+| ⬜ | A package knows which profile it was built for | Asked 2026-10-18: a package is a mod of its own in `Zomboid/mods`, so it shows in every profile's list, and its merges only settle the list it was built with (`patch_metadata.json` `packaged_mod_ids`). Done the same day: Mod Health says when the lists differ (`package_built_for_other_list`, Info, with "switch it off here"). Open: a profile chip on the package's card in the Merger, and a package per profile made from the profile's name when the player wants one |
 | ⬜ | Other people's lists | Later, through the community repository, the way the index works: a list is a file, by pull request |
 
 ## Phase 7: For mod developers too

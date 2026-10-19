@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -18,6 +18,9 @@ interface HealthModuleProps {
   onModsChanged: () => void;
   /** Opens the Mod Merger on this conflicting file. */
   onOpenMerger: (relativePath: string) => void;
+  /** The issue a Mod List chip pointed at: scrolled to and lit up once. */
+  focusIssue?: HealthIssue | null;
+  onFocusHandled?: () => void;
 }
 
 /** Fixes handled here (not by rewriting the mod list). */
@@ -35,7 +38,7 @@ const SAFE_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'move_befor
  * row and is kept out of the one-click button, which is for what the game itself would complain
  * about.
  */
-const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'translation_conflict', 'translation_stale', 'translation_settled']);
+const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'translation_conflict', 'translation_stale', 'translation_settled', 'package_built_for_other_list']);
 
 
 const fixLabel = (fix: HealthFix): string => {
@@ -73,7 +76,23 @@ const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: str
   info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400', label: 'Info' },
 };
 
-export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged, onOpenMerger }) => {
+export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged, onOpenMerger, focusIssue = null, onFocusHandled }) => {
+  const [litKey, setLitKey] = useState<string | null>(null);
+  const issueKey = (i: HealthIssue) => `${i.code}|${i.mod_id ?? ''}|${i.message}`;
+  useEffect(() => {
+    if (!focusIssue || !report) return;
+    const key = issueKey(focusIssue);
+    const el = document.querySelector<HTMLElement>(`[data-issue-key="${CSS.escape(key)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setLitKey(key);
+    const t = setTimeout(() => {
+      setLitKey(null);
+      onFocusHandled?.();
+    }, 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusIssue, report]);
   const [compatBusy, setCompatBusy] = useState(false);
   const [compatResult, setCompatResult] = useState<CompatResult | null>(null);
   const [mergeBusy, setMergeBusy] = useState(false);
@@ -461,7 +480,11 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
               const enableThenMove = applicable.length === 2 && applicable[0].action === 'enable_mod' && applicable[1].action === 'move_before';
               const fixes = enableThenMove ? [applicable[0]] : applicable;
               return (
-                <div key={`${issue.code}-${issue.mod_id}-${idx}`} className={`flex items-start gap-3 p-3 rounded-lg border ${style.row}`}>
+                <div
+                  key={`${issue.code}-${issue.mod_id}-${idx}`}
+                  data-issue-key={issueKey(issue)}
+                  className={`flex items-start gap-3 p-3 rounded-lg border ${style.row} ${litKey === issueKey(issue) ? 'ring-2 ring-cyan-400 shadow-lg shadow-cyan-900/50' : ''}`}
+                >
                   <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${style.iconColor}`} aria-hidden="true" />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-slate-200 break-words">{issue.message}</div>

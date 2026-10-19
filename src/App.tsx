@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, profileBuildMajor } from './types';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor } from './types';
 import { DeveloperModule } from './components/dev/DeveloperModule';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { StudioSidebar } from './components/layout/StudioSidebar';
@@ -85,6 +85,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     void loadErrorStats();
   }, [loadErrorStats]);
+
+  // Mod Health checks again every time it is opened, besides its own button: what the list looks
+  // like now, not when the tab was last looked at.
+  useEffect(() => {
+    if (activeTab === 'HEALTH') void health.recheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+  /** The issue a row's chip sent the player to: Mod Health scrolls to it and lights it up. */
+  const [healthFocus, setHealthFocus] = useState<HealthIssue | null>(null);
 
   const refreshActiveProfile = useCallback(async (customUserDir?: string): Promise<AppProfile | null> => {
     const userDir = customUserDir || paths.user_zomboid_dir;
@@ -420,7 +429,7 @@ Start the game anyway?`
     );
 
     const openDraftPackages = mods.filter(
-      (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && (m.is_packaged === false || m.mod_id === openedPackageFolder)
+      (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && m.is_packaged === false
     );
 
     // If there is no active closed package (either because it is open/draft, or none is active)
@@ -694,7 +703,10 @@ Start the game anyway?`
                 setMergerFocusPath(relativePath);
                 setActiveTab('MERGER');
               }}
-              onGoToHealth={() => setActiveTab('HEALTH')}
+              onGoToHealth={(issue) => {
+                setHealthFocus(issue ?? null);
+                setActiveTab('HEALTH');
+              }}
               onRulesChanged={health.recheck}
               profiles={profiles}
               activeProfileId={activeProfile?.id ?? null}
@@ -736,6 +748,8 @@ Start the game anyway?`
               report={health.report}
               checking={health.checking}
               onRecheck={health.recheck}
+              focusIssue={healthFocus}
+              onFocusHandled={() => setHealthFocus(null)}
               onApplyModList={handleReorderMods}
               onModsChanged={handleRefreshMods}
               onOpenMerger={(relativePath) => {
@@ -879,7 +893,7 @@ Start the game anyway?`
       {/* Launch Warning Modal — Open Package or No Merge Package */}
       {pendingLaunchMode && (() => {
         const openPackages = mods.filter(
-          (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && (m.is_packaged === false || m.mod_id === openedPackageFolder)
+          (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && m.is_packaged === false
         );
         const isOpenPackageWarning = openPackages.length > 0;
         const openPackageNames = openPackages.map((p) => p.name || p.mod_id).join(', ');

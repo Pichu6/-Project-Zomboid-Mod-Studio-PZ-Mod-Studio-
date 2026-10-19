@@ -460,7 +460,7 @@ export const TauriService = {
   },
 
   /** TileZed and WorldEd, looked for in the named folder and the usual places. */
-  mapTools: async (configured: string | null): Promise<MapTools> => {
+  mapTools: async (configured: string[]): Promise<MapTools> => {
     try {
       return await invoke<MapTools>('map_tools_cmd', { configured });
     } catch {
