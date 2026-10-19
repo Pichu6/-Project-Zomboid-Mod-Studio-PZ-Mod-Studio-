@@ -239,9 +239,6 @@
   "modList": {
     "title": "Lista de mods y orden de carga",
     "subscriptions": "Suscripciones de Steam:",
-    "items": "{{count}} ítems",
-    "totalSubmods": "Sub-mods en total:",
-    "active": "Activos:",
     "cycleMissing": "Clic para recorrer los mods con dependencias faltantes (no instaladas)",
     "missing": "Dependencias faltantes",
     "cycleOff": "Clic para recorrer los mods con librerías apagadas",
@@ -309,7 +306,6 @@
     "disableAllTitle": "Apagar todos los mods",
     "disableAll": "Apagar todo",
     "autoSort": "Ordenar dependencias",
-    "legend": "Tipos de mod:",
     "mapTitle": "Mod de mapa: agrega pueblos, rutas o tiles de mapa",
     "map": "Mod de mapa",
     "libraryTitle": "Librería / framework: lo requieren otros mods",
@@ -318,7 +314,6 @@
     "script": "Mod de script",
     "colActive": "Activo",
     "colName": "Nombre e ID",
-    "searchList": "Buscar en la lista...",
     "clearSearch": "Limpiar búsqueda",
     "colActions": "Acciones",
     "dragTitle": "Arrastrá para mover este mod en el orden de carga",
@@ -366,9 +361,7 @@
       "scriptMod": "Mod de script",
       "bridgeTitle": "Mod acompañante del Studio (puente en vivo con el juego)",
       "bridge": "PUENTE DEL STUDIO",
-      "openDraftTitle": "Paquete abierto (borrador): {{id}}\nEstá en edición y desactivado. Empaquetalo o publicalo en el Fusionador para usarlo en el juego.",
       "openDraft": "ABIERTO (borrador)",
-      "packagedTitle": "Paquete cerrado: {{id}}\nContiene parches de compatibilidad listos para Project Zomboid.",
       "packaged": "EMPAQUETADO",
       "inThisProfile": "En este perfil",
       "andIn": ", y en {{names}}",
@@ -386,7 +379,6 @@
       "down": "Bajar",
       "toBottom": "Mover al final",
       "loadsIn": "carga en {{time}}",
-      "loadTimeTitle": "Tiempo de carga: del tiempo que el juego pasó en la pantalla de carga la última sesión, {{time}} se fueron en leer los archivos de este mod.\n\nLa mayoría de los mods tardan unos milisegundos; los packs de tiles y modelos, segundos. No dice nada de cómo corre el mod una vez cargado.\n\nMedido del DebugLog del propio juego (Zomboid/Logs), desde la línea \"loading\" de este mod hasta la del siguiente; la fase de Lua que sigue es una sola pasada y no se mide por mod.",
       "seconds": "{{n}} segundos",
       "millis": "{{n}} milisegundos",
       "threw": "{{count}}× error",
@@ -394,9 +386,18 @@
       "errorsTitle": "La última sesión el juego registró {{count}} error(es) de este mod: algo en su código falló, y lo que estaba haciendo en ese momento no se terminó.",
       "warningsTitle": "La última sesión el juego registró {{count}} aviso(s) sobre este mod: el juego notó algo raro y siguió, así que nada se rompió por sí solo.",
       "alsoWarnings": " Además {{count}} aviso(s).",
-      "lastLine": "\n\nLa última línea:\n{{line}}",
-      "requireNote": "\n\n(require(...) failed: el mod pidió un archivo que el juego no encontró en esa ruta. Inofensivo salvo que falte una función; el Centro de monitoreo puede corregir la ruta.)",
-      "fromConsole": "\n\nDe console.txt tal como está ahora; el Centro de monitoreo tiene las tarjetas completas."
+      "openDraftHead": "Paquete abierto (borrador): {{id}}",
+      "openDraftBody": "Está en edición y desactivado. Empaquetalo o publicalo en el Fusionador para usarlo en el juego.",
+      "packagedHead": "Paquete cerrado: {{id}}",
+      "packagedBody": "Contiene parches de compatibilidad listos para Project Zomboid.",
+      "errorsHead": "{{count}} error(es) la última sesión",
+      "warningsHead": "{{count}} aviso(s) la última sesión",
+      "lastLineLabel": "Última línea",
+      "requireHint": "require(...) falló: el mod pidió un archivo que el juego no encontró en esa ruta. Inofensivo salvo que falte una función; el Centro de monitoreo puede corregir la ruta.",
+      "fromConsoleNote": "De console.txt tal como está ahora; el Centro de monitoreo tiene las tarjetas completas.",
+      "loadsInHead": "Carga en {{time}}",
+      "loadTimeBody": "Del tiempo que el juego pasó en la pantalla de carga la última sesión, {{time}} se fueron en leer los archivos de este mod.\nLa mayoría de los mods tardan unos milisegundos; los packs de tiles y modelos, segundos. No dice nada de cómo corre el mod una vez cargado.",
+      "loadTimeHow": "La etiqueta aparece solo desde {{min}} ms: todos los mods tienen su tiempo, pero los que tardan menos (casi todos, 2 a 20 ms) no llevan etiqueta para no llenar la lista. Medido del DebugLog del propio juego (Zomboid/Logs), desde la línea \"loading\" de este mod hasta la del siguiente; la fase de Lua que sigue es una sola pasada y no se mide por mod."
     },
     "health": {
       "labels": {
@@ -408,7 +409,7 @@
         "user_rule_order": "Antes de un mod que dijiste que debe seguir",
         "community_rule_order": "Antes de un mod que la comunidad dice que debe seguir",
         "community_incompatible": "La comunidad dice que chocan",
-        "community_known_issue": "Problema conocido, según la comunidad",
+        "community_known_issue": "Problema conocido",
         "community_successor": "Hay una versión para esta build",
         "load_before_order": "Carga demasiado tarde",
         "incompatible": "Incompatible",
@@ -417,7 +418,7 @@
         "invalid_mod_info": "mod.info roto",
         "missing_mod": "No instalado",
         "duplicate_entry": "Listado dos veces",
-        "shadowed_copy": "Gana otra copia",
+        "shadowed_copy": "Copia duplicada",
         "compatible_copy": "Copia compatible",
         "workshop_update_pending": "Actualización pendiente",
         "updated_since_last_play": "Actualizado desde que jugaste",
@@ -445,14 +446,35 @@
       "kept": "{{name}} tal como está hoy quedó guardado ({{when}}). Clic derecho en la fila para ver sus versiones guardadas.",
       "shimOn": "El parche {{name}} del shim está encendido, escrito en {{count}} paquete(s); el juego lo lee en el próximo inicio.",
       "confirmDisable": "¿Apagar {{name}}?\n\nQueda instalado, y podés volver a activarlo acá.",
-      "clickGoTo": "\n\nClic: ir a {{name}}",
-      "clickHealthAll": "\n\nClic: abrir Salud de mods en esto, que muestra los {{count}} mods, los archivos y los arreglos",
-      "clickHealth": "\n\nClic: abrir Salud de mods en esto",
-      "listFix": "{{fix}} — cambia tu lista; Listas anteriores puede deshacerlo",
+      "clickGoTo": "Clic: ir a {{name}}",
+      "clickHealthAll": "Clic: abrir Salud de mods en esto, que muestra los {{count}} mods, los archivos y los arreglos",
+      "clickHealth": "Clic: abrir Salud de mods en esto",
+      "listFix": "Cambia tu lista; Listas anteriores puede deshacerlo.",
       "mergerFix": "Abre {{path}} en el Fusionador, en el paquete que usa el juego, con lo que dice cada mod lado a lado. Un paquete cerrado lo muestra solo lectura; Guardar publica la decisión en él.",
-      "healthFix": "{{fix}}: abre Salud de mods en esto, donde está el botón",
-      "more": "{{count}} más: {{labels}}\n\nClic: abrir Salud de mods en ellos"
-    }
+      "healthFix": "Abre Salud de mods en esto, donde está el botón.",
+      "moreTitle": "{{count}} problema(s) más",
+      "moreAction": "Clic: abrir Salud de mods en ellos"
+    },
+    "statWorkshop": "del Workshop",
+    "statMods": "mods",
+    "statActive": "activos",
+    "tagLabel": "Filtrar por etiqueta",
+    "tagTitle": "Mostrar solo los mods que llevan una etiqueta: errores o avisos de la última sesión, carga lenta, o un problema de Salud de mods",
+    "tags": {
+      "all": "Todas las etiquetas",
+      "errors": "Con errores la última sesión",
+      "warnings": "Con avisos la última sesión",
+      "slow": "Carga lenta (desde {{min}} ms)"
+    },
+    "clearFilters": "quitar filtros",
+    "clearFiltersTitle": "Volver a mostrar todos los mods",
+    "showingCount": "mostrando {{shown}} de {{total}}",
+    "loadsFirst": "CARGA PRIMERO: librerías en las que se apoyan otros mods",
+    "loadsLast": "CARGA ÚLTIMO: gana cualquier archivo que compartan dos mods",
+    "position": "Posición #{{n}}",
+    "noMatch": "Ningún mod coincide con",
+    "noneFiltered": "Ningún mod cumple estos filtros.",
+    "understood": "Entendido"
   },
   "health": {
     "title": "Salud de mods",
@@ -1204,12 +1226,16 @@
     "workshopTitle": "Ítem del Steam Workshop {{id}}",
     "uploadTitle": "Tu carpeta de subida al Workshop ({{folder}})",
     "nexusTitle": "Descargado de Nexus Mods (mod {{id}})",
-    "compatTitle": "Copia compatible hecha por PZ Mod Studio: {{changes}}",
     "urlTitle": "Descargado de {{source}}",
     "manualTitle": "Instalado a mano",
     "manualFromTitle": "Instalado a mano desde {{file}}",
     "outsideTitle": "En Zomboid/mods (instalado fuera del Studio)",
-    "openPage": "{{title}}: abrir su página"
+    "openPage": "{{title}}: abrir su página",
+    "compatHead": "Copia compatible hecha por PZ Mod Studio",
+    "compatChanges": "Qué se cambió",
+    "compatWins": "Está en Zomboid/mods con el mismo id ({{id}}) que el original del Workshop. El Studio inicia el juego con -modfolders mods,workshop,steam, así que el juego usa esta copia y deja de lado la del Workshop: es lo esperado.",
+    "openPageAction": "Clic: abrir su página en el navegador",
+    "folder": "Carpeta: {{path}}"
   },
   "splash": {
     "line1": "Estos son los tiempos de los mods.",
@@ -1931,5 +1957,9 @@
       "setFocusingUp": "el enfoque de un faro",
       "damageObjects": "un vehículo que daña objetos"
     }
+  },
+  "common": {
+    "showMore": "ver más",
+    "showLess": "ver menos"
   }
 }

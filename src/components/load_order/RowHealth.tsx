@@ -6,21 +6,25 @@ import { StudioPathsUI } from '../settings/SettingsModule';
 import { applyFix } from '../../utils/healthFix';
 import i18next from 'i18next';
 import { issueText } from '../../i18n/backendText';
+import { Tip, TipBody } from '../common/Tip';
+import { RichText } from '../common/RichText';
 
 /** What a row says for each code the health check can raise. Short: the row is narrow. */
 /** Settled things are Mod Health's record, not a row's problem. */
 const SETTLED_CODES = new Set(['script_definition_settled', 'translation_settled', 'compatible_copy']);
+/** Codes the row shows as its own tags; exported for the Mod List's tag filter. */
+export const rowIssueCodes = (issues: HealthIssue[]) => issues.filter((i) => !SETTLED_CODES.has(i.code)).map((i) => i.code);
 /** A row has room for this many chips; the rest fold into one that opens Mod Health. */
 const MAX_CHIPS = 2;
 /** Issues about a group of files and mods, which only Mod Health shows whole. */
 const HEALTH_ONLY_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'script_definition_conflict_more', 'translation_conflict', 'translation_stale', 'translation_settled']);
 
-const labelFor = (issue: HealthIssue) => i18next.t(`modList.health.labels.${issue.code}`, { defaultValue: issue.code.replace(/_/g, ' ') });
+export const labelFor = (issue: Pick<HealthIssue, 'code'>) => i18next.t(`modList.health.labels.${issue.code}`, { defaultValue: issue.code.replace(/_/g, ' ') });
 
-const STYLE: Record<HealthSeverity, { chip: string; icon: React.ElementType; iconColor: string }> = {
-  error: { chip: 'bg-red-500/20 hover:bg-red-500/35 text-red-200 border-red-500/60', icon: XCircle, iconColor: 'text-red-400' },
-  warning: { chip: 'bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border-amber-500/60', icon: AlertTriangle, iconColor: 'text-amber-400' },
-  info: { chip: 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-600', icon: Info, iconColor: 'text-slate-400' },
+const STYLE: Record<HealthSeverity, { chip: string; icon: React.ElementType; iconColor: string; tone: 'red' | 'amber' | 'slate' }> = {
+  error: { chip: 'bg-red-500/20 hover:bg-red-500/35 text-red-200 border-red-500/60', icon: XCircle, iconColor: 'text-red-400', tone: 'red' },
+  warning: { chip: 'bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border-amber-500/60', icon: AlertTriangle, iconColor: 'text-amber-400', tone: 'amber' },
+  info: { chip: 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-600', icon: Info, iconColor: 'text-slate-400', tone: 'slate' },
 };
 
 const ORDER: Record<HealthSeverity, number> = { error: 0, warning: 1, info: 2 };
@@ -78,6 +82,8 @@ interface RowHealthChipsProps {
 export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, mods, onApplyList, onJumpToMod, onOpenMerger, onGoToHealth, onNote }) => {
   if (issues.length === 0) return null;
   const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
+  // The names and ids a message may mention, set in bold in the tips.
+  const modWords = mods.flatMap((m) => [m.name, m.mod_id]);
 
   // One chip per kind of problem, worst first; the message of the first is the tooltip. What is
   // already settled stays off the row, and past two chips the rest fold into one, so the mod's
@@ -90,6 +96,16 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
   if (all.length === 0) return null;
   const shown = all.slice(0, MAX_CHIPS);
   const folded = all.slice(MAX_CHIPS);
+
+  /** What the fix button does beyond its label, when that needs saying. */
+  const fixHint = (fix: HealthFix): string =>
+    LIST_FIX_ACTIONS.has(fix.action)
+      ? i18next.t('modList.health.listFix')
+      : fix.action === 'open_in_merger'
+      ? i18next.t('modList.health.mergerFix', { path: fix.relative_path })
+      : fix.action === 'merge_files' || fix.action === 'make_compatible_copy' || fix.action === 'remove_compatible_copy'
+      ? i18next.t('modList.health.healthFix')
+      : '';
 
   const runFix = (fix: HealthFix, issue: HealthIssue) => {
     switch (fix.action) {
@@ -140,64 +156,91 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
         const fix = issue.fixes[0];
         return (
           <span key={issue.code} className="flex items-center shrink-0">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (other) onJumpToMod(other);
-                else onGoToHealth?.(issue);
-              }}
-              className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 border transition cursor-pointer shadow-sm ${style.chip} ${
-                fix ? 'rounded-l' : 'rounded'
-              }`}
-              title={`${issueText(issue)}${
-                other
-                  ? i18next.t('modList.health.clickGoTo', { name: nameOf(other) })
-                  : others.length > 1
-                    ? i18next.t('modList.health.clickHealthAll', { count: others.length + 1 })
-                    : i18next.t('modList.health.clickHealth')
-              }`}
+            <Tip
+              content={
+                <TipBody
+                  title={labelFor(issue)}
+                  tone={style.tone}
+                  action={
+                    other
+                      ? i18next.t('modList.health.clickGoTo', { name: nameOf(other) })
+                      : others.length > 1
+                        ? i18next.t('modList.health.clickHealthAll', { count: others.length + 1 })
+                        : i18next.t('modList.health.clickHealth')
+                  }
+                >
+                  <RichText text={issueText(issue)} mods={modWords} foldAt={260} />
+                </TipBody>
+              }
             >
-              <Icon className={`w-3 h-3 shrink-0 ${style.iconColor}`} aria-hidden="true" />
-              <span>{labelFor(issue)}</span>
-            </button>
-            {fix && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  runFix(fix, issue);
+                  if (other) onJumpToMod(other);
+                  else onGoToHealth?.(issue);
                 }}
-                className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-r border border-l-0 transition cursor-pointer shadow-sm ${style.chip}`}
-                title={
-                  LIST_FIX_ACTIONS.has(fix.action)
-                    ? i18next.t('modList.health.listFix', { fix: fixLabel(fix, nameOf) })
-                    : fix.action === 'open_in_merger'
-                    ? i18next.t('modList.health.mergerFix', { path: fix.relative_path })
-                    : fix.action === 'merge_files' || fix.action === 'make_compatible_copy' || fix.action === 'remove_compatible_copy'
-                    ? i18next.t('modList.health.healthFix', { fix: fixLabel(fix, nameOf) })
-                    : fixLabel(fix, nameOf)
+                className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 border transition cursor-pointer shadow-sm ${style.chip} ${
+                  fix ? 'rounded-l' : 'rounded'
+                }`}
+              >
+                <Icon className={`w-3 h-3 shrink-0 ${style.iconColor}`} aria-hidden="true" />
+                <span>{labelFor(issue)}</span>
+              </button>
+            </Tip>
+            {fix && (
+              <Tip
+                content={
+                  <TipBody title={fixLabel(fix, nameOf)} tone="cyan">
+                    {fixHint(fix) && <RichText mods={modWords} text={fixHint(fix)} />}
+                  </TipBody>
                 }
               >
-                <Wrench className="w-3 h-3 shrink-0" aria-hidden="true" />
-                <span>{fixLabel(fix, nameOf)}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    runFix(fix, issue);
+                  }}
+                  className={`flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-r border border-l-0 transition cursor-pointer shadow-sm ${style.chip}`}
+                >
+                  <Wrench className="w-3 h-3 shrink-0" aria-hidden="true" />
+                  <span>{fixLabel(fix, nameOf)}</span>
+                </button>
+              </Tip>
             )}
           </span>
         );
       })}
       {folded.length > 0 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onGoToHealth?.(folded[0]);
-          }}
-          className="flex items-center text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border transition cursor-pointer shadow-sm bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-600 shrink-0"
-          title={i18next.t('modList.health.more', { count: folded.length, labels: folded.map(labelFor).join('; ') })}
+        <Tip
+          content={
+            <TipBody title={i18next.t('modList.health.moreTitle', { count: folded.length })} action={i18next.t('modList.health.moreAction')}>
+              <ul className="space-y-0.5">
+                {folded.map((i) => {
+                  const FoldIcon = STYLE[i.severity].icon;
+                  return (
+                    <li key={i.code} className="flex items-center gap-1.5">
+                      <FoldIcon className={`w-3 h-3 shrink-0 ${STYLE[i.severity].iconColor}`} aria-hidden="true" />
+                      <span>{labelFor(i)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </TipBody>
+          }
         >
-          +{folded.length}
-        </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onGoToHealth?.(folded[0]);
+            }}
+            className="flex items-center text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border transition cursor-pointer shadow-sm bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-600 shrink-0"
+          >
+            +{folded.length}
+          </button>
+        </Tip>
       )}
     </>
   );

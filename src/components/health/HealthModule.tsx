@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -7,6 +7,7 @@ import { applyFix } from '../../utils/healthFix';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { issueText } from '../../i18n/backendText';
+import { RichText } from '../common/RichText';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -84,20 +85,39 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   const { t } = useTranslation();
   const [litKey, setLitKey] = useState<string | null>(null);
   const issueKey = (i: HealthIssue) => `${i.code}|${i.mod_id ?? ''}|${i.message}`;
+  // Opening this screen checks again, and the check lands in two steps (the rules, then the
+  // script conflicts), each moving the issues around. Scrolling on every step made the page jump;
+  // so it waits until the check is done and the page has kept still a moment, then scrolls once.
+  const scrolledFor = useRef<HealthIssue | null>(null);
+  const unlight = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(unlight.current), []);
   useEffect(() => {
-    if (!focusIssue || !report) return;
-    const key = issueKey(focusIssue);
-    const el = document.querySelector<HTMLElement>(`[data-issue-key="${CSS.escape(key)}"]`);
-    if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    setLitKey(key);
-    const t = setTimeout(() => {
-      setLitKey(null);
-      onFocusHandled?.();
-    }, 4000);
-    return () => clearTimeout(t);
+    if (!focusIssue) {
+      scrolledFor.current = null;
+      return;
+    }
+    if (!report || checking || scrolledFor.current === focusIssue) return;
+    const settle = window.setTimeout(() => {
+      const key = issueKey(focusIssue);
+      const el =
+        document.querySelector<HTMLElement>(`[data-issue-key="${CSS.escape(key)}"]`) ??
+        document.querySelector<HTMLElement>(`[data-issue-code="${CSS.escape(`${focusIssue.code}|${focusIssue.mod_id ?? ''}`)}"]`);
+      scrolledFor.current = focusIssue;
+      if (!el) {
+        onFocusHandled?.();
+        return;
+      }
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setLitKey(el.dataset.issueKey ?? key);
+      window.clearTimeout(unlight.current);
+      unlight.current = window.setTimeout(() => {
+        setLitKey(null);
+        onFocusHandled?.();
+      }, 4000);
+    }, 250);
+    return () => window.clearTimeout(settle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusIssue, report]);
+  }, [focusIssue, report, checking]);
   const [compatBusy, setCompatBusy] = useState(false);
   const [compatResult, setCompatResult] = useState<CompatResult | null>(null);
   const [mergeBusy, setMergeBusy] = useState(false);
@@ -252,6 +272,8 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
 
   /** The name the Mod List shows for a mod id. */
   const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
+  /** Names and ids a message may mention, set in bold. */
+  const modWords = useMemo(() => mods.flatMap((m) => [m.name, m.mod_id]), [mods]);
 
   const safeFixes = useMemo(() => {
     if (!report) return [] as HealthFix[];
@@ -429,13 +451,13 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
             <button type="button" onClick={() => setCompatResult(null)} className="text-slate-500 hover:text-slate-300 cursor-pointer text-[11px]">{t('health.close')}</button>
           </div>
           <ul className="list-disc pl-5 text-slate-300 space-y-0.5">
-            {compatResult.changes.map((c, i) => <li key={i}>{c}</li>)}
+            {compatResult.changes.map((c, i) => <li key={i}><RichText text={c} foldAt={240} /></li>)}
           </ul>
           {compatResult.warnings.length > 0 ? (
             <>
               <div className="text-amber-300 font-bold mt-1">{t('health.mayBreak')}</div>
               <ul className="list-disc pl-5 text-amber-200/90 space-y-0.5">
-                {compatResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                {compatResult.warnings.map((w, i) => <li key={i}><RichText text={w} foldAt={240} /></li>)}
               </ul>
             </>
           ) : (
@@ -477,12 +499,19 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                 <div
                   key={`${issue.code}-${issue.mod_id}-${idx}`}
                   data-issue-key={issueKey(issue)}
+                  data-issue-code={`${issue.code}|${issue.mod_id ?? ''}`}
                   className={`flex items-start gap-3 p-3 rounded-lg border ${style.row} ${litKey === issueKey(issue) ? 'ring-2 ring-cyan-400 shadow-lg shadow-cyan-900/50' : ''}`}
                 >
                   <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${style.iconColor}`} aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-slate-200 break-words">{issueText(issue)}</div>
-                    <div className="text-[10px] font-mono text-slate-500 mt-0.5">{issue.code}</div>
+                    {issue.mod_id && (
+                      <div className="text-[12.5px] font-bold text-slate-100 truncate">
+                        {nameOf(issue.mod_id)}
+                        {nameOf(issue.mod_id) !== issue.mod_id && <span className="ml-1.5 text-[10px] font-mono font-normal text-slate-500">{issue.mod_id}</span>}
+                      </div>
+                    )}
+                    <RichText text={issueText(issue)} mods={modWords} foldAt={320} className="text-xs text-slate-300 leading-relaxed" />
+                    <div className="text-[10px] font-mono text-slate-600 mt-0.5">{issue.code}</div>
                     {issue.details && issue.details.length > 0 && (
                       <details className="mt-1.5">
                         <summary className="text-[11px] text-sky-300 cursor-pointer select-none">

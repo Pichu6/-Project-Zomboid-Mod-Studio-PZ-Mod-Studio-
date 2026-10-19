@@ -8,7 +8,8 @@ import { findInstalledDependencyInMods, normalizeModId } from './modLookup';
 import { ModPresets } from './ModPresets';
 import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
-import { ModRowBody } from './ModRow';
+import { ModRowBody, SLOW_LOAD_MS } from './ModRow';
+import { labelFor, rowIssueCodes } from './RowHealth';
 import { useKeepActions } from '../common/keep';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
@@ -27,9 +28,9 @@ import {
   Copy,
   EyeOff,
   FolderOpen,
+  Filter,
   FolderX,
   Globe,
-  HelpCircle,
   ListOrdered,
   MapPin,
   Package,
@@ -91,6 +92,50 @@ const PACKAGE_COLOR_PALETTES = [
 const MOD_FILTERS = ['all', 'enabled', 'disabled', 'problems', 'maps', 'libraries', 'unloadable', 'updated'] as const;
 
 type ModFilterId = (typeof MOD_FILTERS)[number];
+
+/**
+ * A row's border colour and background. Every row has the same border widths (1px, 4px on the
+ * left), whatever its state, so the switches and names of all rows sit on the same line; states
+ * change colours and rings only.
+ */
+function rowFrame(row: {
+  isHighlighted: boolean;
+  isSelected: boolean;
+  isConflictPartner: boolean;
+  isOpenedPackage: boolean;
+  worstIssue: 'error' | 'warning' | null;
+  packageColor: { border: string; bgMatch: string } | null;
+  enabled: boolean;
+}): string {
+  const border = row.isHighlighted
+    ? 'border-cyan-400'
+    : row.worstIssue === 'error'
+    ? 'border-red-500/80'
+    : row.isConflictPartner || row.worstIssue === 'warning' || row.isOpenedPackage
+    ? 'border-amber-500/70'
+    : row.isSelected
+    ? 'border-emerald-500/60'
+    : 'border-slate-800';
+  const left = row.packageColor ? row.packageColor.border : '';
+  const background = row.isHighlighted
+    ? 'bg-cyan-950/90 ring-2 ring-cyan-400/60 shadow-lg shadow-cyan-900/50 animate-pulse'
+    : row.isSelected
+    ? 'bg-slate-800/90 ring-1 ring-emerald-500/40 shadow-lg'
+    : row.isConflictPartner
+    ? 'bg-amber-950/80 ring-2 ring-amber-400/50 animate-pulse'
+    : row.worstIssue === 'error'
+    ? 'bg-red-950/40 hover:bg-red-950/55'
+    : row.worstIssue === 'warning'
+    ? 'bg-amber-950/30 hover:bg-amber-950/45'
+    : row.packageColor
+    ? row.packageColor.bgMatch.split(' ').filter((c) => !c.startsWith('border-')).join(' ')
+    : row.isOpenedPackage
+    ? 'bg-amber-950/20 hover:bg-amber-950/30'
+    : row.enabled
+    ? 'bg-slate-900/90 hover:bg-slate-800/80'
+    : 'bg-slate-950/40 opacity-60 hover:opacity-100';
+  return `${border} ${left} ${background}`;
+}
 
 
 export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
@@ -405,12 +450,42 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     activeConflictsMap,
   ]);
 
+  /**
+   * The tags each row shows (what the last session said, its loading time, the health check's
+   * chips), so the list can be narrowed to one of them. A tag is the same word as the chip.
+   */
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const modTags = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const m of mods) {
+      const tags: string[] = [];
+      const stat = errorStats?.get(m.name);
+      if (stat && stat.exceptions > 0) tags.push('errors');
+      else if (stat && stat.warnings > 0) tags.push('warnings');
+      if ((loadTimes?.get(m.mod_id) ?? 0) >= SLOW_LOAD_MS) tags.push('slow');
+      const compat = sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind === 'compat';
+      for (const code of rowIssueCodes(issuesByMod.get(m.mod_id) ?? [])) {
+        if (compat && code === 'shadowed_copy') continue;
+        if (!tags.includes(`health:${code}`)) tags.push(`health:${code}`);
+      }
+      map.set(m.mod_id, tags);
+    }
+    return map;
+  }, [mods, errorStats, loadTimes, catalogById, issuesByMod]);
+  const tagOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tags of modTags.values()) for (const tag of tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    const label = (tag: string) => (tag.startsWith('health:') ? labelFor({ code: tag.slice(7) }) : t(`modList.tags.${tag}`, { min: SLOW_LOAD_MS }));
+    return [...counts.entries()].map(([id, count]) => ({ id, count, label: label(id) })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [modTags, t]);
+
   const filteredMods = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     return mods.filter((m) => {
       if (activeProfile && !showEveryMod && !inActiveProfile.has(m.mod_id) && !m.enabled) return false;
       if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
       if (!matchesFilter(m, stateFilter)) return false;
+      if (tagFilter !== 'all' && !(modTags.get(m.mod_id) ?? []).includes(tagFilter)) return false;
       if (!query) return true;
       return (
         m.name.toLowerCase().includes(query) ||
@@ -423,6 +498,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     searchQuery,
     sourceFilter,
     stateFilter,
+    tagFilter,
+    modTags,
     catalogById,
     activeProfile,
     showEveryMod,
@@ -797,102 +874,77 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   }
 
   const activeCount = mods.filter((m) => m.enabled).length;
+  const anyFilter = stateFilter !== 'all' || sourceFilter !== 'all' || tagFilter !== 'all' || searchQuery !== '';
+  const clearFilters = () => {
+    setStateFilter('all');
+    setSourceFilter('all');
+    setTagFilter('all');
+    setSearchQuery('');
+  };
+  /** One of the problem counters of the toolbar: click to walk through those mods. */
+  const cycleButton = (count: number, index: number, onClick: () => void, label: string, title: string, tone: 'red' | 'amber') =>
+    count > 0 && (
+      <button
+        onClick={onClick}
+        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10.5px] font-bold transition cursor-pointer ${
+          tone === 'red'
+            ? 'text-red-300 bg-red-500/10 hover:bg-red-500/20 border-red-500/40'
+            : 'text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/40'
+        }`}
+        title={title}
+      >
+        <AlertTriangle className="w-3 h-3 shrink-0" />
+        <span>{label}</span>
+        <span className="font-mono text-[10px] opacity-80">
+          {index + 1}/{count}
+        </span>
+      </button>
+    );
+  const selectClass = (active: boolean) =>
+    `bg-slate-950 border rounded-md px-2 py-1 text-xs cursor-pointer outline-none focus:border-cyan-500/80 ${
+      active ? 'border-cyan-600/70 text-cyan-200' : 'border-slate-800 text-slate-300'
+    }`;
 
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
-      {/* Module Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <ListOrdered className="w-5 h-5 text-emerald-400" />
-            {t('modList.title')} (<code className="text-emerald-400">Zomboid/mods/default.txt</code>)
+      {/* Module Header: what the list is and its numbers on the left, what you do with the whole list on the right. */}
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 min-w-0">
+            <ListOrdered className="w-5 h-5 text-emerald-400 shrink-0" />
+            <span className="truncate">{t('modList.title')}</span>
+            <code className="text-[11px] font-mono font-normal text-slate-500 truncate">Zomboid/mods/default.txt</code>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
-            <span>{t('modList.subscriptions')} <b className="text-cyan-400">{t('modList.items', { count: uniqueWorkshopIds })}</b></span>
-
-            <span>•</span>
-            <span>{t('modList.totalSubmods')} <b className="text-slate-200">{mods.length}</b></span>
-            <span>•</span>
-            <span>{t('modList.active')} <b className="text-emerald-400">{activeCount}</b></span>
-            {/* Grave 1: Dependencies missing (Red) */}
-            {missingUninstalledModIds.length > 0 && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={handleCycleMissingUninstalled}
-                  className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title={t('modList.cycleMissing')}
-                >
-                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span>{t('modList.missing')}</span>
-                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.5 rounded border border-red-700/50 ml-0.5">
-                    {missingUninstalledCycleIdx + 1}/{missingUninstalledModIds.length} ⚙️
-                  </span>
-                </button>
-              </>
-            )}
-
-            {/* Grave 2: Dependencies off (Red) */}
-            {missingDepModIds.length > 0 && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={handleCycleMissingDeps}
-                  className="flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title={t('modList.cycleOff')}
-                >
-                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span>{t('modList.depsOff')}</span>
-                  <AlertTriangle className="w-3 h-3 text-red-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-red-300 font-mono bg-red-950/80 px-1 py-0.5 rounded border border-red-700/50 ml-0.5">
-                    {missingDepCycleIdx + 1}/{missingDepModIds.length} ⚙️
-                  </span>
-                </button>
-              </>
-            )}
-
-            {/* Medio 1: Incompatibility (Yellow) */}
-            {conflictModIds.length > 0 && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={handleCycleConflicts}
-                  className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title={t('modList.cycleIncompatible')}
-                >
-                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span>{t('modList.incompatibility')}</span>
-                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/50 ml-0.5">
-                    {conflictCycleIdx + 1}/{conflictModIds.length} ⚙️
-                  </span>
-                </button>
-              </>
-            )}
-
-            {/* Medio 2: List Order (Yellow) */}
-            {orderViolationModIds.length > 0 && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={handleCycleOrderViolations}
-                  className="flex items-center gap-1.5 text-amber-400 font-bold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 transition cursor-pointer shadow-sm group text-[11px]"
-                  title={t('modList.cycleOrder')}
-                >
-                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span>{t('modList.listOrder')}</span>
-                  <AlertTriangle className="w-3 h-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
-                  <span className="text-[10px] text-amber-300 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/50 ml-0.5">
-                    {orderViolationCycleIdx + 1}/{orderViolationModIds.length} ⚙️
-                  </span>
-                </button>
-              </>
-            )}
-          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-400">
+            <span title={t('modList.subscriptions')}>
+              <b className="text-cyan-400">{uniqueWorkshopIds}</b> {t('modList.statWorkshop')}
+            </span>
+            <span className="text-slate-700">|</span>
+            <span>
+              <b className="text-slate-200">{mods.length}</b> {t('modList.statMods')}
+            </span>
+            <span className="text-slate-700">|</span>
+            <span>
+              <b className="text-emerald-400">{activeCount}</b> {t('modList.statActive')}
+            </span>
+            <span className="text-slate-700">|</span>
+            <span className="flex items-center gap-1" title={t('modList.mapTitle')}>
+              <MapPin className="w-3 h-3 text-amber-400" /> <b className="text-amber-400">{modCategoryCounts.mapCount}</b> {t('modList.map')}
+            </span>
+            <span className="flex items-center gap-1" title={t('modList.libraryTitle')}>
+              <Package className="w-3 h-3 text-purple-400" /> <b className="text-purple-400">{modCategoryCounts.libCount}</b> {t('modList.library')}
+            </span>
+            <span className="flex items-center gap-1" title={t('modList.scriptTitle')}>
+              <ListOrdered className="w-3 h-3 text-cyan-400" /> <b className="text-cyan-400">{modCategoryCounts.scriptCount}</b> {t('modList.script')}
+            </span>
+            {cycleButton(missingUninstalledModIds.length, missingUninstalledCycleIdx, handleCycleMissingUninstalled, t('modList.missing'), t('modList.cycleMissing'), 'red')}
+            {cycleButton(missingDepModIds.length, missingDepCycleIdx, handleCycleMissingDeps, t('modList.depsOff'), t('modList.cycleOff'), 'red')}
+            {cycleButton(conflictModIds.length, conflictCycleIdx, handleCycleConflicts, t('modList.incompatibility'), t('modList.cycleIncompatible'), 'amber')}
+            {cycleButton(orderViolationModIds.length, orderViolationCycleIdx, handleCycleOrderViolations, t('modList.listOrder'), t('modList.cycleOrder'), 'amber')}
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <ModPresets
             paths={paths}
             mods={mods}
@@ -901,109 +953,132 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             onOpenInBrowser={onOpenInBrowser}
             toast={showToast}
           />
-
+          <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
-            title={t('modList.refreshTitle')}
+            className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition cursor-pointer shrink-0"
+            title={`${t('modList.refresh')}: ${t('modList.refreshTitle')}`}
+            aria-label={t('modList.refresh')}
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>{t('modList.refresh')}</span>
           </button>
-
-          <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={t('modList.searchPlaceholder')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-60 bg-slate-900 border border-slate-800 focus:border-emerald-500/80 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 text-slate-500 hover:text-slate-300 p-0.5"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {activeProfile && (
-            <button
-              type="button"
-              onClick={() => setShowEveryMod((v) => !v)}
-              aria-pressed={showEveryMod}
-              title={showEveryMod ? t('modList.onlyProfileTitle', { name: activeProfile.name }) : t('modList.everythingTitle')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition ${
-                showEveryMod
-                  ? 'bg-slate-800 text-slate-200 border-slate-700'
-                  : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/70'
-              }`}
-            >
-              {showEveryMod ? t('modList.showingEverything') : t('modList.onlyProfile', { name: activeProfile.name })}
-            </button>
-          )}
-
-          <select
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value as ModFilterId)}
-            aria-label={t('modList.filterLabel')}
-            title={t('modList.filterTitle')}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 cursor-pointer"
-          >
-            {MOD_FILTERS.map((id) => (
-              <option key={id} value={id} title={t(`modList.filters.${id}.hint`)}>
-                {t(`modList.filters.${id}.label`)} ({filterCounts[id] ?? 0})
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            aria-label={t('modList.sourceLabel')}
-            title={t('modList.sourceTitle')}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 cursor-pointer"
-          >
-            {(['all', 'steam', 'nexus', 'manual', 'local', 'studio', 'compat'] as const).map((id) => (
-              <option key={id} value={id}>{t(`modList.sources.${id}`)}</option>
-            ))}
-          </select>
-
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
-            <button
-              onClick={() => handleEnableAllWithoutDiscrimination(true)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-emerald-400 font-medium transition cursor-pointer"
-              title={t('modList.enableAllTitle')}
-            >
-              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{t('modList.enableAll')}</span>
-            </button>
-
-            <button
-              onClick={() => handleEnableAllWithoutDiscrimination(false)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded hover:bg-slate-800 text-slate-400 font-medium transition cursor-pointer"
-              title={t('modList.disableAllTitle')}
-            >
-              <Square className="w-3.5 h-3.5 text-slate-500" />
-              <span>{t('modList.disableAll')}</span>
-            </button>
-          </div>
-
-          <ModListHistory paths={paths} mods={mods} onRefreshMods={onRefreshMods} toast={showToast} />
-          <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
-          {keep.node}
-          <LoadRules paths={paths} mod={rulesOf} mods={mods} installedBuild={installedBuild} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
-
           <button
             onClick={handleAutoSortDependencies}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
           >
             <Wand2 className="w-4 h-4" />
             {t('modList.autoSort')}
+          </button>
+          <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
+          {keep.node}
+          <LoadRules paths={paths} mod={rulesOf} mods={mods} installedBuild={installedBuild} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
+        </div>
+      </div>
+
+      {/* Toolbar: find and filter on the left, the problems to walk through and the switches for everything on the right. */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 px-2 py-1.5 rounded-xl border border-slate-800 bg-slate-900/60">
+        <div className="relative flex items-center">
+          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 pointer-events-none" />
+          <input
+            type="text"
+            placeholder={t('modList.searchPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-52 bg-slate-950 border border-slate-800 focus:border-cyan-500/80 rounded-md pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 transition outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-1.5 text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
+              title={t('modList.clearSearch')}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        <Filter className="w-3.5 h-3.5 text-slate-500 ml-1" aria-hidden="true" />
+        <select
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value as ModFilterId)}
+          aria-label={t('modList.filterLabel')}
+          title={t('modList.filterTitle')}
+          className={selectClass(stateFilter !== 'all')}
+        >
+          {MOD_FILTERS.map((id) => (
+            <option key={id} value={id} title={t(`modList.filters.${id}.hint`)}>
+              {t(`modList.filters.${id}.label`)} ({filterCounts[id] ?? 0})
+            </option>
+          ))}
+        </select>
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value)}
+          aria-label={t('modList.sourceLabel')}
+          title={t('modList.sourceTitle')}
+          className={selectClass(sourceFilter !== 'all')}
+        >
+          {(['all', 'steam', 'nexus', 'manual', 'local', 'studio', 'compat'] as const).map((id) => (
+            <option key={id} value={id}>{t(`modList.sources.${id}`)}</option>
+          ))}
+        </select>
+        <select
+          value={tagFilter}
+          onChange={(e) => setTagFilter(e.target.value)}
+          aria-label={t('modList.tagLabel')}
+          title={t('modList.tagTitle')}
+          className={selectClass(tagFilter !== 'all')}
+        >
+          <option value="all">{t('modList.tags.all')}</option>
+          {tagFilter !== 'all' && !tagOptions.some((tag) => tag.id === tagFilter) && <option value={tagFilter}>{tagFilter} (0)</option>}
+          {tagOptions.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.label} ({tag.count})
+            </option>
+          ))}
+        </select>
+        {anyFilter && (
+          <button onClick={clearFilters} className="text-[11px] text-cyan-400 hover:text-cyan-300 underline cursor-pointer" title={t('modList.clearFiltersTitle')}>
+            {t('modList.clearFilters')}
+          </button>
+        )}
+        {activeProfile && (
+          <button
+            type="button"
+            onClick={() => setShowEveryMod((v) => !v)}
+            aria-pressed={showEveryMod}
+            title={showEveryMod ? t('modList.onlyProfileTitle', { name: activeProfile.name }) : t('modList.everythingTitle')}
+            className={`px-2 py-1 rounded-md text-xs font-medium border cursor-pointer transition ${
+              showEveryMod
+                ? 'bg-slate-800 text-slate-200 border-slate-700'
+                : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/70'
+            }`}
+          >
+            {showEveryMod ? t('modList.showingEverything') : t('modList.onlyProfile', { name: activeProfile.name })}
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+
+        <div className="flex items-center rounded-md border border-slate-800 bg-slate-950 overflow-hidden text-xs">
+          <button
+            onClick={() => handleEnableAllWithoutDiscrimination(true)}
+            className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 text-emerald-400 font-medium transition cursor-pointer"
+            title={t('modList.enableAllTitle')}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span className="hidden 2xl:inline">{t('modList.enableAll')}</span>
+          </button>
+          <span className="w-px self-stretch bg-slate-800" />
+          <button
+            onClick={() => handleEnableAllWithoutDiscrimination(false)}
+            className="flex items-center gap-1 px-2 py-1 hover:bg-slate-800 text-slate-400 font-medium transition cursor-pointer"
+            title={t('modList.disableAllTitle')}
+          >
+            <Square className="w-3.5 h-3.5 text-slate-500" />
+            <span className="hidden 2xl:inline">{t('modList.disableAll')}</span>
           </button>
         </div>
       </div>
@@ -1016,100 +1091,46 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
       )}
 
-      {/* Icon Legend Bar */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 mb-4 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-1.5 font-bold text-slate-300">
-          <HelpCircle className="w-4 h-4 text-cyan-400" />
-          <span>{t('modList.legend')}</span>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2" title={t('modList.mapTitle')}>
-            <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
-              <MapPin className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <span>{t('modList.map')} (<b className="text-amber-400">{modCategoryCounts.mapCount}</b>)</span>
-          </div>
-
-          <div className="flex items-center gap-2" title={t('modList.libraryTitle')}>
-            <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
-              <Package className="w-3.5 h-3.5 text-purple-400" />
-            </div>
-            <span>{t('modList.library')} (<b className="text-purple-400">{modCategoryCounts.libCount}</b>)</span>
-          </div>
-
-          <div className="flex items-center gap-2" title={t('modList.scriptTitle')}>
-            <div className="w-5 h-5 rounded bg-slate-950 border border-slate-800 flex items-center justify-center">
-              <ListOrdered className="w-3.5 h-3.5 text-cyan-400" />
-            </div>
-            <span>{t('modList.script')} (<b className="text-cyan-400">{modCategoryCounts.scriptCount}</b>)</span>
-          </div>
-        </div>
-      </div>
-
       {/* Main 2-Column Grid: Left Column Reorderable List / Right Column Mod Inspector */}
       <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
         {/* Left Column (7 cols): Reorderable Mod List */}
         <div className="col-span-12 lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow">
-          <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800 items-center">
-            <div className="col-span-1 text-center">#</div>
-            <div className="col-span-1 text-center">{t('modList.colActive')}</div>
-            <div className="col-span-6 flex items-center gap-2 min-w-0">
-              <span className="shrink-0">{t('modList.colName')}</span>
-              <div className="relative flex-1 max-w-[260px] normal-case font-normal text-xs">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder={t('modList.searchList')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-950/90 border border-slate-800 hover:border-slate-700 focus:border-cyan-500/80 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-200 placeholder-slate-500 transition shadow-inner font-sans outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
-                    title={t('modList.clearSearch')}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+          <div className="flex gap-2 pl-5 pr-4 py-2 bg-slate-900 text-slate-500 font-bold text-[10.5px] uppercase tracking-wider border-b border-slate-800 items-center">
+            <div className="w-9 shrink-0 text-right">#</div>
+            <div className="w-8 shrink-0 text-center">{t('modList.colActive')}</div>
+            <div className="flex-1 min-w-0 pl-8">
+              {t('modList.colName')}
+              {filteredMods.length !== mods.length && (
+                <span className="ml-2 normal-case tracking-normal font-normal text-cyan-400">
+                  {t('modList.showingCount', { shown: filteredMods.length, total: mods.length })}
+                </span>
+              )}
             </div>
-            <div className="col-span-4 text-right">{t('modList.colActions')}</div>
+            <div className="min-w-[150px] text-right">{t('modList.colActions')}</div>
           </div>
 
           <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
             <span className="flex items-center gap-1.5 font-bold">
               <ArrowUpCircle className="w-3.5 h-3.5" />
-              LOADS FIRST — libraries other mods build on
+              {t('modList.loadsFirst')}
             </span>
-            <span className="text-[10px] text-emerald-500/80">Position #1</span>
+            <span className="text-[10px] text-emerald-500/80">{t('modList.position', { n: 1 })}</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {filteredMods.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
                 {searchQuery ? (
-                  <>No mod matches "<b className="text-slate-400">{searchQuery}</b>"</>
+                  <>{t('modList.noMatch')} "<b className="text-slate-400">{searchQuery}</b>"</>
                 ) : (
-                  <>
-                    No mod is{' '}
-                    <b className="text-slate-400">
-                      {t(`modList.filters.${stateFilter}.label`).toLowerCase()}
-                    </b>
-                  </>
+                  <>{t('modList.noneFiltered')}</>
                 )}
-                {(stateFilter !== 'all' || sourceFilter !== 'all') && (
+                {anyFilter && (
                   <button
-                    onClick={() => {
-                      setStateFilter('all');
-                      setSourceFilter('all');
-                      setSearchQuery('');
-                    }}
+                    onClick={clearFilters}
                     className="ml-2 underline text-emerald-400 hover:text-emerald-300 cursor-pointer"
                   >
-                    show everything
+                    {t('modList.clearFilters')}
                   </button>
                 )}
               </div>
@@ -1172,42 +1193,25 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       const box = e.currentTarget.getBoundingClientRect();
                       handleDropOnMod(mod.mod_id, e.clientY > box.top + box.height / 2);
                     }}
-                    title={isAssigningThis ? undefined : t('modList.dragTitle')}
                     onClick={() => setSelectedModId(mod.mod_id)}
                     onContextMenu={(e) => {
                       setSelectedModId(mod.mod_id);
                       showContextMenu(e, modRowMenu(mod, originalIndex));
                     }}
-                    className={`grid grid-cols-12 gap-2 px-3 py-2 items-center rounded-lg text-xs cursor-pointer transition ${
-                      isOpenedPackage
-                        ? 'border-2 border-amber-500/80 bg-amber-950/25 shadow-md shadow-amber-950/30'
-                        : worstIssue === 'error'
-                        ? 'border-2 border-red-500 bg-red-950/40 shadow-md shadow-red-950/40'
-                        : isConflictPartner
-                        ? 'border-2 border-amber-400 bg-amber-950/90 shadow-xl shadow-amber-900/60 ring-2 ring-amber-400/50 animate-pulse'
-                        : worstIssue === 'warning'
-                        ? 'border-2 border-amber-500 bg-amber-950/40 shadow-md shadow-amber-950/30'
-                        : isMultiPackage && packageColor
-                        ? `border-l-4 ${packageColor.border}`
-                        : 'border-l border-l-transparent'
-                    } ${isDragging ? 'opacity-40' : ''} ${
+                    className={`flex gap-2 px-2 py-1.5 items-center rounded-lg text-xs cursor-pointer transition border border-l-4 ${rowFrame({
+                      isHighlighted,
+                      isSelected,
+                      isConflictPartner: Boolean(isConflictPartner),
+                      isOpenedPackage,
+                      worstIssue,
+                      packageColor: isMultiPackage ? packageColor : null,
+                      enabled: mod.enabled,
+                    })} ${isDragging ? 'opacity-40' : ''} ${
                       dropEdge === false
-                        ? 'border-t-2 border-t-emerald-400'
+                        ? 'shadow-[inset_0_2px_0_0_#34d399]'
                         : dropEdge === true
-                        ? 'border-b-2 border-b-emerald-400'
+                        ? 'shadow-[inset_0_-2px_0_0_#34d399]'
                         : ''
-                    } ${
-                      isHighlighted
-                        ? 'bg-cyan-950/90 border-2 border-cyan-400 shadow-lg shadow-cyan-900/50 animate-pulse'
-                        : isSelected
-                        ? 'bg-slate-800/90 border border-emerald-500/60 shadow-lg'
-                        : isMultiPackage && packageColor
-                        ? packageColor.bgMatch
-                        : isOpenedPackage
-                        ? 'bg-amber-950/20 hover:bg-amber-950/30 border border-amber-800/60'
-                        : mod.enabled
-                        ? 'bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800'
-                        : 'bg-slate-950/40 opacity-60 hover:opacity-100 border border-slate-900/60'
                     }`}
                   >
                     <ModRowBody
@@ -1252,9 +1256,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <div className="bg-amber-950/40 border-t border-amber-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-amber-400">
             <span className="flex items-center gap-1.5 font-bold">
               <ArrowDownCircle className="w-3.5 h-3.5" />
-              LOADS LAST — wins any file two mods share
+              {t('modList.loadsLast')}
             </span>
-            <span className="text-[10px] text-amber-500/80">Position #{mods.length}</span>
+            <span className="text-[10px] text-amber-500/80">{t('modList.position', { n: mods.length })}</span>
           </div>
         </div>
 
@@ -1339,7 +1343,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 }}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer shrink-0"
               >
-                Understood
+                {t('modList.understood')}
               </button>
             </div>
           </div>

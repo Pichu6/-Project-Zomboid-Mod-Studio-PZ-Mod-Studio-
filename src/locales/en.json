@@ -239,9 +239,6 @@
   "modList": {
     "title": "Mod List & Load Order",
     "subscriptions": "Steam Subscriptions:",
-    "items": "{{count}} items",
-    "totalSubmods": "Total Sub-mods:",
-    "active": "Active:",
     "cycleMissing": "Click to cycle through mods with missing dependencies (not installed)",
     "missing": "Dependencies missing",
     "cycleOff": "Click to cycle through mods with disabled libraries",
@@ -309,7 +306,6 @@
     "disableAllTitle": "Switch every mod off",
     "disableAll": "Disable All",
     "autoSort": "Auto-Sort Dependencies",
-    "legend": "Mod Type Legend:",
     "mapTitle": "Map Mod - Adds new towns, roads or custom map tiles",
     "map": "Map Mod",
     "libraryTitle": "Base Library / Framework - Required by other mods",
@@ -318,7 +314,6 @@
     "script": "Script Mod",
     "colActive": "Active",
     "colName": "Mod Name & ID",
-    "searchList": "Search the list...",
     "clearSearch": "Clear search",
     "colActions": "Actions",
     "dragTitle": "Drag to move this mod in the load order",
@@ -366,9 +361,7 @@
       "scriptMod": "Script / Feature Mod",
       "bridgeTitle": "PZ Mod Studio Live Bridge Companion Mod",
       "bridge": "COMPANION BRIDGE",
-      "openDraftTitle": "Open Package (Draft): {{id}}\nThis package is in editing mode and deactivated. Package / publish it in Mod Merger to use it in-game.",
       "openDraft": "OPEN (Draft)",
-      "packagedTitle": "Packaged Mod (Closed): {{id}}\nContains compiled compatibility patches ready for Project Zomboid.",
       "packaged": "PACKAGED",
       "inThisProfile": "In this profile",
       "andIn": ", and in {{names}}",
@@ -386,7 +379,6 @@
       "down": "Move Down",
       "toBottom": "Move to Bottom",
       "loadsIn": "loads in {{time}}",
-      "loadTimeTitle": "Loading time: of the time the game spent on the loading screen last session, {{time}} went to reading this mod's files.\n\nMost mods take a few milliseconds; tile and model packs take seconds. It says nothing about how the mod runs once loaded.\n\nMeasured from the game's own DebugLog (Zomboid/Logs), from this mod's \"loading\" line to the next mod's; the Lua phase after that is one pass and is not timed per mod.",
       "seconds": "{{n}} seconds",
       "millis": "{{n}} milliseconds",
       "threw": "{{count}}× threw",
@@ -394,9 +386,18 @@
       "errorsTitle": "Last session the game logged {{count}} error(s) from this mod: something in its code threw, and whatever it was doing at that moment did not finish.",
       "warningsTitle": "Last session the game logged {{count}} warning(s) about this mod: the game noticed something odd and carried on, so nothing broke by itself.",
       "alsoWarnings": " Also {{count}} warning(s).",
-      "lastLine": "\n\nThe last line:\n{{line}}",
-      "requireNote": "\n\n(require(...) failed: the mod asked for a file the game could not find at that path. Harmless unless a feature is missing; the Monitor Center can fix the path.)",
-      "fromConsole": "\n\nFrom console.txt as it is now; the Monitor Center has the full cards."
+      "openDraftHead": "Open package (draft): {{id}}",
+      "openDraftBody": "It is being edited and is switched off. Package or publish it in the Mod Merger to use it in the game.",
+      "packagedHead": "Packaged mod (closed): {{id}}",
+      "packagedBody": "Contains compatibility patches ready for Project Zomboid.",
+      "errorsHead": "{{count}} error(s) last session",
+      "warningsHead": "{{count}} warning(s) last session",
+      "lastLineLabel": "Last line",
+      "requireHint": "require(...) failed: the mod asked for a file the game could not find at that path. Harmless unless a feature is missing; the Monitor Center can fix the path.",
+      "fromConsoleNote": "From console.txt as it is now; the Monitor Center has the full cards.",
+      "loadsInHead": "Loads in {{time}}",
+      "loadTimeBody": "Of the time the game spent on the loading screen last session, {{time}} went to reading this mod's files.\nMost mods take a few milliseconds; tile and model packs take seconds. It says nothing about how the mod runs once loaded.",
+      "loadTimeHow": "The tag shows from {{min}} ms up: every mod has its time, but the faster ones (nearly all, 2 to 20 ms) get no tag so the list stays readable. Measured from the game's own DebugLog (Zomboid/Logs), from this mod's \"loading\" line to the next mod's; the Lua phase after that is one pass and is not timed per mod."
     },
     "health": {
       "labels": {
@@ -408,7 +409,7 @@
         "user_rule_order": "Before a mod you said it must follow",
         "community_rule_order": "Before a mod the community says it must follow",
         "community_incompatible": "The community says these clash",
-        "community_known_issue": "Known issue, per the community",
+        "community_known_issue": "Known issue",
         "community_successor": "There is a version for this build",
         "load_before_order": "Loads too late",
         "incompatible": "Incompatible",
@@ -417,7 +418,7 @@
         "invalid_mod_info": "Broken mod.info",
         "missing_mod": "Not installed",
         "duplicate_entry": "Listed twice",
-        "shadowed_copy": "Another copy wins",
+        "shadowed_copy": "Duplicate copy",
         "compatible_copy": "Compatible copy",
         "workshop_update_pending": "Update waiting",
         "updated_since_last_play": "Updated since you last played",
@@ -445,14 +446,35 @@
       "kept": "{{name}} as it is today is kept ({{when}}). Right-click the row for its kept versions.",
       "shimOn": "The shim's patch {{name}} is on, written into {{count}} package(s); the game reads it on its next launch.",
       "confirmDisable": "Switch off {{name}}?\n\nIt stays installed, and you can switch it back on here.",
-      "clickGoTo": "\n\nClick: go to {{name}}",
-      "clickHealthAll": "\n\nClick: open Mod Health on this, which shows all {{count}} mods, the files and the fixes",
-      "clickHealth": "\n\nClick: open Mod Health on this",
-      "listFix": "{{fix}} — changes your list; Earlier lists can undo it",
+      "clickGoTo": "Click: go to {{name}}",
+      "clickHealthAll": "Click: open Mod Health on this, which shows all {{count}} mods, the files and the fixes",
+      "clickHealth": "Click: open Mod Health on this",
+      "listFix": "Changes your list; Earlier lists can undo it.",
       "mergerFix": "Opens {{path}} in the Mod Merger, in the package the game uses, with what each mod says side by side. A packaged package shows it read-only; Save publishes the decision into it.",
-      "healthFix": "{{fix}}: opens Mod Health on this, where the button is",
-      "more": "{{count}} more: {{labels}}\n\nClick: open Mod Health on them"
-    }
+      "healthFix": "Opens Mod Health on this, where the button is.",
+      "moreTitle": "{{count}} more problem(s)",
+      "moreAction": "Click: open Mod Health on them"
+    },
+    "statWorkshop": "from the Workshop",
+    "statMods": "mods",
+    "statActive": "active",
+    "tagLabel": "Filter by tag",
+    "tagTitle": "Show only the mods carrying a tag: errors or warnings last session, slow loading, or a Mod Health problem",
+    "tags": {
+      "all": "All tags",
+      "errors": "Errors last session",
+      "warnings": "Warnings last session",
+      "slow": "Slow to load (from {{min}} ms)"
+    },
+    "clearFilters": "clear filters",
+    "clearFiltersTitle": "Show every mod again",
+    "showingCount": "showing {{shown}} of {{total}}",
+    "loadsFirst": "LOADS FIRST: libraries other mods build on",
+    "loadsLast": "LOADS LAST: wins any file two mods share",
+    "position": "Position #{{n}}",
+    "noMatch": "No mod matches",
+    "noneFiltered": "No mod passes these filters.",
+    "understood": "Understood"
   },
   "health": {
     "title": "Mod Health",
@@ -1204,12 +1226,16 @@
     "workshopTitle": "Steam Workshop item {{id}}",
     "uploadTitle": "Your Workshop upload folder ({{folder}})",
     "nexusTitle": "Downloaded from Nexus Mods (mod {{id}})",
-    "compatTitle": "Compatible copy made by PZ Mod Studio: {{changes}}",
     "urlTitle": "Downloaded from {{source}}",
     "manualTitle": "Installed by hand",
     "manualFromTitle": "Installed by hand from {{file}}",
     "outsideTitle": "In Zomboid/mods (installed outside the Studio)",
-    "openPage": "{{title}}: open its page"
+    "openPage": "{{title}}: open its page",
+    "compatHead": "Compatible copy made by PZ Mod Studio",
+    "compatChanges": "What was changed",
+    "compatWins": "It is in Zomboid/mods with the same id ({{id}}) as the Workshop original. The Studio starts the game with -modfolders mods,workshop,steam, so the game uses this copy and leaves the Workshop one aside: that is expected.",
+    "openPageAction": "Click: open its page in the browser",
+    "folder": "Folder: {{path}}"
   },
   "splash": {
     "line1": "These are the mod times.",
@@ -1931,5 +1957,9 @@
       "setFocusingUp": "a headlight's focus",
       "damageObjects": "a vehicle damaging objects"
     }
+  },
+  "common": {
+    "showMore": "show more",
+    "showLess": "show less"
   }
 }

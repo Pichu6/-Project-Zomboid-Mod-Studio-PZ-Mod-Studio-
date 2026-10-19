@@ -2,9 +2,14 @@ import React from 'react';
 import { AppInstance, CatalogModSummary, HealthIssue, ModErrorStat, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { useTranslation } from 'react-i18next';
-import { SourceBadge } from '../common/SourceBadge';
+import { SourceBadge, sourceOf } from '../common/SourceBadge';
+import { Tip, TipBody } from '../common/Tip';
+import { RichText } from '../common/RichText';
 import { RowHealthChips } from './RowHealth';
 import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered, MapPin, Package, Star } from 'lucide-react';
+
+/** Below this a mod's loading time is a few milliseconds of mod.info and translations: not worth a tag. */
+export const SLOW_LOAD_MS = 250;
 
 export interface ModRowBodyProps {
   paths: StudioPathsUI;
@@ -84,15 +89,20 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   handleAssignPosition,
 }) => {
   const { t } = useTranslation();
+  const entry = catalogById?.get(mod.mod_id);
+  const source = sourceOf(mod.mod_id, entry);
+  // A compatible copy is meant to win over the Workshop original it was made from; its source
+  // tag says so, so "another copy is ignored" is no news on its row.
+  const shownIssues = source.kind === 'compat' ? rowIssues.filter((i) => i.code !== 'shadowed_copy') : rowIssues;
   return (
   <>
     {/* Fixed Line Number (Original Load Order Index) */}
-    <div className={`col-span-1 text-center font-mono text-[11px] ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
+    <div title={t('modList.dragTitle')} className={`w-9 shrink-0 text-right font-mono text-[11px] cursor-grab ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
       #{originalIndex + 1}
     </div>
 
     {/* Enable/Disable Toggle Checkbox */}
-    <div className="col-span-1 flex justify-center">
+    <div className="w-8 shrink-0 flex justify-center">
       <button
         disabled={isOpenedPackage}
         onClick={(e) => {
@@ -101,15 +111,15 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             handleToggleSingleMod(mod.mod_id);
           }
         }}
-        className={`w-5 h-5 rounded-md flex items-center justify-center transition ${
+        className={`w-5 h-5 rounded-md flex items-center justify-center transition border ${
           isOpenedPackage
-            ? 'cursor-not-allowed opacity-40 bg-slate-900 text-slate-600 border border-amber-800/50'
+            ? 'cursor-not-allowed opacity-40 bg-slate-900 text-slate-600 border-amber-800/50'
             : 'cursor-pointer'
         } ${
           mod.enabled && !isOpenedPackage
-            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 border border-emerald-400 font-bold'
+            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 border-emerald-400 font-bold'
             : !isOpenedPackage
-            ? 'bg-slate-950 text-slate-700 border border-slate-700 hover:border-slate-500'
+            ? 'bg-slate-950 text-slate-700 border-slate-700 hover:border-slate-500'
             : ''
         }`}
         title={isOpenedPackage ? t('modList.row.draftLocked') : mod.enabled ? t('modList.row.clickDisable') : t('modList.row.clickEnable')}
@@ -118,105 +128,155 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
       </button>
     </div>
 
-    {/* Mod Title, Type Icon & Compact Dual Warning Badges */}
-    <div className="col-span-5 flex items-center gap-2.5 overflow-hidden">
-      <div
-        className={`w-6 h-6 rounded border flex items-center justify-center shrink-0 ${
-          mod.enabled
-            ? 'bg-slate-900 border-slate-800'
-            : 'bg-slate-950/80 border-slate-900 opacity-60'
-        }`}
-        title={mod.is_map_mod ? t('modList.row.mapMod') : mod.is_library ? t('modList.row.libraryMod') : t('modList.row.scriptMod')}
-      >
-        {mod.is_map_mod ? (
-          <MapPin className={`w-3.5 h-3.5 ${mod.enabled ? 'text-amber-400' : 'text-amber-700'}`} />
-        ) : mod.is_library ? (
-          <Package className={`w-3.5 h-3.5 ${mod.enabled ? 'text-purple-400' : 'text-purple-700'}`} />
-        ) : (
-          <ListOrdered className={`w-3.5 h-3.5 ${mod.enabled ? 'text-cyan-400' : 'text-cyan-700'}`} />
-        )}
+    {/* Kind icon, then the name on a line of its own and the tags under it, on the right. */}
+    <div
+      className={`w-6 h-6 rounded border flex items-center justify-center shrink-0 ${
+        mod.enabled
+          ? 'bg-slate-900 border-slate-800'
+          : 'bg-slate-950/80 border-slate-900 opacity-60'
+      }`}
+      title={mod.is_map_mod ? t('modList.row.mapMod') : mod.is_library ? t('modList.row.libraryMod') : t('modList.row.scriptMod')}
+    >
+      {mod.is_map_mod ? (
+        <MapPin className={`w-3.5 h-3.5 ${mod.enabled ? 'text-amber-400' : 'text-amber-700'}`} />
+      ) : mod.is_library ? (
+        <Package className={`w-3.5 h-3.5 ${mod.enabled ? 'text-purple-400' : 'text-purple-700'}`} />
+      ) : (
+        <ListOrdered className={`w-3.5 h-3.5 ${mod.enabled ? 'text-cyan-400' : 'text-cyan-700'}`} />
+      )}
+    </div>
+
+    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span
+          className={`truncate min-w-0 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}
+          title={mod.name}
+        >
+          {mod.name}
+        </span>
+        {isFavorite && <Star className="w-3 h-3 shrink-0 text-amber-400 fill-amber-400" aria-label="In Favorites" />}
       </div>
 
-      <div className="overflow-hidden flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          <span className={`truncate min-w-0 flex-1 ${mod.enabled ? 'font-bold text-slate-100' : 'font-medium text-slate-400/80'}`}>
-            {mod.name}
-          </span>
-          {isFavorite && <Star className="w-3 h-3 shrink-0 text-amber-400 fill-amber-400" aria-label="In Favorites" />}
+      <div className="flex items-start gap-2 min-w-0">
+        <div className={`text-[10px] font-mono truncate min-w-[4rem] flex-1 pt-0.5 ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`} title={mod.mod_id}>
+          ID: {mod.mod_id}
+        </div>
 
+        <div className="flex flex-wrap items-center justify-end gap-1 max-w-[78%]">
           {isBridge && (
-            <span
-              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-700 shrink-0 shadow-sm"
-              title={t('modList.row.bridgeTitle')}
-            >
-              <Package className="w-3 h-3 text-cyan-400" />
-              <span>{t('modList.row.bridge')}</span>
-            </span>
+            <Tip content={<TipBody title={t('modList.row.bridge')} tone="cyan">{t('modList.row.bridgeTitle')}</TipBody>}>
+              <span className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-700 shrink-0 shadow-sm">
+                <Package className="w-3 h-3 text-cyan-400" />
+                <span>{t('modList.row.bridge')}</span>
+              </span>
+            </Tip>
           )}
 
           {isOpenedPackage && (
-            <span
-              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shrink-0 shadow-sm cursor-help animate-pulse"
-              title={t('modList.row.openDraftTitle', { id: mod.mod_id })}
-            >
-              <Package className="w-3 h-3 text-amber-400" />
-              <span>{t('modList.row.openDraft')}</span>
-            </span>
+            <Tip content={<TipBody title={t('modList.row.openDraftHead', { id: mod.mod_id })} tone="amber"><RichText text={t('modList.row.openDraftBody')} /></TipBody>}>
+              <span className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/90 text-amber-300 border border-amber-600 shrink-0 shadow-sm cursor-help animate-pulse">
+                <Package className="w-3 h-3 text-amber-400" />
+                <span>{t('modList.row.openDraft')}</span>
+              </span>
+            </Tip>
           )}
 
           {isClosedPackage && (
-            <span
-              className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shrink-0 shadow-sm cursor-help"
-              title={t('modList.row.packagedTitle', { id: mod.mod_id })}
-            >
-              <Package className="w-3 h-3 text-emerald-400" />
-              <span>{t('modList.row.packaged')}</span>
+            <Tip content={<TipBody title={t('modList.row.packagedHead', { id: mod.mod_id })} tone="emerald">{t('modList.row.packagedBody')}</TipBody>}>
+              <span className="flex items-center gap-1 text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600 shrink-0 shadow-sm cursor-help">
+                <Package className="w-3 h-3 text-emerald-400" />
+                <span>{t('modList.row.packaged')}</span>
+              </span>
+            </Tip>
+          )}
+
+          {!mod.enabled && (
+            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
+              {t('modList.row.off')}
             </span>
           )}
 
-          <SourceBadge modId={mod.mod_id} entry={catalogById?.get(mod.mod_id)} />
+          {mod.loadable_on_installed_build === false && !mod.enabled && (
+            <Tip content={<TipBody title={t('modList.row.notForBuild')} tone="amber"><RichText text={t('modList.row.notForBuildTitle')} /></TipBody>}>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0">
+                {t('modList.row.notForBuild')}
+              </span>
+            </Tip>
+          )}
+
+          <SourceBadge modId={mod.mod_id} entry={entry} />
 
           {/* What the game laid at this mod's door last session, counted from console.txt. */}
           {(() => {
             const stat = errorStats?.get(mod.name);
             if (!stat || (stat.exceptions === 0 && stat.warnings === 0)) return null;
             const threw = stat.exceptions > 0;
+            const line = stat.last_exception ?? stat.last_warning ?? '';
             return (
-              <span
-                className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                  threw ? 'bg-red-950/60 text-red-300 border-red-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
-                }`}
-                title={
-                  (threw ? t('modList.row.errorsTitle', { count: stat.exceptions }) : t('modList.row.warningsTitle', { count: stat.warnings })) +
-                  (threw && stat.warnings > 0 ? t('modList.row.alsoWarnings', { count: stat.warnings }) : '') +
-                  t('modList.row.lastLine', { line: stat.last_exception ?? stat.last_warning ?? '' }) +
-                  ((stat.last_exception ?? stat.last_warning ?? '').includes('require(') ? t('modList.row.requireNote') : '') +
-                  t('modList.row.fromConsole')
+              <Tip
+                content={
+                  <TipBody
+                    title={threw ? t('modList.row.errorsHead', { count: stat.exceptions }) : t('modList.row.warningsHead', { count: stat.warnings })}
+                    tone={threw ? 'red' : 'amber'}
+                    footnote={t('modList.row.fromConsoleNote')}
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <div>
+                        {threw ? t('modList.row.errorsTitle', { count: stat.exceptions }) : t('modList.row.warningsTitle', { count: stat.warnings })}
+                        {threw && stat.warnings > 0 ? t('modList.row.alsoWarnings', { count: stat.warnings }) : ''}
+                      </div>
+                      {line && (
+                        <div>
+                          <div className="text-[10.5px] uppercase tracking-wider font-bold text-slate-500">{t('modList.row.lastLineLabel')}</div>
+                          <div className="font-mono text-[10.5px] text-red-200/90 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 break-all">{line}</div>
+                        </div>
+                      )}
+                      {line.includes('require(') && <RichText text={t('modList.row.requireHint')} />}
+                    </div>
+                  </TipBody>
                 }
               >
-                {threw ? t('modList.row.threw', { count: stat.exceptions }) : t('modList.row.warn', { count: stat.warnings })}
-              </span>
+                <span
+                  className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                    threw ? 'bg-red-950/60 text-red-300 border-red-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {threw ? t('modList.row.threw', { count: stat.exceptions }) : t('modList.row.warn', { count: stat.warnings })}
+                </span>
+              </Tip>
             );
           })()}
 
           {/* Its files' share of the loading screen last session, when it is worth a word. */}
-        {(() => {
-          const ms = loadTimes?.get(mod.mod_id);
-          if (ms === undefined || ms < 250) return null;
-          const slow = ms >= 1000;
-          return (
-            <span
-              className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
-                slow ? 'bg-amber-950/50 text-amber-300 border-amber-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
-              }`}
-              title={t('modList.row.loadTimeTitle', { time: ms >= 1000 ? t('modList.row.seconds', { n: (ms / 1000).toFixed(1) }) : t('modList.row.millis', { n: ms }) })}
-            >
-              {t('modList.row.loadsIn', { time: ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms` })}
-            </span>
-          );
-        })()}
+          {(() => {
+            const ms = loadTimes?.get(mod.mod_id);
+            if (ms === undefined || ms < SLOW_LOAD_MS) return null;
+            const slow = ms >= 1000;
+            const time = ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`;
+            return (
+              <Tip
+                content={
+                  <TipBody
+                    title={t('modList.row.loadsInHead', { time })}
+                    tone={slow ? 'amber' : 'slate'}
+                    footnote={<RichText text={t('modList.row.loadTimeHow', { min: SLOW_LOAD_MS })} foldAt={140} />}
+                  >
+                    <RichText text={t('modList.row.loadTimeBody', { time: ms >= 1000 ? t('modList.row.seconds', { n: (ms / 1000).toFixed(1) }) : t('modList.row.millis', { n: ms }) })} />
+                  </TipBody>
+                }
+              >
+                <span
+                  className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
+                    slow ? 'bg-amber-950/50 text-amber-300 border-amber-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {t('modList.row.loadsIn', { time })}
+                </span>
+              </Tip>
+            );
+          })()}
 
-        {/* Showing everything: say which profiles each mod belongs to. */}
+          {/* Showing everything: say which profiles each mod belongs to. */}
           {showEveryMod && activeProfile && (() => {
             const usedBy = profilesByMod.get(mod.mod_id) ?? [];
             const others = usedBy.filter((name) => name !== activeProfile.name);
@@ -240,25 +300,10 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             );
           })()}
 
-          {!mod.enabled && (
-            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-600 border border-slate-800 shrink-0">
-              {t('modList.row.off')}
-            </span>
-          )}
-
-          {mod.loadable_on_installed_build === false && !mod.enabled && (
-            <span
-              className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/50 shrink-0"
-              title={t('modList.row.notForBuildTitle')}
-            >
-              {t('modList.row.notForBuild')}
-            </span>
-          )}
-
           {/* Every problem the health check found for this mod, with its fix. */}
           <RowHealthChips
             paths={paths}
-            issues={rowIssues}
+            issues={shownIssues}
             onNote={showToast}
             mods={mods}
             onApplyList={triggerReorder}
@@ -267,13 +312,10 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             onGoToHealth={onGoToHealth}
           />
         </div>
-        <div className={`text-[10px] font-mono truncate ${mod.enabled ? 'text-emerald-500/80' : 'text-slate-600'}`}>
-          ID: {mod.mod_id}
-        </div>
       </div>
     </div>
 
-    <div className="col-span-5 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+    <div className="min-w-[150px] shrink-0 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
       {isAssigningThis ? (
         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded border border-emerald-500">
           <input
