@@ -1,6 +1,6 @@
 # Other mod managers: what they do, and where we stand
 
-Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager for Project Zomboid. Ideas only: none of their code, text or images is used here. Sources were their Workshop pages (text, pictures, comments), their mod files, PZMM's video thumbnails, and PZMM's public source code, which was read but never run.
+Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager for Project Zomboid. Ideas only: none of their code, text or images is used here. Sources were their Workshop pages (text, pictures, comments), their mod files, PZMM's video thumbnails (the video itself could not be fetched: YouTube asks to sign in), and PZMM's public source code, which was read but never run.
 
 | | **PZMM** (SEVNC3) | **DMM - Definitive Mod Manager** (Kasualidad) |
 | :--- | :--- | :--- |
@@ -35,7 +35,9 @@ Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager
   - sandbox editor and repairs.
 - **Java mods:**
   - sets up ZombieBuddy and Viewpoint, taking the jar only from the official Workshop item, with Repair after Steam's "verify files";
-  - a jar scan that flags network, process, native and hidden code.
+  - a jar scan that flags network, process, native and hidden code;
+  - the screen is a checklist of the four things that must be true (mod downloaded, agent files in the game folder, launch flag in `ProjectZomboid64.json`, mod on in the profile) under a red warning that Java mods can do anything on the computer;
+  - before it changes the launcher file it shows "PZMM will: add `-agentlib:zbNative` to <path>" with Apply changes / Cancel, and a notice says when a game update has reset the flag.
 - **Check setup:** findings graded Broken, Risk, Check and Low, with fixes; "run harmless fixes"; the same check runs before Launch and Join.
 - **Find the broken mod (bisect):**
   - mods that need each other move as one group;
@@ -105,7 +107,7 @@ Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager
    - Show the free disk space first.
    - This is the biggest gap: losing a save is what players fear most.
 2. **Compare a save with its last session before it loads.** We now record what each save ran with (`PZModStudio_SaveRefs.json`); the Link should show what changed and offer to play on a copy.
-3. **Dependency planner with a preview.** Switching a mod on brings what it requires; switching one off says what needs it. One preview component for every change the Studio makes, files included.
+3. **Dependency planner with a preview.** Switching a mod on brings what it requires; switching one off says what needs it. One preview component for every change the Studio makes, files included. Today `sync_java_agents` edits `ProjectZomboid64.json` on its own when a profile is activated (with a backup); it should say what it will change first, and say so when a game update or "verify files" took the flag out.
 4. **Never write over what could not be read.**
    - Keep an unreadable file as `.bad` and retry Windows sharing violations (antivirus).
    - `atomic_write` should also `sync_all` before the rename and retry while the game holds the file.
