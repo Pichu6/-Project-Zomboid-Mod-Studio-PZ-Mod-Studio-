@@ -324,7 +324,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   const modFromStack = (card: TranslatedErrorCard): string | null => {
     // A mod's translated text, or a line in one of the game's own files, says whose it is (or
     // that it is nobody's): a mod named on a line nearby is someone else.
-    if (card.code === 'translator_text' || card.raw_error.includes('Lua(Vanilla)')) return null;
+    if (card.code === 'translator_text' || card.code === 'save_item_missing' || card.raw_error.includes('Lua(Vanilla)')) return null;
     const at = logLines.findIndex((l) => l.includes(card.raw_error.trim()));
     if (at < 0) return null;
     for (const line of logLines.slice(at, at + 30)) {
@@ -607,7 +607,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     </div>
                   )}
                 </div>
-              ) : card.mod_name || card.code === 'translator_text' ? (
+              ) : card.mod_name || card.code === 'translator_text' || card.code === 'save_item_missing' ? (
                 /* The game named a mod, or it is a mod's text: say what to do, not what the shim covers. */
                 <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
                   {cardText(card, 'action')}

@@ -383,6 +383,10 @@ impl ModBlame {
         };
         if let Some(name) = Self::named_in(line) {
             self.recent = Some((name, 0));
+        } else if let Some(id) = Self::item_mod(line) {
+            // `CreateItem() cannot create item: ... modID = "X"` comes right before the exception
+            // the game throws loading that item from a save.
+            self.recent = Some((id, 0));
         } else if Self::is_vanilla_frame(line) {
             // The game's own file is the nearer frame: what follows is not the mod's.
             self.recent = None;
@@ -398,6 +402,16 @@ impl ModBlame {
         let (name, _) = rest.split_once(')')?;
         let name = name.trim();
         (!name.is_empty()).then(|| name.to_string())
+    }
+
+    /// The mod of an item the game could not create: `... cannot create item: ... modID = "X"`.
+    fn item_mod(line: &str) -> Option<String> {
+        if !line.contains("cannot create item") {
+            return None;
+        }
+        let rest = line.split("modID = \"").nth(1)?;
+        let id = rest.split('"').next()?.trim();
+        (!id.is_empty()).then(|| id.to_string())
     }
 
     /// `Lua(Vanilla)`: the game says the file is its own, not a mod's.
@@ -733,6 +747,24 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
             mod_name: None,
             severity: Severity::Exception,
             polyfill_rule_id_suggestion: Some("SAFE_GLOBAL_TABLE_ACCESS".to_string()),
+        })
+    } else if line.contains("NullPointerException") && line.contains("InventoryItem.load(") && line.contains("is null") {
+        // Loading a save: an item in it (often a weapon part) could not be created, the line
+        // before says which and from which mod (`cannot create item ... removed = true`). The
+        // game skips it and goes on. Java, while reading the save: the shim never sees it.
+        Some(TranslatedErrorPayload {
+            id: format!("err_{}", counter),
+            code: "save_item_missing".to_string(),
+            params: BTreeMap::new(),
+            raw_error: line.to_string(),
+            source_file: None,
+            line_number: None,
+            title: "An item in the save no longer exists".to_string(),
+            explanation: "Loading the save, the game found an item (often a weapon part or something inside a container) that it cannot create any more: the mod that made it is off, or no longer defines it, or the save marked it removed when it was played without that mod. The game skips the item and carries on; that item is gone from the save.".to_string(),
+            recommended_action: "Nothing to do to keep playing. If the item matters, switch the mod named here on before loading the save. The line just above in the log (\"cannot create item\") names the item.".to_string(),
+            mod_name: None,
+            severity: Severity::Warning,
+            polyfill_rule_id_suggestion: None,
         })
     } else if line.contains("NullPointerException") {
         Some(TranslatedErrorPayload {
@@ -1424,6 +1456,21 @@ mod blame_window_tests {
             blame.observe("LOG  : General      f:0> something else entirely");
         }
         assert_eq!(blame.of("ERROR: General      f:9> Exception thrown"), None);
+    }
+
+    #[test]
+    fn a_save_item_that_cannot_be_made_is_its_own_card_and_names_the_mod() {
+        // From a real 42.21 log: the item the game could not create, then the exception.
+        let mut blame = ModBlame::default();
+        let made = "LOG  : General      f:0> InventoryItemFactory.CreateItem() cannot create item: TYPE = item,registryID = 1964,fulltype = \"Base.FiberglassStock\",modID = \"VFExpansion1\",existsAsVanilla = false,isModded = true,obsolete = false,removed = true,modOverrides = 0,";
+        let threw = "\tjava.lang.NullPointerException: Cannot invoke \"zombie.inventory.InventoryItem.load(java.nio.ByteBuffer, int)\" because \"item\" is null at HandWeapon.load(HandWeapon.java:1473).";
+        blame.observe(made);
+        blame.observe("ERROR: General      f:0> InventoryItem.loadItem> Exception thrown");
+        blame.observe(threw);
+        assert_eq!(blame.of(threw).as_deref(), Some("VFExpansion1"));
+        let card = super::translate_log_error(threw, 1).expect("a card");
+        assert_eq!(card.code, "save_item_missing");
+        assert_eq!(card.polyfill_rule_id_suggestion, None);
     }
 
     #[test]

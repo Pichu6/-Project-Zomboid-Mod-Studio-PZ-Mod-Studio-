@@ -2017,6 +2017,11 @@
         "explanation": "A mod called Translator.getText() with an unescaped % or . character, causing Java String formatting to collapse.",
         "action": "Apply Polyfill Rule: SANITIZE_TRANSLATOR_FORMAT"
       },
+      "save_item_missing": {
+        "title": "An item in the save no longer exists",
+        "explanation": "Loading the save, the game found an item (often a weapon part or something inside a container) that it cannot create any more: the mod that made it is off, or no longer defines it, or the save marked it removed when it was played without that mod. The game skips the item and carries on; that item is gone from the save.",
+        "action": "Nothing to do to keep playing. If the item matters, switch the mod named here on before loading the save. The line just above in the log (\"cannot create item\") names the item."
+      },
       "translator_text": {
         "title": "A mod's text has a bare % sign",
         "explanation": "A text in a mod's translation file (a sandbox option's name or tooltip, usually) has a % that is not written %%, so Java's text formatting cannot read it. The game shows the text as it is and carries on: nothing else breaks.",

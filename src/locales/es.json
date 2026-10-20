@@ -2017,6 +2017,11 @@
         "explanation": "Un mod llamó a Translator.getText() con un % o un . sin escapar, y el formateo de cadenas de Java se rompió.",
         "action": "Aplicá la regla de polyfill SANITIZE_TRANSLATOR_FORMAT"
       },
+      "save_item_missing": {
+        "title": "Un objeto de la partida ya no existe",
+        "explanation": "Al cargar la partida, el juego encontró un objeto (muchas veces una pieza de un arma o algo dentro de un contenedor) que ya no puede crear: el mod que lo agregaba está apagado, ya no lo define, o la partida lo marcó como quitado cuando se jugó sin ese mod. El juego saltea el objeto y sigue; ese objeto desaparece de la partida.",
+        "action": "No hay que hacer nada para seguir jugando. Si el objeto te importa, prendé el mod que figura acá antes de cargar la partida. La línea de arriba en el log (\"cannot create item\") dice qué objeto es."
+      },
       "translator_text": {
         "title": "Un texto de un mod tiene un % suelto",
         "explanation": "Un texto del archivo de traducción de un mod (casi siempre el nombre o la ayuda de una opción de sandbox) tiene un % que no está escrito %%, y el formateo de textos de Java no lo puede leer. El juego muestra el texto tal cual y sigue: no se rompe nada más.",
