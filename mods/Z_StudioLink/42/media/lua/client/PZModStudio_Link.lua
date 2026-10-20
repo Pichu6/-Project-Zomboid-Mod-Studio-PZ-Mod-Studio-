@@ -275,8 +275,11 @@ function Link.writeGameState(state)
     if not ok then print("[StudioLink] could not write the game state: " .. tostring(err)) end
 end
 
-Events.OnMainMenuEnter.Add(function() Link.writeGameState("menu") end)
-Events.OnGameStart.Add(function() Link.writeGameState("ingame") end)
+-- Named, so another mod (or a reload of this one) can take them out again.
+function Link.onMainMenuEnter() Link.writeGameState("menu") end
+function Link.onGameStart() Link.writeGameState("ingame") end
+Events.OnMainMenuEnter.Add(Link.onMainMenuEnter)
+Events.OnGameStart.Add(Link.onGameStart)
 
 -- While a request waits, the app's answer is looked for about once a second.
 local lastAckCheck = 0
