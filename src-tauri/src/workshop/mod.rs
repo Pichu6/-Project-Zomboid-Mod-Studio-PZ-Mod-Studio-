@@ -108,14 +108,32 @@ pub fn page_url(id: &str) -> String {
     format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id)
 }
 
+/// One client for every Workshop request: it keeps its connections to Steam open, so browsing
+/// does not pay a fresh TLS handshake per page, collection or detail (an Agent is a cheap handle
+/// to a shared pool, cloned out of here).
 fn agent() -> ureq::Agent {
-    let tls = ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build();
-    ureq::Agent::config_builder()
-        .tls_config(tls)
-        .timeout_global(Some(Duration::from_secs(20)))
-        .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-        .into()
+    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
+    AGENT
+        .get_or_init(|| {
+            let tls = ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build();
+            ureq::Agent::config_builder()
+                .tls_config(tls)
+                .timeout_global(Some(Duration::from_secs(20)))
+                .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
+                .build()
+                .into()
+        })
+        .clone()
+}
+
+/// Whether a failed request is worth one more try: the connection dropped or timed out, or Steam
+/// answered with a passing server error. A bad request or a refusal is not.
+fn transient(e: &ureq::Error) -> bool {
+    match e {
+        ureq::Error::StatusCode(code) => *code >= 500,
+        ureq::Error::Io(_) | ureq::Error::Timeout(_) | ureq::Error::ConnectionFailed | ureq::Error::HostNotFound => true,
+        _ => false,
+    }
 }
 
 /// Workshop ids in free text: links (`...filedetails/?id=123`, `steam://url/CommunityFilePage/123`)
@@ -218,14 +236,27 @@ fn form(prefix: &str, count_key: &str, ids: &[String]) -> Vec<(String, String)> 
     pairs
 }
 
+/// A Steam Web API form post. A dropped connection or a passing server error is tried twice more
+/// (a pooled connection Steam closed while idle fails once, then works), so one hiccup does not
+/// read as "no internet".
 fn post_form(url: &str, pairs: Vec<(String, String)>) -> Result<Value, String> {
-    agent()
-        .post(url)
-        .send_form(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
-        .map_err(|e| format!("Steam could not be reached: {}", e))?
-        .into_body()
-        .read_json()
-        .map_err(|e| format!("Unexpected answer from Steam: {}", e))
+    let mut last = None;
+    for attempt in 0..3u64 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(400 * attempt));
+        }
+        match agent().post(url).send_form(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str()))) {
+            Ok(response) => {
+                return response
+                    .into_body()
+                    .read_json()
+                    .map_err(|e| format!("Unexpected answer from Steam: {}", e));
+            }
+            Err(e) if transient(&e) => last = Some(e),
+            Err(e) => return Err(format!("Steam could not be reached: {}", e)),
+        }
+    }
+    Err(format!("Steam could not be reached: {}", last.map(|e| e.to_string()).unwrap_or_default()))
 }
 
 /// Details for Workshop ids, in the same order (100 per request).
@@ -370,29 +401,41 @@ pub fn search_public(q: &BrowseQuery) -> Result<WorkshopSearchResult, String> {
     }
     let page = q.page.max(1);
     let per_page = if q.per_page == 0 { 30 } else { q.per_page.clamp(1, 30) };
-    let mut req = agent()
-        .get("https://steamcommunity.com/workshop/browse/")
-        .query("appid", PZ_APP_ID.to_string())
-        .query("section", if q.collections { "collections" } else { "readytouseitems" })
-        .query("browsesort", sort.browse_sort())
-        .query("numperpage", per_page.to_string())
-        .query("p", page.to_string());
+    let mut url_query: Vec<(String, String)> = vec![
+        ("appid".into(), PZ_APP_ID.to_string()),
+        ("section".into(), if q.collections { "collections" } else { "readytouseitems" }.into()),
+        ("browsesort".into(), sort.browse_sort().to_string()),
+        ("numperpage".into(), per_page.to_string()),
+        ("p".into(), page.to_string()),
+    ];
     if sort == WorkshopSort::Trending {
         // Steam offers today, a week, three months and a year; anything else it ignores.
-        req = req.query("days", q.days.filter(|d| [1, 7, 90, 365].contains(d)).unwrap_or(7).to_string());
+        url_query.push(("days".into(), q.days.filter(|d| [1, 7, 90, 365].contains(d)).unwrap_or(7).to_string()));
     }
     if let Some(t) = q.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
-        req = req.query("searchtext", t);
+        url_query.push(("searchtext".into(), t.to_string()));
     }
     for tag in tag_filters(q.build.as_deref(), q.category.as_deref()) {
-        req = req.query("requiredtags[]", tag);
+        url_query.push(("requiredtags[]".into(), tag));
     }
-    let html = req
-        .call()
-        .map_err(|e| match e {
-            ureq::Error::StatusCode(429) => "Steam is rate-limiting; try again in a minute.".to_string(),
-            other => format!("The Steam Workshop could not be reached: {}", other),
-        })?
+    // A dropped connection or a passing server error gets two more tries, as in post_form.
+    let mut attempt = 0u64;
+    let response = loop {
+        let mut again = agent().get("https://steamcommunity.com/workshop/browse/");
+        for (k, v) in &url_query {
+            again = again.query(k, v);
+        }
+        match again.call() {
+            Ok(r) => break r,
+            Err(e) if transient(&e) && attempt < 2 => {
+                attempt += 1;
+                std::thread::sleep(Duration::from_millis(400 * attempt));
+            }
+            Err(ureq::Error::StatusCode(429)) => return Err("Steam is rate-limiting; try again in a minute.".to_string()),
+            Err(other) => return Err(format!("The Steam Workshop could not be reached: {}", other)),
+        }
+    };
+    let html = response
         .into_body()
         .with_config()
         .limit(16 * 1024 * 1024)
@@ -403,6 +446,13 @@ pub fn search_public(q: &BrowseQuery) -> Result<WorkshopSearchResult, String> {
         .and_then(|v| find_results(v, 0))
         .ok_or("The Steam Workshop page could not be read (Steam may have changed it).")?;
     let num = |key: &str| results.get(key).and_then(|x| x.as_u64());
+    // Steam's search sometimes refuses the query itself: `eresult` 10 with "Rejected CRE query,
+    // because there are already 501 jobs and the max we allow are 500" and no results (seen
+    // 2026-10-20 for every mod listing; its site shows "There was a problem performing that
+    // action. (10)"). Said as such, not as "0 mods".
+    if num("eresult").is_some_and(|r| r != 1) || results.get("error").and_then(|e| e.as_str()).is_some_and(|e| !e.is_empty()) {
+        return Err("Steam Workshop busy: Steam's own Workshop search is refusing queries right now (its site shows the same error). Try again in a while.".to_string());
+    }
     Ok(WorkshopSearchResult {
         total: num("total_count").unwrap_or(0),
         page: num("current_page").unwrap_or(page as u64) as u32,

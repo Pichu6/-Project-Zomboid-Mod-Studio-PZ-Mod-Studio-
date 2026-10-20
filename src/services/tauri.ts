@@ -192,6 +192,7 @@ export function explainError(err: unknown): string {
     [/ProjectZomboid64\.exe not found/i, 'noExe'],
     [/steam_api64\.dll was not found/i, 'notPzFolder'],
     [/Steam is not running/i, 'steamNotRunning'],
+    [/Steam Workshop busy/i, 'steamBusy'],
     [/could not be reached|os error 10051|dns error/i, 'noConnection'],
     // GitHub's own limit is said above: this one is Steam's.
     [/Steam is rate-limiting|rate-limit/i, 'rateLimit'],
@@ -806,9 +807,11 @@ export const TauriService = {
    * Steam downloads or removes the files itself. Throws with the reason.
    */
   workshopSubscribe: async (paths: StudioPathsUI, ids: string[], subscribe: boolean): Promise<SubscribeOutcome> => {
-    const outcome = await invoke<SubscribeOutcome>('workshop_subscribe_cmd', { paths, ids, subscribe });
-    clearRemoteCache('workshop:');
-    return outcome;
+    // The Workshop's own data (titles, descriptions, collections) does not change when you
+    // subscribe, and whether you have a mod comes from the disk, not from here. Keeping what was
+    // cached makes Back instant; clearing it made every Back ask Steam again, and a refused or
+    // slow answer then read as "no connection".
+    return await invoke<SubscribeOutcome>('workshop_subscribe_cmd', { paths, ids, subscribe });
   },
 
   /** Whether subscribing from here works right now (Steam running and signed in). */

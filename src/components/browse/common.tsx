@@ -1,6 +1,9 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { WorkshopInstallState } from '../../types';
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, Plus, Trash2 } from 'lucide-react';
+import { WorkshopInstallState, WorkshopItem } from '../../types';
+import type { MenuItem } from '../common/ContextMenu';
+import type { KeepActions } from '../common/keep';
+import { TauriService } from '../../services/tauri';
 
 export const PAGE_SIZE = 24;
 export const SCROLL_ID = 'browse-scroll';
@@ -58,6 +61,46 @@ export interface CardHover {
   date?: string | null;
   tags?: string[];
 }
+
+/** The Workshop's hover panel for a card: its description, when it was posted, its tags. */
+export const cardHover = (item: WorkshopItem): CardHover => ({
+  title: item.title,
+  text: item.summary,
+  date: item.time_created
+    ? i18next.t('browse.card.posted', { date: formatUnixDate(item.time_created) })
+    : item.time_updated
+    ? i18next.t('browse.card.updated', { date: formatUnixDate(item.time_updated) })
+    : null,
+  tags: item.tags,
+});
+
+/**
+ * A Workshop mod's right-click menu, the same wherever its card is (Browse, a collection):
+ * subscribe or unsubscribe, its page, its link and id, and favorites / lists / profiles.
+ */
+export const workshopItemMenu = (
+  item: WorkshopItem,
+  installedIds: string[],
+  steamReady: boolean,
+  onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>,
+  keep?: KeepActions
+): MenuItem[] => {
+  const installed = installedIds.length > 0;
+  return [
+    {
+      label: installed ? i18next.t('browse.workshop.unsubscribe') : i18next.t('browse.workshop.subscribe'),
+      icon: installed ? Trash2 : Plus,
+      onSelect: () => void onSubscribe([item.workshop_id], !installed).catch(() => undefined),
+      disabled: !steamReady,
+      disabledReason: i18next.t('browse.workshop.steamNotRunning'),
+    },
+    { label: i18next.t('browse.workshop.openPage'), icon: ExternalLink, separatorBefore: true,
+      onSelect: () => TauriService.openExternalUrl(item.page_url) },
+    { label: i18next.t('browse.workshop.copyLink'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
+    { label: i18next.t('browse.workshop.copyId'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
+    ...(keep ? keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedIds }) : []),
+  ];
+};
 
 const HOVER_DELAY_MS = 350;
 const HOVER_WIDTH = 340;

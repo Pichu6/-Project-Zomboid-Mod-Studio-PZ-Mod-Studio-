@@ -802,7 +802,8 @@
       "copyLink": "Copiar el enlace",
       "copyId": "Copiar el id del Workshop",
       "subscribeMissing": "Suscribirse a los que faltan ({{count}})",
-      "showCollection": "Ver la colección"
+      "showCollection": "Ver la colección",
+      "tryAgain": "Probar de nuevo"
     },
     "nexus": {
       "searchPlaceholder": "Buscar en Nexus Mods (palabras del nombre del mod)",
@@ -1281,6 +1282,7 @@
       "notPzFolder": "Esa no es una carpeta de Project Zomboid. Revisá la carpeta del juego en Configuración.",
       "steamNotRunning": "Steam no está abierto. Abrí Steam, iniciá sesión y probá de nuevo.",
       "noConnection": "Sin conexión. Revisá tu internet y probá de nuevo.",
+      "steamBusy": "El buscador del Workshop de Steam está rechazando búsquedas en este momento (su propia web muestra el mismo error). No es tu internet ni la app: probá de nuevo en un rato.",
       "rateLimit": "Steam está limitando las solicitudes. Probá de nuevo en un minuto.",
       "accessDenied": "Windows no lo permitió. El archivo puede estar abierto en el juego o en otro programa.",
       "gone": "Ese archivo ya no está. Actualizá y probá de nuevo."

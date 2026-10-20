@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import {
-  BuildChips, CardGrid, CardHover, CategoryBar, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
+  BuildChips, CardGrid, CategoryBar, cardHover, workshopItemMenu, Chip, InstalledChip, ModCard, PAGE_SIZE, Pagination, SCROLL_ID, Toolbar, UpdateChips, formatCount, formatIsoDate, formatUnixDate, scrollBrowseToTop, selectClass,
 } from './common';
 import { DetailTarget, ModDetail } from './ModDetail';
 import { useContextMenu } from '../common/ContextMenu';
@@ -232,18 +232,6 @@ const collectionCard = (
   );
 };
 
-/** The Workshop's hover panel for a card: its description, when it was posted, its tags. */
-const cardHover = (item: WorkshopItem): CardHover => ({
-  title: item.title,
-  text: item.summary,
-  date: item.time_created
-    ? i18next.t('browse.card.posted', { date: formatUnixDate(item.time_created) })
-    : item.time_updated
-    ? i18next.t('browse.card.updated', { date: formatUnixDate(item.time_updated) })
-    : null,
-  tags: item.tags,
-});
-
 const WORKSHOP_SORTS: WorkshopSort[] = ['trending', 'top_rated', 'newest', 'recently_updated'];
 
 /** The time window the Workshop offers next to "Most Popular". */
@@ -393,21 +381,8 @@ const WorkshopTab: React.FC<{
     setQuery((q) => ({ ...q, ...patch }));
   };
 
-  const cardMenu = (e: React.MouseEvent, item: WorkshopItem, installed: boolean) =>
-    showContextMenu(e, [
-      {
-        label: installed ? i18next.t('browse.workshop.unsubscribe') : i18next.t('browse.workshop.subscribe'),
-        icon: installed ? Trash2 : Plus,
-        onSelect: () => onSubscribe([item.workshop_id], !installed),
-        disabled: !steamReady,
-        disabledReason: i18next.t('browse.workshop.steamNotRunning'),
-      },
-      { label: i18next.t('browse.workshop.openPage'), icon: ExternalLink, separatorBefore: true,
-        onSelect: () => TauriService.openExternalUrl(item.page_url) },
-      { label: i18next.t('browse.workshop.copyLink'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.page_url) },
-      { label: i18next.t('browse.workshop.copyId'), icon: Copy, onSelect: () => navigator.clipboard.writeText(item.workshop_id) },
-      ...keep.menuItems({ workshop_id: item.workshop_id, name: item.title, installedModIds: installedByItem.get(item.workshop_id) ?? [] }),
-    ]);
+  const cardMenu = (e: React.MouseEvent, item: WorkshopItem) =>
+    showContextMenu(e, workshopItemMenu(item, installedByItem.get(item.workshop_id) ?? [], steamReady, onSubscribe, keep));
 
   /** A collection card's menu: what is missing of it, its page, its link and id. */
   const collectionMenu = (e: React.MouseEvent, item: WorkshopItem, missingIds: string[]) =>
@@ -485,7 +460,18 @@ const WorkshopTab: React.FC<{
           <CategoryBar categories={WORKSHOP_CATEGORIES} value={query.category} onChange={(c) => setFilter({ category: c })} accent="border-sky-600 bg-sky-900/50 text-sky-200" />
         )}
       </div>
-      {searchError && !lookup && <SteamKeyForm reason={searchError} onSaved={() => runSearch(query, 1)} />}
+      {searchError && !lookup && (searchError === i18next.t('backend.explain.steamBusy') ? (
+        // Steam itself is refusing searches: a key would not help, trying again later will.
+        <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 rounded-lg border border-amber-700/60 bg-amber-950/30 text-xs text-amber-100">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-[240px]">{searchError}</span>
+          <button type="button" onClick={() => runSearch(query, page)} className="px-3 py-1 rounded-md bg-amber-700 hover:bg-amber-600 text-white font-bold cursor-pointer">
+            {i18next.t('browse.workshop.tryAgain')}
+          </button>
+        </div>
+      ) : (
+        <SteamKeyForm reason={searchError} onSaved={() => runSearch(query, 1)} />
+      ))}
       {hasSavedKey && (
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
           <KeyRound className="w-3 h-3" aria-hidden="true" />

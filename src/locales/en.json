@@ -802,7 +802,8 @@
       "copyLink": "Copy the link",
       "copyId": "Copy the Workshop id",
       "subscribeMissing": "Subscribe to the missing ones ({{count}})",
-      "showCollection": "Show the collection"
+      "showCollection": "Show the collection",
+      "tryAgain": "Try again"
     },
     "nexus": {
       "searchPlaceholder": "Search Nexus Mods (words in the mod name)",
@@ -1281,6 +1282,7 @@
       "notPzFolder": "That is not a Project Zomboid folder. Check the game folder in App Settings.",
       "steamNotRunning": "Steam is not running. Start Steam, sign in, and try again.",
       "noConnection": "No connection. Check your internet and try again.",
+      "steamBusy": "Steam's Workshop search is refusing searches right now (its own site shows the same error). It is not your internet or the app: try again in a while.",
       "rateLimit": "Steam is rate-limiting requests. Try again in a minute.",
       "accessDenied": "Windows would not allow that. The file may be open in the game or another program.",
       "gone": "That file is no longer there. Refresh and try again."

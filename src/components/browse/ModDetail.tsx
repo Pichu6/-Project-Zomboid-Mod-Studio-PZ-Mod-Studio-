@@ -8,7 +8,8 @@ import i18next from 'i18next';
 import { CommunityIndexSection } from './CommunityIndexSection';
 import { KeepActions, StarButton } from '../common/keep';
 import { registriesForItem, useCommunityIndex } from '../../services/communityIndex';
-import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, formatBytes, formatCount, formatIsoDate, formatUnixDate } from './common';
+import { BuildChips, CardGrid, Chip, InstalledChip, ModCard, UpdateChips, cardHover, formatBytes, formatCount, formatIsoDate, formatUnixDate, workshopItemMenu } from './common';
+import { useContextMenu } from '../common/ContextMenu';
 import { tHtml } from '../../i18n/html';
 
 export type DetailTarget =
@@ -343,7 +344,8 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
 };
 
 /** A Workshop collection: what it holds and what you are missing. */
-const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, onMakeProfile }) => {
+const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection' } & DetailTarget }> = ({ target, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, onMakeProfile, keep }) => {
+  const showContextMenu = useContextMenu();
   // The browse list already told us which mods the collection holds, so ask Steam once.
   const known = target.preview?.children ?? [];
   const { data, loading } = useDetails<WorkshopLookup>(
@@ -393,7 +395,9 @@ const CollectionDetail: React.FC<ModDetailProps & { target: { kind: 'collection'
                   </>
                 }
                 summary={i.summary}
+                hover={i.found ? cardHover(i) : null}
                 onOpen={() => onOpen({ kind: 'workshop', id: i.workshop_id, preview: i })}
+                onContextMenu={i.found ? (e) => showContextMenu(e, workshopItemMenu(i, installedByItem.get(i.workshop_id) ?? [], steamReady, onSubscribe, keep)) : undefined}
               />
             ))}
           </CardGrid>
