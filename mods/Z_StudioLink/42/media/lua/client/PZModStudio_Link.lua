@@ -22,12 +22,16 @@ local TEXT = {
         showAll = "Show all subscribed mods",
         blocked = "This save uses mods that are not in the profile \"%s\":",
         howTo = "Switch to the profile you played it with in PZ Mod Studio, or add these mods to this profile.",
+        empty = "This save's mod list is empty, while the profile \"%s\" has %d mods.",
+        emptyWhy = "Loaded like this, the game runs it with no mods and drops every item that came from a mod. To keep them, press No, then Load > this save > Choose mods, switch its mods on and accept. Yes loads it with no mods anyway.",
     },
     ES = {
         profile = "Perfil: %s  (PZ Mod Studio)",
         showAll = "Mostrar todos los mods suscriptos",
         blocked = "Esta partida usa mods que no están en el perfil \"%s\":",
         howTo = "Cambiá en PZ Mod Studio al perfil con el que la jugaste, o agregá estos mods a este perfil.",
+        empty = "La lista de mods de esta partida está vacía, y el perfil \"%s\" tiene %d mods.",
+        emptyWhy = "Si la cargás así, el juego la corre sin mods y borra todos los objetos que venían de un mod. Para conservarlos, tocá No y después Cargar > esta partida > Elegir mods, prendé sus mods y aceptá. Sí la carga igual, sin mods.",
     },
 }
 
@@ -145,6 +149,26 @@ function MainScreen.checkSaveFile(...)
     local link = Link.read()
     if not link then return true end
     local saveInfo = getSaveInfo(getWorld():getWorld())
+
+    -- A save whose own mod list is empty (not missing: an old save without mods.txt uses the
+    -- default list) loads with no mods, and the game then drops every item a mod made. With a
+    -- profile that has mods that is almost never meant, so ask first, the game's own way (No
+    -- goes back and asks again next time; Yes loads it anyway, and is not asked again).
+    local members = 0
+    for _, id in ipairs(link.order) do
+        if id ~= SELF_ID then members = members + 1 end
+    end
+    local world = getWorld():getWorld()
+    if saveInfo and saveInfo.activeMods and saveInfo.activeMods:getMods():isEmpty() and members > 0 and Link.allowedEmpty ~= world then
+        Link.askedEmpty = world
+        local body = " <H1> " .. getText("UI_mainscreen_ErrorLoadingSavefile") .. " <H2> <LINE> <LINE> "
+        body = body .. getText("UI_mainscreen_SavefileName", world) .. " <LINE> <LINE> "
+        body = body .. " <TEXT> <RED> " .. string.format(text("empty"), link.name, members) .. " <RGB:1,1,1> <LINE> <LINE> "
+        body = body .. text("emptyWhy") .. " <LINE> "
+        MainScreen.displayCheckSavefileModal(body, false)
+        return false
+    end
+
     local outside = Link.outsideProfile(saveInfo and saveInfo.activeMods, link)
     if #outside == 0 then return true end
 
@@ -155,4 +179,15 @@ function MainScreen.checkSaveFile(...)
     body = body .. " <INDENT:0> <RGB:1,1,1> <LINE> " .. text("howTo") .. " <LINE> "
     MainScreen.displayCheckSavefileModal(body, true)
     return false
+end
+
+-- The game's own answer to its dialog: Yes on the empty-list question lets that save through.
+local onCheckSavefileModalClick = MainScreen.onCheckSavefileModalClick
+function MainScreen.onCheckSavefileModalClick(model, button, ...)
+    local world = getWorld():getWorld()
+    if Link.askedEmpty == world then
+        Link.askedEmpty = nil
+        if button and button.internal == "YES" then Link.allowedEmpty = world end
+    end
+    return onCheckSavefileModalClick(model, button, ...)
 end
