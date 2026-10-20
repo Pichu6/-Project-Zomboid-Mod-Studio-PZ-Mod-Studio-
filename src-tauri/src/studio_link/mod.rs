@@ -307,10 +307,129 @@ fn handle_requests<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, r
             });
         }
     }
-    for r in requests.iter().filter(|r| r.verb != "add") {
+    for r in requests.iter().filter(|r| r.verb == "backup") {
+        // "<mode>/<world>\t<reason>": answered when the backup is done, from its own thread.
+        let (save, reason) = r.arg.split_once('\t').unwrap_or((r.arg.as_str(), ""));
+        let reason = match reason.trim() {
+            crate::save_backup::REASON_BEFORE_FIX => crate::save_backup::REASON_BEFORE_FIX,
+            _ => crate::save_backup::REASON_BEFORE_LOAD,
+        };
+        start_backup(app, z_dir, save.trim(), reason, Some(r.id.clone()));
+    }
+    for r in requests.iter().filter(|r| r.verb != "add" && r.verb != "backup") {
         answers.push((r.id.clone(), false, format!("This version of PZ Mod Studio does not know \"{}\".", r.verb)));
     }
     answers
+}
+
+// ------------------------------------------------------------------ save backups
+
+/// app -> game: what the Link needs to know of each save before it loads, one line per save:
+/// `save\t<mode>/<world>\tbacked=0|1\tbytes=<n>\tsession=<unix seconds>\tupdated=<n>\tmods=<a;b;...>`.
+/// `backed`: unchanged since its newest backup. `session` and `mods`: its last session (0 and
+/// empty when the Studio never saw it played). `updated`: mods of that session whose Workshop
+/// version on disk was published after it.
+pub const SAVES_FILE: &str = "PZModStudio_LinkSaves.txt";
+/// Sent to the window when a save's backups changed.
+pub const SAVES_CHANGED_EVENT: &str = "save-backups-changed";
+
+/// Mod id -> Workshop item, from the mod.info files in the Workshop folder (the B42 one too).
+fn workshop_ids_by_mod(workshop_dir: &Path) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    for item in std::fs::read_dir(workshop_dir).into_iter().flatten().flatten() {
+        let wid = item.file_name().to_string_lossy().to_string();
+        for m in std::fs::read_dir(item.path().join("mods")).into_iter().flatten().flatten() {
+            for info in [m.path().join("mod.info"), m.path().join("42").join("mod.info")] {
+                let Ok(text) = std::fs::read_to_string(&info) else { continue };
+                if let Some(id) = text.lines().find_map(|l| l.trim().strip_prefix("id=")) {
+                    out.insert(crate::load_order::mod_info::sanitize_mod_id(id), wid.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// How many of a session's mods have a Workshop version on disk published after that session.
+fn updated_since(session: &SaveReference, by_mod: &std::collections::HashMap<String, String>, state: Option<&crate::workshop::WorkshopLocalState>) -> usize {
+    let Some(state) = state else { return 0 };
+    session
+        .mods
+        .iter()
+        .filter_map(|id| by_mod.get(&crate::load_order::mod_info::sanitize_mod_id(id)))
+        .filter(|wid| state.items.get(*wid).and_then(|i| i.installed_time).is_some_and(|t| t > session.at))
+        .count()
+}
+
+pub fn saves_file_text(user_zomboid_dir: &Path) -> String {
+    let paths = crate::vfs::studio_paths();
+    let by_mod = if paths.workshop_dir.is_empty() { Default::default() } else { workshop_ids_by_mod(Path::new(&paths.workshop_dir)) };
+    let state = (!paths.workshop_dir.is_empty()).then(|| crate::workshop::local_state(&paths.workshop_dir)).flatten();
+    let refs = save_references(user_zomboid_dir);
+    let mut out = String::new();
+    for id in crate::save_backup::list_saves(user_zomboid_dir) {
+        let Some(summary) = crate::save_backup::summary(user_zomboid_dir, &id) else { continue };
+        let session = refs.get(&id);
+        out.push_str(&format!(
+            "save\t{}\tbacked={}\tbytes={}\tsession={}\tupdated={}\tmods={}\n",
+            id,
+            u8::from(summary.backed_up),
+            summary.bytes,
+            session.map(|s| s.at).unwrap_or(0),
+            session.map(|s| updated_since(s, &by_mod, state.as_ref())).unwrap_or(0),
+            session.map(|s| s.mods.join(";")).unwrap_or_default()
+        ));
+    }
+    out
+}
+
+pub fn write_saves_file(user_zomboid_dir: &Path) {
+    let lua_dir = user_zomboid_dir.join("Lua");
+    if !lua_dir.is_dir() {
+        return;
+    }
+    let path = lua_dir.join(SAVES_FILE);
+    let text = saves_file_text(user_zomboid_dir);
+    if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
+        return;
+    }
+    let _ = crate::load_order::ini_parser::atomic_write(path, text);
+}
+
+// The game's answers file is written from the watcher and from backup threads.
+static ACKS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn write_acks(lua_dir: &Path, answers: &[(String, bool, String)]) {
+    if !answers.iter().any(|(id, _, _)| !id.is_empty()) {
+        return;
+    }
+    let _guard = ACKS_LOCK.lock();
+    let acks = lua_dir.join(ACKS_FILE);
+    let previous = std::fs::read_to_string(&acks).unwrap_or_default();
+    let _ = crate::load_order::ini_parser::atomic_write(&acks, acks_text(&previous, &answers));
+}
+
+/// Backs a save up on a thread of its own; when done, the saves file is rewritten first (so a
+/// Link that reloads Lua finds the save backed up) and then the request, if any, is answered.
+pub fn start_backup<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, save_id: &str, reason: &'static str, request: Option<String>) {
+    let app = app.clone();
+    let z_dir = z_dir.to_path_buf();
+    let save_id = save_id.to_string();
+    thread::spawn(move || {
+        let result = crate::save_backup::backup_save(&z_dir, &save_id, reason, false);
+        if let Err(e) = &result {
+            eprintln!("[StudioLink] could not back up {}: {}", save_id, e);
+        }
+        write_saves_file(&z_dir);
+        let _ = app.emit(SAVES_CHANGED_EVENT, &save_id);
+        if let Some(id) = request {
+            let answer = match result {
+                Ok(_) => (id, true, String::new()),
+                Err(e) => (id, false, e),
+            };
+            write_acks(&z_dir.join("Lua"), &[answer]);
+        }
+    });
 }
 
 fn now_secs() -> u64 {
@@ -355,7 +474,12 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         let mut last_seen: Option<(PathBuf, SystemTime)> = None;
         let mut game_seen: Option<SystemTime> = None;
         let mut app_written = 0u64;
+        // The save the player is in, as the game file last said; backed up when they leave it.
+        let mut playing: Option<String> = None;
+        let mut saves_written = 0u64;
+        let mut ticks = 0u64;
         loop {
+            ticks += 1;
             thread::sleep(Duration::from_secs(2));
             let chosen = crate::vfs::saved_user_zomboid_dir();
             let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&chosen).into_iter().next() else {
@@ -376,11 +500,7 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             if let Ok(text) = std::fs::read_to_string(&requests) {
                 let _ = std::fs::remove_file(&requests);
                 let answers = handle_requests(&app, &z_dir, &parse_requests(&text));
-                if answers.iter().any(|(id, _, _)| !id.is_empty()) {
-                    let acks = lua_dir.join(ACKS_FILE);
-                    let previous = std::fs::read_to_string(&acks).unwrap_or_default();
-                    let _ = crate::load_order::ini_parser::atomic_write(&acks, acks_text(&previous, &answers));
-                }
+                write_acks(&lua_dir, &answers);
             }
 
             // Where the player is: a game entered becomes its save's reference.
@@ -392,8 +512,28 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                     if let Err(e) = record_save_reference(&z_dir, &state) {
                         eprintln!("[StudioLink] could not note the save's mods: {}", e);
                     }
+                    if state.state == "ingame" && !state.save.is_empty() {
+                        playing = Some(state.save.clone());
+                    } else if state.state == "menu" {
+                        // Back on the menu: the save just left is backed up (if it changed).
+                        if let Some(save) = playing.take() {
+                            start_backup(&app, &z_dir, &save, crate::save_backup::REASON_EXIT, None);
+                        }
+                    }
+                    saves_written = 0;
                     let _ = app.emit(GAME_STATE_EVENT, state);
                 }
+            }
+            // The game closed while in a save (quit to desktop, or a crash).
+            if playing.is_some() && ticks % 5 == 0 && crate::sandbox::find_running_pz_pid().is_none() {
+                if let Some(save) = playing.take() {
+                    start_backup(&app, &z_dir, &save, crate::save_backup::REASON_EXIT, None);
+                }
+            }
+            // What the Link needs to know of each save, about once a minute.
+            if now.saturating_sub(saves_written) >= 60 {
+                write_saves_file(&z_dir);
+                saves_written = now;
             }
 
             let default_txt = z_dir.join("mods").join("default.txt");
@@ -547,6 +687,20 @@ mod tests {
             assert_eq!(map.keys().cloned().collect::<Vec<_>>(), keys);
             assert!(map.values().all(|v| !v.contains('%')), "a % would be read by the game as a format");
         }
+    }
+
+    #[test]
+    fn a_session_counts_the_mods_published_after_it() {
+        let session = SaveReference { mods: ids(&["A", "\\B", "C", "Local"]), at: 1000 };
+        let by_mod: std::collections::HashMap<String, String> =
+            [("A", "1"), ("B", "2"), ("C", "3")].into_iter().map(|(m, w)| (m.to_string(), w.to_string())).collect();
+        let item = |t: u64| crate::workshop::InstalledItemState { installed_time: Some(t), latest_time: Some(t), size: None, update_pending: false, updated_since_last_play: false };
+        let state = crate::workshop::WorkshopLocalState {
+            time_last_app_ran: None,
+            items: [("1".to_string(), item(900)), ("2".to_string(), item(1500)), ("3".to_string(), item(2000))].into_iter().collect(),
+        };
+        assert_eq!(updated_since(&session, &by_mod, Some(&state)), 2);
+        assert_eq!(updated_since(&session, &by_mod, None), 0);
     }
 
     #[test]

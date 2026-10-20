@@ -71,6 +71,17 @@ local TEXT = {
     badgeEmpty = "no mods",
     badgeOutside = "{1} outside the profile",
     badgeOk = "profile mods",
+    backupTitle = "Backing up the save",
+    backupBeforeLoad = "PZ Mod Studio is backing up \"{1}\" ({2}) before it loads: {3} A big save takes a moment.",
+    backupBeforeFix = "PZ Mod Studio is backing up \"{1}\" ({2}) before its mod list is changed.",
+    whyChanged = "its mods are not the ones of its last session.",
+    whyUpdated = "{1} of its mods were updated since its last session.",
+    whyNever = "PZ Mod Studio did not see its last session, so it cannot tell what changed.",
+    noAppLoad = "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before it loads. It would be, because {2}",
+    noAppFix = "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before its mod list is changed.",
+    backupFailed = "The save could not be backed up: {1}",
+    goOnAnyway = "Go on without a backup?",
+    cancel = "Cancel",
 }
 
 local translated = {}
@@ -582,14 +593,279 @@ function LoadGameScreen:setSaveGamesList(...)
     return setSaveGamesList(self, ...)
 end
 
--- The save check: the game's own one first, then the profile, with the game's own dialog.
+-- ------------------------------------------------------------------ save backups
+
+-- The app's view of each save (see the Studio's studio_link::SAVES_FILE): whether it is backed
+-- up as it is, its size, and the mods of its last session.
+local SAVES_FILE = "PZModStudio_LinkSaves.txt"
+-- "Load it anyway" survives the game's Lua reset between the two save checks of one load.
+local PASS_FILE = "PZModStudio_LinkPass.txt"
+local PASS_SECONDS = 120
+
+local function splitTabs(line)
+    local out = {}
+    local start = 1
+    while true do
+        local i = string.find(line, "\t", start, true)
+        if not i then
+            table.insert(out, string.sub(line, start))
+            return out
+        end
+        table.insert(out, string.sub(line, start, i - 1))
+        start = i + 1
+    end
+end
+
+local function plainId(id)
+    return (string.gsub(tostring(id), "^\\", ""))
+end
+
+local function humanBytes(n)
+    n = tonumber(n) or 0
+    if n >= 1024 * 1024 * 1024 then return string.format("%.1f GB", n / (1024 * 1024 * 1024)) end
+    if n >= 1024 * 1024 then return string.format("%.0f MB", n / (1024 * 1024)) end
+    return string.format("%.0f KB", n / 1024)
+end
+
+--- The app's saves file, by `<mode>/<world>`, or nil when the app never wrote one.
+function Link.readSaves()
+    local file = getFileReader(SAVES_FILE, false)
+    if not file then return nil end
+    local result = {}
+    local line = file:readLine()
+    while line ~= nil do
+        local fields = splitTabs(line)
+        if fields[1] == "save" and fields[2] and fields[2] ~= "" then
+            local save = { backed = false, bytes = 0, session = 0, updated = 0, mods = {} }
+            for i = 3, #fields do
+                local key, value = string.match(fields[i], "^(%w+)=(.*)$")
+                if key == "backed" then save.backed = value == "1"
+                elseif key == "bytes" or key == "session" or key == "updated" then save[key] = tonumber(value) or 0
+                elseif key == "mods" then
+                    for id in string.gmatch(value, "[^;]+") do table.insert(save.mods, plainId(id)) end
+                end
+            end
+            result[fields[2]] = save
+        end
+        line = file:readLine()
+    end
+    file:close()
+    return result
+end
+
+function Link.saveId(world)
+    return tostring(getWorld():getGameMode()) .. "/" .. tostring(world)
+end
+
+--- Why the save should be backed up before it loads, or nil when there is no need: it is backed
+--- up as it is, or it loads with the mods of its last session and none of them changed since.
+function Link.backupWhy(save, activeMods)
+    if not save or save.backed then return nil end
+    if save.session == 0 then return text("whyNever") end
+    local now = {}
+    if activeMods then
+        local mods = activeMods:getMods()
+        for i = 0, mods:size() - 1 do table.insert(now, plainId(mods:get(i))) end
+    end
+    local same = #now == #save.mods
+    for i = 1, #now do
+        if now[i] ~= save.mods[i] then same = false end
+    end
+    if not same then return text("whyChanged") end
+    if save.updated > 0 then return text("whyUpdated", save.updated) end
+    return nil
+end
+
+function Link.markPassed(world)
+    local writer = getFileWriter(PASS_FILE, true, false)
+    if not writer then return end
+    writer:write(tostring(world) .. "\t" .. now() .. "\n")
+    writer:close()
+end
+
+function Link.isPassed(world)
+    local file = getFileReader(PASS_FILE, false)
+    if not file then return false end
+    local line = file:readLine()
+    file:close()
+    if not line then return false end
+    local fields = splitTabs(line)
+    return fields[1] == tostring(world) and math.abs(now() - (tonumber(fields[2]) or 0)) <= PASS_SECONDS
+end
+
+--- The app's answer to one request: "ok" / "error", and its text, or nil while there is none.
+function Link.findAck(id)
+    local file = getFileReader(ACKS_FILE, false)
+    if not file then return nil end
+    local status, msg
+    local line = file:readLine()
+    while line ~= nil do
+        local fields = splitTabs(line)
+        if fields[1] == id then status, msg = fields[2], fields[3] or "" end
+        line = file:readLine()
+    end
+    file:close()
+    return status, msg
+end
+
+local function modal(body, yesNo, onAnswer)
+    local w = 520
+    local dialog = ISModalRichText:new(getCore():getScreenWidth() / 2 - w / 2, getCore():getScreenHeight() / 2 - 90, w, 180,
+        body, yesNo, nil, function(_, button) onAnswer(button and button.internal) end)
+    dialog:initialise()
+    dialog:addToUIManager()
+    dialog:setAlwaysOnTop(true)
+    return dialog
+end
+
+--- Asks "go on without a backup?"; Yes runs `onYes`.
+local function askWithoutBackup(body, onYes)
+    modal(" <RGB:1,0.75,0.3> " .. body .. " <RGB:1,1,1> <LINE> <LINE> " .. text("goOnAnyway"), true, function(answer)
+        if answer == "YES" then onYes() end
+    end)
+end
+
+-- The dialog shown while the app backs a save up: a plain panel of this mod's own, so UI mods
+-- that restyle the game's dialogs (and draw OK as a green tick) cannot change what it says. The
+-- app's answer is looked for while it is drawn.
+local WaitPanel = ISPanel:derive("StudioLinkWaitPanel")
+Link.WaitPanel = WaitPanel
+
+function WaitPanel.show(title, body, onCancel)
+    local w = 520
+    local h = 170
+    local panel = WaitPanel:new(getCore():getScreenWidth() / 2 - w / 2, getCore():getScreenHeight() / 2 - h / 2, w, h)
+    panel.title = title
+    panel.body = body
+    panel.onCancel = onCancel
+    panel:initialise()
+    panel:instantiate()
+    panel:addToUIManager()
+    panel:setAlwaysOnTop(true)
+    return panel
+end
+
+function WaitPanel:new(x, y, w, h)
+    local o = ISPanel.new(self, x, y, w, h)
+    o.backgroundColor = { r = 0.08, g = 0.08, b = 0.08, a = 0.97 }
+    o.borderColor = { r = 0.35, g = 0.75, b = 1.0, a = 0.8 }
+    o.moveWithMouse = true
+    o.started = now()
+    return o
+end
+
+function WaitPanel:createChildren()
+    local rich = ISRichTextPanel:new(12, 12, self.width - 24, self.height - 60)
+    rich:initialise()
+    rich.background = false
+    rich.autosetheight = false
+    rich:setText(" <H2> " .. self.title .. " <LINE> <TEXT> " .. self.body)
+    rich:paginate()
+    self:addChild(rich)
+    self.rich = rich
+    local bw = 120
+    local cancel = ISButton:new((self.width - bw) / 2, self.height - 36, bw, 24, text("cancel"), self, WaitPanel.cancel)
+    cancel:initialise()
+    cancel:instantiate()
+    self:addChild(cancel)
+end
+
+function WaitPanel:close()
+    self:setVisible(false)
+    self:removeFromUIManager()
+end
+
+function WaitPanel:cancel()
+    self:close()
+    if self.onCancel then self.onCancel() end
+end
+
+function WaitPanel:prerender()
+    ISPanel.prerender(self)
+    local seconds = now() - (self.started or now())
+    self:drawTextRight(tostring(seconds) .. " s", self.width - 12, self.height - 32, 0.6, 0.6, 0.6, 1, UIFont.Small)
+    pcall(Link.pollBackup)
+end
+
+--- Has PZ Mod Studio back the save up, shows a dialog while it does, and runs `onDone` once the
+--- backup is made and checked. Without the app, or when it fails, the player decides.
+function Link.withBackup(world, reason, why, onDone)
+    local saveId = Link.saveId(world)
+    local saves = Link.readSaves() or {}
+    local size = humanBytes(saves[saveId] and saves[saveId].bytes or 0)
+    local what = reason == "before-fix" and text("backupBeforeFix", world, size) or text("backupBeforeLoad", world, size, why or "")
+    if not Link.appAlive() then
+        local closed = reason == "before-fix" and text("noAppFix", world) or text("noAppLoad", world, why or "")
+        askWithoutBackup(closed, onDone)
+        return
+    end
+    local writer = getFileWriter(REQUESTS_FILE, true, true)
+    if not writer then
+        askWithoutBackup(text("backupFailed", REQUESTS_FILE), onDone)
+        return
+    end
+    Link.seq = (Link.seq or 0) + 1
+    local id = tostring(now()) .. "-" .. tostring(Link.seq)
+    writer:write(id .. "\tbackup\t" .. saveId .. "\t" .. reason .. "\n")
+    writer:close()
+
+    local wait = { id = id, at = now(), onDone = onDone }
+    Link.backupWait = wait
+    wait.dialog = Link.WaitPanel.show(text("backupTitle"), what, function()
+        -- Cancel: the backup goes on in the app; this load does not.
+        if Link.backupWait == wait then Link.backupWait = nil end
+    end)
+end
+
+function Link.pollBackup()
+    local wait = Link.backupWait
+    if not wait then return end
+    local t = now()
+    if wait.polled == t then return end
+    wait.polled = t
+    local status, msg = Link.findAck(wait.id)
+    if not status then return end
+    Link.backupWait = nil
+    wait.dialog:close()
+    if status == "ok" then
+        wait.onDone()
+    else
+        askWithoutBackup(text("backupFailed", msg ~= "" and msg or status), wait.onDone)
+    end
+end
+
+-- The arguments the game's own load started with, to start it again once the backup is made.
+local continueLatestSaveAux = MainScreen.continueLatestSaveAux
+function MainScreen.continueLatestSaveAux(...)
+    Link.continueArgs = { ... }
+    return continueLatestSaveAux(...)
+end
+
+--- Before a save loads: backed up first when it loads with mods that changed since its last
+--- session. Returns true when it can load now.
+function Link.loadGate(world, saveInfo)
+    if Link.isPassed(world) then return true end
+    local saves = Link.readSaves()
+    if not saves then return true end
+    local why = Link.backupWhy(saves[Link.saveId(world)], saveInfo and saveInfo.activeMods)
+    if not why then return true end
+    local args = Link.continueArgs or {}
+    Link.withBackup(world, "before-load", why, function()
+        Link.markPassed(world)
+        MainScreen.continueLatestSaveAux(args[1], args[2])
+    end)
+    return false
+end
+
+-- The save check: the game's own one first, then the profile, with the game's own dialog, then
+-- a backup when the save loads with changed mods.
 local checkSaveFile = MainScreen.checkSaveFile
 function MainScreen.checkSaveFile(...)
     if not checkSaveFile(...) then return false end
-    local link = Link.read()
-    if not link then return true end
     local world = getWorld():getWorld()
     local saveInfo = getSaveInfo(world)
+    local link = Link.read()
+    if not link then return Link.loadGate(world, saveInfo) end
     local status = Link.saveStatus(saveInfo and saveInfo.activeMods, link)
 
     -- A save whose own mod list is empty loads with no mods, and the game then drops every item
@@ -600,7 +876,7 @@ function MainScreen.checkSaveFile(...)
         -- (empty) list again, so the profile's mods are put back before it loads.
         Link.fillEmpty = nil
         ActiveMods.getById("currentGame"):copyFrom(ActiveMods.getById("default"))
-        return true
+        return Link.loadGate(world, saveInfo)
     end
     Link.fillEmpty = nil
     if status == "empty" then
@@ -613,7 +889,7 @@ function MainScreen.checkSaveFile(...)
         return false
     end
 
-    if status ~= "outside" then return true end
+    if status ~= "outside" then return Link.loadGate(world, saveInfo) end
     local outside = Link.outsideProfile(saveInfo.activeMods, link)
     local body = " <H1> " .. getText("UI_mainscreen_ErrorLoadingSavefile") .. " <H2> <LINE> <LINE> "
     body = body .. getText("UI_mainscreen_SavefileName", world) .. " <LINE> <LINE> "
@@ -624,17 +900,33 @@ function MainScreen.checkSaveFile(...)
     return false
 end
 
--- Yes on the empty-list question: the save gets the profile's mods (the list the game started
--- with), then the game's own Yes writes them into the save and loads it.
+-- Yes in the game's save dialogs changes the save before it loads (its own Yes writes the mod
+-- list into the save: missing mods taken out, or, on the empty-list question, the profile's mods
+-- put in). So the save is backed up first, and then that Yes goes on.
 local onCheckSavefileModalClick = MainScreen.onCheckSavefileModalClick
 function MainScreen.onCheckSavefileModalClick(model, button, ...)
     local world = getWorld():getWorld()
-    if Link.askedEmpty == world then
-        Link.askedEmpty = nil
-        if button and button.internal == "YES" then
+    local fillEmpty = Link.askedEmpty == world
+    Link.askedEmpty = nil
+    local yes = button and button.internal == "YES"
+    local args = { ... }
+    local function goOn()
+        if yes and fillEmpty then
             ActiveMods.getById("currentGame"):copyFrom(ActiveMods.getById("default"))
             Link.fillEmpty = world
         end
+        return onCheckSavefileModalClick(model, button, unpack(args))
     end
-    return onCheckSavefileModalClick(model, button, ...)
+    if yes and not Link.isPassed(world) then
+        local saves = Link.readSaves()
+        local save = saves and saves[Link.saveId(world)]
+        if save and not save.backed then
+            Link.withBackup(world, "before-fix", nil, function()
+                Link.markPassed(world)
+                goOn()
+            end)
+            return
+        end
+    end
+    return goOn()
 end

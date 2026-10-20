@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActiveTab } from '../../types';
 import { useTranslation } from 'react-i18next';
-import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2 } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2, Archive } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -34,6 +34,14 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       id: 'PROFILES' as ActiveTab,
       label: t('nav.profiles'),
       icon: Layers,
+      badge: null,
+      badgeColor: '',
+      requiresProfile: false,
+    },
+    {
+      id: 'SAVES' as ActiveTab,
+      label: t('nav.saves'),
+      icon: Archive,
       badge: null,
       badgeColor: '',
       requiresProfile: false,

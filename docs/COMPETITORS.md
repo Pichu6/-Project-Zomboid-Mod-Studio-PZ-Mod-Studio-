@@ -101,12 +101,8 @@ Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager
 
 **Behind, and worth doing (in order)**
 
-1. **Save backups.** We have none.
-   - Zip a save before it loads with a changed mod list, at exit, and before any repair, then re-open the zip to check it.
-   - Keep N automatic backups and named slots forever.
-   - Show the free disk space first.
-   - This is the biggest gap: losing a save is what players fear most.
-2. **Compare a save with its last session before it loads.** We now record what each save ran with (`PZModStudio_SaveRefs.json`); the Link should show what changed and offer to play on a copy.
+1. ~~**Save backups.**~~ Done (Saves screen, `save_backup`): a zip when the player leaves a save, before it loads with changed mods and before its mod list changes, read back and compared after writing, with the free space in view; 5 automatic per save, kept ones forever; restore backs up first.
+2. **Compare a save with its last session before it loads.** Half done: the Link backs a save up when its mods differ from its last session or were updated since; still to do is showing exactly which mods changed, and offering to play on a copy.
 3. **Dependency planner with a preview.** Switching a mod on brings what it requires; switching one off says what needs it. One preview component for every change the Studio makes, files included. Today `sync_java_agents` edits `ProjectZomboid64.json` on its own when a profile is activated (with a backup); it should say what it will change first, and say so when a game update or "verify files" took the flag out.
 4. **Never write over what could not be read.**
    - Keep an unreadable file as `.bad` and retry Windows sharing violations (antivirus).

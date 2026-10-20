@@ -2,6 +2,7 @@
   "nav": {
     "modules": "Studio Modules",
     "profiles": "Profiles",
+    "saves": "Saves",
     "monitor": "Monitor Center",
     "modList": "Mod List",
     "health": "Mod Health",
@@ -1886,7 +1887,7 @@
       "switchOff": "Switch it off",
       "shimLive": "The shim is already in the game: it rides in your package \"{{package}}\", published and on. If this warning is from a session the package was not in, restart the game; if it comes back, the shim does not cover it.",
       "shimDraft": "Your package \"{{package}}\" is open (a draft), so the shim is not in the game. Publish it in the Merger (Package & Publish) and restart the game.",
-      "openMergerTitle":"The Build 42 shim ships inside a merge package: build one in the Mod Merger",
+      "openMergerTitle": "The Build 42 shim ships inside a merge package: build one in the Mod Merger",
       "openMerger": "A merge package may fix this — open the Mod Merger",
       "shimCovers": "The Build 42 shim already covers this"
     },
@@ -2135,5 +2136,48 @@
   "common": {
     "showMore": "show more",
     "showLess": "show less"
+  },
+  "saves": {
+    "title": "Saves",
+    "blurb": "PZ Mod Studio backs a save up when you leave it, before it loads with mods that changed since its last session, and before its mod list is changed. Each backup is a zip read back after it is written. The newest {{keep}} automatic backups of each save are kept; the ones you make or pin stay until you remove them.",
+    "openFolder": "Open backups folder",
+    "refresh": "Refresh",
+    "space": "{{free}} free on the disk of the backups (of {{total}}). Backups use {{used}}.",
+    "spaceUnknown": "Backups use {{used}}. The free space of the disk could not be read.",
+    "lowSpace": "Little room left: your biggest save ({{size}}) may not fit twice more. Remove old backups or free some space.",
+    "empty": "No saves yet. Start a game and it shows here.",
+    "line": "{{mode}} · {{size}} · {{files}} files · {{mods}} mods · last changed {{when}}",
+    "backUpNow": "Back up now",
+    "noRoom": "Not enough free space for a backup of {{size}}.",
+    "showBackups": "Show backups",
+    "noBackups": "No backups of this save yet.",
+    "backupLine": "{{zip}} zip · {{size}} save · {{files}} files · {{mods}} mods",
+    "verified": "checked",
+    "keptChip": "kept",
+    "keepTitle": "Keep this backup: never taken out to make room (only the newest {{keep}} automatic ones are kept)",
+    "unkeepTitle": "Stop keeping it: it becomes an automatic backup again",
+    "restore": "Restore",
+    "delete": "Remove this backup",
+    "restoreConfirm": "Put the backup of {{when}} back as \"{{world}}\"? The save as it is now is backed up first, so this can be undone. Project Zomboid must be closed.",
+    "deleteConfirm": "Remove the backup of {{when}} of \"{{world}}\"? This cannot be undone.",
+    "backedUp": "\"{{world}}\" backed up ({{size}}) and checked.",
+    "unchangedKept": "\"{{world}}\" has not changed since its last backup, which is now kept.",
+    "restored": "\"{{world}}\" is back as it was on {{when}}. The save as it was is in its backups.",
+    "deleted": "Backup of {{when}} removed.",
+    "kept": "The backup of {{when}} is kept.",
+    "unkept": "The backup of {{when}} is an automatic one again.",
+    "status": {
+      "busy": "Backing up...",
+      "backedUp": "Backed up as it is",
+      "changed": "Changed since the backup of {{when}}",
+      "none": "No backup"
+    },
+    "reason": {
+      "manual": "made by you",
+      "exit": "when you left it",
+      "before-load": "before it loaded with changed mods",
+      "before-fix": "before its mod list was changed",
+      "before-restore": "before a restore"
+    }
   }
 }

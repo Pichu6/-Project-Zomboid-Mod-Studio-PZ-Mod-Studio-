@@ -16,5 +16,16 @@
     "UI_StudioLink_emptyWhy": "Loaded like this, the game would run it with no mods and drop every item that came from a mod. Yes gives it the profile's mods and loads it; No goes back.",
     "UI_StudioLink_badgeEmpty": "no mods",
     "UI_StudioLink_badgeOutside": "{1} outside the profile",
-    "UI_StudioLink_badgeOk": "profile mods"
+    "UI_StudioLink_badgeOk": "profile mods",
+    "UI_StudioLink_backupTitle": "Backing up the save",
+    "UI_StudioLink_backupBeforeLoad": "PZ Mod Studio is backing up \"{1}\" ({2}) before it loads: {3} A big save takes a moment.",
+    "UI_StudioLink_backupBeforeFix": "PZ Mod Studio is backing up \"{1}\" ({2}) before its mod list is changed.",
+    "UI_StudioLink_whyChanged": "its mods are not the ones of its last session.",
+    "UI_StudioLink_whyUpdated": "{1} of its mods were updated since its last session.",
+    "UI_StudioLink_whyNever": "PZ Mod Studio did not see its last session, so it cannot tell what changed.",
+    "UI_StudioLink_backupFailed": "The save could not be backed up: {1}",
+    "UI_StudioLink_goOnAnyway": "Go on without a backup?",
+    "UI_StudioLink_cancel": "Cancel",
+    "UI_StudioLink_noAppLoad": "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before it loads. It would be, because {2}",
+    "UI_StudioLink_noAppFix": "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before its mod list is changed."
 }

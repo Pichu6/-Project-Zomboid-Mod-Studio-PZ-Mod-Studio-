@@ -16,5 +16,16 @@
     "UI_StudioLink_emptyWhy": "Si la cargás así, el juego la correría sin mods y borraría todos los objetos que venían de un mod. Sí le da los mods del perfil y la carga; No vuelve.",
     "UI_StudioLink_badgeEmpty": "sin mods",
     "UI_StudioLink_badgeOutside": "{1} fuera del perfil",
-    "UI_StudioLink_badgeOk": "mods del perfil"
+    "UI_StudioLink_badgeOk": "mods del perfil",
+    "UI_StudioLink_backupTitle": "Copia de seguridad de la partida",
+    "UI_StudioLink_backupBeforeLoad": "PZ Mod Studio está haciendo una copia de \"{1}\" ({2}) antes de cargarla: {3} Una partida grande tarda un momento.",
+    "UI_StudioLink_backupBeforeFix": "PZ Mod Studio está haciendo una copia de \"{1}\" ({2}) antes de cambiar su lista de mods.",
+    "UI_StudioLink_whyChanged": "sus mods no son los de su última sesión.",
+    "UI_StudioLink_whyUpdated": "{1} de sus mods se actualizaron desde su última sesión.",
+    "UI_StudioLink_whyNever": "PZ Mod Studio no vio su última sesión, así que no puede saber qué cambió.",
+    "UI_StudioLink_backupFailed": "No se pudo hacer la copia de la partida: {1}",
+    "UI_StudioLink_goOnAnyway": "¿Seguir sin copia?",
+    "UI_StudioLink_cancel": "Cancelar",
+    "UI_StudioLink_noAppLoad": "PZ Mod Studio está cerrado, así que no se puede hacer una copia de \"{1}\" antes de cargarla. Haría falta, porque {2}",
+    "UI_StudioLink_noAppFix": "PZ Mod Studio está cerrado, así que no se puede hacer una copia de \"{1}\" antes de cambiar su lista de mods."
 }

@@ -365,7 +365,57 @@ export const profileBuildMajor = (p: AppInstance | null | undefined): string | n
 
 export type AppProfile = AppInstance;
 
-export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'SAVES' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+
+/** One backup of one save (save_backup::BackupEntry). */
+export interface SaveBackupEntry {
+  file: string;
+  /** manual, exit, before-load, before-fix, before-restore */
+  reason: string;
+  /** Unix seconds. */
+  at: number;
+  zip_bytes: number;
+  save_bytes: number;
+  files: number;
+  save_newest: number;
+  mods: string[];
+  /** Kept until the player removes it. */
+  kept: boolean;
+  /** Read back after writing, every CRC matching. */
+  verified: boolean;
+}
+
+export interface SaveBackupOutcome {
+  entry: SaveBackupEntry;
+  /** Nothing changed since this backup, so nothing was written. */
+  unchanged: boolean;
+  pruned: string[];
+}
+
+export interface SaveSummary {
+  /** <mode>/<world> */
+  id: string;
+  mode: string;
+  world: string;
+  bytes: number;
+  files: number;
+  /** Unix seconds of the newest change in the save. */
+  modified: number;
+  mods: string[];
+  backups: SaveBackupEntry[];
+  /** Unchanged since its newest backup. */
+  backed_up: boolean;
+  busy: boolean;
+}
+
+export interface SavesOverview {
+  saves: SaveSummary[];
+  backup_dir: string;
+  backups_bytes: number;
+  free_bytes: number | null;
+  total_bytes: number | null;
+  keep_automatic: number;
+}
 
 /** One thing wrong in one file of a mod, as the Developer screen lists it. */
 export interface FileProblem {

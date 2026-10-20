@@ -18,6 +18,7 @@ pub mod patch_generator;
 pub mod preset_manager;
 pub mod rules;
 pub mod sandbox;
+pub mod save_backup;
 pub mod scripts;
 pub mod secrets;
 pub mod steam_client;
@@ -393,6 +394,59 @@ fn write_link_health_cmd(paths: StudioPaths, lines: Vec<(String, String, String)
         return Ok(());
     };
     studio_link::write_health_file(&z_dir, &lines)
+}
+
+fn zomboid_dir_of(paths: &StudioPaths) -> Result<std::path::PathBuf, String> {
+    load_order::mod_info::get_existing_user_zomboid_dirs(&paths.user_zomboid_dir)
+        .into_iter()
+        .next()
+        .ok_or_else(|| "The Zomboid folder was not found.".to_string())
+}
+
+/// Every save, its backups, and the room on the disk that holds them.
+#[tauri::command(async)]
+fn saves_overview_cmd(paths: StudioPaths) -> Result<save_backup::SavesOverview, String> {
+    Ok(save_backup::overview(&zomboid_dir_of(&paths)?))
+}
+
+/// A backup the player asked for: kept until they remove it.
+#[tauri::command(async)]
+fn backup_save_cmd(paths: StudioPaths, save_id: String) -> Result<save_backup::BackupOutcome, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let result = save_backup::backup_save(&z, &save_id, save_backup::REASON_MANUAL, true);
+    studio_link::write_saves_file(&z);
+    result
+}
+
+/// Puts a backup back as the save (backing the save up first). Refused while the game runs.
+#[tauri::command(async)]
+fn restore_save_backup_cmd(paths: StudioPaths, save_id: String, file: String) -> Result<Option<save_backup::BackupOutcome>, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let result = save_backup::restore_backup(&z, &save_id, &file, sandbox::find_running_pz_pid().is_some());
+    studio_link::write_saves_file(&z);
+    result
+}
+
+#[tauri::command(async)]
+fn delete_save_backup_cmd(paths: StudioPaths, save_id: String, file: String) -> Result<(), String> {
+    let z = zomboid_dir_of(&paths)?;
+    let result = save_backup::delete_backup(&z, &save_id, &file);
+    studio_link::write_saves_file(&z);
+    result
+}
+
+/// Opens the folder the save backups go to (made if it is not there yet).
+#[tauri::command(async)]
+fn open_backups_folder_cmd(paths: StudioPaths) -> Result<(), String> {
+    let dir = zomboid_dir_of(&paths)?.join(save_backup::BACKUP_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    open::that(&dir).map_err(|e| e.to_string())
+}
+
+/// Kept: never taken out to make room for newer automatic backups.
+#[tauri::command(async)]
+fn set_save_backup_kept_cmd(paths: StudioPaths, save_id: String, file: String, kept: bool) -> Result<save_backup::BackupEntry, String> {
+    save_backup::set_kept(&zomboid_dir_of(&paths)?, &save_id, &file, kept)
 }
 
 /// Where the player is in the game (as the Link mod last wrote it) and what each save last ran with.
@@ -1132,6 +1186,12 @@ pub fn run() {
             mod_error_stats_cmd,
             write_link_health_cmd,
             link_status_cmd,
+            saves_overview_cmd,
+            backup_save_cmd,
+            restore_save_backup_cmd,
+            delete_save_backup_cmd,
+            set_save_backup_kept_cmd,
+            open_backups_folder_cmd,
             mod_load_times_cmd,
             mod_lists_cmd,
             validate_mod_cmd,

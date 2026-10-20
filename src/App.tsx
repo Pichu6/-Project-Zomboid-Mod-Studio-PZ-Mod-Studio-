@@ -12,6 +12,7 @@ import { errorShape } from './utils/errorShape';
 
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
+import { SavesModule } from './components/saves/SavesModule';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
@@ -788,6 +789,8 @@ export const App: React.FC = () => {
               />
             </div>
           )}
+
+          {activeTab === 'SAVES' && <SavesModule paths={paths} />}
 
           {activeTab === 'MOD_LIST' && (
             <LoadOrderModule

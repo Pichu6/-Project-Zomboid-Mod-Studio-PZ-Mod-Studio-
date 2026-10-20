@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -1631,6 +1631,52 @@ export const TauriService = {
       reportBackendError('Changing the mods of the profile', err);
       throw err;
     }
+  },
+
+  /** Every save, its backups, and the room on the disk. */
+  savesOverview: async (paths: StudioPathsUI): Promise<SavesOverview | null> => {
+    try {
+      return await invoke<SavesOverview>('saves_overview_cmd', { paths });
+    } catch (err) {
+      reportBackendError('Reading the saves', err);
+      return null;
+    }
+  },
+
+  /** A backup the player asked for (kept until removed). Throws with the reason when it fails. */
+  backupSave: async (paths: StudioPathsUI, saveId: string): Promise<SaveBackupOutcome> => {
+    return await invoke<SaveBackupOutcome>('backup_save_cmd', { paths, saveId });
+  },
+
+  /** Puts a backup back as the save; the save as it is is backed up first. */
+  restoreSaveBackup: async (paths: StudioPathsUI, saveId: string, file: string): Promise<SaveBackupOutcome | null> => {
+    return await invoke<SaveBackupOutcome | null>('restore_save_backup_cmd', { paths, saveId, file });
+  },
+
+  deleteSaveBackup: async (paths: StudioPathsUI, saveId: string, file: string): Promise<void> => {
+    return await invoke('delete_save_backup_cmd', { paths, saveId, file });
+  },
+
+  setSaveBackupKept: async (paths: StudioPathsUI, saveId: string, file: string, kept: boolean): Promise<SaveBackupEntry> => {
+    return await invoke<SaveBackupEntry>('set_save_backup_kept_cmd', { paths, saveId, file, kept });
+  },
+
+  openBackupsFolder: async (paths: StudioPathsUI): Promise<void> => {
+    try {
+      await invoke('open_backups_folder_cmd', { paths });
+    } catch (err) {
+      reportBackendError('Opening the backups folder', err);
+    }
+  },
+
+  /** A save was backed up (or a backup made, restored or removed) by the Studio. */
+  listenSaveBackupsChanged: async (callback: (saveId: string) => void): Promise<UnlistenFn> => {
+    return await listen<string>('save-backups-changed', (event) => callback(event.payload));
+  },
+
+  /** The game entered the menu or a save (the Link mod's game file). */
+  listenLinkGameState: async (callback: () => void): Promise<UnlistenFn> => {
+    return await listen('link-game-state', () => callback());
   },
 
   /** The game's Mods screen changed the active profile (mods switched on or off, or reordered). */

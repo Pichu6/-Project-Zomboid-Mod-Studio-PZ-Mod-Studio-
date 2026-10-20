@@ -2,6 +2,7 @@
   "nav": {
     "modules": "Módulos del Studio",
     "profiles": "Perfiles",
+    "saves": "Partidas",
     "monitor": "Centro de monitoreo",
     "modList": "Lista de mods",
     "health": "Salud de mods",
@@ -2135,5 +2136,48 @@
   "common": {
     "showMore": "ver más",
     "showLess": "ver menos"
+  },
+  "saves": {
+    "title": "Partidas",
+    "blurb": "PZ Mod Studio hace una copia de una partida cuando salís de ella, antes de cargarla con mods que cambiaron desde su última sesión y antes de cambiar su lista de mods. Cada copia es un zip que se vuelve a leer después de escribirlo. Se guardan las {{keep}} copias automáticas más nuevas de cada partida; las que hacés o fijás quedan hasta que las borres.",
+    "openFolder": "Abrir carpeta de copias",
+    "refresh": "Actualizar",
+    "space": "{{free}} libres en el disco de las copias (de {{total}}). Las copias ocupan {{used}}.",
+    "spaceUnknown": "Las copias ocupan {{used}}. No se pudo leer el espacio libre del disco.",
+    "lowSpace": "Queda poco espacio: tu partida más grande ({{size}}) puede no entrar dos veces más. Borrá copias viejas o liberá espacio.",
+    "empty": "Todavía no hay partidas. Empezá una y aparece acá.",
+    "line": "{{mode}} · {{size}} · {{files}} archivos · {{mods}} mods · último cambio {{when}}",
+    "backUpNow": "Hacer copia ahora",
+    "noRoom": "No hay espacio libre para una copia de {{size}}.",
+    "showBackups": "Ver copias",
+    "noBackups": "Esta partida todavía no tiene copias.",
+    "backupLine": "zip de {{zip}} · partida de {{size}} · {{files}} archivos · {{mods}} mods",
+    "verified": "verificada",
+    "keptChip": "guardada",
+    "keepTitle": "Guardar esta copia: nunca se borra para hacer lugar (solo se guardan las {{keep}} automáticas más nuevas)",
+    "unkeepTitle": "Dejar de guardarla: vuelve a ser una copia automática",
+    "restore": "Restaurar",
+    "delete": "Borrar esta copia",
+    "restoreConfirm": "¿Volver \"{{world}}\" a la copia del {{when}}? Antes se hace una copia de la partida como está ahora, así que se puede deshacer. Project Zomboid tiene que estar cerrado.",
+    "deleteConfirm": "¿Borrar la copia del {{when}} de \"{{world}}\"? No se puede deshacer.",
+    "backedUp": "Copia de \"{{world}}\" hecha ({{size}}) y verificada.",
+    "unchangedKept": "\"{{world}}\" no cambió desde su última copia, que ahora queda guardada.",
+    "restored": "\"{{world}}\" volvió a como estaba el {{when}}. La partida como estaba quedó en sus copias.",
+    "deleted": "Copia del {{when}} borrada.",
+    "kept": "La copia del {{when}} queda guardada.",
+    "unkept": "La copia del {{when}} vuelve a ser automática.",
+    "status": {
+      "busy": "Haciendo copia...",
+      "backedUp": "Copia al día",
+      "changed": "Cambió desde la copia del {{when}}",
+      "none": "Sin copia"
+    },
+    "reason": {
+      "manual": "hecha por vos",
+      "exit": "al salir de ella",
+      "before-load": "antes de cargarla con mods cambiados",
+      "before-fix": "antes de cambiar su lista de mods",
+      "before-restore": "antes de una restauración"
+    }
   }
 }
