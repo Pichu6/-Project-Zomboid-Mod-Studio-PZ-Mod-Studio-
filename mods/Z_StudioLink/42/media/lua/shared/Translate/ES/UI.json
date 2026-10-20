@@ -27,5 +27,6 @@
     "UI_StudioLink_goOnAnyway": "¿Seguir sin copia?",
     "UI_StudioLink_cancel": "Cancelar",
     "UI_StudioLink_noAppLoad": "PZ Mod Studio está cerrado, así que no se puede hacer una copia de \"{1}\" antes de cargarla. Haría falta, porque {2}",
-    "UI_StudioLink_noAppFix": "PZ Mod Studio está cerrado, así que no se puede hacer una copia de \"{1}\" antes de cambiar su lista de mods."
+    "UI_StudioLink_noAppFix": "PZ Mod Studio está cerrado, así que no se puede hacer una copia de \"{1}\" antes de cambiar su lista de mods.",
+    "UI_StudioLink_andMore": "...y {1} más"
 }

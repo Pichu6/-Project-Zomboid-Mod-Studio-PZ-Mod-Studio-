@@ -27,5 +27,6 @@
     "UI_StudioLink_goOnAnyway": "Go on without a backup?",
     "UI_StudioLink_cancel": "Cancel",
     "UI_StudioLink_noAppLoad": "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before it loads. It would be, because {2}",
-    "UI_StudioLink_noAppFix": "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before its mod list is changed."
+    "UI_StudioLink_noAppFix": "PZ Mod Studio is closed, so \"{1}\" cannot be backed up before its mod list is changed.",
+    "UI_StudioLink_andMore": "...and {1} more"
 }

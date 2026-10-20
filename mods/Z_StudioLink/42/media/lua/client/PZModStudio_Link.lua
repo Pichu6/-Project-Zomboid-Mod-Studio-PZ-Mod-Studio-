@@ -71,6 +71,7 @@ local TEXT = {
     badgeEmpty = "no mods",
     badgeOutside = "{1} outside the profile",
     badgeOk = "profile mods",
+    andMore = "...and {1} more",
     backupTitle = "Backing up the save",
     backupBeforeLoad = "PZ Mod Studio is backing up \"{1}\" ({2}) before it loads: {3} A big save takes a moment.",
     backupBeforeFix = "PZ Mod Studio is backing up \"{1}\" ({2}) before its mod list is changed.",
@@ -894,7 +895,14 @@ function MainScreen.checkSaveFile(...)
     local body = " <H1> " .. getText("UI_mainscreen_ErrorLoadingSavefile") .. " <H2> <LINE> <LINE> "
     body = body .. getText("UI_mainscreen_SavefileName", world) .. " <LINE> <LINE> "
     body = body .. " <TEXT> " .. text("blocked", link.name) .. " <LINE> <INDENT:20> <RED> "
-    for _, name in ipairs(outside) do body = body .. name .. " <LINE> " end
+    -- A whole profile's worth of names would not fit on the screen.
+    for i, name in ipairs(outside) do
+        if i > 15 then
+            body = body .. text("andMore", #outside - 15) .. " <LINE> "
+            break
+        end
+        body = body .. name .. " <LINE> "
+    end
     body = body .. " <INDENT:0> <RGB:1,1,1> <LINE> " .. text("howTo") .. " <LINE> "
     MainScreen.displayCheckSavefileModal(body, true)
     return false
