@@ -261,6 +261,8 @@ pub fn record_save_reference(user_zomboid_dir: &Path, state: &GameState) -> Resu
     if state.state != "ingame" || state.save.is_empty() {
         return Ok(false);
     }
+    // Refs that could not be read must not be replaced by this one save's.
+    crate::load_order::ini_parser::guard_overwrite::<std::collections::BTreeMap<String, SaveReference>>(&user_zomboid_dir.join(SAVE_REFS_FILE))?;
     let mut refs = save_references(user_zomboid_dir);
     if refs.get(&state.save).is_some_and(|r| r.mods == state.mods) {
         return Ok(false);
@@ -524,6 +526,12 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                     let _ = app.emit(GAME_STATE_EVENT, state);
                 }
             }
+            // A launch-file change left for when the game is closed.
+            if ticks % 5 == 0 {
+                if let Some(changes) = finish_pending_agents(&z_dir) {
+                    let _ = app.emit(AGENTS_SYNCED_EVENT, changes);
+                }
+            }
             // The game closed while in a save (quit to desktop, or a crash).
             if playing.is_some() && ticks % 5 == 0 && crate::sandbox::find_running_pz_pid().is_none() {
                 if let Some(save) = playing.take() {
@@ -546,7 +554,19 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             if !changed || crate::load_order::ini_parser::is_own_write(&default_txt) {
                 continue;
             }
-            let game_active = crate::load_order::ini_parser::parse_default_txt(&default_txt);
+            // The game writes the file in place: read it twice, a moment apart, and take it only
+            // when it is whole and the two agree. Otherwise look again on the next round, rather
+            // than give the profile a list cut short (or "nothing on" for a file not really read).
+            let first = crate::load_order::ini_parser::try_parse_default_txt(&default_txt);
+            thread::sleep(Duration::from_millis(300));
+            let second = crate::load_order::ini_parser::try_parse_default_txt(&default_txt);
+            let game_active = match (first, second) {
+                (Some(a), Some(b)) if a == b => a,
+                _ => {
+                    last_seen = Some((default_txt.clone(), SystemTime::UNIX_EPOCH));
+                    continue;
+                }
+            };
             match crate::instance_manager::take_mod_list_from_game(&z_dir, &game_active) {
                 Ok(Some(profile)) => {
                     let _ = app.emit(PROFILE_CHANGED_EVENT, profile);
@@ -581,10 +601,50 @@ fn read_removed(user_zomboid_dir: &Path) -> Vec<String> {
 }
 
 /// What changed in `ProjectZomboid64.json`, for the log.
-#[derive(Debug, Default, serde::Serialize)]
+#[derive(Debug, Default, Clone, serde::Serialize)]
 pub struct AgentChanges {
     pub removed: Vec<String>,
     pub restored: Vec<String>,
+}
+
+/// `<Zomboid>/PZModStudio_JavaAgentsPending.txt`: the launch file needs the active list's Java
+/// agents, but the game was running (it keeps `ProjectZomboid64.json` open, so Windows refuses
+/// the write). The watcher does it once the game has closed.
+pub const AGENTS_PENDING_FILE: &str = "PZModStudio_JavaAgentsPending.txt";
+/// Sent to the window when a change left for later was made: `AgentChanges`.
+pub const AGENTS_SYNCED_EVENT: &str = "java-agents-synced";
+
+/// The Java agents for the active list now, or once the game has closed if it is running.
+/// Returns None when it was left for later.
+pub fn sync_java_agents_when_free(pz_install_dir: &Path, user_zomboid_dir: &Path, active_mods: &[String]) -> Result<Option<AgentChanges>, String> {
+    let pending = user_zomboid_dir.join(AGENTS_PENDING_FILE);
+    if crate::sandbox::find_running_pz_pid().is_some() {
+        let _ = crate::load_order::ini_parser::atomic_write(&pending, "The game was running when the profile changed.\n");
+        return Ok(None);
+    }
+    let changes = sync_java_agents(pz_install_dir, user_zomboid_dir, active_mods)?;
+    let _ = std::fs::remove_file(&pending);
+    Ok(Some(changes))
+}
+
+/// The change left for later, once the game is closed, from the list the game reads. Nothing
+/// is done while `default.txt` cannot be read whole: an empty list would take the agents out.
+fn finish_pending_agents(user_zomboid_dir: &Path) -> Option<AgentChanges> {
+    if !user_zomboid_dir.join(AGENTS_PENDING_FILE).is_file() || crate::sandbox::find_running_pz_pid().is_some() {
+        return None;
+    }
+    let install = crate::vfs::studio_paths().pz_install_dir;
+    if install.is_empty() {
+        return None;
+    }
+    let active = crate::load_order::ini_parser::try_parse_default_txt(&user_zomboid_dir.join("mods").join("default.txt"))?;
+    match sync_java_agents_when_free(Path::new(&install), user_zomboid_dir, &active) {
+        Ok(changes) => changes,
+        Err(e) => {
+            eprintln!("[StudioLink] {}", e);
+            None
+        }
+    }
 }
 
 /// Puts each mod's Java agent line in `ProjectZomboid64.json` when the mod is on and takes it out

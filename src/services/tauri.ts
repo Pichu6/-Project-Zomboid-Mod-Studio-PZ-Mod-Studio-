@@ -71,6 +71,11 @@ const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
 
 /** Window event fired when a backend operation fails; App shows it to the user. */
 export const BACKEND_ERROR_EVENT = 'pzms-backend-error';
+/** Something the Studio did on its own that the player should know about (a green toast). */
+export const NOTICE_EVENT = 'pzms-notice';
+export const reportNotice = (text: string): void => {
+  window.dispatchEvent(new CustomEvent<string>(NOTICE_EVENT, { detail: text }));
+};
 
 export interface BackendErrorDetail {
   action: string;
@@ -1672,6 +1677,11 @@ export const TauriService = {
   /** A save was backed up (or a backup made, restored or removed) by the Studio. */
   listenSaveBackupsChanged: async (callback: (saveId: string) => void): Promise<UnlistenFn> => {
     return await listen<string>('save-backups-changed', (event) => callback(event.payload));
+  },
+
+  /** A launch-file change left for later (the game was running) was made now. */
+  listenJavaAgentsSynced: async (callback: (changes: { removed: string[]; restored: string[] }) => void): Promise<UnlistenFn> => {
+    return await listen<{ removed: string[]; restored: string[] }>('java-agents-synced', (event) => callback(event.payload));
   },
 
   /** The game entered the menu or a save (the Link mod's game file). */

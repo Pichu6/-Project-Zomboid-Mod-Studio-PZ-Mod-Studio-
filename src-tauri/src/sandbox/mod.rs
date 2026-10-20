@@ -141,9 +141,11 @@ fn sync_java_agents_for_launch(install_dir: &Path, user_zomboid_dir: &str) {
     let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next() else {
         return;
     };
-    let active = crate::load_order::ini_parser::parse_default_txt(&z_dir.join("mods").join("default.txt"));
-    if let Err(e) = crate::studio_link::sync_java_agents(install_dir, &z_dir, &active) {
-        eprintln!("[StudioLink] {}", e);
+    // Only a list read whole: an unreadable default.txt must not take the agents out.
+    if let Some(active) = crate::load_order::ini_parser::try_parse_default_txt(&z_dir.join("mods").join("default.txt")) {
+        if let Err(e) = crate::studio_link::sync_java_agents_when_free(install_dir, &z_dir, &active) {
+            eprintln!("[StudioLink] {}", e);
+        }
     }
     // The companion mods the player has installed run this build's scripts, not an older Studio's.
     crate::claude_agent::refresh_if_installed(&z_dir);

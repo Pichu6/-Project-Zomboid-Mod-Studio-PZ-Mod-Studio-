@@ -2179,5 +2179,8 @@
       "before-fix": "antes de cambiar su lista de mods",
       "before-restore": "antes de una restauración"
     }
+  },
+  "notices": {
+    "javaAgentsLater": "Project Zomboid estaba abierto cuando cambió el perfil, así que su archivo de inicio (agentes Java como ZombieBuddy) esperó. Ahora que el juego se cerró, ya está hecho. Prendidos: {{on}}. Apagados: {{off}}."
   }
 }

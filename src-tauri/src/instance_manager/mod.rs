@@ -94,7 +94,7 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
     // Tests run on throwaway folders and must never edit the real game's launch file.
     let install = if cfg!(test) { String::new() } else { crate::vfs::studio_paths().pz_install_dir };
     if !install.is_empty() {
-        if let Err(e) = crate::studio_link::sync_java_agents(std::path::Path::new(&install), z_dir, &instance.active_mod_ids) {
+        if let Err(e) = crate::studio_link::sync_java_agents_when_free(std::path::Path::new(&install), z_dir, &instance.active_mod_ids) {
             eprintln!("[StudioLink] {}", e);
         }
     }

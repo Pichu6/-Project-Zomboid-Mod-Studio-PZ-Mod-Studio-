@@ -53,6 +53,7 @@ pub fn save_draft_resolution(
     }
 
     let json_str = serde_json::to_string_pretty(&resolutions).map_err(|e| e.to_string())?;
+    crate::load_order::ini_parser::guard_overwrite::<std::collections::HashMap<String, DraftResolutionItem>>(&draft_file)?;
     crate::load_order::ini_parser::atomic_write(draft_file, json_str).map_err(|e| e.to_string())?;
     Ok(true)
 }

@@ -2179,5 +2179,8 @@
       "before-fix": "before its mod list was changed",
       "before-restore": "before a restore"
     }
+  },
+  "notices": {
+    "javaAgentsLater": "Project Zomboid was open when the profile changed, so its launch file (Java agents such as ZombieBuddy) waited. Now that the game is closed it is done. On: {{on}}. Off: {{off}}."
   }
 }

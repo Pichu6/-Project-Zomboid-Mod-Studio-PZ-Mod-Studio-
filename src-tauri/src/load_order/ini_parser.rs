@@ -54,8 +54,12 @@ fn parse_ini_file(path: &Path) -> Vec<String> {
 }
 
 pub(crate) fn parse_default_txt(path: &Path) -> Vec<String> {
+    read_patiently(path).map(|text| parse_default_txt_text(&text)).unwrap_or_default()
+}
+
+fn parse_default_txt_text(content: &str) -> Vec<String> {
     let mut active = Vec::new();
-    if let Ok(content) = fs::read_to_string(path) {
+    {
         let mut in_mods_block = false;
         for line in content.lines() {
             let trimmed = line.trim();
@@ -342,29 +346,85 @@ fn prune_backups(dir: &Path, prefix: &str, keep: usize) {
     }
 }
 
-/// `fs::write` through a temp file + rename, for the Studio's own JSON state: a crash or a full
-/// disk mid-write leaves the previous file, never a truncated one that reads as "no profile".
+/// Whether an error is Windows saying someone else has the file open right now (the game while
+/// it writes, an antivirus scanning it, an editor): worth waiting a moment for, not a failure.
+fn is_held(e: &std::io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(5) | Some(32) | Some(33)) || e.kind() == std::io::ErrorKind::PermissionDenied
+}
+
+/// Tries `op` again for about two seconds while the file is held by someone else.
+fn while_held<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut tries = 0;
+    loop {
+        match op() {
+            Err(e) if is_held(&e) && tries < 20 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            other => return other,
+        }
+    }
+}
+
+/// `fs::read_to_string`, waiting a moment while the file is held by someone else.
+pub fn read_patiently(path: &Path) -> std::io::Result<String> {
+    while_held(|| fs::read_to_string(path))
+}
+
+/// `fs::write` through a temp file + rename, for the Studio's own state and for files the game
+/// reads: a crash, a full disk or a power cut mid-write leaves the previous file, never a
+/// truncated one that reads as "no profile". The temp file is flushed to the disk before it
+/// takes the name, and the rename waits a moment while the game or an antivirus holds the file.
 pub fn atomic_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) -> std::io::Result<()> {
+    use std::io::Write;
     static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = path.as_ref();
     let n = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let name = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
     let tmp = path.with_file_name(format!(".{}.pzms-tmp-{}-{}", name, std::process::id(), n));
-    fs::write(&tmp, content)?;
-    fs::rename(&tmp, path).inspect_err(|_| {
+    let written = (|| {
+        let mut file = fs::File::create(&tmp)?;
+        file.write_all(content.as_ref())?;
+        file.sync_all()
+    })();
+    if let Err(e) = written {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    while_held(|| fs::rename(&tmp, path)).inspect_err(|_| {
         let _ = fs::remove_file(&tmp);
     })
 }
 
-/// Before a file of the Studio's that no longer parses is replaced, a copy of it is kept beside
-/// it: it read as empty, and the save about to happen would otherwise be all that is left.
-pub fn keep_unreadable<T: serde::de::DeserializeOwned>(path: &Path) {
-    let Ok(text) = fs::read_to_string(path) else { return };
+/// To call before a file of the Studio's is written from what was read of it. A file that is
+/// there but cannot be read (held, or no permission) is refused: what was read of it was
+/// nothing, and writing would replace it with that. One that reads but does not parse is kept
+/// beside it as `<name>.unreadable-<stamp>.json` first, so the write is never all that is left.
+pub fn guard_overwrite<T: serde::de::DeserializeOwned>(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let text = read_patiently(path).map_err(|e| format!("Cannot read {} ({}), so it is not written over.", path.display(), e))?;
     if text.trim().is_empty() || serde_json::from_str::<T>(&text).is_ok() {
-        return;
+        return Ok(());
     }
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let _ = fs::copy(path, path.with_extension(format!("unreadable-{}.json", stamp)));
+    let copy = path.with_extension(format!("unreadable-{}.json", stamp));
+    fs::copy(path, &copy).map_err(|e| format!("{} does not parse and could not be kept aside ({}), so it is not written over.", path.display(), e))?;
+    Ok(())
+}
+
+/// The mods `default.txt` switches on, or None when that cannot be told: the file could not be
+/// read, or it is cut short (the game writes it in place, so a read can land mid-write). Never
+/// an empty list for a file that was not really read.
+pub fn try_parse_default_txt(path: &Path) -> Option<Vec<String>> {
+    let text = read_patiently(path).ok()?;
+    let mods_at = text.lines().position(|l| l.trim().starts_with("mods"))?;
+    // The mods block has to be closed for the list to be whole.
+    if !text.lines().skip(mods_at + 1).any(|l| l.trim().starts_with('}')) {
+        return None;
+    }
+    Some(parse_default_txt_text(&text))
 }
 
 /// Replaces `path` with `content`: skips the write when nothing changed, copies the previous
@@ -573,6 +633,62 @@ mod tests {
         fs::write(&path, &text).unwrap();
         assert_eq!(parse_default_txt(&path), ids(&["ModA", "ModB", "2858201402/dailystatisticsandgains"]));
         assert_eq!(read_existing_maps(&path), ids(&["MyMap"]));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_default_txt_cut_short_or_unreadable_is_not_a_list() {
+        let dir = temp_zomboid("trydefault");
+        let path = dir.join("default.txt");
+        assert_eq!(try_parse_default_txt(&path), None, "missing");
+        fs::write(&path, "VERSION = 1,\n\nmods\n{\n    mod = A,\n    mod = B,\n").unwrap();
+        assert_eq!(try_parse_default_txt(&path), None, "the game was still writing it");
+        fs::write(&path, "VERSION = 1,\n\nmods\n{\n    mod = A,\n    mod = B,\n}\n\nmaps\n{\n}\n").unwrap();
+        assert_eq!(try_parse_default_txt(&path), Some(ids(&["A", "B"])));
+        fs::write(&path, "VERSION = 1,\n\nmods\n{\n}\n").unwrap();
+        assert_eq!(try_parse_default_txt(&path), Some(vec![]), "really nothing on");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_does_not_parse_is_kept_before_it_is_written_over() {
+        let dir = temp_zomboid("guard");
+        let path = dir.join("state.json");
+        assert!(guard_overwrite::<Vec<String>>(&path).is_ok(), "nothing there yet");
+        fs::write(&path, "[\"a\", \"b\"]").unwrap();
+        assert!(guard_overwrite::<Vec<String>>(&path).is_ok());
+        fs::write(&path, "{ half a file").unwrap();
+        assert!(guard_overwrite::<Vec<String>>(&path).is_ok());
+        let kept: Vec<_> = fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains("unreadable")).collect();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(fs::read_to_string(kept[0].path()).unwrap(), "{ half a file");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Windows: a file another program holds open without sharing (the game, an antivirus).
+    #[cfg(windows)]
+    #[test]
+    fn writes_wait_for_a_held_file_and_reads_never_turn_it_into_nothing() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = temp_zomboid("held");
+        let path = dir.join("held.json");
+        fs::write(&path, "[\"before\"]").unwrap();
+
+        // Held for a moment: the write waits and goes through.
+        let hold = fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            drop(hold);
+        });
+        atomic_write(&path, "[\"after\"]").unwrap();
+        release.join().unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[\"after\"]");
+
+        // Held for longer than the wait: never written over, never read as an empty list.
+        let _hold = fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+        assert!(guard_overwrite::<Vec<String>>(&path).is_err());
+        assert_eq!(try_parse_default_txt(&path), None);
+        drop(_hold);
         let _ = fs::remove_dir_all(&dir);
     }
 

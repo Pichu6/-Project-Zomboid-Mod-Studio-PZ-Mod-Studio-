@@ -90,7 +90,7 @@ pub fn load_lists(user_zomboid_dir: &str) -> Vec<ModList> {
 fn save(user_zomboid_dir: &str, lists: &[ModList]) -> Result<(), String> {
     let path = lists_path(user_zomboid_dir)?;
     let json = serde_json::to_string_pretty(&ListsFile { lists: lists.to_vec() }).map_err(|e| e.to_string())?;
-    crate::load_order::ini_parser::keep_unreadable::<ListsFile>(&path);
+    crate::load_order::ini_parser::guard_overwrite::<ListsFile>(&path)?;
     crate::load_order::ini_parser::atomic_write(path, json).map_err(|e| e.to_string())
 }
 

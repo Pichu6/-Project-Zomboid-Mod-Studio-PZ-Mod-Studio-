@@ -6,7 +6,7 @@ import { StudioSidebar } from './components/layout/StudioSidebar';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
 import { SettingsModule, StudioPathsUI } from './components/settings/SettingsModule';
-import { TauriService, reportBackendError } from './services/tauri';
+import { TauriService, reportBackendError, reportNotice } from './services/tauri';
 import { startLiveConsole } from './services/liveConsole';
 import { errorShape } from './utils/errorShape';
 
@@ -230,6 +230,17 @@ export const App: React.FC = () => {
   pathsRef.current = paths;
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    // A launch-file change the game kept from happening while it ran, made once it closed.
+    let unlistenAgents: (() => void) | null = null;
+    TauriService.listenJavaAgentsSynced((changes) => {
+      if (changes.removed.length === 0 && changes.restored.length === 0) return;
+      reportNotice(i18next.t('notices.javaAgentsLater', {
+        on: changes.restored.join(', ') || '-',
+        off: changes.removed.join(', ') || '-',
+      }));
+    }).then((u) => {
+      unlistenAgents = u;
+    });
     TauriService.listenProfileChangedInGame(async () => {
       const current = pathsRef.current;
       if (!current.is_valid) return;
@@ -241,6 +252,7 @@ export const App: React.FC = () => {
     });
     return () => {
       if (unlisten) unlisten();
+      if (unlistenAgents) unlistenAgents();
     };
   }, [refreshActiveProfile]);
 
