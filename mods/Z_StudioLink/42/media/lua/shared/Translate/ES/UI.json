@@ -1,0 +1,20 @@
+{
+    "UI_StudioLink_profile": "Perfil: {1}",
+    "UI_StudioLink_profileTip": "El perfil activo en PZ Mod Studio. Solo se listan sus mods.",
+    "UI_StudioLink_appClosed": "(PZ Mod Studio cerrado)",
+    "UI_StudioLink_appClosedTip": "PZ Mod Studio no está abierto. La lista es el perfil como la app lo dejó la última vez; lo que pidas acá se hace cuando abras la app.",
+    "UI_StudioLink_showAll": "Mostrar todos los mods suscriptos",
+    "UI_StudioLink_newMods": "+{1} nuevos -> perfil",
+    "UI_StudioLink_newModsTip": "{1} mod(s) instalados no están en ningún perfil (suscriptos fuera de PZ Mod Studio, por ejemplo). Clic para agregarlos a \"{2}\", apagados:\n{3}",
+    "UI_StudioLink_adding": "Agregando...",
+    "UI_StudioLink_addFailed": "No se agregaron",
+    "UI_StudioLink_addFailedTip": "PZ Mod Studio no pudo agregar los mods: {1}",
+    "UI_StudioLink_noAnswer": "PZ Mod Studio no respondió. Abrilo y los mods se agregan entonces.",
+    "UI_StudioLink_blocked": "Esta partida usa mods que no están en el perfil \"{1}\":",
+    "UI_StudioLink_howTo": "Cambiá en PZ Mod Studio al perfil con el que la jugaste, o agregá estos mods a este perfil.",
+    "UI_StudioLink_empty": "La lista de mods de esta partida está vacía, y el perfil \"{1}\" tiene {2} mods.",
+    "UI_StudioLink_emptyWhy": "Si la cargás así, el juego la correría sin mods y borraría todos los objetos que venían de un mod. Sí le da los mods del perfil y la carga; No vuelve.",
+    "UI_StudioLink_badgeEmpty": "sin mods",
+    "UI_StudioLink_badgeOutside": "{1} fuera del perfil",
+    "UI_StudioLink_badgeOk": "mods del perfil"
+}

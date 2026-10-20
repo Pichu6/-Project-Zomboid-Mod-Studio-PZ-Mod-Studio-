@@ -1,0 +1,20 @@
+{
+    "UI_StudioLink_profile": "Profile: {1}",
+    "UI_StudioLink_profileTip": "The profile active in PZ Mod Studio. Only its mods are listed.",
+    "UI_StudioLink_appClosed": "(PZ Mod Studio closed)",
+    "UI_StudioLink_appClosedTip": "PZ Mod Studio is not running. The list is the profile as it was when the app last wrote it; what you ask for here is done when the app opens.",
+    "UI_StudioLink_showAll": "Show all subscribed mods",
+    "UI_StudioLink_newMods": "+{1} new -> profile",
+    "UI_StudioLink_newModsTip": "{1} installed mod(s) are in no profile (subscribed outside PZ Mod Studio, for example). Click to add them to \"{2}\", switched off:\n{3}",
+    "UI_StudioLink_adding": "Adding...",
+    "UI_StudioLink_addFailed": "Not added",
+    "UI_StudioLink_addFailedTip": "PZ Mod Studio could not add the mods: {1}",
+    "UI_StudioLink_noAnswer": "PZ Mod Studio did not answer. Open it and the mods are added then.",
+    "UI_StudioLink_blocked": "This save uses mods that are not in the profile \"{1}\":",
+    "UI_StudioLink_howTo": "Switch to the profile you played it with in PZ Mod Studio, or add these mods to this profile.",
+    "UI_StudioLink_empty": "This save's mod list is empty, while the profile \"{1}\" has {2} mods.",
+    "UI_StudioLink_emptyWhy": "Loaded like this, the game would run it with no mods and drop every item that came from a mod. Yes gives it the profile's mods and loads it; No goes back.",
+    "UI_StudioLink_badgeEmpty": "no mods",
+    "UI_StudioLink_badgeOutside": "{1} outside the profile",
+    "UI_StudioLink_badgeOk": "profile mods"
+}

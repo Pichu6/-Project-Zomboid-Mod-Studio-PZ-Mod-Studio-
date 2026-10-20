@@ -26,12 +26,19 @@ const MOD_INFO: &str = include_str!("../../../mods/Z_StudioLink/mod.info");
 const MOD_INFO_42: &str = include_str!("../../../mods/Z_StudioLink/42/mod.info");
 const CLIENT_LUA: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_Link.lua");
 
-fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 3] {
+const UI_EN: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/shared/Translate/EN/UI.json");
+const UI_ES: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/shared/Translate/ES/UI.json");
+
+fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 5] {
     let target = user_zomboid_dir.join("mods").join(LINK_MOD_ID);
+    let lua = target.join("42").join("media").join("lua");
+    let translate = lua.join("shared").join("Translate");
     [
         (target.join("mod.info"), MOD_INFO),
         (target.join("42").join("mod.info"), MOD_INFO_42),
-        (target.join("42").join("media").join("lua").join("client").join("PZModStudio_Link.lua"), CLIENT_LUA),
+        (lua.join("client").join("PZModStudio_Link.lua"), CLIENT_LUA),
+        (translate.join("EN").join("UI.json"), UI_EN),
+        (translate.join("ES").join("UI.json"), UI_ES),
     ]
 }
 
@@ -58,7 +65,9 @@ pub fn install_link_mod(user_zomboid_dir: &Path) -> Result<(), String> {
         for (path, _) in link_files(user_zomboid_dir) {
             let _ = std::fs::remove_file(path);
         }
-        for dir in [local.join("42").join("media").join("lua").join("client"), local.join("42").join("media").join("lua"), local.join("42").join("media"), local.join("42"), local.join("common"), local.clone()] {
+        let lua = local.join("42").join("media").join("lua");
+        let translate = lua.join("shared").join("Translate");
+        for dir in [translate.join("EN"), translate.join("ES"), translate.clone(), lua.join("shared"), lua.join("client"), lua.clone(), local.join("42").join("media"), local.join("42"), local.join("common"), local.clone()] {
             let _ = std::fs::remove_dir(dir); // only when empty
         }
         return Ok(());
@@ -123,23 +132,189 @@ pub fn merge_game_order(previous: &[String], game_active: &[String]) -> Vec<Stri
     out
 }
 
-// ------------------------------------------------------------------ requests from the game
+// ------------------------------------------------------------------ talking with the game
+//
+// Everything goes through small text files in `<Zomboid>/Lua`, the only folder the game's Lua can
+// read and write. Both sides poll; nothing waits on the other.
+//
+//   PZModStudio_LinkApp.txt       app  -> game  protocol, version, alive=<unix seconds> (every few
+//                                               seconds while the app runs)
+//   PZModStudio_LinkRequests.txt  game -> app   <id>\t<verb>\t<argument> per request; the app reads
+//                                               and removes it
+//   PZModStudio_LinkAcks.txt      app  -> game  <id>\tok|error\t<text> per request handled (the
+//                                               last ACKS_KEPT)
+//   PZModStudio_LinkGame.txt      game -> app   where the player is: state=menu|ingame, the save,
+//                                               its mods (written on entering the menu or a game)
 
-/// Written by the Link mod when the player asks, in the game, to add mods to the profile
-/// (`add=<mod id>` per line); read and removed by the watcher.
+/// Bumped when one of the files above changes meaning. The Link mod says which one it speaks in
+/// the game file, the app in its own.
+pub const PROTOCOL: u32 = 2;
+pub const APP_FILE: &str = "PZModStudio_LinkApp.txt";
 pub const REQUESTS_FILE: &str = "PZModStudio_LinkRequests.txt";
+pub const ACKS_FILE: &str = "PZModStudio_LinkAcks.txt";
+pub const GAME_FILE: &str = "PZModStudio_LinkGame.txt";
+/// Sent to the window when the game file changed: the player entered the menu or a game.
+pub const GAME_STATE_EVENT: &str = "link-game-state";
+const ACKS_KEPT: usize = 50;
 
-/// The mod ids a requests file asks to add, without duplicates or empty lines.
-pub fn parse_requests(text: &str) -> Vec<String> {
-    let mut ids: Vec<String> = Vec::new();
+/// One thing the game asked for. `id` is empty for the first protocol's `add=<mod id>` lines.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkRequest {
+    pub id: String,
+    pub verb: String,
+    pub arg: String,
+}
+
+/// The requests in a requests file, each (verb, argument) once.
+pub fn parse_requests(text: &str) -> Vec<LinkRequest> {
+    let mut out: Vec<LinkRequest> = Vec::new();
     for line in text.lines() {
-        if let Some(id) = line.trim().strip_prefix("add=").map(str::trim) {
-            if !id.is_empty() && !ids.iter().any(|x| x == id) {
-                ids.push(id.to_string());
-            }
+        let line = line.trim();
+        let request = if let Some(id) = line.strip_prefix("add=") {
+            LinkRequest { id: String::new(), verb: "add".into(), arg: id.trim().into() }
+        } else {
+            let mut parts = line.splitn(3, '\t');
+            let (Some(id), Some(verb)) = (parts.next(), parts.next()) else { continue };
+            LinkRequest { id: id.trim().into(), verb: verb.trim().into(), arg: parts.next().unwrap_or("").trim().into() }
+        };
+        if request.verb.is_empty() || (request.verb == "add" && request.arg.is_empty()) || out.iter().any(|r| r.verb == request.verb && r.arg == request.arg) {
+            continue;
+        }
+        out.push(request);
+    }
+    out
+}
+
+/// The app file: which protocol and version this app speaks, and when it last said so.
+pub fn app_file_text(now_secs: u64) -> String {
+    format!("protocol={}\nversion={}\nalive={}\n", PROTOCOL, env!("CARGO_PKG_VERSION"), now_secs)
+}
+
+/// The acks file after these answers: the newest `ACKS_KEPT` lines, the given ones last.
+pub fn acks_text(previous: &str, answers: &[(String, bool, String)]) -> String {
+    let clean = |s: &str| s.replace(['\t', '\r', '\n'], " ");
+    let mut lines: Vec<String> = previous.lines().filter(|l| !l.trim().is_empty()).map(str::to_string).collect();
+    for (id, ok, text) in answers {
+        if id.is_empty() {
+            continue; // first-protocol requests carry no id to answer to
+        }
+        lines.push(format!("{}\t{}\t{}", clean(id), if *ok { "ok" } else { "error" }, clean(text)));
+    }
+    let skip = lines.len().saturating_sub(ACKS_KEPT);
+    lines.into_iter().skip(skip).map(|l| l + "\n").collect()
+}
+
+/// Where the player is, as the Link mod last wrote it.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GameState {
+    pub protocol: u32,
+    /// The Link mod's version (`modversion` of its mod.info).
+    pub link_version: String,
+    /// "menu" or "ingame".
+    pub state: String,
+    /// The save folder (`<mode>/<world>`), empty on the menu.
+    pub save: String,
+    /// The mods the game runs with, in load order.
+    pub mods: Vec<String>,
+    /// Unix seconds, from the game's clock.
+    pub at: u64,
+}
+
+pub fn parse_game_state(text: &str) -> Option<GameState> {
+    let mut state = GameState::default();
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else { continue };
+        let value = value.trim();
+        match key.trim() {
+            "protocol" => state.protocol = value.parse().unwrap_or(0),
+            "link" => state.link_version = value.to_string(),
+            "state" => state.state = value.to_string(),
+            "save" => state.save = value.to_string(),
+            "mod" if !value.is_empty() => state.mods.push(value.to_string()),
+            "at" => state.at = value.parse().unwrap_or(0),
+            _ => {}
         }
     }
-    ids
+    (!state.state.is_empty()).then_some(state)
+}
+
+/// What a save last ran with, recorded each time the player enters it: the base for telling,
+/// before it loads again, what changed since.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SaveReference {
+    pub mods: Vec<String>,
+    pub at: u64,
+}
+
+/// `<Zomboid>/PZModStudio_SaveRefs.json`: save folder -> its reference.
+const SAVE_REFS_FILE: &str = "PZModStudio_SaveRefs.json";
+
+pub fn save_references(user_zomboid_dir: &Path) -> std::collections::BTreeMap<String, SaveReference> {
+    std::fs::read_to_string(user_zomboid_dir.join(SAVE_REFS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Notes what a save ran with. Only games, and only a list that changed, are written.
+pub fn record_save_reference(user_zomboid_dir: &Path, state: &GameState) -> Result<bool, String> {
+    if state.state != "ingame" || state.save.is_empty() {
+        return Ok(false);
+    }
+    let mut refs = save_references(user_zomboid_dir);
+    if refs.get(&state.save).is_some_and(|r| r.mods == state.mods) {
+        return Ok(false);
+    }
+    refs.insert(state.save.clone(), SaveReference { mods: state.mods.clone(), at: state.at });
+    let text = serde_json::to_string_pretty(&refs).map_err(|e| e.to_string())?;
+    let path = user_zomboid_dir.join(SAVE_REFS_FILE);
+    crate::load_order::ini_parser::atomic_write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))?;
+    Ok(true)
+}
+
+/// What the app knows about the game side: the last game file and the saves' references.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct LinkStatus {
+    pub game: Option<GameState>,
+    pub saves: std::collections::BTreeMap<String, SaveReference>,
+}
+
+pub fn link_status(user_zomboid_dir: &Path) -> LinkStatus {
+    LinkStatus {
+        game: std::fs::read_to_string(user_zomboid_dir.join("Lua").join(GAME_FILE)).ok().and_then(|t| parse_game_state(&t)),
+        saves: save_references(user_zomboid_dir),
+    }
+}
+
+/// Does what the game asked and says how it went, per request.
+fn handle_requests<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, requests: &[LinkRequest]) -> Vec<(String, bool, String)> {
+    let mut answers = Vec::new();
+    let adds: Vec<&LinkRequest> = requests.iter().filter(|r| r.verb == "add" && !r.arg.is_empty()).collect();
+    if !adds.is_empty() {
+        let ids: Vec<String> = adds.iter().map(|r| r.arg.clone()).collect();
+        let result = crate::instance_manager::add_members_to_active(z_dir, &ids);
+        match &result {
+            Ok(Some(profile)) => {
+                let _ = app.emit(PROFILE_CHANGED_EVENT, profile.clone());
+            }
+            Ok(None) => {}
+            Err(e) => eprintln!("[StudioLink] could not add the mods the game asked for: {}", e),
+        }
+        for r in &adds {
+            answers.push(match &result {
+                Ok(_) => (r.id.clone(), true, String::new()),
+                Err(e) => (r.id.clone(), false, e.clone()),
+            });
+        }
+    }
+    for r in requests.iter().filter(|r| r.verb != "add") {
+        answers.push((r.id.clone(), false, format!("This version of PZ Mod Studio does not know \"{}\".", r.verb)));
+    }
+    answers
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 /// Mod Health's warnings for the game's Mods screen, one per line: `<severity>\t<mod id>\t<text>`,
@@ -178,25 +353,46 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     }
     thread::spawn(move || {
         let mut last_seen: Option<(PathBuf, SystemTime)> = None;
+        let mut game_seen: Option<SystemTime> = None;
+        let mut app_written = 0u64;
         loop {
             thread::sleep(Duration::from_secs(2));
             let chosen = crate::vfs::saved_user_zomboid_dir();
             let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&chosen).into_iter().next() else {
                 continue;
             };
-            // Mods the player asked, in the game, to add to the profile.
-            let requests = z_dir.join("Lua").join(REQUESTS_FILE);
+            let lua_dir = z_dir.join("Lua");
+
+            // The app is here: the game counts it gone when this is some seconds old.
+            let now = now_secs();
+            if now.saturating_sub(app_written) >= 4 && lua_dir.is_dir() {
+                if crate::load_order::ini_parser::atomic_write(lua_dir.join(APP_FILE), app_file_text(now)).is_ok() {
+                    app_written = now;
+                }
+            }
+
+            // What the player asked for in the game, answered one by one.
+            let requests = lua_dir.join(REQUESTS_FILE);
             if let Ok(text) = std::fs::read_to_string(&requests) {
                 let _ = std::fs::remove_file(&requests);
-                let ids = parse_requests(&text);
-                if !ids.is_empty() {
-                    match crate::instance_manager::add_members_to_active(&z_dir, &ids) {
-                        Ok(Some(profile)) => {
-                            let _ = app.emit(PROFILE_CHANGED_EVENT, profile);
-                        }
-                        Ok(None) => {}
-                        Err(e) => eprintln!("[StudioLink] could not add the mods the game asked for: {}", e),
+                let answers = handle_requests(&app, &z_dir, &parse_requests(&text));
+                if answers.iter().any(|(id, _, _)| !id.is_empty()) {
+                    let acks = lua_dir.join(ACKS_FILE);
+                    let previous = std::fs::read_to_string(&acks).unwrap_or_default();
+                    let _ = crate::load_order::ini_parser::atomic_write(&acks, acks_text(&previous, &answers));
+                }
+            }
+
+            // Where the player is: a game entered becomes its save's reference.
+            let game_file = lua_dir.join(GAME_FILE);
+            let stamp = modified(&game_file);
+            if stamp.is_some() && stamp != game_seen {
+                game_seen = stamp;
+                if let Some(state) = std::fs::read_to_string(&game_file).ok().and_then(|t| parse_game_state(&t)) {
+                    if let Err(e) = record_save_reference(&z_dir, &state) {
+                        eprintln!("[StudioLink] could not note the save's mods: {}", e);
                     }
+                    let _ = app.emit(GAME_STATE_EVENT, state);
                 }
             }
 
@@ -325,7 +521,72 @@ mod tests {
 
     #[test]
     fn requests_from_the_game_are_read_once_each() {
-        assert_eq!(parse_requests("add=A\r\nadd= B \nnoise\nadd=A\nadd=\n"), ids(&["A", "B"]));
+        let args = |text: &str| parse_requests(text).into_iter().map(|r| (r.id, r.verb, r.arg)).collect::<Vec<_>>();
+        let s = |a: &str, b: &str, c: &str| (a.to_string(), b.to_string(), c.to_string());
+        // The first protocol's lines, which carry no id.
+        assert_eq!(args("add=A\r\nadd= B \nnoise\nadd=A\nadd=\n"), vec![s("", "add", "A"), s("", "add", "B")]);
+        // The second's, mixed with an old one asking for the same thing.
+        assert_eq!(
+            args("17-1\tadd\tC\r\nadd=C\n17-2\tbisect\t\n\n"),
+            vec![s("17-1", "add", "C"), s("17-2", "bisect", "")]
+        );
+    }
+
+    #[test]
+    fn every_link_text_has_its_translations() {
+        let start = CLIENT_LUA.find("local TEXT = {").unwrap();
+        let block = &CLIENT_LUA[start..start + CLIENT_LUA[start..].find("\n}").unwrap()];
+        let mut keys: Vec<String> = block
+            .lines()
+            .filter_map(|l| l.trim().split_once(" = \"").map(|(k, _)| format!("UI_StudioLink_{}", k)))
+            .collect();
+        keys.sort();
+        assert!(keys.len() > 10);
+        for json in [UI_EN, UI_ES] {
+            let map: std::collections::BTreeMap<String, String> = serde_json::from_str(json).unwrap();
+            assert_eq!(map.keys().cloned().collect::<Vec<_>>(), keys);
+            assert!(map.values().all(|v| !v.contains('%')), "a % would be read by the game as a format");
+        }
+    }
+
+    #[test]
+    fn the_link_lua_uses_only_what_the_games_lua_has() {
+        // Kahlua has no `next` (seen live: "Object tried to call nil"), and no goto or integer
+        // division.
+        for missing in ["next(", "goto ", "//"] {
+            let used = CLIENT_LUA.lines().filter(|l| !l.trim_start().starts_with("--")).any(|l| l.split("--").next().unwrap().contains(missing));
+            assert!(!used, "PZModStudio_Link.lua uses {}", missing);
+        }
+    }
+
+    #[test]
+    fn answers_keep_the_newest_and_skip_requests_without_an_id() {
+        let mut text = String::new();
+        for i in 0..60 {
+            text = acks_text(&text, &[(format!("r{}", i), i % 2 == 0, format!("line\twith\ntabs {}", i))]);
+        }
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), ACKS_KEPT);
+        assert_eq!(lines[0], "r10\tok\tline with tabs 10");
+        assert_eq!(*lines.last().unwrap(), "r59\terror\tline with tabs 59");
+        assert_eq!(acks_text("", &[(String::new(), true, String::new())]), "");
+        assert!(app_file_text(42).contains("alive=42\n") && app_file_text(42).starts_with("protocol=2\n"));
+    }
+
+    #[test]
+    fn a_game_entered_becomes_its_saves_reference() {
+        let z = temp("saverefs");
+        let text = "protocol=2\nlink=1.1.0\nstate=ingame\nsave=Sandbox/World 1\nmod=A\nmod=B\nat=100\n";
+        let state = parse_game_state(text).unwrap();
+        assert_eq!(state.mods, ids(&["A", "B"]));
+        assert_eq!(state.save, "Sandbox/World 1");
+        assert!(record_save_reference(&z, &state).unwrap());
+        // The same list again is not a change; the menu never is.
+        assert!(!record_save_reference(&z, &GameState { at: 200, ..state.clone() }).unwrap());
+        assert!(!record_save_reference(&z, &parse_game_state("state=menu\n").unwrap()).unwrap());
+        assert_eq!(save_references(&z)["Sandbox/World 1"], SaveReference { mods: ids(&["A", "B"]), at: 100 });
+        assert!(parse_game_state("noise\n").is_none());
+        let _ = std::fs::remove_dir_all(&z);
     }
 
     fn temp(name: &str) -> PathBuf {

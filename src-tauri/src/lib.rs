@@ -395,6 +395,15 @@ fn write_link_health_cmd(paths: StudioPaths, lines: Vec<(String, String, String)
     studio_link::write_health_file(&z_dir, &lines)
 }
 
+/// Where the player is in the game (as the Link mod last wrote it) and what each save last ran with.
+#[tauri::command(async)]
+fn link_status_cmd(paths: StudioPaths) -> studio_link::LinkStatus {
+    match load_order::mod_info::get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).into_iter().next() {
+        Some(z_dir) => studio_link::link_status(&z_dir),
+        None => studio_link::LinkStatus::default(),
+    }
+}
+
 /// What each mod did to the last session's log: exceptions and warnings the game laid at its door.
 #[tauri::command(async)]
 fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
@@ -1122,6 +1131,7 @@ pub fn run() {
             mark_profile_played_cmd,
             mod_error_stats_cmd,
             write_link_health_cmd,
+            link_status_cmd,
             mod_load_times_cmd,
             mod_lists_cmd,
             validate_mod_cmd,

@@ -1,12 +1,16 @@
 -- PZ Mod Studio Link: the game's Mods screen shows the profile that is active in PZ Mod Studio.
 --
--- The Studio writes, in Zomboid/Lua:
---   PZModStudio_Link.txt        profile=<name>, member=<mod id> per mod of the profile (on or
---                               off, in load order), other=<mod id> per mod another profile holds
---   PZModStudio_LinkHealth.txt  <severity>\t<mod id>\t<text> per Mod Health warning, in the
---                               player's language
--- and this mod writes PZModStudio_LinkRequests.txt (add=<mod id> per line) when the player asks
--- to add mods to the profile; the Studio picks it up within a couple of seconds.
+-- Files in Zomboid/Lua (the only folder the game's Lua can use), protocol 2:
+--   PZModStudio_Link.txt          app:  profile=<name>, member=<mod id> per mod of the profile
+--                                       (on or off, in load order), other=<mod id> per mod
+--                                       another profile holds
+--   PZModStudio_LinkHealth.txt    app:  <severity>\t<mod id>\t<text> per Mod Health warning, in
+--                                       the player's language
+--   PZModStudio_LinkApp.txt       app:  protocol, version, alive=<unix seconds>, every few
+--                                       seconds while it runs
+--   PZModStudio_LinkRequests.txt  this: <id>\t<verb>\t<argument> per request (add <mod id>)
+--   PZModStudio_LinkAcks.txt      app:  <id>\tok|error\t<text> per request it handled
+--   PZModStudio_LinkGame.txt      this: state=menu|ingame, save, mods, on entering either
 --
 -- What it does with them:
 -- - Mods screen: only the profile's mods ("Show all subscribed mods" brings the rest back); a
@@ -32,54 +36,70 @@ local HEALTH_FILE = "PZModStudio_LinkHealth.txt"
 local REQUESTS_FILE = "PZModStudio_LinkRequests.txt"
 local STUDIO_PACKAGE = "^Z_PZModStudio_"
 
+local APP_FILE = "PZModStudio_LinkApp.txt"
+local ACKS_FILE = "PZModStudio_LinkAcks.txt"
+local GAME_FILE = "PZModStudio_LinkGame.txt"
+local PROTOCOL = 2
+-- The app writes its file every few seconds; older than this, it is closed.
+local APP_ALIVE_SECONDS = 15
+-- A request the app has not answered in this long is shown as not done.
+local REQUEST_TIMEOUT_SECONDS = 30
+-- Mod managers that own the Mods screen themselves. With one of them on, this mod leaves that
+-- screen alone (two mods reshaping one list fight) and keeps only the save checks.
+-- (mod.info ids: Definitive Mod Manager, PZMM's client, Mod Manager, Mod Load Order Sorter)
+local OTHER_MANAGERS = { "DefinitiveModManager", "PZMMClient", "ModManager", "ModLoadOrderSorter_b42" }
+
+-- The texts, in English. The game's translations (media/lua/shared/Translate/<LANG>/UI.json,
+-- keys UI_StudioLink_<name>) win when they have the key. {1}, {2}... are filled in here: a "%"
+-- in a translation would be read by the game as a format of its own.
 local TEXT = {
-    EN = {
-        profile = "Profile: %s",
-        profileTip = "The profile active in PZ Mod Studio. Only its mods are listed.",
-        showAll = "Show all subscribed mods",
-        newMods = "+%d new -> profile",
-        newModsTip = "%d installed mod(s) are in no profile (subscribed outside PZ Mod Studio, for example). Click to add them to \"%s\", switched off:\n%s",
-        added = "Added to the profile",
-        blocked = "This save uses mods that are not in the profile \"%s\":",
-        howTo = "Switch to the profile you played it with in PZ Mod Studio, or add these mods to this profile.",
-        empty = "This save's mod list is empty, while the profile \"%s\" has %d mods.",
-        emptyWhy = "Loaded like this, the game would run it with no mods and drop every item that came from a mod. Yes gives it the profile's mods and loads it; No goes back.",
-        badgeEmpty = "no mods",
-        badgeOutside = "%d outside the profile",
-        badgeOk = "profile mods",
-    },
-    ES = {
-        profile = "Perfil: %s",
-        profileTip = "El perfil activo en PZ Mod Studio. Solo se listan sus mods.",
-        showAll = "Mostrar todos los mods suscriptos",
-        newMods = "+%d nuevos -> perfil",
-        newModsTip = "%d mod(s) instalados no están en ningún perfil (suscriptos fuera de PZ Mod Studio, por ejemplo). Clic para agregarlos a \"%s\", apagados:\n%s",
-        added = "Agregado al perfil",
-        blocked = "Esta partida usa mods que no están en el perfil \"%s\":",
-        howTo = "Cambiá en PZ Mod Studio al perfil con el que la jugaste, o agregá estos mods a este perfil.",
-        empty = "La lista de mods de esta partida está vacía, y el perfil \"%s\" tiene %d mods.",
-        emptyWhy = "Si la cargás así, el juego la correría sin mods y borraría todos los objetos que venían de un mod. Sí le da los mods del perfil y la carga; No vuelve.",
-        badgeEmpty = "sin mods",
-        badgeOutside = "%d fuera del perfil",
-        badgeOk = "mods del perfil",
-    },
+    profile = "Profile: {1}",
+    profileTip = "The profile active in PZ Mod Studio. Only its mods are listed.",
+    appClosed = "(PZ Mod Studio closed)",
+    appClosedTip = "PZ Mod Studio is not running. The list is the profile as it was when the app last wrote it; what you ask for here is done when the app opens.",
+    showAll = "Show all subscribed mods",
+    newMods = "+{1} new -> profile",
+    newModsTip = "{1} installed mod(s) are in no profile (subscribed outside PZ Mod Studio, for example). Click to add them to \"{2}\", switched off:\n{3}",
+    adding = "Adding...",
+    addFailed = "Not added",
+    addFailedTip = "PZ Mod Studio could not add the mods: {1}",
+    noAnswer = "PZ Mod Studio did not answer. Open it and the mods are added then.",
+    blocked = "This save uses mods that are not in the profile \"{1}\":",
+    howTo = "Switch to the profile you played it with in PZ Mod Studio, or add these mods to this profile.",
+    empty = "This save's mod list is empty, while the profile \"{1}\" has {2} mods.",
+    emptyWhy = "Loaded like this, the game would run it with no mods and drop every item that came from a mod. Yes gives it the profile's mods and loads it; No goes back.",
+    badgeEmpty = "no mods",
+    badgeOutside = "{1} outside the profile",
+    badgeOk = "profile mods",
 }
 
-local function language()
-    local lang = "EN"
-    pcall(function()
-        local l = Translator.getLanguage()
-        lang = tostring(l and (l.name and l:name() or l) or "EN")
-    end)
-    return string.upper(lang)
+local translated = {}
+
+--- A text in the player's language, with {1}, {2}... filled in.
+local function text(key, ...)
+    local value = translated[key]
+    if value == nil then
+        local full = "UI_StudioLink_" .. key
+        local ok, result = pcall(getText, full)
+        value = (ok and type(result) == "string" and result ~= "" and result ~= full) and result or TEXT[key] or key
+        translated[key] = value
+    end
+    local args = { ... }
+    if #args == 0 then return value end
+    return (string.gsub(value, "{(%d)}", function(n)
+        local arg = args[tonumber(n)]
+        return arg ~= nil and tostring(arg) or ""
+    end))
 end
 
-local function text(key)
-    local t = TEXT[language()] or TEXT.EN
-    return t[key] or TEXT.EN[key]
+--- Seconds since 1970 by the game's clock (the app writes the same clock in its file).
+local function now()
+    local ok, ms = pcall(getTimestampMs)
+    if ok and ms then return math.floor(ms / 1000) end
+    return math.floor(os.time())
 end
 
-local Link = { showAll = false, pending = {}, health = {} }
+local Link = { showAll = false, pending = {}, waiting = {}, health = {} }
 PZModStudioLink = Link
 
 -- ------------------------------------------------------------------ the Studio's files
@@ -132,16 +152,149 @@ function Link.readHealth()
     return result
 end
 
---- Asks the Studio to add these mods to the active profile (switched off).
+--- Asks the Studio to add these mods to the active profile (switched off). Each request gets an
+--- id the app answers to; until then the mods count as in the profile.
 function Link.requestAdd(ids)
     if #ids == 0 then return end
     local writer = getFileWriter(REQUESTS_FILE, true, true)
     if not writer then return end
-    for _, id in ipairs(ids) do
-        writer:write("add=" .. id .. "\n")
-        Link.pending[id] = true
+    Link.seq = (Link.seq or 0) + 1
+    local id = tostring(now()) .. "-" .. tostring(Link.seq)
+    for _, modId in ipairs(ids) do
+        writer:write(id .. "\tadd\t" .. modId .. "\n")
+        Link.pending[modId] = true
     end
     writer:close()
+    Link.waiting[id] = { ids = ids, at = now() }
+    Link.addError = nil
+end
+
+--- Whether a request is still waiting for the app's answer. (The game's Lua has no `next`.)
+function Link.isWaiting()
+    for _ in pairs(Link.waiting) do return true end
+    return false
+end
+
+--- Whether PZ Mod Studio is running: its file says so, and says it lately.
+function Link.appAlive()
+    local t = now()
+    if Link.appCheckedAt and t - Link.appCheckedAt < 2 then return Link.appIsAlive end
+    Link.appCheckedAt = t
+    local alive = false
+    local file = getFileReader(APP_FILE, false)
+    if file then
+        local line = file:readLine()
+        while line ~= nil do
+            local stamp = string.match(line, "^alive=(%d+)")
+            if stamp then alive = math.abs(t - tonumber(stamp)) <= APP_ALIVE_SECONDS end
+            line = file:readLine()
+        end
+        file:close()
+    end
+    Link.appIsAlive = alive
+    return alive
+end
+
+--- Reads the app's answers to what is still waiting. Returns true when something was settled.
+function Link.readAcks()
+    if not Link.isWaiting() then return false end
+    local settled = false
+    local file = getFileReader(ACKS_FILE, false)
+    if file then
+        local line = file:readLine()
+        while line ~= nil do
+            local id, status, msg = string.match(line, "^([^\t]+)\t([^\t]+)\t?(.*)$")
+            local request = id and Link.waiting[id]
+            if request then
+                Link.waiting[id] = nil
+                settled = true
+                if status ~= "ok" then
+                    for _, modId in ipairs(request.ids) do Link.pending[modId] = nil end
+                    Link.addError = msg ~= "" and msg or status
+                end
+            end
+            line = file:readLine()
+        end
+        file:close()
+    end
+    -- Not answered in time: shown as not done. The request stays in the file, so the app still
+    -- does it when it opens.
+    local t = now()
+    for id, request in pairs(Link.waiting) do
+        if t - request.at > REQUEST_TIMEOUT_SECONDS then
+            Link.waiting[id] = nil
+            for _, modId in ipairs(request.ids) do Link.pending[modId] = nil end
+            Link.addError = text("noAnswer")
+            settled = true
+        end
+    end
+    return settled
+end
+
+--- The mod managers on in this game that own the Mods screen, by id.
+function Link.otherManager()
+    if Link.otherManagerId ~= nil then return Link.otherManagerId or nil end
+    Link.otherManagerId = false
+    pcall(function()
+        local active = ActiveMods.getById("default")
+        for _, id in ipairs(OTHER_MANAGERS) do
+            if active:isModActive(id) then
+                Link.otherManagerId = id
+                print("[StudioLink] " .. id .. " is on: it owns the Mods screen; only the save checks stay")
+                return
+            end
+        end
+    end)
+    return Link.otherManagerId or nil
+end
+
+--- Tells the app where the player is. state = "menu" or "ingame".
+function Link.writeGameState(state)
+    local ok, err = pcall(function()
+        local writer = getFileWriter(GAME_FILE, true, false)
+        if not writer then return end
+        local version = ""
+        pcall(function() version = getModInfoByID(SELF_ID):getModVersion() or "" end)
+        writer:write("protocol=" .. PROTOCOL .. "\n")
+        writer:write("link=" .. tostring(version) .. "\n")
+        writer:write("state=" .. state .. "\n")
+        if state == "ingame" then
+            local world = getWorld()
+            local name = tostring(world:getWorld() or "")
+            if name ~= "" then
+                writer:write("save=" .. tostring(world:getGameMode()) .. "/" .. name .. "\n")
+            end
+            local mods = getActivatedMods()
+            for i = 0, mods:size() - 1 do
+                writer:write("mod=" .. tostring(mods:get(i)) .. "\n")
+            end
+        end
+        writer:write("at=" .. now() .. "\n")
+        writer:close()
+    end)
+    if not ok then print("[StudioLink] could not write the game state: " .. tostring(err)) end
+end
+
+Events.OnMainMenuEnter.Add(function() Link.writeGameState("menu") end)
+Events.OnGameStart.Add(function() Link.writeGameState("ingame") end)
+
+-- While a request waits, the app's answer is looked for about once a second.
+local lastAckCheck = 0
+local function checkAcks()
+    if not Link.isWaiting() then return end
+    local t = now()
+    if t == lastAckCheck then return end
+    lastAckCheck = t
+    if Link.readAcks() and Link.panel then
+        pcall(function() Link.panel:updateView() end)
+    end
+end
+-- Looked for while the Mods screen is drawn, which is where the answer is shown.
+local listPrerender = ModSelector.ModListPanel.prerender
+function ModSelector.ModListPanel:prerender(...)
+    local result = listPrerender(self, ...)
+    pcall(checkAcks)
+    return result
 end
 
 --- Installed mods that are in no profile: not this one's, not another's, not the Studio's own.
@@ -164,18 +317,22 @@ end
 local filterMods = ModSelector.Model.filterMods
 function ModSelector.Model:filterMods(...)
     filterMods(self, ...)
-    if self.isServerSettingsMods then return end
-    local link = Link.read()
-    if not link then return end
-    local kept = {}
-    for _, modData in ipairs(self.currentMods) do
-        local id = modData.modId
-        if id ~= SELF_ID and (Link.showAll or link.members[id] or modData.isActive) then
-            table.insert(kept, modData)
+    if self.isServerSettingsMods or Link.otherManager() then return end
+    -- Anything going wrong here leaves the game's own list as it is.
+    local ok, err = pcall(function()
+        local link = Link.read()
+        if not link then return end
+        local kept = {}
+        for _, modData in ipairs(self.currentMods) do
+            local id = modData.modId
+            if id ~= SELF_ID and (Link.showAll or link.members[id] or modData.isActive) then
+                table.insert(kept, modData)
+            end
         end
-    end
-    table.wipe(self.currentMods)
-    for _, modData in ipairs(kept) do table.insert(self.currentMods, modData) end
+        table.wipe(self.currentMods)
+        for _, modData in ipairs(kept) do table.insert(self.currentMods, modData) end
+    end)
+    if not ok then print("[StudioLink] could not filter the list: " .. tostring(err)) end
 end
 
 -- Mod Health's warnings are read when the list is read, not on every frame.
@@ -208,8 +365,10 @@ end
 local createChildren = ModSelector.ModListPanel.createChildren
 function ModSelector.ModListPanel:createChildren()
     createChildren(self)
+    if Link.otherManager() then return end
     local link = Link.read()
     if not link then return end
+    Link.panel = self
     local ok, err = pcall(function()
         local row = self.enabledModsTickbox
         local h = row:getHeight()
@@ -227,10 +386,11 @@ function ModSelector.ModListPanel:createChildren()
         self.studioShowAll = tick
 
         local button = ISButton:new(tick:getRight() + 12, row.y, 120, h, "", self, function(panel)
-            local now = Link.read()
-            if not now then return end
+            if Link.isWaiting() then return end
+            local current = Link.read()
+            if not current then return end
             local ids = {}
-            for _, modData in ipairs(Link.orphans(panel.model, now)) do table.insert(ids, modData.modId) end
+            for _, modData in ipairs(Link.orphans(panel.model, current)) do table.insert(ids, modData.modId) end
             Link.requestAdd(ids)
             panel:updateView()
         end)
@@ -241,7 +401,7 @@ function ModSelector.ModListPanel:createChildren()
         self.filterPanel:addChild(button)
         self.studioNewButton = button
 
-        local name = ISLabel:new(button:getRight() + 12, row.y, h, string.format(text("profile"), link.name),
+        local name = ISLabel:new(button:getRight() + 12, row.y, h, text("profile", link.name),
             0.55, 0.85, 1.0, 1.0, UIFont.Small, true)
         name:initialise()
         name.tooltip = text("profileTip")
@@ -260,19 +420,36 @@ function ModSelector.ModListPanel:updateView(...)
         local ok, err = pcall(function()
             local link = Link.read()
             if not link then return end
-            self.studioProfileLabel:setName(string.format(text("profile"), link.name))
+            local label = self.studioProfileLabel
+            if Link.appAlive() then
+                label:setName(text("profile", link.name))
+                label:setColor(0.55, 0.85, 1.0)
+                label.tooltip = text("profileTip")
+            else
+                label:setName(text("profile", link.name) .. " " .. text("appClosed"))
+                label:setColor(0.6, 0.6, 0.6)
+                label.tooltip = text("appClosedTip")
+            end
             local orphans = Link.orphans(self.model, link)
             local button = self.studioNewButton
-            if #orphans > 0 then
+            local function show(title, tooltip, r, g, b)
+                button:setTitle(title)
+                button:setWidth(getTextManager():MeasureStringX(UIFont.Small, title) + 16)
+                button.tooltip = tooltip
+                button.borderColor = { r = r, g = g, b = b, a = 0.8 }
+                button:setVisible(true)
+            end
+            if Link.isWaiting() then
+                show(text("adding"), nil, 0.6, 0.6, 0.6)
+            elseif Link.addError and #orphans > 0 then
+                show(text("addFailed"), text("addFailedTip", Link.addError), 0.95, 0.35, 0.35)
+            elseif #orphans > 0 then
                 local names = {}
                 for i, modData in ipairs(orphans) do
                     if i > 12 then table.insert(names, "..."); break end
                     table.insert(names, "- " .. modData.name)
                 end
-                button:setTitle(string.format(text("newMods"), #orphans))
-                button:setWidth(getTextManager():MeasureStringX(UIFont.Small, button:getTitle()) + 16)
-                button.tooltip = string.format(text("newModsTip"), #orphans, link.name, table.concat(names, "\n"))
-                button:setVisible(true)
+                show(text("newMods", #orphans), text("newModsTip", #orphans, link.name, table.concat(names, "\n")), 0.3, 0.75, 1.0)
             else
                 button:setVisible(false)
             end
@@ -372,7 +549,7 @@ local function drawSaveBadge(list, y, item)
     if status == "empty" then
         label, r, g, b = text("badgeEmpty"), 0.95, 0.35, 0.35
     elseif status == "outside" then
-        label, r, g, b = string.format(text("badgeOutside"), count), 1.0, 0.7, 0.2
+        label, r, g, b = text("badgeOutside", count), 1.0, 0.7, 0.2
     else
         label, r, g, b = text("badgeOk"), 0.45, 0.85, 0.5
     end
@@ -427,7 +604,7 @@ function MainScreen.checkSaveFile(...)
         Link.askedEmpty = world
         local body = " <H1> " .. getText("UI_mainscreen_ErrorLoadingSavefile") .. " <H2> <LINE> <LINE> "
         body = body .. getText("UI_mainscreen_SavefileName", world) .. " <LINE> <LINE> "
-        body = body .. " <TEXT> <RED> " .. string.format(text("empty"), link.name, profileSize(link)) .. " <RGB:1,1,1> <LINE> <LINE> "
+        body = body .. " <TEXT> <RED> " .. text("empty", link.name, profileSize(link)) .. " <RGB:1,1,1> <LINE> <LINE> "
         body = body .. text("emptyWhy") .. " <LINE> "
         MainScreen.displayCheckSavefileModal(body, false)
         return false
@@ -437,7 +614,7 @@ function MainScreen.checkSaveFile(...)
     local outside = Link.outsideProfile(saveInfo.activeMods, link)
     local body = " <H1> " .. getText("UI_mainscreen_ErrorLoadingSavefile") .. " <H2> <LINE> <LINE> "
     body = body .. getText("UI_mainscreen_SavefileName", world) .. " <LINE> <LINE> "
-    body = body .. " <TEXT> " .. string.format(text("blocked"), link.name) .. " <LINE> <INDENT:20> <RED> "
+    body = body .. " <TEXT> " .. text("blocked", link.name) .. " <LINE> <INDENT:20> <RED> "
     for _, name in ipairs(outside) do body = body .. name .. " <LINE> " end
     body = body .. " <INDENT:0> <RGB:1,1,1> <LINE> " .. text("howTo") .. " <LINE> "
     MainScreen.displayCheckSavefileModal(body, true)
