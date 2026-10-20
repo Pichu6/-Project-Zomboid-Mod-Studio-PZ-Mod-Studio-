@@ -35,6 +35,7 @@ import {
   ListOrdered,
   MapPin,
   Package,
+  PackagePlus,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -417,6 +418,42 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     }
     return map;
   }, [profiles]);
+  /**
+   * Installed mods no profile holds, on or off: usually subscribed from the Steam website, which
+   * the Studio never sees happen. While a profile is active they are out of sight, so the list
+   * says they are there and offers to add them (switched off). The game's Mods screen offers the
+   * same through the Studio Link mod.
+   */
+  const orphanMods = useMemo(
+    () =>
+      activeProfile
+        ? mods.filter(
+            (m) =>
+              !m.not_installed &&
+              !m.enabled &&
+              m.mod_id !== STUDIO_LINK_MOD_ID &&
+              !m.mod_id.startsWith('Z_PZModStudio_') &&
+              !profilesByMod.has(m.mod_id)
+          )
+        : [],
+    [mods, activeProfile, profilesByMod]
+  );
+  const orphanKey = orphanMods.map((m) => m.mod_id).sort().join('|');
+  const [dismissedOrphans, setDismissedOrphans] = useState<string>('');
+  const addOrphansToProfile = async () => {
+    if (!activeProfile || orphanMods.length === 0) return;
+    const current = await freshProfile(paths.user_zomboid_dir || '', activeProfile);
+    const members = profileMembers(current);
+    const added = orphanMods.map((m) => m.mod_id).filter((id) => !members.includes(id));
+    try {
+      await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, [...members, ...added]);
+      showToast(t('modList.orphans.added', { count: added.length, name: activeProfile.name }));
+      onProfilesChanged?.();
+      onRefreshMods();
+    } catch {
+      // Already shown by TauriService.
+    }
+  };
   /**
    * Whether a mod belongs in each filter. The answers come from what the game and the health
    * check already told us, so a filter never claims more than the Studio knows.
@@ -1147,6 +1184,40 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </div>
             <div className="min-w-[150px] text-right">{t('modList.colActions')}</div>
           </div>
+
+          {activeProfile && orphanMods.length > 0 && dismissedOrphans !== orphanKey && (
+            <div className="bg-sky-950/40 border-b border-sky-800/50 px-4 py-2 flex items-center gap-2 text-xs text-sky-200">
+              <PackagePlus className="w-4 h-4 shrink-0 text-sky-400" />
+              <span
+                className="flex-1 min-w-0"
+                title={orphanMods.map((m) => m.name).join('\n')}
+              >
+                {t('modList.orphans.text', { count: orphanMods.length, name: activeProfile.name })}
+              </span>
+              <button
+                onClick={() => void addOrphansToProfile()}
+                className="px-2 py-1 rounded bg-sky-700/60 hover:bg-sky-600/70 text-sky-50 font-medium cursor-pointer"
+              >
+                {t('modList.orphans.add', { count: orphanMods.length })}
+              </button>
+              {!showEveryMod && (
+                <button
+                  onClick={() => setShowEveryMod(true)}
+                  className="px-2 py-1 rounded hover:bg-sky-900/60 text-sky-300 cursor-pointer"
+                >
+                  {t('modList.orphans.show')}
+                </button>
+              )}
+              <button
+                onClick={() => setDismissedOrphans(orphanKey)}
+                className="p-1 rounded hover:bg-sky-900/60 text-sky-400 cursor-pointer"
+                title={t('modList.orphans.dismiss')}
+                aria-label={t('modList.orphans.dismiss')}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           <div className="bg-emerald-950/40 border-b border-emerald-800/40 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-emerald-400">
             <span className="flex items-center gap-1.5 font-bold">

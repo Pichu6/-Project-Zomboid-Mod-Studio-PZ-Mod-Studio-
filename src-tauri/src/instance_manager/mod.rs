@@ -72,7 +72,23 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
     if let Err(e) = crate::studio_link::install_link_mod(z_dir) {
         eprintln!("[StudioLink] {}", e);
     }
-    if let Err(e) = crate::studio_link::write_link_file(z_dir, &instance.name, &instance.member_ids()) {
+    // What the other profiles hold, so the game can tell a mod that is in no profile at all.
+    let mut others: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(z_dir.join("PZModStudio_Instances")) {
+        for path in entries.flatten().map(|e| e.path()) {
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            if let Some(other) = read_instance(&path).filter(|p| p.id != instance.id) {
+                for id in other.member_ids() {
+                    if !others.contains(&id) {
+                        others.push(id);
+                    }
+                }
+            }
+        }
+    }
+    if let Err(e) = crate::studio_link::write_link_file(z_dir, &instance.name, &instance.member_ids(), &others) {
         eprintln!("[StudioLink] {}", e);
     }
     // Tests run on throwaway folders and must never edit the real game's launch file.
@@ -131,6 +147,31 @@ pub fn take_mod_list_from_game(z_dir: &std::path::Path, game_active: &[String]) 
         "active_profile_name": inst.name
     });
     let _ = crate::load_order::ini_parser::atomic_write(z_dir.join("PZModStudio_MasterLoadOrder.json"), serde_json::to_string_pretty(&master).unwrap_or_default());
+    apply_link(z_dir, &inst);
+    Ok(Some(inst))
+}
+
+/// Mods the game asked to add to the active profile (the Link mod's "add the new ones"): they
+/// join it switched off, at the end of its order. Returns the profile when it changed.
+pub fn add_members_to_active(z_dir: &std::path::Path, ids: &[String]) -> Result<Option<AppInstance>, String> {
+    let dir = z_dir.join("PZModStudio_Instances");
+    let Some((path, mut inst)) = find_active(&dir) else { return Ok(None) };
+    let mut members = inst.member_ids();
+    let mut changed = false;
+    for id in ids {
+        if !members.contains(id) {
+            members.push(id.clone());
+            changed = true;
+        }
+        if !inst.load_order.contains(id) {
+            inst.load_order.push(id.clone());
+        }
+    }
+    if !changed {
+        return Ok(None);
+    }
+    inst.members = Some(members);
+    write_instance(&path, &inst)?;
     apply_link(z_dir, &inst);
     Ok(Some(inst))
 }
@@ -491,6 +532,32 @@ mod build_tests {
         let text = r#"{"id":"a","name":"A","created_at":"","is_active":false,"active_mod_ids":["C","A"],"load_order":["A","B","C"]}"#;
         let p: AppInstance = serde_json::from_str(text).unwrap();
         assert_eq!(p.member_ids(), ids(&["A", "C"]));
+    }
+
+    #[test]
+    fn mods_the_game_asks_to_add_join_the_active_profile_switched_off() {
+        let z = std::env::temp_dir().join(format!("pzms-profile-add-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&z);
+        let dir = z.join("PZModStudio_Instances");
+        fs::create_dir_all(&dir).unwrap();
+        let active: AppInstance = serde_json::from_str(
+            r#"{"id":"a","name":"A","created_at":"","is_active":true,"active_mod_ids":["A"],"load_order":["A"],"members":["A"]}"#,
+        ).unwrap();
+        let other: AppInstance = serde_json::from_str(
+            r#"{"id":"b","name":"B","created_at":"","is_active":false,"active_mod_ids":["X"],"load_order":["X"],"members":["X","Y"]}"#,
+        ).unwrap();
+        write_instance(&dir.join("a.json"), &active).unwrap();
+        write_instance(&dir.join("b.json"), &other).unwrap();
+
+        let after = add_members_to_active(&z, &ids(&["N", "A"])).unwrap().expect("changed");
+        assert_eq!(after.active_mod_ids, ids(&["A"]), "added switched off");
+        assert_eq!(after.member_ids(), ids(&["A", "N"]));
+        // Asking again changes nothing.
+        assert!(add_members_to_active(&z, &ids(&["N"])).unwrap().is_none());
+        // The Link file names the other profile's mods, so the game can tell the new ones.
+        let link = fs::read_to_string(z.join("Lua").join(crate::studio_link::LINK_FILE)).unwrap();
+        assert!(link.contains("member=N\n") && link.contains("other=X\n") && link.contains("other=Y\n"), "{}", link);
+        let _ = fs::remove_dir_all(&z);
     }
 
     #[test]

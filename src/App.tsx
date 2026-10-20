@@ -27,6 +27,8 @@ const DEV_LAUNCH_KEY = 'pzms_dev_launch';
 import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 import i18next from 'i18next';
 import { tHtml } from './i18n/html';
+import { issueText } from './i18n/backendText';
+import { labelFor } from './components/load_order/RowHealth';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('PROFILES');
@@ -70,6 +72,20 @@ export const App: React.FC = () => {
 
   // Game-exact health check of the active list, shared by Mod List, Mod Health and the sidebar.
   const health = useModHealth(paths, mods);
+
+  /**
+   * Mod Health's warnings go to the game too: the Studio Link mod marks those mods in the game's
+   * Mods screen, with the text on hover, in the language the Studio speaks.
+   */
+  const healthIssues = health.report?.issues;
+  useEffect(() => {
+    if (!paths.is_valid || !paths.user_zomboid_dir || !healthIssues) return;
+    const plain = (text: string) => text.replace(/`|\*\*/g, '').replace(/\s+/g, ' ').trim();
+    const lines: [string, string, string][] = healthIssues
+      .filter((i) => i.mod_id && (i.severity === 'error' || i.severity === 'warning'))
+      .map((i) => [i.severity, i.mod_id as string, plain(`${labelFor(i)}: ${issueText(i)}`)]);
+    void TauriService.writeLinkHealth(paths, lines);
+  }, [paths, healthIssues, i18next.language]);
 
   /**
    * What each mod did to the last session's log, by the name the game writes. Read when the

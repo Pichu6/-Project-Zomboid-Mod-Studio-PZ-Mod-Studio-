@@ -1,0 +1,21 @@
+version=1
+title=PZ Mod Studio Link
+description=The game-side half of PZ Mod Studio, a free desktop mod manager for Project Zomboid (Build 42).
+description=
+description=[h2]What it does[/h2]
+description=[list]
+description=[*] The Mods screen lists the mods of the profile active in PZ Mod Studio. "Show all subscribed mods" brings the rest back.
+description=[*] Mods you subscribed to that are in no profile get a button that adds them to the profile, switched off.
+description=[*] Mods that Mod Health warns about (missing requirement, wrong order, incompatible pair...) get a mark, with the warning on hover.
+description=[*] The Load screen says, for each save, whether its mods match the profile.
+description=[*] A save that uses mods outside the profile does not load by accident. A save whose mod list is empty asks first, and can be given the profile's mods.
+description=[/list]
+description=
+description=[h2]You need the app[/h2]
+description=This mod only reads what PZ Mod Studio writes. Without the app it does nothing and the game's screens stay as they are. PZ Mod Studio installs its own copy of this mod; once you subscribe here, it uses this one and removes its own.
+description=
+description=Download (Windows): [url=https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases]PZ Mod Studio on GitHub[/url]
+description=
+description=Client only, nothing runs in a running game: safe to add to an existing save and to remove.
+tags=Build 42;Interface;Misc
+visibility=public

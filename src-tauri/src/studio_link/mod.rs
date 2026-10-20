@@ -35,10 +35,35 @@ fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 3] {
     ]
 }
 
+/// The Workshop folder of a subscribed copy of `Z_StudioLink`, if the player has one.
+fn workshop_copy() -> Option<PathBuf> {
+    let workshop = crate::vfs::studio_paths().workshop_dir;
+    if workshop.is_empty() {
+        return None;
+    }
+    std::fs::read_dir(&workshop).ok()?.flatten().find_map(|item| {
+        let dir = item.path().join("mods").join(LINK_MOD_ID);
+        dir.join("mod.info").is_file().then_some(dir)
+    })
+}
+
 /// Installs `Z_StudioLink` into `<Zomboid>/mods`, or brings it up to this build's version.
-/// Files that are already right are not touched.
+/// Files that are already right are not touched. With the mod subscribed on the Workshop the
+/// local copy goes instead: two copies with one id would leave the game picking one (the
+/// Workshop's, by its folder order), and which version runs would depend on that.
 pub fn install_link_mod(user_zomboid_dir: &Path) -> Result<(), String> {
-    let _ = std::fs::create_dir_all(user_zomboid_dir.join("mods").join(LINK_MOD_ID).join("common"));
+    let local = user_zomboid_dir.join("mods").join(LINK_MOD_ID);
+    if !cfg!(test) && workshop_copy().is_some() {
+        // Only ever the Studio's own files: anything else the player put there stays.
+        for (path, _) in link_files(user_zomboid_dir) {
+            let _ = std::fs::remove_file(path);
+        }
+        for dir in [local.join("42").join("media").join("lua").join("client"), local.join("42").join("media").join("lua"), local.join("42").join("media"), local.join("42"), local.join("common"), local.clone()] {
+            let _ = std::fs::remove_dir(dir); // only when empty
+        }
+        return Ok(());
+    }
+    let _ = std::fs::create_dir_all(local.join("common"));
     for (path, content) in link_files(user_zomboid_dir) {
         if std::fs::read_to_string(&path).is_ok_and(|now| now == content) {
             continue;
@@ -51,21 +76,27 @@ pub fn install_link_mod(user_zomboid_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The text of `PZModStudio_Link.txt` for a profile: its name and its mods in load order.
-pub fn link_file_text(profile_name: &str, members: &[String]) -> String {
+/// The text of `PZModStudio_Link.txt` for a profile: its name, its mods in load order, and the
+/// mods other profiles hold (so the game can tell a mod that is in no profile at all, a new one).
+pub fn link_file_text(profile_name: &str, members: &[String], others: &[String]) -> String {
     let mut out = format!("profile={}\n", profile_name.replace(['\r', '\n'], " "));
     for id in members {
         out.push_str(&format!("member={}\n", id));
+    }
+    for id in others {
+        if !members.contains(id) {
+            out.push_str(&format!("other={}\n", id));
+        }
     }
     out
 }
 
 /// Writes what the game's Mods screen should show for the active profile.
-pub fn write_link_file(user_zomboid_dir: &Path, profile_name: &str, members: &[String]) -> Result<(), String> {
+pub fn write_link_file(user_zomboid_dir: &Path, profile_name: &str, members: &[String], others: &[String]) -> Result<(), String> {
     let lua_dir = user_zomboid_dir.join("Lua");
     std::fs::create_dir_all(&lua_dir).map_err(|e| format!("Cannot create {}: {}", lua_dir.display(), e))?;
     let path = lua_dir.join(LINK_FILE);
-    let text = link_file_text(profile_name, members);
+    let text = link_file_text(profile_name, members, others);
     if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
         return Ok(());
     }
@@ -92,6 +123,44 @@ pub fn merge_game_order(previous: &[String], game_active: &[String]) -> Vec<Stri
     out
 }
 
+// ------------------------------------------------------------------ requests from the game
+
+/// Written by the Link mod when the player asks, in the game, to add mods to the profile
+/// (`add=<mod id>` per line); read and removed by the watcher.
+pub const REQUESTS_FILE: &str = "PZModStudio_LinkRequests.txt";
+
+/// The mod ids a requests file asks to add, without duplicates or empty lines.
+pub fn parse_requests(text: &str) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for line in text.lines() {
+        if let Some(id) = line.trim().strip_prefix("add=").map(str::trim) {
+            if !id.is_empty() && !ids.iter().any(|x| x == id) {
+                ids.push(id.to_string());
+            }
+        }
+    }
+    ids
+}
+
+/// Mod Health's warnings for the game's Mods screen, one per line: `<severity>\t<mod id>\t<text>`,
+/// written by the app (already in the player's language) after each check.
+pub const HEALTH_FILE: &str = "PZModStudio_LinkHealth.txt";
+
+pub fn write_health_file(user_zomboid_dir: &Path, lines: &[(String, String, String)]) -> Result<(), String> {
+    let lua_dir = user_zomboid_dir.join("Lua");
+    std::fs::create_dir_all(&lua_dir).map_err(|e| format!("Cannot create {}: {}", lua_dir.display(), e))?;
+    let clean = |s: &str| s.replace(['\t', '\r', '\n'], " ");
+    let text: String = lines
+        .iter()
+        .map(|(severity, id, msg)| format!("{}\t{}\t{}\n", clean(severity), clean(id), clean(msg)))
+        .collect();
+    let path = lua_dir.join(HEALTH_FILE);
+    if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
+        return Ok(());
+    }
+    crate::load_order::ini_parser::atomic_write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))
+}
+
 // ------------------------------------------------------------------ the game's mod list
 
 static WATCHER_STARTED: AtomicBool = AtomicBool::new(false);
@@ -115,6 +184,22 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&chosen).into_iter().next() else {
                 continue;
             };
+            // Mods the player asked, in the game, to add to the profile.
+            let requests = z_dir.join("Lua").join(REQUESTS_FILE);
+            if let Ok(text) = std::fs::read_to_string(&requests) {
+                let _ = std::fs::remove_file(&requests);
+                let ids = parse_requests(&text);
+                if !ids.is_empty() {
+                    match crate::instance_manager::add_members_to_active(&z_dir, &ids) {
+                        Ok(Some(profile)) => {
+                            let _ = app.emit(PROFILE_CHANGED_EVENT, profile);
+                        }
+                        Ok(None) => {}
+                        Err(e) => eprintln!("[StudioLink] could not add the mods the game asked for: {}", e),
+                    }
+                }
+            }
+
             let default_txt = z_dir.join("mods").join("default.txt");
             let Some(stamp) = modified(&default_txt) else { continue };
             let changed = match &last_seen {
@@ -234,8 +319,13 @@ mod tests {
 
     #[test]
     fn the_link_file_lists_the_profile_and_its_mods() {
-        let text = link_file_text("Vanilla+\nx", &ids(&["A", "B"]));
-        assert_eq!(text, "profile=Vanilla+ x\nmember=A\nmember=B\n");
+        let text = link_file_text("Vanilla+\nx", &ids(&["A", "B"]), &ids(&["B", "C"]));
+        assert_eq!(text, "profile=Vanilla+ x\nmember=A\nmember=B\nother=C\n");
+    }
+
+    #[test]
+    fn requests_from_the_game_are_read_once_each() {
+        assert_eq!(parse_requests("add=A\r\nadd= B \nnoise\nadd=A\nadd=\n"), ids(&["A", "B"]));
     }
 
     fn temp(name: &str) -> PathBuf {

@@ -701,6 +701,18 @@ export const TauriService = {
     }
   },
 
+  /**
+   * Mod Health's warnings for the Studio Link mod, which marks those mods in the game's Mods
+   * screen: [severity, mod id, text in the player's language] each.
+   */
+  writeLinkHealth: async (paths: StudioPathsUI, lines: [string, string, string][]): Promise<void> => {
+    try {
+      await invoke('write_link_health_cmd', { paths, lines });
+    } catch {
+      // The marks are a convenience; the Mod List says the same.
+    }
+  },
+
   /** The active profile was just played: the Studio notes the installed build on it. */
   markProfilePlayed: async (userZomboidDir: string, instanceId: string): Promise<string | null> => {
     try {

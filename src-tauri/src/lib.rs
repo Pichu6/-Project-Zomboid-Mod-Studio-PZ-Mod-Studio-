@@ -385,6 +385,16 @@ fn keep_mod_version_cmd(paths: StudioPaths, mod_id: String) -> Result<snapshots:
     snapshots::keep_version(&paths.user_zomboid_dir, &m.id, &m.name, std::path::Path::new(&m.root_dir), m.info.mod_version.clone(), workshop_id)
 }
 
+/// Mod Health's warnings for the game's Mods screen (the Link mod draws them on each mod):
+/// `(severity, mod id, text)`, the text already in the player's language.
+#[tauri::command(async)]
+fn write_link_health_cmd(paths: StudioPaths, lines: Vec<(String, String, String)>) -> Result<(), String> {
+    let Some(z_dir) = load_order::mod_info::get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).into_iter().next() else {
+        return Ok(());
+    };
+    studio_link::write_health_file(&z_dir, &lines)
+}
+
 /// What each mod did to the last session's log: exceptions and warnings the game laid at its door.
 #[tauri::command(async)]
 fn mod_error_stats_cmd(paths: StudioPaths) -> Vec<sandbox::ModErrorStat> {
@@ -1111,6 +1121,7 @@ pub fn run() {
             list_kept_versions_cmd,
             mark_profile_played_cmd,
             mod_error_stats_cmd,
+            write_link_health_cmd,
             mod_load_times_cmd,
             mod_lists_cmd,
             validate_mod_cmd,

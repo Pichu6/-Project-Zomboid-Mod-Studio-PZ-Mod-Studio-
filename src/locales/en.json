@@ -522,6 +522,13 @@
     "noneFiltered": "No mod passes these filters.",
     "emptyProfile": "The profile \"{{name}}\" has no mods yet.",
     "emptyProfileShowAll": "See all your mods to add some",
+    "orphans": {
+      "text": "{{count}} installed mod(s) are in no profile, so \"{{name}}\" does not list them (subscribed from the Steam website, for example).",
+      "add": "Add to the profile",
+      "show": "Show them",
+      "dismiss": "Hide until another one appears",
+      "added": "{{count}} mod(s) added to \"{{name}}\", switched off."
+    },
     "understood": "Understood",
     "enableAllConfirm": "Switch on the {{count}} mod(s) shown here that are off?",
     "disableAllConfirm": "Switch off the {{count}} mod(s) shown here that are on?"
