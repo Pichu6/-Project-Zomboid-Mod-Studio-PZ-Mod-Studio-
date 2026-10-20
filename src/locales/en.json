@@ -1388,7 +1388,7 @@
     "line1": "These are the mod times.",
     "line2": "There was no hope of compatibility.",
     "line3": "This is how you mod.",
-    "continue": "Click or press any key to continue",
+    "continue": "Press any key",
     "lua": "Lua checker",
     "conflicts": "Conflict scanner",
     "ready": "B41 & B42 Ready"

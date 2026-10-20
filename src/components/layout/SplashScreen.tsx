@@ -21,7 +21,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 }) => {
   const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0);
   const [phraseVisible, setPhraseVisible] = useState(true);
-  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+  /** The three phrases have played: the last one stays, with "press any key" under it. */
+  const [introDone, setIntroDone] = useState(false);
+  /** A key or click came while the app was still loading: leave as soon as it is ready. */
+  const [wantsOut, setWantsOut] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
 
@@ -34,6 +37,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       }, 700);
     }
   }, [isFadingOut]);
+
+  /** Like the game's intro: nothing leaves on its own; a key or a click does, at any moment. */
+  const requestDismiss = useCallback(() => {
+    if (isLoading) setWantsOut(true);
+    else handleDismiss();
+  }, [isLoading, handleDismiss]);
 
   // Cinematic phrase sequence controller (Authentic, suspenseful PZ timing)
   useEffect(() => {
@@ -55,10 +64,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       }, 600);
     }, 7000);
 
-    // Phrase 3 shown (7.6s -> 10.5s), then allow auto-transition
+    // Phrase 3 fades in at 7.6s and is fully on screen a second later: it stays there.
     const t3 = setTimeout(() => {
-      setMinTimeElapsed(true);
-    }, 2600);
+      setIntroDone(true);
+    }, 8800);
 
     return () => {
       clearTimeout(t1);
@@ -67,23 +76,17 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     };
   }, []);
 
-  // Auto-dismiss splash when both backend loading is done and cinematic intro has finished
+  // Asked to leave while loading: go once the app is ready.
   useEffect(() => {
-    if (!isLoading && minTimeElapsed) {
-      handleDismiss();
-    }
-  }, [isLoading, minTimeElapsed, handleDismiss]);
+    if (wantsOut && !isLoading) handleDismiss();
+  }, [wantsOut, isLoading, handleDismiss]);
 
-  // Allow user to click or press any key to enter immediately if loaded (or skip directly)
+  // Any key leaves.
   useEffect(() => {
-    const handleKeyDown = () => {
-      if (!isLoading) {
-        handleDismiss();
-      }
-    };
+    const handleKeyDown = () => requestDismiss();
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLoading, handleDismiss]);
+  }, [requestDismiss]);
 
   if (!shouldRender) return null;
 
@@ -91,9 +94,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
   return (
     <div
-      onClick={() => {
-        if (!isLoading) handleDismiss();
-      }}
+      onClick={requestDismiss}
       className={`fixed inset-0 z-[9999] flex flex-col justify-between items-center bg-black text-slate-100 select-none transition-all duration-700 ease-in-out cursor-pointer ${
         isFadingOut ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
@@ -128,10 +129,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           </h2>
         </div>
 
-        {/* Click to continue hint when loading completes */}
+        {/* "Press any key", once the phrases have played and the app is ready; it stays. */}
         <div
           className={`mt-10 transition-opacity duration-700 flex items-center justify-center gap-2 text-xs font-mono text-neutral-400 tracking-widest uppercase ${
-            !isLoading ? 'opacity-100 animate-pulse' : 'opacity-0'
+            introDone && !isLoading ? 'opacity-100 animate-pulse' : 'opacity-0'
           }`}
         >
           <MousePointerClick className="w-4 h-4 text-red-500" />
@@ -140,7 +141,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       </div>
 
       {/* Bottom Area: Real-Time Diagnostic & Subsystem Loading Panel */}
-      <div className="w-full max-w-xl pb-10 px-6 space-y-3" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-xl pb-10 px-6 space-y-3">
         <div className="bg-neutral-950/95 border border-neutral-800/90 rounded-xl p-4 shadow-2xl backdrop-blur-md space-y-2.5">
           {/* Header of real loading monitor */}
           <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-b border-neutral-900 pb-2">
