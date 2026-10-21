@@ -251,6 +251,19 @@ fn show<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+/// The window in front of the game, asked for from the game's Mods screen. Windows gives the
+/// foreground to a program in the background only right after a key press, so an Alt tap goes
+/// first (it does nothing on its own).
+pub fn bring_to_front<R: Runtime>(app: &tauri::AppHandle<R>) {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYEVENTF_KEYUP, VK_MENU};
+        keybd_event(VK_MENU as u8, 0, 0, 0);
+        keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+    }
+    show(app);
+}
+
 /// The tray icon next to the clock, made the first time it is needed: click to open, menu to
 /// open or quit.
 pub fn ensure_tray<R: Runtime>(app: &tauri::AppHandle<R>) {

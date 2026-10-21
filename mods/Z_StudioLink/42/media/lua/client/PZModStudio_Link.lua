@@ -8,11 +8,15 @@
 --                                       the player's language
 --   PZModStudio_LinkApp.txt       app:  protocol, version, alive=<unix seconds>, every few
 --                                       seconds while it runs
---   PZModStudio_LinkRequests.txt  this: <id>\t<verb>\t<argument> per request (add <mod id>)
+--   PZModStudio_LinkRequests.txt  this: <id>\t<verb>\t<argument> per request (add <mod id>;
+--                                       show: the app's window to the front)
 --   PZModStudio_LinkAcks.txt      app:  <id>\tok|error\t<text> per request it handled
 --   PZModStudio_LinkGame.txt      this: state=menu|ingame, save, mods, on entering either
 --   PZModStudio_LinkScreen.txt    both: screen=studio|other|ask, other=<mod id>: which Mods
 --                                       screen the player chose when another manager is on
+--   PZModStudio_LinkActive.txt    app:  a copy of mods/default.txt, made whenever it changes; a
+--                                       new copy while the game runs (the app changed the mods)
+--                                       becomes the game's active list
 --
 -- What it does with them:
 -- - Mods screen: only the profile's mods ("Show all subscribed mods" brings the rest back); a
@@ -44,6 +48,8 @@ local INVITE_FILE = "PZModStudio_LinkInvite.txt"
 local DOWNLOAD_URL = "https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest"
 local ACKS_FILE = "PZModStudio_LinkAcks.txt"
 local GAME_FILE = "PZModStudio_LinkGame.txt"
+-- mods/default.txt as the app last saw it: the game takes it when the app changes it.
+local ACTIVE_FILE = "PZModStudio_LinkActive.txt"
 local PROTOCOL = 2
 -- The app writes its file every few seconds; older than this, it is closed.
 local APP_ALIVE_SECONDS = 15
@@ -214,6 +220,39 @@ local TEXT = {
     cardNoChanges = "same mods as its last session",
     cardChanges = "since its last session: {1} updated, {2} added, {3} taken out",
     cardNever = "PZ Mod Studio has not seen it played yet",
+    modsState = "State:",
+    modsStateOn = "On, #{1} of {2} in the load order",
+    modsStateOff = "Off (no place in the load order)",
+    modsFrom = "From:",
+    modsFromWorkshop = "Steam Workshop (item {1})",
+    modsFromLocal = "Local folder",
+    modsBuilds = "Builds:",
+    modsBuildsRange = "{1} to {2}",
+    modsBuildsFrom = "{1} and later",
+    modsBuildsUpTo = "up to {1}",
+    modsLoadAfter = "Loads after:",
+    modsLoadBefore = "Loads before:",
+    modsIncompatible = "Incompatible with:",
+    modsLoadsFirst = "LOADS FIRST",
+    modsLoadsFirstWhy = "libraries other mods rely on",
+    modsLoadsLast = "LOADS LAST",
+    modsLoadsLastWhy = "wins any file two mods share",
+    modsPosition = "Position #{1}",
+    modsAppClosed = "PZ Mod Studio closed",
+    modsAppChanged = "PZ Mod Studio changed the mods. Sync to choose which stay.",
+    modsSync = "Sync with PZ Mod Studio",
+    modsSyncTip = "Takes what PZ Mod Studio changed (profile, mods on or off, fix packages) into the game. What you accept here goes to the profile.",
+    modsSyncClosed = "PZ Mod Studio is closed: open it to sync.",
+    modsSynced = "Synced with PZ Mod Studio.",
+    modsSyncedSame = "Already the same as PZ Mod Studio.",
+    modsSyncWhich = "{1} change(s) made here are not accepted yet, and PZ Mod Studio may hold others. Which stay?",
+    modsSyncTake = "PZ Mod Studio's",
+    modsSyncSend = "Mine (Accept)",
+    modsOpenApp = "Open PZ Mod Studio",
+    modsAppNoOpen = "PZ Mod Studio could not be opened from the game. Open it from Windows.",
+    modsAppShown = "PZ Mod Studio is in front of the game.",
+    modsAppOpening = "Opening PZ Mod Studio...",
+    modsFromApp = "PZ Mod Studio changed the mods: this is its list now.",
 }
 
 local translated = {}
@@ -310,6 +349,106 @@ function Link.requestAdd(ids)
     writer:close()
     Link.waiting[id] = { ids = ids, at = now() }
     Link.addError = nil
+end
+
+--- Asks the running Studio to bring its window to the front.
+function Link.requestShow()
+    local writer = getFileWriter(REQUESTS_FILE, true, true)
+    if not writer then return end
+    Link.seq = (Link.seq or 0) + 1
+    writer:write(tostring(now()) .. "-" .. tostring(Link.seq) .. "\tshow\t\n")
+    writer:close()
+end
+
+--- PZ Mod Studio in front: asked through its file when it runs, opened through Windows
+--- (pzmodstudio://, which the app registers) when it is closed.
+function Link.openApp()
+    if Link.appAlive() then
+        Link.requestShow()
+        return true
+    end
+    return pcall(openUrl, "pzmodstudio://open")
+end
+
+--- mods/default.txt as PZ Mod Studio last saw it (its copy in Zomboid/Lua): the mods and maps in
+--- order, as written, and the whole text to tell when it changes. Nil without a whole copy.
+function Link.readAppList()
+    local file = getFileReader(ACTIVE_FILE, false)
+    if not file then return nil end
+    local list = { mods = {}, maps = {}, hasMods = false, hasMaps = false }
+    local parts, block, closed = {}, nil, false
+    local line = file:readLine()
+    while line ~= nil do
+        table.insert(parts, line)
+        local trimmed = string.match(line, "^%s*(.-)%s*$")
+        if trimmed == "mods" or trimmed == "maps" then
+            block = trimmed
+            if block == "mods" then list.hasMods = true else list.hasMaps = true end
+        elseif trimmed == "}" then
+            if block == "mods" then closed = true end
+            block = nil
+        else
+            local key, value = string.match(trimmed, "^(%a+)%s*=%s*(.-),?$")
+            if key == "mod" and block == "mods" and value ~= "" then table.insert(list.mods, value) end
+            if key == "map" and block == "maps" and value ~= "" then table.insert(list.maps, value) end
+        end
+        line = file:readLine()
+    end
+    file:close()
+    if not closed then return nil end
+    list.sig = table.concat(parts, "\n")
+    return list
+end
+
+--- Whether the game's active mods (and map order) are already this list.
+function Link.sameAsGame(list)
+    local active = ActiveMods.getById("default")
+    local mods = active:getMods()
+    if mods:size() ~= #list.mods then return false end
+    for i, id in ipairs(list.mods) do
+        if mods:get(i - 1) ~= id then return false end
+    end
+    if list.hasMaps then
+        local maps = active:getMapOrder()
+        if maps:size() ~= #list.maps then return false end
+        for i, m in ipairs(list.maps) do
+            if maps:get(i - 1) ~= m then return false end
+        end
+    end
+    return true
+end
+
+--- Gives the game the list PZ Mod Studio wrote. Returns whether the game must reload its Lua
+--- (mods came on or went off), as the game's own Mods screen does after Accept.
+function Link.takeAppList(list)
+    local active = ActiveMods.getById("default")
+    local mods = active:getMods()
+    mods:clear()
+    for _, id in ipairs(list.mods) do mods:add(id) end
+    if list.hasMaps then
+        active:getMapOrder():clear()
+        for _, m in ipairs(list.maps) do active:getMapOrder():add(m) end
+    end
+    ActiveMods.getById("currentGame"):copyFrom(active)
+    return ActiveMods.requiresResetLua(active)
+end
+
+--- What the app's files say now, as one text: when it changes, the screens read them again.
+function Link.appSignature()
+    local parts = { Link.appAlive() and "alive" or "closed" }
+    for _, name in ipairs({ FILE, HEALTH_FILE, "PZModStudio_LinkMeta.txt", "PZModStudio_LinkUpdated.txt" }) do
+        local file = getFileReader(name, false)
+        if file then
+            local line = file:readLine()
+            while line ~= nil do
+                table.insert(parts, line)
+                line = file:readLine()
+            end
+            file:close()
+        end
+        table.insert(parts, "|")
+    end
+    return table.concat(parts, "\n")
 end
 
 --- Whether a request is still waiting for the app's answer. (The game's Lua has no `next`.)

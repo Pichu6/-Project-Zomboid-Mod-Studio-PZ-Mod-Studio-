@@ -30,6 +30,7 @@ pub mod server_browser;
 pub mod server_manager;
 pub mod snapshots;
 pub mod translations;
+pub mod url_protocol;
 pub mod vdf;
 pub mod vfs;
 pub mod whats_new;
@@ -1426,6 +1427,8 @@ pub fn run() {
             sandbox::watch_console_log(app.handle().clone());
             // What the game's Mods screen changes comes back to the active profile.
             studio_link::watch_mod_list(app.handle().clone());
+            // pzmodstudio:// opens it from the game's Mods screen.
+            url_protocol::register();
             // The window opens where and how it was left (it starts hidden so it does not jump).
             if let Some(window) = app.get_webview_window("main") {
                 window_prefs::restore(&window);

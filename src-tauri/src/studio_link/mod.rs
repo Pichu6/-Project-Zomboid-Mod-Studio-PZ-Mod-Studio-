@@ -379,7 +379,12 @@ fn handle_requests<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, r
         // "<mode>/<world>": answered with the copy's world folder.
         start_copy(app, z_dir, r.arg.trim(), r.id.clone());
     }
-    for r in requests.iter().filter(|r| r.verb != "add" && r.verb != "backup" && r.verb != "copy") {
+    // "Open PZ Mod Studio" on the game's Mods screen: the window comes to the front.
+    for r in requests.iter().filter(|r| r.verb == "show") {
+        crate::window_prefs::bring_to_front(app);
+        answers.push((r.id.clone(), true, String::new()));
+    }
+    for r in requests.iter().filter(|r| !["add", "backup", "copy", "show"].contains(&r.verb.as_str())) {
         answers.push((r.id.clone(), false, format!("This version of PZ Mod Studio does not know \"{}\".", r.verb)));
     }
     answers
@@ -624,6 +629,34 @@ pub fn write_health_file(user_zomboid_dir: &Path, lines: &[(String, String, Stri
 
 static WATCHER_STARTED: AtomicBool = AtomicBool::new(false);
 
+/// app -> game: `mods/default.txt` as it is, copied where the game's Lua can read it. The game
+/// keeps the active mods it read when it started; when this copy changes while it runs (a profile
+/// switched, a mod turned on in the app, a fix package added) the Link takes the new list.
+pub const ACTIVE_FILE: &str = "PZModStudio_LinkActive.txt";
+
+/// Copies `default.txt` for the Link, only whole (its mods block closed) and read the same twice
+/// (the game writes it in place). False when it should be tried again on the next round.
+pub fn mirror_active_list(z_dir: &Path) -> bool {
+    let lua = z_dir.join("Lua");
+    let path = z_dir.join("mods").join("default.txt");
+    if !lua.is_dir() || !path.is_file() {
+        return true;
+    }
+    let Ok(first) = std::fs::read_to_string(&path) else { return false };
+    if crate::load_order::ini_parser::try_parse_default_txt(&path).is_none() {
+        return false;
+    }
+    thread::sleep(Duration::from_millis(200));
+    if std::fs::read_to_string(&path).ok().as_ref() != Some(&first) {
+        return false;
+    }
+    let file = lua.join(ACTIVE_FILE);
+    if std::fs::read_to_string(&file).is_ok_and(|t| t == first) {
+        return true;
+    }
+    crate::load_order::ini_parser::atomic_write(file, first).is_ok()
+}
+
 fn modified(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
@@ -638,6 +671,8 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     thread::spawn(move || {
         let mut last_seen: Option<(PathBuf, SystemTime)> = None;
         let mut game_seen: Option<SystemTime> = None;
+        // The default.txt the Link's copy was made from.
+        let mut mirrored: Option<SystemTime> = None;
         let mut app_written = 0u64;
         // The save the player is in, as the game file last said; backed up when they leave it.
         let mut playing: Option<String> = None;
@@ -710,6 +745,9 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
 
             let default_txt = z_dir.join("mods").join("default.txt");
             let Some(stamp) = modified(&default_txt) else { continue };
+            if mirrored != Some(stamp) && mirror_active_list(&z_dir) {
+                mirrored = Some(stamp);
+            }
             let changed = match &last_seen {
                 Some((path, seen)) => path != &default_txt || *seen != stamp,
                 None => false, // the file as it was when the Studio opened is not a change
@@ -1060,6 +1098,27 @@ waiting=C
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn the_link_gets_a_copy_of_the_active_list_only_when_whole() {
+        let z = temp("active");
+        std::fs::create_dir_all(z.join("Lua")).unwrap();
+        std::fs::create_dir_all(z.join("mods")).unwrap();
+        let copy = z.join("Lua").join(ACTIVE_FILE);
+        std::fs::write(z.join("mods").join("default.txt"), "VERSION = 1,\nmods\n{\n    mod = \\A,\n").unwrap();
+        assert!(!mirror_active_list(&z), "a file cut short is tried again");
+        assert!(!copy.exists());
+        let whole = "VERSION = 1,\nmods\n{\n    mod = \\A,\n}\nmaps\n{\n    map = Muldraugh, KY,\n}\n";
+        std::fs::write(z.join("mods").join("default.txt"), whole).unwrap();
+        assert!(mirror_active_list(&z));
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), whole);
+        let _ = std::fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn the_game_can_ask_for_the_window() {
+        assert_eq!(parse_requests("9-1\tshow\n9-2\tshow\n"), vec![LinkRequest { id: "9-1".into(), verb: "show".into(), arg: String::new() }]);
     }
 
     #[test]

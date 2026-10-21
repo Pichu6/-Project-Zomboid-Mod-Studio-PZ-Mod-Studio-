@@ -12,7 +12,10 @@
 -- With PZ Mod Studio: the profile's mods first, Mod Health's warnings on each mod, the mods
 -- updated since the last session, the mods installed but in no profile (added in one click),
 -- and the player's own notes and groups (made in the app; here they are shown, and a group's
--- heading selects its mods to turn them on or off together).
+-- heading selects its mods to turn them on or off together). While the app runs, what it changes
+-- reaches the game on the main menu (a profile switched, mods turned on or off, a fix package:
+-- see Link.readAppList), "Sync" takes it on demand, and "Open PZ Mod Studio" brings it up. With
+-- the app closed the list is everything installed, as without it.
 -- The game's own screen is one button away ("The game's screen"), and another mod manager that
 -- owns the Mods screen (see PZModStudio_Link.lua) keeps it: then this screen never opens.
 
@@ -40,6 +43,9 @@ local UPDATED_FILE = "PZModStudio_LinkUpdated.txt"
 local FILTERS = { "all", "on", "off", "favourites", "updated", "problems", "maps" }
 local META_FILE = "PZModStudio_LinkMeta.txt"
 local VIEW_FILE = "PZModStudio_LinkView.txt"
+-- reopen=1: the game reloaded its Lua for mods synced from PZ Mod Studio while this screen was
+-- open, and opens it again.
+local REOPEN_FILE = "PZModStudio_LinkReopen.txt"
 
 -- The app's colours (Tailwind slate and emerald), as 0..1.
 local C = {
@@ -67,6 +73,16 @@ Link.ModsScreen = Screen
 
 -- ------------------------------------------------------------------ data
 
+--- The plain ids of a Java list of ids (nil or not there: none).
+local function idsOf(get)
+    local out = {}
+    local ok, list = pcall(get)
+    if ok and list then
+        for i = 0, list:size() - 1 do table.insert(out, plainId(tostring(list:get(i)))) end
+    end
+    return out
+end
+
 --- Every installed mod the game can see, once each (the first folder of an id wins, as in the
 --- game's screen), with what the screen needs of it.
 local function readMods()
@@ -75,18 +91,18 @@ local function readMods()
         local info = getModInfo(dir)
         if info and not byId[plainId(info:getId())] then
             local id = plainId(info:getId())
-            local requires = {}
-            local req = info:getRequire()
-            if req then
-                for i = 0, req:size() - 1 do table.insert(requires, plainId(req:get(i))) end
-            end
+            local requires = idsOf(function() return info:getRequire() end)
             local mod = {
                 id = id,
                 gameId = info:getId(),
                 info = info,
+                dir = tostring(dir),
                 name = info:getName() or id,
                 author = info:getAuthor() or "",
                 requires = requires,
+                loadAfter = idsOf(function() return info:getLoadAfter() end),
+                loadBefore = idsOf(function() return info:getLoadBefore() end),
+                incompatible = idsOf(function() return info:getIncompatible() end),
                 available = info:isAvailable(),
                 map = Link.isMapMod(info:getId()),
                 workshop = tostring(info:getWorkshopID() or ""),
@@ -456,8 +472,9 @@ function Screen:readState()
     self.startOn = {}
     for id, _ in pairs(self.on) do self.startOn[id] = true end
     self.favs = readFavourites()
-    -- With the app: its profile, Mod Health's warnings and what was updated (as it last wrote them).
-    self.link = Link.appInstalled() and Link.read() or nil
+    -- With the app: its profile (only while it runs: closed, the profile may no longer be what
+    -- it holds, so the list is everything installed), Mod Health's warnings and what was updated.
+    self.link = Link.appInstalled() and Link.appAlive() and Link.read() or nil
     self.health = self.link and Link.readHealth() or {}
     self.updated = Link.appInstalled() and readUpdated() or {}
     if Link.appInstalled() then self.notes, self.groups, self.groupNotes = readMeta() end
@@ -1316,6 +1333,50 @@ function Screen:select(mod, groupName)
     local info = mod.info
     local parts = {}
     local function line(s) table.insert(parts, s) end
+    -- Where it stands and where it comes from, as the app's inspector shows it.
+    local function fact(label, value, color)
+        line(" <RGB:0.58,0.64,0.72> " .. label .. " <RGB:" .. (color or "0.9,0.92,0.95") .. "> " .. value .. " <RGB:1,1,1> <LINE> ")
+    end
+    local function nameOf(id)
+        local m = self.byId[id]
+        return m and m.name or id
+    end
+    if self.on[mod.id] then
+        fact(text("modsState"), text("modsStateOn", self.position[mod.id] or "?", #self.order), "0.45,0.9,0.65")
+    else
+        fact(text("modsState"), text("modsStateOff"))
+    end
+    if mod.workshop ~= "" and mod.workshop ~= "0" and string.find(mod.dir, "108600", 1, true) then
+        fact(text("modsFrom"), text("modsFromWorkshop", mod.workshop))
+    else
+        fact(text("modsFrom"), text("modsFromLocal"))
+    end
+    local okMin, vMin = pcall(function() return info:getVersionMin() end)
+    local okMax, vMax = pcall(function() return info:getVersionMax() end)
+    vMin = okMin and vMin and tostring(vMin) or nil
+    vMax = okMax and vMax and tostring(vMax) or nil
+    if vMin and vMax then
+        fact(text("modsBuilds"), text("modsBuildsRange", vMin, vMax))
+    elseif vMin then
+        fact(text("modsBuilds"), text("modsBuildsFrom", vMin))
+    elseif vMax then
+        fact(text("modsBuilds"), text("modsBuildsUpTo", vMax))
+    end
+    local function idList(ids, warnOn)
+        local out, warn = {}, false
+        for _, id in ipairs(ids) do
+            table.insert(out, nameOf(id))
+            if warnOn and self.on[id] then warn = true end
+        end
+        return table.concat(out, ", "), warn
+    end
+    if #mod.loadAfter > 0 then fact(text("modsLoadAfter"), (idList(mod.loadAfter))) end
+    if #mod.loadBefore > 0 then fact(text("modsLoadBefore"), (idList(mod.loadBefore))) end
+    if #mod.incompatible > 0 then
+        local names, clash = idList(mod.incompatible, self.on[mod.id])
+        fact(text("modsIncompatible"), names, clash and "1,0.45,0.45" or nil)
+    end
+    line(" <LINE> ")
     -- The player's own note (with the app).
     if self.notes[mod.id] then line(" <RGB:0.55,0.8,1> " .. text("modsYourNote") .. " " .. self.notes[mod.id] .. " <RGB:1,1,1> <LINE> <LINE> ") end
     -- What Mod Health says (with the app).
@@ -1539,7 +1600,10 @@ function Screen:createChildren()
     local bottom = self.height - pad - bh - 14
     local listW = math.floor((self.width - pad * 3) * self.ratio)
     self.layoutTop, self.layoutBottom, self.bh = listTop, bottom, bh
-    self.list = ModList:new(pad, listTop, listW, bottom - listTop, self)
+    -- Above and below the list, what its ends mean (as in the app): #1 loads first, the last
+    -- one loads last.
+    self.barH = fontH(UIFont.Small) + 8
+    self.list = ModList:new(pad, listTop + self.barH + 4, listW, bottom - listTop - (self.barH + 4) * 2, self)
     self.list:initialise()
     self.list:instantiate()
     self:addChild(self.list)
@@ -1593,6 +1657,12 @@ function Screen:createChildren()
     self.undoButton = button(self, gs:getRight() + 16, fy, measure(UIFont.Small, text("modsUndo")) + 26, bh, text("modsUndo"), function(screen) screen:undo() end)
     self.redoButton = button(self, self.undoButton:getRight() + 6, fy, measure(UIFont.Small, text("modsRedo")) + 26, bh, text("modsRedo"), function(screen) screen:redo() end)
     self.mapOrderButton = button(self, self.redoButton:getRight() + 16, fy, measure(UIFont.Small, text("modsMapOrder")) + 26, bh, text("modsMapOrder"), function(screen) screen:openMapOrder() end)
+    -- With PZ Mod Studio: take what it changed (or send what changed here), and open it.
+    if Link.appInstalled() then
+        self.syncButton = button(self, self.mapOrderButton:getRight() + 16, fy, measure(UIFont.Small, text("modsSync")) + 26, bh, text("modsSync"), function(screen) screen:sync() end)
+        self.syncButton.tooltip = text("modsSyncTip")
+        self.openAppButton = button(self, self.syncButton:getRight() + 6, fy, measure(UIFont.Small, text("modsOpenApp")) + 26, bh, text("modsOpenApp"), function(screen) screen:openApp() end)
+    end
     self.acceptButton = button(self, self.width - pad - 200, fy, 200, bh, text("modsAccept"), function(screen) screen:accept() end, true)
     self.backButton = button(self, self.acceptButton.x - 140, fy, 130, bh, text("back"), function(screen) screen:back() end)
 
@@ -1645,6 +1715,35 @@ function Screen:setRatio(ratio)
     self.desc:paginate()
 end
 
+--- The bars above and below the list: #1 loads first, the last # loads last (the # beside each
+--- mod is its place in that order, whatever order the list is sorted in).
+function Screen:drawBars()
+    local l = self.list
+    if not l or not self.barH then return end
+    local h = self.barH
+    local small = UIFont.Small
+    local function bar(y, label, detail, position)
+        self:drawRect(l.x, y, l.width, h, 0.95, C.panel[1], C.panel[2], C.panel[3])
+        self:drawRectBorder(l.x, y, l.width, h, 1, C.border[1], C.border[2], C.border[3])
+        self:drawRect(l.x, y, 3, h, 1, C.accent[1], C.accent[2], C.accent[3])
+        local ty = y + (h - fontH(small)) / 2
+        self:drawText(label, l.x + 12, ty, C.accent[1], C.accent[2], C.accent[3], 1, small)
+        local lw = measure(small, label)
+        local pw = measure(small, position)
+        self:drawText(position, l.x + l.width - pw - 12, ty, C.muted[1], C.muted[2], C.muted[3], 1, small)
+        local room = l.width - lw - pw - 48
+        if room < 60 then return end
+        local d = detail
+        if measure(small, d) > room then
+            while string.len(d) > 1 and measure(small, d .. "...") > room do d = string.sub(d, 1, -2) end
+            d = d .. "..."
+        end
+        self:drawText(d, l.x + 24 + lw, ty, C.muted[1], C.muted[2], C.muted[3], 1, small)
+    end
+    bar(l.y - h - 4, text("modsLoadsFirst"), text("modsLoadsFirstWhy"), text("modsPosition", 1))
+    bar(l:getBottom() + 4, text("modsLoadsLast"), text("modsLoadsLastWhy"), text("modsPosition", math.max(#self.order, 1)))
+end
+
 function Screen:prerender()
     ISPanelJoypad.prerender(self)
     -- While the divider is held only its line follows the pointer; let go, the list and the
@@ -1674,8 +1773,11 @@ function Screen:prerender()
         local c = alive and C.accent or C.muted
         self:drawText(status, pad + measure(UIFont.Small, sub), subY, c[1], c[2], c[3], 1, UIFont.Small)
     else
-        self:drawText(text("modsSub", #self.mods, onCount), pad, subY, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small)
+        local sub = text("modsSub", #self.mods, onCount)
+        self:drawText(sub, pad, subY, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small)
+        if Link.appInstalled() then self:drawText("   " .. text("modsAppClosed"), pad + measure(UIFont.Small, sub), subY, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small) end
     end
+    self:drawBars()
     if not self.detailX then return end
     -- The details panel behind the poster and the text.
     self:drawRect(self.detailX - 10, self.detailY - 6, self.detailW + 20, self.noteY + 22 - self.detailY, 0.95, C.panel[1], C.panel[2], C.panel[3])
@@ -1728,6 +1830,137 @@ function Screen:prerender()
     -- A short note (why a move was refused...), for a few seconds.
     if self.note and self.noteAt and Link.now() - self.noteAt < 6 then
         self:drawText(self.note, self.detailX, self.noteY, C.warn[1], C.warn[2], C.warn[3], 1, UIFont.Small)
+    elseif self.appChanged then
+        -- PZ Mod Studio changed the mods while changes made here wait: Sync says which stay.
+        self:drawText(text("modsAppChanged"), self.detailX, self.noteY, C.warn[1], C.warn[2], C.warn[3], 1, UIFont.Small)
+    end
+end
+
+-- ------------------------------------------------------------------ PZ Mod Studio
+
+local function writeReopen(on)
+    local file = getFileWriter(REOPEN_FILE, true, false)
+    if not file then return end
+    file:write("reopen=" .. (on and "1" or "0") .. "\n")
+    file:close()
+end
+
+local function readReopen()
+    local file = getFileReader(REOPEN_FILE, false)
+    if not file then return false end
+    local line = file:readLine()
+    file:close()
+    return line == "reopen=1"
+end
+
+--- Gives the game PZ Mod Studio's list, and reloads the game's Lua when mods came on or went
+--- off (as Accept does). False when the game already had it.
+local function takeFromApp(list, reopen)
+    if not list or Link.sameAsGame(list) then return false end
+    local reset = Link.takeAppList(list)
+    if reset then
+        pcall(writeReopen, reopen)
+        if Screen.instance then Screen.instance:close() end
+        MainScreen.instance.bottomPanel:setVisible(false)
+        getCore():ResetLua("default", "modsChanged")
+    end
+    return true
+end
+
+--- What the app changed is taken as seen (its list now, its files).
+local function noteAppSeen(list)
+    if list then Link.appListSig = list.sig end
+    Link.appSig = Link.appSignature()
+end
+
+--- The screen made again from what the game and the app hold now, as the player had it.
+function Screen.reopen(note)
+    local old = Screen.instance
+    local keep = old and {
+        filter = old.filter, sort = old.sort, group = old.group, search = old.search,
+        collapsed = old.collapsed, shown = old.selectedMod and old.selectedMod.id, onlyProfile = old.onlyProfile,
+    }
+    Screen.open(keep)
+    if note and Screen.instance then Screen.instance:say(note) end
+end
+
+--- With changes waiting here, only the app's files are read again (the list stays as edited).
+function Screen:refreshAppData()
+    self.link = Link.appAlive() and Link.read() or nil
+    self.health = self.link and Link.readHealth() or {}
+    self.updated = readUpdated()
+    self.notes, self.groups, self.groupNotes = readMeta()
+    self:recount()
+    self:refreshList()
+end
+
+--- Sync: what PZ Mod Studio holds becomes the game's. With changes waiting here, the player says
+--- which stay: theirs (Accept, which the app takes into the profile) or the app's.
+function Screen:sync()
+    if not Link.appAlive() then return self:say(text("modsSyncClosed")) end
+    local function pull()
+        local list = Link.readAppList()
+        noteAppSeen(list)
+        if Screen.instance then Screen.instance.appChanged = false end
+        if takeFromApp(list, true) then
+            if Screen.instance then Screen.reopen(text("modsSynced")) end
+        else
+            Screen.reopen(text("modsSyncedSame"))
+        end
+    end
+    if self.changes == 0 then return pull() end
+    self.dialog = Link.WaitPanel.choose(text("modsSync"), text("modsSyncWhich", self.changes), 170, {
+        { label = text("back") },
+        { label = text("modsSyncTake"), onClick = pull },
+        { label = text("modsSyncSend"), accept = true, onClick = function() self:accept() end },
+    })
+end
+
+function Screen:openApp()
+    local alive = Link.appAlive()
+    local ok = Link.openApp()
+    self:say(not ok and text("modsAppNoOpen") or alive and text("modsAppShown") or text("modsAppOpening"))
+end
+
+--- Every few seconds on the main menu: what PZ Mod Studio changed while the game runs reaches
+--- it. A new mod list becomes the game's (at once on the main menu or on this screen, unless
+--- changes wait here: then Sync asks); a new profile, health, notes or updates are read again.
+local function watchApp(ms)
+    if ms.inGame or Link.inGame or not Link.appInstalled() then return end
+    local t = Link.now()
+    if Link.watchedAt and t - Link.watchedAt < 3 then return end
+    Link.watchedAt = t
+    local screen = Screen.instance
+    -- Not under a window of its own (a mod's options, a question): the screen may be made again.
+    if screen and (screen.optionsWindow or (screen.dialog and screen.dialog:isVisible())) then return end
+    local list = Link.readAppList()
+    if list and Link.appListSig == nil then
+        Link.appListSig = list.sig
+    elseif list and list.sig ~= Link.appListSig then
+        if screen and screen.changes > 0 then
+            if not screen.appChanged then
+                screen.appChanged = true
+                if screen.syncButton then styleButton(screen.syncButton, true) end
+            end
+        elseif screen or ms.bottomPanel:isVisible() then
+            -- (on another screen of the menu, New Game or Load, it waits until that one closes)
+            noteAppSeen(list)
+            if takeFromApp(list, screen ~= nil) then
+                if screen and Screen.instance == screen then Screen.reopen(text("modsFromApp")) end
+                return
+            end
+        end
+    end
+    local sig = Link.appSignature()
+    if Link.appSig == nil then
+        Link.appSig = sig
+    elseif sig ~= Link.appSig then
+        Link.appSig = sig
+        if screen and screen.changes == 0 then
+            Screen.reopen()
+        elseif screen then
+            screen:refreshAppData()
+        end
     end
 end
 
@@ -1792,7 +2025,7 @@ end
 
 function Screen:back()
     if self.changes == 0 then return self:close() end
-    Link.WaitPanel.choose(text("modsTitle"), text("modsDiscard", self.changes), 150, {
+    self.dialog = Link.WaitPanel.choose(text("modsTitle"), text("modsDiscard", self.changes), 150, {
         { label = text("back") },
         { label = text("modsDiscardYes"), onClick = function() self:close() end },
         { label = text("modsAccept"), accept = true, onClick = function() self:accept() end },
@@ -1870,14 +2103,22 @@ function Screen.owns()
     return not Link.otherManager()
 end
 
-function Screen.open()
+function Screen.open(keep)
     local ms = MainScreen.instance
     if not ms then return end
     if Screen.instance then Screen.instance:close() end
     local screen = Screen:new(0, 0, ms.width, ms.height)
     screen:readState()
+    if keep then
+        screen.filter, screen.sort, screen.group = keep.filter, keep.sort, keep.group
+        screen.search = keep.search or ""
+        screen.collapsed = keep.collapsed or {}
+        if screen.link and keep.onlyProfile ~= nil then screen.onlyProfile = keep.onlyProfile end
+        if keep.shown then screen.selectedMod = screen.byId[keep.shown] end
+    end
     screen:initialise()
     screen:instantiate()
+    if screen.search ~= "" then screen.searchBox:setText(screen.search) end
     ms:addChild(screen)
     screen:bringToTop()
     Screen.instance = screen
@@ -1910,4 +2151,20 @@ local menuPrerender = MainScreen.prerender
 function MainScreen:prerender(...)
     menuPrerender(self, ...)
     if self.modsOption and self.modsOption.onMouseDown ~= click then self.modsOption.onMouseDown = click end
+    if self.inGame then return end
+    -- Back from a reload asked by Sync while this screen was open: it opens again.
+    if not Link.reopenChecked then
+        Link.reopenChecked = true
+        if readReopen() then
+            pcall(writeReopen, false)
+            local ok, err = pcall(Screen.open)
+            if ok and Screen.instance then Screen.instance:say(text("modsSynced")) end
+            if not ok then print("[StudioLink] the Mods screen could not open again: " .. tostring(err)) end
+        end
+    end
+    local ok, err = pcall(watchApp, self)
+    if not ok and not Link.watchFailed then
+        Link.watchFailed = true
+        print("[StudioLink] following PZ Mod Studio failed: " .. tostring(err))
+    end
 end
