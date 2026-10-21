@@ -154,7 +154,7 @@
     "community": "Descargar las reglas y el índice de mods de la comunidad",
     "communityBlurb": "Una vez al día, del repositorio del Studio en GitHub: reglas de orden de carga, pares incompatibles, y un registro por mod con las builds en que corre, con qué choca y sus problemas conocidos con el arreglo que el Studio aplica. Los usan Ordenar, Salud de mods, la Lista de mods y Explorar. Apagado: se conserva la última copia y no se descarga nada. Nunca se envía nada.",
     "communitySite": "El índice de la comunidad en la web",
-    "communityLists": "Listas de la comunidad en GitHub",
+    "communityLists": "Listas de la comunidad en la web",
     "github": "GitHub, para \"Compartir\" en un clic",
     "githubBlurb": "Opcional. Con un token personal guardado, \"Compartir con la comunidad\" (una regla de orden, el registro de un mod) hace un fork del repositorio del Studio en tu cuenta una sola vez, escribe el archivo en una rama y abre el pull request solo. Sin token, los mismos botones abren la página de GitHub con el JSON ya completo y apretás \"Propose changes\" ahí. Recibir los archivos de la comunidad no necesita ninguna cuenta. El token se verifica con GitHub y se guarda en el Administrador de credenciales de Windows, solo en esta PC; no se envía nada más.",
     "githubHow": "Conectar con GitHub muestra un código; escribilo en la página que se abre y aprobá \"PZ Mod Studio\" (puede abrir pull requests en repositorios públicos, y se usa solo para estas propuestas). O creá vos un token de grano fino (Settings → Developer settings → Personal access tokens) con \"Contents\" y \"Pull requests\" en lectura y escritura, y pegalo.",
@@ -1074,8 +1074,8 @@
         "have": "Tenés {{have}} de sus {{count}} mod(s) del Workshop.",
         "copy": "Copiar a mis listas",
         "source": "Ver en GitHub",
-        "all": "Todas las listas en GitHub",
-        "allTitle": "Abre las listas de la comunidad en tu navegador: todas las compartidas, y cómo compartir la tuya."
+        "all": "Todas las listas en la web",
+        "allTitle": "Abre la página de listas de la comunidad en tu navegador: todas las compartidas con sus mods, y cómo hacer una."
       },
       "share": {
         "button": "Compartir con la comunidad",

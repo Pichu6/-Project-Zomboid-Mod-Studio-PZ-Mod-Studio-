@@ -154,7 +154,7 @@
     "community": "Download the community rules and mod index",
     "communityBlurb": "Once a day, from the Studio's own repository on GitHub: load-order rules, incompatible pairs, and one registry per mod with the builds it runs on, what it clashes with and its known issues with the fix the Studio can apply. Auto-Sort, Mod Health, the Mod List and the Browse page use them. Off: the last copy is kept and nothing is fetched. Nothing is ever sent.",
     "communitySite": "The community index on the web",
-    "communityLists": "Community lists on GitHub",
+    "communityLists": "Community lists on the web",
     "github": "GitHub, for \"Propose\" in one click",
     "githubBlurb": "Optional. With a personal token saved, \"Propose to the community\" (a load-order rule, a mod's registry) forks the Studio's repository on your account once, writes the file on a branch and opens the pull request by itself. Without one, the same buttons open GitHub's page with the JSON filled in and you press \"Propose changes\" there. Receiving the community files needs no account at all. The token is checked with GitHub and kept in Windows Credential Manager on this PC only; nothing else is ever sent.",
     "githubHow": "Connect with GitHub shows a code; type it on the page that opens and approve \"PZ Mod Studio\" (it may open pull requests on public repositories, and is used only for these proposals). Or make a fine-grained token yourself (Settings → Developer settings → Personal access tokens) with \"Contents\" and \"Pull requests\" read and write, and paste it.",
@@ -1074,8 +1074,8 @@
         "have": "You have {{have}} of its {{count}} Workshop mod(s).",
         "copy": "Copy to my lists",
         "source": "See on GitHub",
-        "all": "All lists on GitHub",
-        "allTitle": "Opens the community's lists in your browser: every shared list, and how to share yours."
+        "all": "All lists on the web",
+        "allTitle": "Opens the community lists page in your browser: every shared list with its mods, and how to make one."
       },
       "share": {
         "button": "Share with the community",

@@ -1,11 +1,11 @@
 name: 'Index web view'
 
-# Publishes site/ with community/index.json and community/rules.json beside it, as GitHub Pages.
+# Publishes site/ with community/index.json, rules.json and lists.json beside it, as GitHub Pages.
 # Needs Pages enabled once in the repository settings, with "GitHub Actions" as the source.
 on:
   push:
     branches: [main]
-    paths: ['site/**', 'community/index.json', 'community/rules.json', '.github/workflows/pages.yml']
+    paths: ['site/**', 'community/index.json', 'community/rules.json', 'community/lists.json', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p _site
           cp site/index.html _site/
-          cp community/index.json community/rules.json _site/
+          cp community/index.json community/rules.json community/lists.json _site/
 
       # Needs Pages switched on in the repository settings (Source: GitHub Actions); the token is
       # not allowed to do that itself ("Resource not accessible by integration").

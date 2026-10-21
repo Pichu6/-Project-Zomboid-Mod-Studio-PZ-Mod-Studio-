@@ -26,7 +26,7 @@
   .card:hover { border-color: #334155; } .card h3 { margin: 0 0 2px; font-size: 15px; } .card .id { color: var(--dim); font-family: Consolas, Menlo, monospace; font-size: 11px; }
   .card p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
   .detail { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 16px 0; }
-  .detail h2 { margin: 0; font-size: 18px; } .detail .close { float: right; color: var(--muted); cursor: pointer; }
+  .detail h2 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: normal; color: var(--text); } .detail .close { float: right; color: var(--muted); cursor: pointer; }
   .issue { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: var(--panel2); }
   .issue b { color: var(--text); } .issue .meta { color: var(--dim); font-size: 11px; } .issue .fix { color: #7dd3fc; font-size: 12px; }
   .muted { color: var(--muted); } .dim { color: var(--dim); font-size: 12px; }
@@ -61,6 +61,13 @@
     <div class="dim" style="margin-bottom:8px">From <code>community/rules.json</code>: what mod.info does not say. The Studio's Auto-Sort follows the rules and Mod Health warns when both of a pair are on.</div>
     <table id="rules"></table>
   </section>
+  <section id="lists">
+    <h2>Players' lists</h2>
+    <div class="dim" style="margin-bottom:8px">Mod lists other players shared, each read by a person before it is published. In PZ Mod Studio: Browse → My lists → <i>From the community</i> copies one into your lists (nothing is installed until you press Subscribe to all missing), and <i>Share with the community</i> on one of yours proposes it here. Without the Studio, <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/blob/main/community/lists/README.md">see on GitHub how to make one</a>.</div>
+    <div id="listGrid" class="grid"></div>
+    <div id="listDetail"></div>
+    <p><a class="btn" href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/blob/main/community/lists/README.md">How to make a list (GitHub)</a> <a class="btn quiet" href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest">Get PZ Mod Studio</a></p>
+  </section>
   <section>
     <h2>Add what you know</h2>
     <p class="muted">A registry is one small JSON file per mod, by pull request; the repository's check refuses a malformed one, so a person reviews only what a machine could not. From the Studio: right-click a mod → <i>Share what the Studio saw of this mod…</i> opens GitHub with the file filled in. Without git: <a id="reportLink" href="#">report a mod issue</a> with the form, and a maintainer files it.</p>
@@ -76,10 +83,13 @@
   document.getElementById('newLink').href = REPO + '/new/main/community/index?filename=MyMod.json&value=' + encodeURIComponent(JSON.stringify({ id: 'MyMod', name: 'My Mod', workshop_id: '', builds: ['42'], requires: [], incompatible: [], load_after: [], issues: [] }, null, 2) + '\n');
   document.getElementById('reportLink').href = REPO + '/issues/new?template=mod-report.yml';
 
-  // The JSON sits beside the page when deployed; in the repository it sits one folder up.
+  // Read from the repository's main branch first: the workflow that rebuilds the JSON commits as
+  // the Actions bot, which does not publish this page again, so the copy beside the page can be
+  // older. Beside the page (deployed) and one folder up (in the repository) when that fails.
+  const RAW = 'https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/community/';
   const fetchFirst = async (paths) => { for (const p of paths) { try { const r = await fetch(p, { cache: 'no-cache' }); if (r.ok) return { json: await r.json(), url: p }; } catch (e) { /* next */ } } return null; };
-  const idx = await fetchFirst(['./index.json', '../community/index.json']);
-  const rules = await fetchFirst(['./rules.json', '../community/rules.json']);
+  const data = (file) => fetchFirst([RAW + file, './' + file, '../community/' + file]);
+  const [idx, rules, shared] = await Promise.all([data('index.json'), data('rules.json'), data('lists.json')]);
   const grid = document.getElementById('grid'), detail = document.getElementById('detail'), count = document.getElementById('count');
   if (!idx) { grid.innerHTML = '<div class="empty">The index could not be read.</div>'; return; }
   document.getElementById('rawLink').href = idx.url;
@@ -126,7 +136,7 @@
   ['q', 'build', 'onlyIssues'].forEach((id) => document.getElementById(id).addEventListener('input', render));
   render();
   const wanted = decodeURIComponent(location.hash.slice(1));
-  if (wanted && idx.json.mods[wanted]) show(idx.json.mods[wanted]);
+  if (wanted && wanted !== 'lists' && idx.json.mods[wanted]) show(idx.json.mods[wanted]);
 
   if (rules && ((rules.json.load_after || []).length || (rules.json.incompatible || []).length)) {
     document.getElementById('rulesSection').hidden = false;
@@ -134,6 +144,26 @@
       + (rules.json.load_after || []).map((r) => '<tr><td><b>' + esc(nameOf(r.mod_id)) + '</b> loads after <b>' + esc(nameOf(r.after)) + '</b></td><td>' + esc(r.note || '') + '</td><td class="dim">' + esc(r.source || '') + '</td></tr>').join('')
       + (rules.json.incompatible || []).map((p) => '<tr><td><b>' + esc(nameOf(p.a)) + '</b> and <b>' + esc(nameOf(p.b)) + '</b> do not go together</td><td>' + esc(p.note || '') + '</td><td class="dim">' + esc(p.source || '') + '</td></tr>').join('');
   }
+
+  // Players' lists: a card each; the detail lists every mod with its Workshop page.
+  const lists = (shared && shared.json.lists) || [];
+  const listGrid = document.getElementById('listGrid'), listDetail = document.getElementById('listDetail');
+  listGrid.innerHTML = lists.length
+    ? lists.map((l) => '<div class="card" data-list="' + esc(l.id) + '"><h3>' + esc(l.name) + '</h3><div class="id">by ' + esc(l.author) + ' · ' + (l.items || []).length + ' mod' + ((l.items || []).length === 1 ? '' : 's') + (l.build ? ' · Build ' + esc(l.build) : '') + (l.updated ? ' · ' + esc(l.updated) : '') + '</div>'
+      + (l.description ? '<p>' + esc(l.description) + '</p>' : '') + '<p class="dim">' + esc((l.items || []).slice(0, 6).map((i) => i.name).join(' · ')) + ((l.items || []).length > 6 ? ' …' : '') + '</p></div>').join('')
+    : '<div class="empty">No one has shared a list yet. Share yours from PZ Mod Studio (Browse → My lists → Share with the community), or <a href="' + REPO + '/blob/main/community/lists/README.md">see on GitHub how to make one</a>.</div>';
+  const showList = (l) => {
+    listDetail.innerHTML = '<div class="detail"><span class="close" id="listClose">✕ close</span><h2>' + esc(l.name) + '</h2><div class="id dim">by ' + esc(l.author) + (l.build ? ' · Build ' + esc(l.build) : '') + (l.updated ? ' · ' + esc(l.updated) : '')
+      + ' · <a href="' + REPO + '/blob/main/community/lists/' + esc(l.id) + '.json">its file</a></div>'
+      + (l.description ? '<p class="muted">' + esc(l.description) + '</p>' : '')
+      + '<table><tr><th>Mod</th><th>Where</th></tr>' + (l.items || []).map((i) => '<tr><td>' + esc(i.name) + '</td><td>' + (i.workshop_id ? '<a href="https://steamcommunity.com/sharedfiles/filedetails/?id=' + esc(i.workshop_id) + '">Workshop</a>' : '<span class="dim">' + esc(i.mod_id || 'not on the Workshop') + '</span>') + '</td></tr>').join('') + '</table>'
+      + '<p class="dim">To use it: in PZ Mod Studio, Browse → My lists → From the community → <i>Copy to my lists</i>, then Subscribe to all missing or Make a profile.</p></div>';
+    document.getElementById('listClose').onclick = () => { listDetail.innerHTML = ''; };
+    listDetail.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  listGrid.querySelectorAll('.card').forEach((c) => { c.onclick = () => showList(lists.find((l) => l.id === c.dataset.list)); });
+  // The page's links to #lists land here once the lists are drawn (the browser jumped before).
+  if (location.hash === '#lists') document.getElementById('lists').scrollIntoView();
 })();
 </script>
 </body>

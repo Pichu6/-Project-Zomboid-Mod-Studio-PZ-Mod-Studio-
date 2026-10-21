@@ -3,7 +3,7 @@ import { DiagnosticsCard } from './DiagnosticsCard';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb, KeyRound, ExternalLink, Loader2 } from 'lucide-react';
 import { PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
-import { COMMUNITY_REPO, COMMUNITY_SITE } from '../../utils/communityIndex';
+import { COMMUNITY_SITE } from '../../utils/communityIndex';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, setLanguage } from '../../i18n';
 import { tHtml } from '../../i18n/html';
@@ -804,7 +804,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer">
                   <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('settings.communitySite')}
                 </button>
-                <button type="button" onClick={() => TauriService.openExternalUrl(`${COMMUNITY_REPO}/tree/main/community/lists`)}
+                <button type="button" onClick={() => TauriService.openExternalUrl(`${COMMUNITY_SITE}#lists`)}
                   className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer">
                   <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('settings.communityLists')}
                 </button>

@@ -47,7 +47,7 @@ Pick **English** or **Español** under **Language**. A line missing in a languag
 
 ## Community files and GitHub token
 
-- **Download the community rules and mod index**: once a day the Studio fetches load-order rules, incompatible pairs and a registry per mod from its own GitHub repository. Auto-Sort, Mod Health, the Mod List and Browse Mods use them. Off, the last copy is kept and nothing is fetched. Nothing is ever sent. Its two buttons open the index's web page and the community lists on GitHub.
+- **Download the community rules and mod index**: once a day the Studio fetches load-order rules, incompatible pairs and a registry per mod from its own GitHub repository. Auto-Sort, Mod Health, the Mod List and Browse Mods use them. Off, the last copy is kept and nothing is fetched. Nothing is ever sent. Its two buttons open the index's web page and its community lists.
 - **GitHub, for "Propose" in one click**: optional. Connected, the "Propose to the community" buttons (rules, a mod's registry, a list) open the pull request for you. Without it, they open GitHub's page with everything filled in. Press **Connect with GitHub**: a code appears (already copied) and GitHub's page opens; type the code there and approve **PZ Mod Studio**, and the Studio is connected. Or press **Make a token**, make one on GitHub, paste it and press **Check and save**. The token is checked with GitHub and kept in Windows Credential Manager on this PC only; **Remove** deletes it.
 
 ## Diagnostics

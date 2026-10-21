@@ -47,7 +47,7 @@ Elegí **English** o **Español** en **Idioma**. Si a un idioma le falta una lí
 
 ## Archivos de la comunidad y token de GitHub
 
-- **Descargar las reglas y el índice de mods de la comunidad**: una vez al día el Studio baja de su propio repositorio de GitHub reglas de orden de carga, pares incompatibles y un registro por mod. Los usan Ordenar, Salud de mods, la Lista de mods y Explorar mods. Apagado, se conserva la última copia y no se descarga nada. Nunca se envía nada. Sus dos botones abren la página web del índice y las listas de la comunidad en GitHub.
+- **Descargar las reglas y el índice de mods de la comunidad**: una vez al día el Studio baja de su propio repositorio de GitHub reglas de orden de carga, pares incompatibles y un registro por mod. Los usan Ordenar, Salud de mods, la Lista de mods y Explorar mods. Apagado, se conserva la última copia y no se descarga nada. Nunca se envía nada. Sus dos botones abren la página web del índice y sus listas de la comunidad.
 - **GitHub, para "Compartir" en un clic**: opcional. Conectado, los botones "Compartir con la comunidad" (reglas, el registro de un mod, una lista) abren el pull request por vos. Sin conectar, abren la página de GitHub con todo ya completo. Apretá **Conectar con GitHub**: aparece un código (ya copiado) y se abre la página de GitHub; escribí el código ahí y aprobá **PZ Mod Studio**, y el Studio queda conectado. O apretá **Crear un token**, crealo en GitHub, pegalo y apretá **Verificar y guardar**. El token se verifica con GitHub y se guarda en el Administrador de credenciales de Windows, solo en esta PC; **Quitar** lo borra.
 
 ## Diagnóstico
