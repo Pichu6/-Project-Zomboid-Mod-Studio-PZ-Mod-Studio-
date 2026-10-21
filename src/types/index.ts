@@ -429,6 +429,15 @@ export interface SaveSummary {
   busy: boolean;
 }
 
+/** What changed for a save since its last session (studio_link::SessionDiff). */
+export interface SessionDiff {
+  at: number;
+  added: string[];
+  removed: string[];
+  updated: string[];
+  reordered: boolean;
+}
+
 export interface SavesOverview {
   saves: SaveSummary[];
   backup_dir: string;

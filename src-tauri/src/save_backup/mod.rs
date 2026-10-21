@@ -532,6 +532,55 @@ pub fn restore_backup(user_zomboid_dir: &Path, save_id: &str, file: &str, game_r
     Ok(before)
 }
 
+/// Copies a save to `<world>_copy` (or `_copy2`, ...) beside it, for playing a save whose mods
+/// changed without risking the save itself. The copy is made in a hidden folder first and
+/// only then given its name, so a half-made copy never shows in the game's Load list. Returns
+/// the copy's `<mode>/<world>`.
+pub fn copy_save(user_zomboid_dir: &Path, save_id: &str) -> Result<String, String> {
+    let (mode, world) = split_id(save_id)?;
+    let src = save_dir(user_zomboid_dir, save_id)?;
+    if !src.is_dir() {
+        return Err(format!("There is no save {}.", save_id));
+    }
+    let scan = scan(&src)?;
+    let parent = src.parent().ok_or("The save has no folder.")?.to_path_buf();
+    if let Some((free, _)) = disk_space(&parent) {
+        if free < scan.bytes + SPARE_BYTES {
+            return Err(format!("Not enough free space to copy {} ({}): the disk has {} free.", save_id, human_bytes(scan.bytes), human_bytes(free)));
+        }
+    }
+    let mut name = format!("{}_copy", world);
+    let mut n = 1;
+    while parent.join(&name).exists() {
+        n += 1;
+        name = format!("{}_copy{}", world, n);
+    }
+    let staging = parent.join(format!(".{}.pzms-copy", name));
+    let _ = fs::remove_dir_all(&staging);
+    let copied = (|| -> Result<(), String> {
+        for dir in &scan.empty_dirs {
+            fs::create_dir_all(staging.join(dir)).map_err(|e| e.to_string())?;
+        }
+        for (rel, _) in &scan.files {
+            let to = staging.join(rel);
+            if let Some(p) = to.parent() {
+                fs::create_dir_all(p).map_err(|e| e.to_string())?;
+            }
+            fs::copy(src.join(rel), &to).map_err(|e| format!("Cannot copy {}: {}", rel, e))?;
+        }
+        Ok(())
+    })();
+    if let Err(e) = copied {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(e);
+    }
+    fs::rename(&staging, parent.join(&name)).map_err(|e| {
+        let _ = fs::remove_dir_all(&staging);
+        format!("Cannot name the copy: {}", e)
+    })?;
+    Ok(format!("{}/{}", mode, name))
+}
+
 /// One save, for the Saves screen.
 #[derive(Debug, Clone, Serialize)]
 pub struct SaveSummary {
@@ -678,6 +727,21 @@ mod tests {
         fs::write(&zip, bytes).unwrap();
         assert!(restore_backup(&z, "Survival/W", &file, false).is_err());
         assert_eq!(fs::read(dir.join("map.bin")).unwrap(), vec![7u8; 5000]);
+        let _ = fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn a_copy_is_whole_beside_the_save_and_never_takes_an_existing_name() {
+        let z = temp("copy");
+        let dir = make_save(&z, "Sandbox/W");
+        assert_eq!(copy_save(&z, "Sandbox/W").unwrap(), "Sandbox/W_copy");
+        assert_eq!(copy_save(&z, "Sandbox/W").unwrap(), "Sandbox/W_copy2");
+        let copy = dir.parent().unwrap().join("W_copy");
+        assert_eq!(fs::read(copy.join("map.bin")).unwrap(), vec![7u8; 5000]);
+        assert!(copy.join("apop").is_dir());
+        assert_eq!(save_mods(&copy), vec!["ModA".to_string(), "ModB".to_string()]);
+        assert!(!dir.parent().unwrap().join(".W_copy.pzms-copy").exists());
+        assert!(copy_save(&z, "Sandbox/Nope").is_err());
         let _ = fs::remove_dir_all(&z);
     }
 

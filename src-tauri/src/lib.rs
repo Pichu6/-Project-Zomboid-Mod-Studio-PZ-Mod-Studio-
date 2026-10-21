@@ -429,6 +429,12 @@ fn saves_overview_cmd(paths: StudioPaths) -> Result<save_backup::SavesOverview, 
     Ok(save_backup::overview(&zomboid_dir_of(&paths)?))
 }
 
+/// For each save with a recorded session: mods added, removed and updated since.
+#[tauri::command(async)]
+fn save_session_diffs_cmd(paths: StudioPaths) -> Result<std::collections::BTreeMap<String, studio_link::SessionDiff>, String> {
+    Ok(studio_link::session_diffs(&zomboid_dir_of(&paths)?))
+}
+
 /// A backup the player asked for: kept until they remove it.
 #[tauri::command(async)]
 fn backup_save_cmd(paths: StudioPaths, save_id: String) -> Result<save_backup::BackupOutcome, String> {
@@ -1207,6 +1213,7 @@ pub fn run() {
             write_link_health_cmd,
             link_status_cmd,
             saves_overview_cmd,
+            save_session_diffs_cmd,
             java_agents_plan_cmd,
             backup_save_cmd,
             restore_save_backup_cmd,

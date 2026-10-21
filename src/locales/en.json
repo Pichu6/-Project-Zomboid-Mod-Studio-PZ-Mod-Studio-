@@ -2202,6 +2202,16 @@
       "before-load": "before it loaded with changed mods",
       "before-fix": "before its mod list was changed",
       "before-restore": "before a restore"
+    },
+    "session": {
+      "line": "Since its last session ({{when}}): {{what}}",
+      "added": "{{count}} added",
+      "removed": "{{count}} taken out",
+      "updated": "{{count}} updated",
+      "reordered": "order changed",
+      "addedList": "Added",
+      "removedList": "Taken out",
+      "updatedList": "Updated on the Workshop"
     }
   },
   "notices": {

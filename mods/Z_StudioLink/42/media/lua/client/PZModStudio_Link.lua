@@ -72,6 +72,24 @@ local TEXT = {
     badgeOutside = "{1} outside the profile",
     badgeOk = "profile mods",
     andMore = "...and {1} more",
+    changesTitle = "What changed since its last session",
+    changesWhen = "\"{1}\" was last played {2} ago. Since then:",
+    changesRemoved = "Taken out of its mod list ({1})",
+    changesAdded = "Added to its mod list ({1})",
+    changesUpdated = "Updated on the Workshop ({1})",
+    changesReordered = "The load order of its mods changed.",
+    mapTag = "(map)",
+    mapsOutWarning = "Map mods were taken out: what they added to the world may be gone when it loads, and the game saves it that way.",
+    agoMinutes = "{1} min",
+    agoHours = "{1} h",
+    agoDays = "{1} days",
+    back = "Back",
+    playCopy = "Play on a copy",
+    loadIt = "Load it",
+    copyTitle = "Copying the save",
+    copyBody = "PZ Mod Studio is copying \"{1}\" ({2}). The copy loads; the save itself stays as it is.",
+    copyNeedsApp = "Playing on a copy needs PZ Mod Studio open: it makes the copy.",
+    copyFailed = "The save could not be copied: {1}",
     backupTitle = "Backing up the save",
     backupBeforeLoad = "PZ Mod Studio is backing up \"{1}\" ({2}) before it loads: {3} A big save takes a moment.",
     backupBeforeFix = "PZ Mod Studio is backing up \"{1}\" ({2}) before its mod list is changed.",
@@ -644,6 +662,9 @@ function Link.readSaves()
                 elseif key == "bytes" or key == "session" or key == "updated" then save[key] = tonumber(value) or 0
                 elseif key == "mods" then
                     for id in string.gmatch(value, "[^;]+") do table.insert(save.mods, plainId(id)) end
+                elseif key == "updatedmods" then
+                    save.updatedmods = {}
+                    for id in string.gmatch(value, "[^;]+") do table.insert(save.updatedmods, plainId(id)) end
                 end
             end
             result[fields[2]] = save
@@ -726,24 +747,35 @@ local function askWithoutBackup(body, onYes)
     end)
 end
 
--- The dialog shown while the app backs a save up: a plain panel of this mod's own, so UI mods
--- that restyle the game's dialogs (and draw OK as a green tick) cannot change what it says. The
--- app's answer is looked for while it is drawn.
+-- The Studio's own panel, for waiting on the app and for choices: a plain panel of this mod's, so
+-- UI mods that restyle the game's dialogs (and draw OK as a green tick) cannot change what it
+-- says. While it waits, the app's answer is looked for as it is drawn.
 local WaitPanel = ISPanel:derive("StudioLinkWaitPanel")
 Link.WaitPanel = WaitPanel
 
-function WaitPanel.show(title, body, onCancel)
-    local w = 520
-    local h = 170
+local function openPanel(title, body, height, choices, waiting)
+    local w = 560
+    local h = math.min(height, getCore():getScreenHeight() - 80)
     local panel = WaitPanel:new(getCore():getScreenWidth() / 2 - w / 2, getCore():getScreenHeight() / 2 - h / 2, w, h)
     panel.title = title
     panel.body = body
-    panel.onCancel = onCancel
+    panel.choices = choices
+    panel.waiting = waiting
     panel:initialise()
     panel:instantiate()
     panel:addToUIManager()
     panel:setAlwaysOnTop(true)
     return panel
+end
+
+--- A panel that waits for the app, with Cancel.
+function WaitPanel.show(title, body, onCancel)
+    return openPanel(title, body, 170, { { label = text("cancel"), onClick = onCancel } }, true)
+end
+
+--- A panel with a choice: `choices` = { { label, onClick, accept }, ... }, left to right.
+function WaitPanel.choose(title, body, height, choices)
+    return openPanel(title, body, height, choices, false)
 end
 
 function WaitPanel:new(x, y, w, h)
@@ -764,11 +796,22 @@ function WaitPanel:createChildren()
     rich:paginate()
     self:addChild(rich)
     self.rich = rich
-    local bw = 120
-    local cancel = ISButton:new((self.width - bw) / 2, self.height - 36, bw, 24, text("cancel"), self, WaitPanel.cancel)
-    cancel:initialise()
-    cancel:instantiate()
-    self:addChild(cancel)
+    local bw, gap = 150, 10
+    local count = #self.choices
+    local x = (self.width - (count * bw + (count - 1) * gap)) / 2
+    for _, choice in ipairs(self.choices) do
+        local button = ISButton:new(x, self.height - 36, bw, 24, choice.label, self, function(panel)
+            panel:close()
+            if choice.onClick then choice.onClick() end
+        end)
+        button:initialise()
+        button:instantiate()
+        if choice.accept then
+            button.borderColor = { r = 0.35, g = 0.85, b = 0.5, a = 0.9 }
+        end
+        self:addChild(button)
+        x = x + bw + gap
+    end
 end
 
 function WaitPanel:close()
@@ -776,16 +819,31 @@ function WaitPanel:close()
     self:removeFromUIManager()
 end
 
-function WaitPanel:cancel()
-    self:close()
-    if self.onCancel then self.onCancel() end
-end
-
 function WaitPanel:prerender()
     ISPanel.prerender(self)
+    if not self.waiting then return end
     local seconds = now() - (self.started or now())
     self:drawTextRight(tostring(seconds) .. " s", self.width - 12, self.height - 32, 0.6, 0.6, 0.6, 1, UIFont.Small)
     pcall(Link.pollBackup)
+end
+
+--- Sends a request to the app and waits for its answer with a panel: `onOk(text)` when it is
+--- done, `onFail(text)` when it failed. Cancel stops waiting (the app still does it).
+local function askApp(verb, arg, title, body, onOk, onFail)
+    local writer = getFileWriter(REQUESTS_FILE, true, true)
+    if not writer then
+        onFail(REQUESTS_FILE)
+        return
+    end
+    Link.seq = (Link.seq or 0) + 1
+    local id = tostring(now()) .. "-" .. tostring(Link.seq)
+    writer:write(id .. "\t" .. verb .. "\t" .. arg .. "\n")
+    writer:close()
+    local wait = { id = id, at = now(), onOk = onOk, onFail = onFail }
+    Link.backupWait = wait
+    wait.dialog = WaitPanel.show(title, body, function()
+        if Link.backupWait == wait then Link.backupWait = nil end
+    end)
 end
 
 --- Has PZ Mod Studio back the save up, shows a dialog while it does, and runs `onDone` once the
@@ -800,22 +858,9 @@ function Link.withBackup(world, reason, why, onDone)
         askWithoutBackup(closed, onDone)
         return
     end
-    local writer = getFileWriter(REQUESTS_FILE, true, true)
-    if not writer then
-        askWithoutBackup(text("backupFailed", REQUESTS_FILE), onDone)
-        return
-    end
-    Link.seq = (Link.seq or 0) + 1
-    local id = tostring(now()) .. "-" .. tostring(Link.seq)
-    writer:write(id .. "\tbackup\t" .. saveId .. "\t" .. reason .. "\n")
-    writer:close()
-
-    local wait = { id = id, at = now(), onDone = onDone }
-    Link.backupWait = wait
-    wait.dialog = Link.WaitPanel.show(text("backupTitle"), what, function()
-        -- Cancel: the backup goes on in the app; this load does not.
-        if Link.backupWait == wait then Link.backupWait = nil end
-    end)
+    askApp("backup", saveId .. "\t" .. reason, text("backupTitle"), what,
+        function() onDone() end,
+        function(msg) askWithoutBackup(text("backupFailed", msg), onDone) end)
 end
 
 function Link.pollBackup()
@@ -829,9 +874,9 @@ function Link.pollBackup()
     Link.backupWait = nil
     wait.dialog:close()
     if status == "ok" then
-        wait.onDone()
+        wait.onOk(msg or "")
     else
-        askWithoutBackup(text("backupFailed", msg ~= "" and msg or status), wait.onDone)
+        wait.onFail(msg ~= "" and msg or status)
     end
 end
 
@@ -842,19 +887,142 @@ function MainScreen.continueLatestSaveAux(...)
     return continueLatestSaveAux(...)
 end
 
---- Before a save loads: backed up first when it loads with mods that changed since its last
---- session. Returns true when it can load now.
+--- What changed for the save since its last session, or nil when nothing did (or the Studio
+--- never saw a session of it): mods added and taken out of its list, mods updated on the
+--- Workshop since, and whether the order of the others changed.
+function Link.sessionChanges(save, activeMods)
+    if not save or save.session == 0 then return nil end
+    local now = {}
+    if activeMods then
+        local mods = activeMods:getMods()
+        for i = 0, mods:size() - 1 do table.insert(now, plainId(mods:get(i))) end
+    end
+    local inNow, inThen = {}, {}
+    for _, id in ipairs(now) do inNow[id] = true end
+    for _, id in ipairs(save.mods) do inThen[id] = true end
+    local changes = { added = {}, removed = {}, updated = {}, reordered = false }
+    for _, id in ipairs(now) do if not inThen[id] then table.insert(changes.added, id) end end
+    for _, id in ipairs(save.mods) do if not inNow[id] then table.insert(changes.removed, id) end end
+    for _, id in ipairs(save.updatedmods or {}) do if inNow[id] then table.insert(changes.updated, id) end end
+    local keptThen, keptNow = {}, {}
+    for _, id in ipairs(save.mods) do if inNow[id] then table.insert(keptThen, id) end end
+    for _, id in ipairs(now) do if inThen[id] then table.insert(keptNow, id) end end
+    for i = 1, #keptNow do
+        if keptNow[i] ~= keptThen[i] then changes.reordered = true end
+    end
+    if #changes.added == 0 and #changes.removed == 0 and #changes.updated == 0 and not changes.reordered then return nil end
+    return changes
+end
+
+local function modName(id)
+    local info = getModInfoByID(id)
+    return info and info:getName() or id
+end
+
+--- Whether a mod adds map cells: taking one out of a save loses what it built there.
+local function isMapMod(id)
+    local ok, folders = pcall(getMapFoldersForMod, id)
+    return ok and folders ~= nil and folders:size() > 0
+end
+
+local function ago(seconds)
+    if seconds < 3600 then return text("agoMinutes", math.max(1, math.floor(seconds / 60))) end
+    if seconds < 86400 * 2 then return text("agoHours", math.floor(seconds / 3600)) end
+    return text("agoDays", math.floor(seconds / 86400))
+end
+
+--- Shows what changed since the save's last session, and lets the player load it (backed up
+--- first), play on a copy, or go back.
+function Link.showChanges(world, save, changes, onLoad, onCopy)
+    local lines = 0
+    local body = text("changesWhen", world, ago(math.max(0, now() - save.session))) .. " <LINE> <LINE> "
+    local function list(head, ids, r, g, b, mark)
+        if #ids == 0 then return end
+        body = body .. " <RGB:" .. r .. "," .. g .. "," .. b .. "> " .. text(head, #ids) .. " <RGB:1,1,1> <LINE> <INDENT:16> "
+        for i, id in ipairs(ids) do
+            if i > 8 then
+                body = body .. text("andMore", #ids - 8) .. " <LINE> "
+                lines = lines + 1
+                break
+            end
+            body = body .. modName(id) .. (mark and mark(id) or "") .. " <LINE> "
+            lines = lines + 1
+        end
+        body = body .. " <INDENT:0> <LINE> "
+        lines = lines + 2
+    end
+    local mapsOut = 0
+    list("changesRemoved", changes.removed, "1", "0.45", "0.45", function(id)
+        if isMapMod(id) then
+            mapsOut = mapsOut + 1
+            return "  " .. text("mapTag")
+        end
+        return ""
+    end)
+    list("changesAdded", changes.added, "0.5", "0.9", "0.55")
+    list("changesUpdated", changes.updated, "0.55", "0.8", "1")
+    if changes.reordered then
+        body = body .. text("changesReordered") .. " <LINE> <LINE> "
+        lines = lines + 2
+    end
+    if mapsOut > 0 then
+        body = body .. " <RGB:1,0.6,0.3> " .. text("mapsOutWarning") .. " <RGB:1,1,1> <LINE> "
+        lines = lines + 2
+    end
+    local height = 120 + lines * (getTextManager():getFontHeight(UIFont.Small) + 2)
+    WaitPanel.choose(text("changesTitle"), body, height, {
+        { label = text("back") },
+        { label = text("playCopy"), onClick = onCopy },
+        { label = text("loadIt"), onClick = onLoad, accept = true },
+    })
+end
+
+--- Has the app copy the save, then loads the copy; the save itself stays as it is.
+function Link.playOnCopy(world)
+    if not Link.appAlive() then
+        modal(" <RGB:1,0.75,0.3> " .. text("copyNeedsApp") .. " <RGB:1,1,1> ", false, function() end)
+        return
+    end
+    local saveId = Link.saveId(world)
+    local saves = Link.readSaves() or {}
+    local size = humanBytes(saves[saveId] and saves[saveId].bytes or 0)
+    local mode = tostring(getWorld():getGameMode())
+    askApp("copy", saveId, text("copyTitle"), text("copyBody", world, size),
+        function(copy)
+            if copy == "" then return end
+            Link.markPassed(copy)
+            MainScreen.continueLatestSave(mode, copy)
+        end,
+        function(msg)
+            modal(" <RGB:1,0.75,0.3> " .. text("copyFailed", msg) .. " <RGB:1,1,1> ", false, function() end)
+        end)
+end
+
+--- Before a save loads: what changed since its last session is shown first (load, play on a
+--- copy, or go back), and the save is backed up first when it is not backed up as it is.
+--- Returns true when it can load now.
 function Link.loadGate(world, saveInfo)
     if Link.isPassed(world) then return true end
     local saves = Link.readSaves()
     if not saves then return true end
-    local why = Link.backupWhy(saves[Link.saveId(world)], saveInfo and saveInfo.activeMods)
-    if not why then return true end
+    local save = saves[Link.saveId(world)]
+    local activeMods = saveInfo and saveInfo.activeMods
+    local changes = Link.sessionChanges(save, activeMods)
+    local why = Link.backupWhy(save, activeMods)
+    if not changes and not why then return true end
     local args = Link.continueArgs or {}
-    Link.withBackup(world, "before-load", why, function()
+    local function load()
         Link.markPassed(world)
         MainScreen.continueLatestSaveAux(args[1], args[2])
-    end)
+    end
+    local function backupThenLoad()
+        if why then Link.withBackup(world, "before-load", why, load) else load() end
+    end
+    if changes then
+        Link.showChanges(world, save, changes, backupThenLoad, function() Link.playOnCopy(world) end)
+    else
+        backupThenLoad()
+    end
     return false
 end
 

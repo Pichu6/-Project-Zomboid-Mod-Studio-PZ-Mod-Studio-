@@ -318,7 +318,11 @@ fn handle_requests<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, r
         };
         start_backup(app, z_dir, save.trim(), reason, Some(r.id.clone()));
     }
-    for r in requests.iter().filter(|r| r.verb != "add" && r.verb != "backup") {
+    for r in requests.iter().filter(|r| r.verb == "copy") {
+        // "<mode>/<world>": answered with the copy's world folder.
+        start_copy(app, z_dir, r.arg.trim(), r.id.clone());
+    }
+    for r in requests.iter().filter(|r| r.verb != "add" && r.verb != "backup" && r.verb != "copy") {
         answers.push((r.id.clone(), false, format!("This version of PZ Mod Studio does not know \"{}\".", r.verb)));
     }
     answers
@@ -352,15 +356,61 @@ fn workshop_ids_by_mod(workshop_dir: &Path) -> std::collections::HashMap<String,
     out
 }
 
-/// How many of a session's mods have a Workshop version on disk published after that session.
-fn updated_since(session: &SaveReference, by_mod: &std::collections::HashMap<String, String>, state: Option<&crate::workshop::WorkshopLocalState>) -> usize {
-    let Some(state) = state else { return 0 };
+/// The session's mods whose Workshop version on disk was published after that session.
+fn updated_since(session: &SaveReference, by_mod: &std::collections::HashMap<String, String>, state: Option<&crate::workshop::WorkshopLocalState>) -> Vec<String> {
+    let Some(state) = state else { return Vec::new() };
     session
         .mods
         .iter()
-        .filter_map(|id| by_mod.get(&crate::load_order::mod_info::sanitize_mod_id(id)))
-        .filter(|wid| state.items.get(*wid).and_then(|i| i.installed_time).is_some_and(|t| t > session.at))
-        .count()
+        .filter(|id| {
+            by_mod
+                .get(&crate::load_order::mod_info::sanitize_mod_id(id))
+                .and_then(|wid| state.items.get(wid))
+                .and_then(|i| i.installed_time)
+                .is_some_and(|t| t > session.at)
+        })
+        .cloned()
+        .collect()
+}
+
+/// What changed for a save since its last session: mods its list has now and did not then, and
+/// the other way round, and mods updated on the Workshop since.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct SessionDiff {
+    /// When the last session was (unix seconds).
+    pub at: u64,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub updated: Vec<String>,
+    /// The order of the mods that are in both changed.
+    pub reordered: bool,
+}
+
+pub fn session_diff(session: &SaveReference, now: &[String], updated: Vec<String>) -> SessionDiff {
+    let plain = |id: &String| crate::load_order::mod_info::sanitize_mod_id(id);
+    let then: Vec<String> = session.mods.iter().map(plain).collect();
+    let now: Vec<String> = now.iter().map(plain).collect();
+    let added: Vec<String> = now.iter().filter(|m| !then.contains(m)).cloned().collect();
+    let removed: Vec<String> = then.iter().filter(|m| !now.contains(m)).cloned().collect();
+    let kept_then: Vec<&String> = then.iter().filter(|m| now.contains(m)).collect();
+    let kept_now: Vec<&String> = now.iter().filter(|m| then.contains(m)).collect();
+    SessionDiff { at: session.at, added, removed, updated, reordered: kept_then != kept_now }
+}
+
+/// For each save with a recorded session: what changed since.
+pub fn session_diffs(user_zomboid_dir: &Path) -> std::collections::BTreeMap<String, SessionDiff> {
+    let paths = crate::vfs::studio_paths();
+    let by_mod = if paths.workshop_dir.is_empty() { Default::default() } else { workshop_ids_by_mod(Path::new(&paths.workshop_dir)) };
+    let state = (!paths.workshop_dir.is_empty()).then(|| crate::workshop::local_state(&paths.workshop_dir)).flatten();
+    let refs = save_references(user_zomboid_dir);
+    let mut out = std::collections::BTreeMap::new();
+    for id in crate::save_backup::list_saves(user_zomboid_dir) {
+        let Some(session) = refs.get(&id) else { continue };
+        let Ok(dir) = crate::save_backup::saves_dir(user_zomboid_dir).join(&id).canonicalize() else { continue };
+        let now = crate::save_backup::save_mods(&dir);
+        out.insert(id, session_diff(session, &now, updated_since(session, &by_mod, state.as_ref())));
+    }
+    out
 }
 
 pub fn saves_file_text(user_zomboid_dir: &Path) -> String {
@@ -372,13 +422,15 @@ pub fn saves_file_text(user_zomboid_dir: &Path) -> String {
     for id in crate::save_backup::list_saves(user_zomboid_dir) {
         let Some(summary) = crate::save_backup::summary(user_zomboid_dir, &id) else { continue };
         let session = refs.get(&id);
+        let updated = session.map(|s| updated_since(s, &by_mod, state.as_ref())).unwrap_or_default();
         out.push_str(&format!(
-            "save\t{}\tbacked={}\tbytes={}\tsession={}\tupdated={}\tmods={}\n",
+            "save\t{}\tbacked={}\tbytes={}\tsession={}\tupdated={}\tupdatedmods={}\tmods={}\n",
             id,
             u8::from(summary.backed_up),
             summary.bytes,
             session.map(|s| s.at).unwrap_or(0),
-            session.map(|s| updated_since(s, &by_mod, state.as_ref())).unwrap_or(0),
+            updated.len(),
+            updated.join(";"),
             session.map(|s| s.mods.join(";")).unwrap_or_default()
         ));
     }
@@ -409,6 +461,29 @@ fn write_acks(lua_dir: &Path, answers: &[(String, bool, String)]) {
     let acks = lua_dir.join(ACKS_FILE);
     let previous = std::fs::read_to_string(&acks).unwrap_or_default();
     let _ = crate::load_order::ini_parser::atomic_write(&acks, acks_text(&previous, &answers));
+}
+
+/// Copies a save on a thread of its own (with its session, so the copy compares the same way),
+/// rewrites the saves file and answers the request with the copy's world folder.
+pub fn start_copy<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, save_id: &str, request: String) {
+    let app = app.clone();
+    let z_dir = z_dir.to_path_buf();
+    let save_id = save_id.to_string();
+    thread::spawn(move || {
+        let result = crate::save_backup::copy_save(&z_dir, &save_id);
+        if let Ok(copy) = &result {
+            if let Some(session) = save_references(&z_dir).get(&save_id).cloned() {
+                let _ = record_save_reference(&z_dir, &GameState { protocol: PROTOCOL, state: "ingame".into(), save: copy.clone(), mods: session.mods, at: session.at, ..Default::default() });
+            }
+        }
+        write_saves_file(&z_dir);
+        let _ = app.emit(SAVES_CHANGED_EVENT, &save_id);
+        let answer = match result {
+            Ok(copy) => (request, true, copy.rsplit('/').next().unwrap_or(&copy).to_string()),
+            Err(e) => (request, false, e),
+        };
+        write_acks(&z_dir.join("Lua"), &[answer]);
+    });
 }
 
 /// Backs a save up on a thread of its own; when done, the saves file is rewritten first (so a
@@ -779,8 +854,11 @@ mod tests {
             time_last_app_ran: None,
             items: [("1".to_string(), item(900)), ("2".to_string(), item(1500)), ("3".to_string(), item(2000))].into_iter().collect(),
         };
-        assert_eq!(updated_since(&session, &by_mod, Some(&state)), 2);
-        assert_eq!(updated_since(&session, &by_mod, None), 0);
+        assert_eq!(updated_since(&session, &by_mod, Some(&state)), ids(&["\\B", "C"]));
+        assert!(updated_since(&session, &by_mod, None).is_empty());
+        let diff = session_diff(&session, &ids(&["C", "A", "New"]), vec![]);
+        assert_eq!((diff.added.clone(), diff.removed.clone(), diff.reordered), (ids(&["New"]), ids(&["B", "Local"]), true));
+        assert!(!session_diff(&session, &ids(&["A", "B", "C", "Local"]), vec![]).reordered);
     }
 
     #[test]

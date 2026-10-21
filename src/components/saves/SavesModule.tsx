@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Archive, CheckCircle2, ChevronDown, ChevronRight, FolderOpen, HardDrive, Loader2, Pin, PinOff, RefreshCw, RotateCcw, ShieldAlert, Trash2 } from 'lucide-react';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { SaveBackupEntry, SaveSummary, SavesOverview } from '../../types';
+import { SaveBackupEntry, SaveSummary, SavesOverview, SessionDiff } from '../../types';
 import { formatBytes } from '../browse/common';
 import i18next from 'i18next';
 
@@ -22,6 +22,7 @@ const when = (secs: number) => (secs ? new Date(secs * 1000).toLocaleString(i18n
 export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<SavesOverview | null>(null);
+  const [diffs, setDiffs] = useState<Record<string, SessionDiff>>({});
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -30,8 +31,9 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
   const refresh = useCallback(async () => {
     if (!paths.user_zomboid_dir) return;
     setLoading(true);
-    const next = await TauriService.savesOverview(paths);
+    const [next, sessions] = await Promise.all([TauriService.savesOverview(paths), TauriService.saveSessionDiffs(paths)]);
     if (next) setOverview(next);
+    setDiffs(sessions);
     setLoading(false);
   }, [paths]);
 
@@ -148,6 +150,26 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
                   <div className="text-[11px] text-slate-500">
                     {t('saves.line', { mode: save.mode, size: formatBytes(save.bytes), files: save.files.toLocaleString(), mods: save.mods.length, when: when(save.modified) })}
                   </div>
+                  {(() => {
+                    const d = diffs[save.id];
+                    if (!d || (d.added.length === 0 && d.removed.length === 0 && d.updated.length === 0 && !d.reordered)) return null;
+                    const parts = [
+                      d.added.length > 0 && t('saves.session.added', { count: d.added.length }),
+                      d.removed.length > 0 && t('saves.session.removed', { count: d.removed.length }),
+                      d.updated.length > 0 && t('saves.session.updated', { count: d.updated.length }),
+                      d.reordered && t('saves.session.reordered'),
+                    ].filter(Boolean).join(' · ');
+                    const detail = [
+                      d.removed.length > 0 && `${t('saves.session.removedList')}: ${d.removed.join(', ')}`,
+                      d.added.length > 0 && `${t('saves.session.addedList')}: ${d.added.join(', ')}`,
+                      d.updated.length > 0 && `${t('saves.session.updatedList')}: ${d.updated.join(', ')}`,
+                    ].filter(Boolean).join('\n');
+                    return (
+                      <div className="text-[11px] text-amber-300 mt-0.5" title={detail}>
+                        {t('saves.session.line', { when: when(d.at), what: parts })}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="text-[11px] shrink-0">{status(save)}</div>
                 <button
