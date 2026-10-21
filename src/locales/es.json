@@ -85,6 +85,19 @@
     }
   },
   "settings": {
+    "connect": "Conectar con GitHub",
+    "orPaste": "O pegá un token tuyo:",
+    "connectTypeCode": "Escribí este código en la página de GitHub que se abrió (ya está copiado):",
+    "connectOpenAgain": "Copiar y abrir GitHub de nuevo",
+    "connectWaiting": "Esperando que lo apruebes en GitHub…",
+    "connectCancel": "Cancelar",
+    "connectErrors": {
+      "expired": "El código venció antes de aprobarlo; apretá Conectar con GitHub de nuevo.",
+      "denied": "La conexión se canceló en GitHub.",
+      "cancelled": "Cancelado.",
+      "unreachable": "No se pudo llegar a GitHub: {{detail}}",
+      "refused": "GitHub lo rechazó: {{detail}}"
+    },
     "language": {
       "title": "Idioma",
       "blurb": "El idioma en que habla el Studio. El inglés es el original; si a un idioma le falta una línea, se muestra en inglés. Los mensajes del propio juego (errores, avisos, las líneas del registro en el Monitor) quedan como el juego los escribe.",
@@ -140,9 +153,9 @@
     "rememberModeBlurb": "El botón de inicio arranca en el modo que usaste la última vez (depuración, ventana, normal...). Apagado: siempre arranca en Modo depuración (pantalla completa), el recomendado.",
     "community": "Descargar las reglas y el índice de mods de la comunidad",
     "communityBlurb": "Una vez al día, del repositorio del Studio en GitHub: reglas de orden de carga, pares incompatibles, y un registro por mod con las builds en que corre, con qué choca y sus problemas conocidos con el arreglo que el Studio aplica. Los usan Ordenar, Salud de mods, la Lista de mods y Explorar. Apagado: se conserva la última copia y no se descarga nada. Nunca se envía nada.",
-    "github": "Token de GitHub, para \"Compartir\" en un clic",
+    "github": "GitHub, para \"Compartir\" en un clic",
     "githubBlurb": "Opcional. Con un token personal guardado, \"Compartir con la comunidad\" (una regla de orden, el registro de un mod) hace un fork del repositorio del Studio en tu cuenta una sola vez, escribe el archivo en una rama y abre el pull request solo. Sin token, los mismos botones abren la página de GitHub con el JSON ya completo y apretás \"Propose changes\" ahí. Recibir los archivos de la comunidad no necesita ninguna cuenta. El token se verifica con GitHub y se guarda en el Administrador de credenciales de Windows, solo en esta PC; no se envía nada más.",
-    "githubHow": "Creá un token de grano fino en GitHub (Settings → Developer settings → Personal access tokens) para tus propios repositorios con \"Contents\" y \"Pull requests\" en lectura y escritura; se usa solo en tu fork y para abrir el pull request.",
+    "githubHow": "Conectar con GitHub muestra un código; escribilo en la página que se abre y aprobá \"PZ Mod Studio\" (puede abrir pull requests en repositorios públicos, y se usa solo para estas propuestas). O creá vos un token de grano fino (Settings → Developer settings → Personal access tokens) con \"Contents\" y \"Pull requests\" en lectura y escritura, y pegalo.",
     "tokenSaved": "Hay un token guardado{{account}}.",
     "tokenAccount": " (cuenta de GitHub {{login}})",
     "remove": "Quitar",

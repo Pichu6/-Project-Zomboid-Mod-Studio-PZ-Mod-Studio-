@@ -294,6 +294,23 @@ fn set_github_token_cmd(token: String) -> Result<String, String> {
     rules::propose::save_token(&token)
 }
 
+/// "Connect with GitHub": a code to type at github.com/login/device.
+#[tauri::command(async)]
+fn github_device_start_cmd() -> Result<rules::github_device::DeviceCode, String> {
+    rules::github_device::start()
+}
+
+/// Waits until the code is approved on GitHub, keeps the token; returns the login.
+#[tauri::command(async)]
+fn github_device_wait_cmd() -> Result<String, String> {
+    rules::github_device::wait()
+}
+
+#[tauri::command]
+fn github_device_cancel_cmd() {
+    rules::github_device::cancel()
+}
+
 #[tauri::command(async)]
 fn delete_github_token_cmd() -> Result<(), String> {
     secrets::delete(rules::propose::GITHUB_TOKEN)
@@ -1682,6 +1699,9 @@ pub fn run() {
             github_token_status_cmd,
             set_github_token_cmd,
             delete_github_token_cmd,
+            github_device_start_cmd,
+            github_device_wait_cmd,
+            github_device_cancel_cmd,
             propose_registry_cmd,
             propose_rule_cmd,
             workshop_search_cmd,

@@ -85,6 +85,19 @@
     }
   },
   "settings": {
+    "connect": "Connect with GitHub",
+    "orPaste": "Or paste a token of your own:",
+    "connectTypeCode": "Type this code on the GitHub page that opened (it is copied):",
+    "connectOpenAgain": "Copy and open GitHub again",
+    "connectWaiting": "Waiting for you to approve on GitHub…",
+    "connectCancel": "Cancel",
+    "connectErrors": {
+      "expired": "The code expired before it was approved; press Connect with GitHub again.",
+      "denied": "The connection was cancelled on GitHub.",
+      "cancelled": "Cancelled.",
+      "unreachable": "GitHub could not be reached: {{detail}}",
+      "refused": "GitHub refused: {{detail}}"
+    },
     "language": {
       "title": "Language",
       "blurb": "The language the Studio speaks. English is the source; a language that misses a line shows it in English. The game's own messages (errors, warnings, the Monitor's log lines) stay as the game writes them.",
@@ -140,9 +153,9 @@
     "rememberModeBlurb": "The Launch button starts on the mode you used last time (Debug, Windowed, Normal...). Off: it always starts on Debug Mode (Fullscreen), the recommended one.",
     "community": "Download the community rules and mod index",
     "communityBlurb": "Once a day, from the Studio's own repository on GitHub: load-order rules, incompatible pairs, and one registry per mod with the builds it runs on, what it clashes with and its known issues with the fix the Studio can apply. Auto-Sort, Mod Health, the Mod List and the Browse page use them. Off: the last copy is kept and nothing is fetched. Nothing is ever sent.",
-    "github": "GitHub token, for \"Propose\" in one click",
+    "github": "GitHub, for \"Propose\" in one click",
     "githubBlurb": "Optional. With a personal token saved, \"Propose to the community\" (a load-order rule, a mod's registry) forks the Studio's repository on your account once, writes the file on a branch and opens the pull request by itself. Without one, the same buttons open GitHub's page with the JSON filled in and you press \"Propose changes\" there. Receiving the community files needs no account at all. The token is checked with GitHub and kept in Windows Credential Manager on this PC only; nothing else is ever sent.",
-    "githubHow": "Make a fine-grained token on GitHub (Settings → Developer settings → Personal access tokens) for your own repositories with \"Contents\" and \"Pull requests\" read and write; it is used only on your fork and to open the pull request.",
+    "githubHow": "Connect with GitHub shows a code; type it on the page that opens and approve \"PZ Mod Studio\" (it may open pull requests on public repositories, and is used only for these proposals). Or make a fine-grained token yourself (Settings → Developer settings → Personal access tokens) with \"Contents\" and \"Pull requests\" read and write, and paste it.",
     "tokenSaved": "A token is saved{{account}}.",
     "tokenAccount": " (GitHub account {{login}})",
     "remove": "Remove",

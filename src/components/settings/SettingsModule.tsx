@@ -118,6 +118,29 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [githubTokenInput, setGithubTokenInput] = useState('');
   const [githubBusy, setGithubBusy] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
+  /** The code GitHub gave for "Connect with GitHub", while it waits for the player. */
+  const [deviceCode, setDeviceCode] = useState<{ user_code: string; verification_uri: string } | null>(null);
+  const connectGithub = async () => {
+    setGithubError(null);
+    setGithubBusy(true);
+    try {
+      const code = await TauriService.githubDeviceStart();
+      setDeviceCode(code);
+      void navigator.clipboard.writeText(code.user_code).catch(() => undefined);
+      TauriService.openExternalUrl(code.verification_uri);
+      const login = await TauriService.githubDeviceWait();
+      setGithubTokenSaved(true);
+      setGithubLogin(login);
+      localStorage.setItem('pz_github_login', login);
+    } catch (err) {
+      const text = String(err);
+      const m = text.match(/^(expired|denied|cancelled|unreachable|refused): (.*)$/s);
+      if (!m || m[1] !== 'cancelled') setGithubError(m ? t(`settings.connectErrors.${m[1]}`, { detail: m[2] }) : text);
+    } finally {
+      setDeviceCode(null);
+      setGithubBusy(false);
+    }
+  };
   useEffect(() => {
     void TauriService.githubTokenStatus().then(setGithubTokenSaved);
   }, []);
@@ -816,7 +839,31 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   {t('settings.remove')}
                 </button>
               </div>
+            ) : deviceCode ? (
+              <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-sky-800/60 bg-sky-950/30">
+                <div className="space-y-1">
+                  <div className="text-[11px] text-slate-300">{t('settings.connectTypeCode')}</div>
+                  <div className="font-mono text-xl font-bold tracking-widest text-sky-200 select-all">{deviceCode.user_code}</div>
+                </div>
+                <button type="button" onClick={() => { void navigator.clipboard.writeText(deviceCode.user_code); TauriService.openExternalUrl(deviceCode.verification_uri); }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer">
+                  <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('settings.connectOpenAgain')}
+                </button>
+                <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> {t('settings.connectWaiting')}
+                </span>
+                <button type="button" onClick={() => void TauriService.githubDeviceCancel()}
+                  className="px-2.5 py-1 rounded-lg text-[11px] text-slate-300 border border-slate-800 hover:border-slate-600 cursor-pointer">
+                  {t('settings.connectCancel')}
+                </button>
+              </div>
             ) : (
+              <div className="space-y-2">
+              <button type="button" disabled={githubBusy} onClick={() => void connectGithub()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white cursor-pointer disabled:opacity-50">
+                {githubBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />} {t('settings.connect')}
+              </button>
+              <p className="text-[10.5px] text-slate-500">{t('settings.orPaste')}</p>
               <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void saveGithubToken(); }}>
                 <button type="button" onClick={() => TauriService.openExternalUrl('https://github.com/settings/personal-access-tokens/new')}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
@@ -830,6 +877,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   {githubBusy && <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />} {t('settings.checkAndSave')}
                 </button>
               </form>
+              </div>
             )}
             {githubError && <p className="text-[11px] text-red-300">{githubError}</p>}
           </div>

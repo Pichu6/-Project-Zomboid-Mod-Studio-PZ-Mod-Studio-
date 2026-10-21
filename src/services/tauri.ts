@@ -905,7 +905,20 @@ export const TauriService = {
     await invoke('delete_github_token_cmd');
   },
 
-  /** With the saved token: forks, writes the registry on a branch and opens the pull request. */
+  /** "Connect with GitHub": a code to type at github.com/login/device. */
+  githubDeviceStart: async (): Promise<{ user_code: string; verification_uri: string; expires_in: number }> => {
+    return await invoke('github_device_start_cmd');
+  },
+
+  /** Waits until the code is approved on GitHub; the token is kept; returns the login. */
+  githubDeviceWait: async (): Promise<string> => {
+    return await invoke<string>('github_device_wait_cmd');
+  },
+
+  githubDeviceCancel: async (): Promise<void> => {
+    await invoke('github_device_cancel_cmd');
+  },
+
   communityLists: async (paths: StudioPathsUI, refresh = false): Promise<CommunityLists | null> => {
     try {
       return await invoke<CommunityLists>('community_lists_cmd', { paths, refresh });
@@ -927,6 +940,7 @@ export const TauriService = {
     return await invoke<ProposeResult>('propose_shared_list_cmd', { list });
   },
 
+  /** With the saved token: forks, writes the registry on a branch and opens the pull request. */
   proposeRegistry: async (modId: string, content: string): Promise<ProposeResult> => {
     try {
       return await invoke<ProposeResult>('propose_registry_cmd', { modId, content });
