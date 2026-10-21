@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -823,6 +823,16 @@ export const TauriService = {
    * Subscribes or unsubscribes through the Steam client that is already signed in (no API key).
    * Steam downloads or removes the files itself. Throws with the reason.
    */
+  /** What subscribing to these items needs too: their "Required items", all the way down. */
+  workshopRequirements: async (ids: string[]): Promise<RequiredChain | null> => {
+    try {
+      return await invoke<RequiredChain>('workshop_requirements_cmd', { ids });
+    } catch (err) {
+      reportBackendError('Reading what the mod needs', err);
+      return null;
+    }
+  },
+
   workshopSubscribe: async (paths: StudioPathsUI, ids: string[], subscribe: boolean): Promise<SubscribeOutcome> => {
     // The Workshop's own data (titles, descriptions, collections) does not change when you
     // subscribe, and whether you have a mod comes from the disk, not from here. Keeping what was
@@ -1614,6 +1624,19 @@ export const TauriService = {
     loadOrder: string[]
   ): Promise<any> => {
     return await invoke('create_instance', { userZomboidDir, name, description, activeModIds, loadOrder });
+  },
+
+  /**
+   * What switching this list on would change in the game's launch file (Java agents such as
+   * ZombieBuddy's), without changing it; and whether the game is running (then it waits).
+   */
+  javaAgentsPlan: async (paths: StudioPathsUI, activeModIds: string[]): Promise<{ removed: string[]; restored: string[]; removed_args: string[]; restored_args: string[]; file: string; gameRunning: boolean } | null> => {
+    try {
+      const [plan, gameRunning] = await invoke<[{ removed: string[]; restored: string[]; removed_args: string[]; restored_args: string[]; file: string }, boolean]>('java_agents_plan_cmd', { paths, activeModIds });
+      return { ...plan, gameRunning };
+    } catch {
+      return null;
+    }
   },
 
   activateInstance: async (userZomboidDir: string, instanceId: string): Promise<void> => {

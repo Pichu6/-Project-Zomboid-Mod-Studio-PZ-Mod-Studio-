@@ -134,6 +134,12 @@ fn workshop_item_details_cmd(id: String) -> Result<workshop::WorkshopItemDetails
     workshop::item_details(&id)
 }
 
+/// What subscribing to these items needs too: their "Required items", all the way down.
+#[tauri::command(async)]
+fn workshop_requirements_cmd(ids: Vec<String>) -> Result<workshop::RequiredChain, String> {
+    workshop::required_chain(&ids)
+}
+
 /// Whether a Steam Web API key is saved (the key itself never goes back to the UI).
 #[tauri::command(async)]
 fn steam_key_status_cmd() -> Result<bool, String> {
@@ -401,6 +407,20 @@ fn zomboid_dir_of(paths: &StudioPaths) -> Result<std::path::PathBuf, String> {
         .into_iter()
         .next()
         .ok_or_else(|| "The Zomboid folder was not found.".to_string())
+}
+
+/// What switching this list on would change in the game's launch file (Java agents such as
+/// ZombieBuddy's), without changing it; and whether the game is running, so it would wait.
+#[tauri::command(async)]
+fn java_agents_plan_cmd(paths: StudioPaths, active_mod_ids: Vec<String>) -> Result<(studio_link::AgentChanges, bool), String> {
+    let z = zomboid_dir_of(&paths)?;
+    // The game folder the Studio saved or detected, never one the page names.
+    let install = vfs::studio_paths().pz_install_dir;
+    if install.is_empty() {
+        return Ok((studio_link::AgentChanges::default(), false));
+    }
+    let plan = studio_link::plan_java_agents(std::path::Path::new(&install), &z, &active_mod_ids)?;
+    Ok((plan, sandbox::find_running_pz_pid().is_some()))
 }
 
 /// Every save, its backups, and the room on the disk that holds them.
@@ -1187,6 +1207,7 @@ pub fn run() {
             write_link_health_cmd,
             link_status_cmd,
             saves_overview_cmd,
+            java_agents_plan_cmd,
             backup_save_cmd,
             restore_save_backup_cmd,
             delete_save_backup_cmd,
@@ -1216,6 +1237,7 @@ pub fn run() {
             nexus_categories_cmd,
             nexus_mod_details_cmd,
             workshop_item_details_cmd,
+            workshop_requirements_cmd,
             install_mods_cmd,
             workshop_details_cmd,
             workshop_lookup_cmd,

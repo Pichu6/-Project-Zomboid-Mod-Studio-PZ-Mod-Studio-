@@ -605,6 +605,14 @@ fn read_removed(user_zomboid_dir: &Path) -> Vec<String> {
 pub struct AgentChanges {
     pub removed: Vec<String>,
     pub restored: Vec<String>,
+    /// The launch lines themselves (`-agentlib:zbNative`), taken out and put back.
+    #[serde(default)]
+    pub removed_args: Vec<String>,
+    #[serde(default)]
+    pub restored_args: Vec<String>,
+    /// The launch file.
+    #[serde(default)]
+    pub file: String,
 }
 
 /// `<Zomboid>/PZModStudio_JavaAgentsPending.txt`: the launch file needs the active list's Java
@@ -652,6 +660,16 @@ fn finish_pending_agents(user_zomboid_dir: &Path) -> Option<AgentChanges> {
 /// what adds it the first time), and every change keeps a copy of the file before it in
 /// `<Zomboid>/PZModStudio_Backups`.
 pub fn sync_java_agents(pz_install_dir: &Path, user_zomboid_dir: &Path, active_mods: &[String]) -> Result<AgentChanges, String> {
+    java_agents_change(pz_install_dir, user_zomboid_dir, active_mods, true)
+}
+
+/// What `sync_java_agents` would change for this list, without changing anything: shown before
+/// a profile is switched on.
+pub fn plan_java_agents(pz_install_dir: &Path, user_zomboid_dir: &Path, active_mods: &[String]) -> Result<AgentChanges, String> {
+    java_agents_change(pz_install_dir, user_zomboid_dir, active_mods, false)
+}
+
+fn java_agents_change(pz_install_dir: &Path, user_zomboid_dir: &Path, active_mods: &[String], write: bool) -> Result<AgentChanges, String> {
     let json_path = pz_install_dir.join("ProjectZomboid64.json");
     let Ok(text) = std::fs::read_to_string(&json_path) else {
         return Ok(AgentChanges::default());
@@ -663,7 +681,7 @@ pub fn sync_java_agents(pz_install_dir: &Path, user_zomboid_dir: &Path, active_m
     };
 
     let mut removed_by_studio = read_removed(user_zomboid_dir);
-    let mut changes = AgentChanges::default();
+    let mut changes = AgentChanges { file: json_path.to_string_lossy().to_string(), ..Default::default() };
     for agent in JAVA_AGENTS {
         let wanted = active_mods.iter().any(|m| m == agent.mod_id);
         let present = vm_args.iter().any(|a| a.as_str() == Some(agent.vm_arg));
@@ -673,14 +691,16 @@ pub fn sync_java_agents(pz_install_dir: &Path, user_zomboid_dir: &Path, active_m
                 removed_by_studio.push(agent.vm_arg.to_string());
             }
             changes.removed.push(agent.mod_id.to_string());
+            changes.removed_args.push(agent.vm_arg.to_string());
         } else if wanted && !present && removed_by_studio.iter().any(|r| r == agent.vm_arg) {
             // First, where its installer had it: agents load before the other VM options.
             vm_args.insert(0, serde_json::Value::String(agent.vm_arg.to_string()));
             removed_by_studio.retain(|r| r != agent.vm_arg);
             changes.restored.push(agent.mod_id.to_string());
+            changes.restored_args.push(agent.vm_arg.to_string());
         }
     }
-    if changes.removed.is_empty() && changes.restored.is_empty() {
+    if !write || (changes.removed.is_empty() && changes.restored.is_empty()) {
         return Ok(changes);
     }
 

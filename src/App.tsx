@@ -13,6 +13,8 @@ import { errorShape } from './utils/errorShape';
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SavesModule } from './components/saves/SavesModule';
+import { ChangePreview } from './components/common/ChangePreview';
+import { TogglePlan, applyPlan, enableWithRequirements, planIsSimple, planToggle } from './utils/planner';
 import { SplashScreen } from './components/layout/SplashScreen';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
@@ -323,6 +325,14 @@ export const App: React.FC = () => {
         if (added.length > 0) {
           await TauriService.setProfileMembers(paths.user_zomboid_dir, profileId, [...members, ...added]).catch(() => null);
         }
+        // In the profile that is on, what arrived goes on too, with what it needs before it.
+        if (profile.is_active) {
+          const updated = enableWithRequirements(scanned, modIds);
+          if (updated.some((m, i) => m.enabled !== scanned[i]?.enabled || m.mod_id !== scanned[i]?.mod_id)) {
+            setMods(updated);
+            autoPersistProfileChanges(updated);
+          }
+        }
       }
       void refreshActiveProfile();
       setAwaitedItems((prev) => {
@@ -585,11 +595,30 @@ export const App: React.FC = () => {
     autoPersistProfileChanges(newOrder);
   };
 
+  /** A switch that brings other mods with it, waiting for the player to see it. */
+  const [pendingPlan, setPendingPlan] = useState<TogglePlan | null>(null);
+  const applyTogglePlan = (plan: TogglePlan, withExtras: boolean) => {
+    const updated = applyPlan(mods, plan, withExtras);
+    setPendingPlan(null);
+    setMods(updated);
+    autoPersistProfileChanges(updated);
+  };
+
   const handleToggleMod = (modId: string) => {
     const target = mods.find((m) => m.mod_id === modId);
     if (!target) return;
     // With a profile active the Studio Link mod stays on: it is how the game shows the profile.
     if (modId === STUDIO_LINK_MOD_ID && activeProfile && target.enabled) return;
+
+    // An ordinary mod: what it needs comes on with it, what needs it is named before it goes
+    // off, and anything beyond the one mod is shown first.
+    if (!modId.startsWith('Z_PZModStudio_')) {
+      const plan = planToggle(mods, modId);
+      if (!plan) return;
+      if (planIsSimple(plan)) applyTogglePlan(plan, true);
+      else setPendingPlan(plan);
+      return;
+    }
 
     const isSyntheticFusionPackage =
       modId.startsWith('Z_PZModStudio_') &&
@@ -1087,6 +1116,33 @@ export const App: React.FC = () => {
         );
       })()}
     </div>
+    {pendingPlan && (
+      <ChangePreview
+        title={pendingPlan.enable
+          ? i18next.t('preview.onTitle', { name: pendingPlan.target.name })
+          : i18next.t('preview.offTitle', { name: pendingPlan.target.name })}
+        blurb={pendingPlan.enable ? i18next.t('preview.onBlurb') : i18next.t('preview.offBlurb')}
+        sections={[
+          { label: i18next.t('preview.turnOn'), tone: 'on', rows: pendingPlan.turnOn.map((s) => ({ name: s.name, note: i18next.t('preview.neededBy', { name: s.because }) })) },
+          { label: i18next.t('preview.turnOff'), tone: 'off', rows: pendingPlan.turnOff.map((s) => ({ name: s.name, note: i18next.t('preview.needs', { name: s.because }) })) },
+          { label: i18next.t('preview.moved'), tone: 'move', rows: pendingPlan.moved.map((s) => ({ name: s.name, note: i18next.t('preview.movedBefore', { name: s.because }) })) },
+          { label: i18next.t('preview.missing'), tone: 'warn', rows: pendingPlan.missing.map((m) => ({ name: m.id, note: i18next.t('preview.missingNote', { name: m.because }) })) },
+          { label: i18next.t('preview.blocked'), tone: 'warn', rows: pendingPlan.blocked.map((s) => ({ name: s.name, note: i18next.t('preview.blockedNote', { name: s.because }) })) },
+        ]}
+        primary={{
+          label: pendingPlan.enable
+            ? (pendingPlan.turnOn.length + pendingPlan.moved.length > 0
+              ? i18next.t('preview.onAll', { count: pendingPlan.turnOn.length + 1 })
+              : i18next.t('preview.onAnyway'))
+            : i18next.t('preview.offAll', { count: pendingPlan.turnOff.length + 1 }),
+          onClick: () => applyTogglePlan(pendingPlan, true),
+        }}
+        secondary={(pendingPlan.enable ? pendingPlan.turnOn.length + pendingPlan.moved.length : pendingPlan.turnOff.length) > 0
+          ? { label: i18next.t('preview.onlyThis', { name: pendingPlan.target.name }), onClick: () => applyTogglePlan(pendingPlan, false) }
+          : undefined}
+        onClose={() => setPendingPlan(null)}
+      />
+    )}
     <BackendErrorToasts />
     </ContextMenuProvider>
   );

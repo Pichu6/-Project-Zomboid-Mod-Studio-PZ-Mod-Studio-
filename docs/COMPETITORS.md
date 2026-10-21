@@ -103,10 +103,8 @@ Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager
 
 1. ~~**Save backups.**~~ Done (Saves screen, `save_backup`): a zip when the player leaves a save, before it loads with changed mods and before its mod list changes, read back and compared after writing, with the free space in view; 5 automatic per save, kept ones forever; restore backs up first.
 2. **Compare a save with its last session before it loads.** Half done: the Link backs a save up when its mods differ from its last session or were updated since; still to do is showing exactly which mods changed, and offering to play on a copy.
-3. **Dependency planner with a preview.** Switching a mod on brings what it requires; switching one off says what needs it. One preview component for every change the Studio makes, files included. Today `sync_java_agents` edits `ProjectZomboid64.json` on its own when a profile is activated (with a backup); it should say what it will change first, and say so when a game update or "verify files" took the flag out.
-4. **Never write over what could not be read.**
-   - Keep an unreadable file as `.bad` and retry Windows sharing violations (antivirus).
-   - `atomic_write` should also `sync_all` before the rename and retry while the game holds the file.
+3. ~~**Dependency planner with a preview.**~~ Done: switching a mod on brings what it requires (all the way down, requirements moved before it), switching one off names what needs it, and anything beyond the one mod is shown first (`utils/planner.ts`, `ChangePreview`). Subscribing in Browse follows the Workshop's "Required items" down the chain and offers them in the same subscription; what arrives goes on in the active profile, requirements first. Switching a profile on shows the launch-file change first (`java_agents_plan_cmd`), and says when it will wait for the game to close.
+4. ~~**Never write over what could not be read.**~~ Done: `guard_overwrite`, `try_parse_default_txt` (read twice, whole), `atomic_write` with `sync_all` and a wait for held files.
 5. **Shared Steam limiter.** One cooldown per host that follows Retry-After, one request in flight per id, and a cache kept on disk so a restart does not ask again. Today's Workshop outage (eresult 10) showed why.
 6. **What's new since you last played,** with "may break saves" flags.
 7. **Map cells grid and clashes.**

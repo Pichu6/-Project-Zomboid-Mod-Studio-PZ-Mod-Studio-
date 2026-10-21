@@ -274,7 +274,17 @@
     "packageDeleteError": "{{folder}} could not be deleted: {{error}}",
     "deletedWithPackages": "Profile '{{name}}' and its {{count}} patch package(s) deleted.",
     "deleted": "Profile '{{name}}' deleted.",
-    "deleteError": "Error deleting profile: {{error}}"
+    "deleteError": "Error deleting profile: {{error}}",
+    "launchFile": {
+      "title": "Switch on {{name}}",
+      "blurb": "This profile also changes the game's launch file, {{file}}: Java agents load outside the mod list, so they follow the profile. A copy of the file is kept first.",
+      "blurbLater": "This profile also changes the game's launch file, {{file}}. The game is running and keeps that file open, so this part is done as soon as the game closes.",
+      "out": "Taken out of the launch file",
+      "back": "Put back in the launch file",
+      "outNote": "{{mod}} is not on in this profile",
+      "backNote": "{{mod}} is on in this profile",
+      "activate": "Switch on {{name}}"
+    }
   },
   "modList": {
     "title": "Mod List & Load Order",
@@ -975,7 +985,21 @@
       "reported": "reported",
       "on": " on {{build}}"
     },
-    "subscribePartial": "{{failed}} of {{total}} did not go through: {{reason}}"
+    "subscribePartial": "{{failed}} of {{total}} did not go through: {{reason}}",
+    "requirements": {
+      "title": "{{name}} needs other mods",
+      "theseMods": "these {{count}} mods",
+      "blurb": "Its \"Required items\" on the Workshop, and what those need in turn. The ticked ones come in the same subscription, and go on with it in your profile.",
+      "installed": "Already installed",
+      "gone": "Not on the Workshop any more (removed or private)",
+      "neededBy": "needed by {{names}}",
+      "unread": "The page of {{count}} item(s) could not be read (Steam busy?), so this list may be incomplete.",
+      "cutShort": "The chain of requirements is very long; only its first part is listed.",
+      "retry": "Try again",
+      "onlyThis": "Only {{name}}",
+      "subscribeAll": "Subscribe to all {{count}} {{size}}",
+      "subscribeAsked": "Subscribe"
+    }
   },
   "merger": {
     "panels": {
@@ -2182,5 +2206,26 @@
   },
   "notices": {
     "javaAgentsLater": "Project Zomboid was open when the profile changed, so its launch file (Java agents such as ZombieBuddy) waited. Now that the game is closed it is done. On: {{on}}. Off: {{off}}."
+  },
+  "preview": {
+    "cancel": "Cancel",
+    "onTitle": "Switch on {{name}}",
+    "offTitle": "Switch off {{name}}",
+    "onBlurb": "It needs other mods. They come on with it, and load before it.",
+    "offBlurb": "Mods that are on need it, and would fail without it.",
+    "turnOn": "Switched on with it",
+    "turnOff": "Switched off with it",
+    "moved": "Moved to load before",
+    "missing": "Not installed",
+    "blocked": "Cannot load on your build",
+    "neededBy": "needed by {{name}}",
+    "needs": "needs {{name}}",
+    "movedBefore": "{{name}} needs it loaded first",
+    "missingNote": "{{name}} requires it; subscribe to it in Browse Mods",
+    "blockedNote": "{{name}} requires it, but it is not made for the installed game build",
+    "onAll": "Switch on all {{count}}",
+    "onAnyway": "Switch it on anyway",
+    "offAll": "Switch off all {{count}}",
+    "onlyThis": "Only {{name}}"
   }
 }

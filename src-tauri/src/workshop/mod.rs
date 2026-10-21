@@ -643,13 +643,7 @@ pub fn item_details(id: &str) -> Result<WorkshopItemDetails, String> {
     if !item.found {
         return Err("Steam has no public item with this id (removed, private or wrong id).".to_string());
     }
-    let extras = agent()
-        .get(&page_url(id))
-        .call()
-        .ok()
-        .and_then(|r| r.into_body().with_config().limit(8 * 1024 * 1024).read_to_string().ok())
-        .map(|html| parse_item_page(&html))
-        .unwrap_or_default();
+    let extras = fetch_page(&page_url(id)).ok().map(|html| parse_item_page(&html)).unwrap_or_default();
     Ok(WorkshopItemDetails {
         description: raw.get("description").and_then(|x| x.as_str()).unwrap_or("").to_string(),
         time_created: raw.get("time_created").and_then(|x| x.as_u64()),
@@ -659,6 +653,195 @@ pub fn item_details(id: &str) -> Result<WorkshopItemDetails, String> {
         required_items: extras.required_items,
         item,
     })
+}
+
+// ------------------------------------------------------------------ what an item needs
+
+/// One item a subscription needs, found by following "Required items" from the items asked for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequiredNode {
+    pub workshop_id: String,
+    pub title: String,
+    pub preview_url: Option<String>,
+    pub file_size: u64,
+    /// False when Steam has no public item with this id (removed or private).
+    pub found: bool,
+    /// Titles of the items that list it.
+    pub required_by: Vec<String>,
+    /// 1 for what the items asked for list, 2 for what those list, ...
+    pub depth: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequiredChain {
+    pub items: Vec<RequiredNode>,
+    /// The chain was longer than what is followed (`CHAIN_MAX_ITEMS` / `CHAIN_MAX_DEPTH`).
+    pub cut_short: bool,
+    /// Items whose page could not be read (Steam busy, no connection): what they need is not in
+    /// the list, which may be incomplete.
+    pub unread: Vec<String>,
+    /// The items asked for, with their titles (when Steam gave them).
+    pub asked: Vec<RequiredItem>,
+}
+
+const CHAIN_MAX_ITEMS: usize = 60;
+const CHAIN_MAX_DEPTH: u32 = 6;
+const PAGE_CACHE_SECS: u64 = 600;
+
+// Pages read in this session: the same chain is asked for again when a dialog opens twice.
+static PAGE_REQUIRED: std::sync::Mutex<Option<std::collections::HashMap<String, (std::time::Instant, Vec<RequiredItem>)>>> = std::sync::Mutex::new(None);
+
+/// The "Required items" on an item's public page (cached for ten minutes).
+fn page_required_items(id: &str) -> Result<Vec<RequiredItem>, String> {
+    if let Ok(guard) = PAGE_REQUIRED.lock() {
+        if let Some((at, items)) = guard.as_ref().and_then(|m| m.get(id)) {
+            if at.elapsed().as_secs() < PAGE_CACHE_SECS {
+                return Ok(items.clone());
+            }
+        }
+    }
+    let html = fetch_page(&page_url(id)).map_err(|e| format!("Cannot read the Workshop page of {}: {}", id, e))?;
+    let items = parse_item_page(&html).required_items;
+    if let Ok(mut guard) = PAGE_REQUIRED.lock() {
+        guard.get_or_insert_with(Default::default).insert(id.to_string(), (std::time::Instant::now(), items.clone()));
+    }
+    Ok(items)
+}
+
+/// An item's public Workshop page. Steam's edge sometimes refuses this client ("429") while
+/// answering others from the same machine (seen 2026-10-20 during its Workshop trouble): then
+/// the page is asked for once through the curl that ships with Windows.
+fn fetch_page(url: &str) -> Result<String, String> {
+    match agent().get(url).call() {
+        Ok(r) => r.into_body().with_config().limit(8 * 1024 * 1024).read_to_string().map_err(|e| e.to_string()),
+        Err(ureq::Error::StatusCode(429)) => page_through_system_curl(url).ok_or_else(|| "Steam is limiting requests (429).".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// A Workshop page through `%SystemRoot%\\System32\\curl.exe` (Windows 10 and later), no window.
+#[cfg(windows)]
+fn page_through_system_curl(url: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+    let curl = std::path::Path::new(&root).join("System32").join("curl.exe");
+    if !url.starts_with("https://steamcommunity.com/") || !curl.is_file() {
+        return None;
+    }
+    let out = std::process::Command::new(curl)
+        .args(["-s", "-f", "-L", "--max-time", "20", "--max-filesize", "8388608", url])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .output()
+        .ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+#[cfg(not(windows))]
+fn page_through_system_curl(_url: &str) -> Option<String> {
+    None
+}
+
+/// Everything the given items need, following "Required items" down the chain, each item once
+/// and never the ones asked for. `pages` reads one item's list (the public page, or a test's).
+pub fn required_chain_with(ids: &[String], mut pages: impl FnMut(&str) -> Result<Vec<RequiredItem>, String>) -> (Vec<RequiredNode>, bool, Vec<String>) {
+    let asked: std::collections::HashSet<&String> = ids.iter().collect();
+    let mut nodes: Vec<RequiredNode> = Vec::new();
+    let mut queue: std::collections::VecDeque<(String, String, u32)> = std::collections::VecDeque::new();
+    for id in ids {
+        queue.push_back((id.clone(), String::new(), 0));
+    }
+    let mut read: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut cut_short = false;
+    let mut unread: Vec<String> = Vec::new();
+    while let Some((id, title, depth)) = queue.pop_front() {
+        if !read.insert(id.clone()) {
+            continue;
+        }
+        if depth >= CHAIN_MAX_DEPTH {
+            cut_short = true;
+            continue;
+        }
+        let parent = if title.is_empty() { id.clone() } else { title };
+        // One page that cannot be read leaves out what that item needs, not the whole chain.
+        let Ok(required) = pages(&id) else {
+            unread.push(id.clone());
+            continue;
+        };
+        for req in required {
+            if asked.contains(&req.workshop_id) {
+                continue;
+            }
+            if let Some(node) = nodes.iter_mut().find(|n| n.workshop_id == req.workshop_id) {
+                if !node.required_by.contains(&parent) {
+                    node.required_by.push(parent.clone());
+                }
+                continue;
+            }
+            if nodes.len() >= CHAIN_MAX_ITEMS {
+                cut_short = true;
+                break;
+            }
+            nodes.push(RequiredNode {
+                workshop_id: req.workshop_id.clone(),
+                title: req.title.clone(),
+                preview_url: None,
+                file_size: 0,
+                found: true,
+                required_by: vec![parent.clone()],
+                depth: depth + 1,
+            });
+            queue.push_back((req.workshop_id.clone(), req.title.clone(), depth + 1));
+        }
+    }
+    (nodes, cut_short, unread)
+}
+
+/// What subscribing to `ids` needs too, with each item's picture, size and whether Steam still
+/// has it. Pages are read gently (a short pause between them).
+pub fn required_chain(ids: &[String]) -> Result<RequiredChain, String> {
+    let mut first = true;
+    let (mut items, cut_short, unread) = required_chain_with(ids, |id| {
+        if !first {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+        first = false;
+        // Steam says "slow down" (429) often: once more after a pause before giving up on it.
+        page_required_items(id).or_else(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            page_required_items(id)
+        })
+    });
+    let mut asked: Vec<RequiredItem> = ids.iter().map(|id| RequiredItem { workshop_id: id.clone(), title: id.clone() }).collect();
+    if !items.is_empty() {
+        let wanted: Vec<String> = items.iter().map(|n| n.workshop_id.clone()).chain(ids.iter().cloned()).collect();
+        if let Ok(details) = get_details(&wanted) {
+            // The items asked for are named by their title, not their id.
+            let title_of = |id: &String| details.iter().find(|d| &d.workshop_id == id && !d.title.is_empty()).map(|d| d.title.clone());
+            for a in asked.iter_mut() {
+                if let Some(t) = title_of(&a.workshop_id) {
+                    a.title = t;
+                }
+            }
+            for node in items.iter_mut() {
+                for by in node.required_by.iter_mut() {
+                    if ids.contains(by) {
+                        if let Some(t) = title_of(by) {
+                            *by = t;
+                        }
+                    }
+                }
+                if let Some(d) = details.iter().find(|d| d.workshop_id == node.workshop_id) {
+                    node.found = d.found && !d.banned;
+                    if !d.title.is_empty() {
+                        node.title = d.title.clone();
+                    }
+                    node.preview_url = d.preview_url.clone();
+                    node.file_size = d.file_size;
+                }
+            }
+        }
+    }
+    Ok(RequiredChain { items, cut_short, unread, asked })
 }
 
 /// Looks up whatever the user pasted: item links/ids, or one collection link (expanded).
@@ -680,6 +863,63 @@ pub fn lookup(input: &str) -> Result<WorkshopLookup, String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_chain_follows_required_items_down_each_once() {
+        // 1 needs 2 and 3; 2 needs 3 and 4; 4 needs 1 (a loop back to what was asked for).
+        let page = |id: &str| -> Result<Vec<RequiredItem>, String> {
+            let r = |w: &str| RequiredItem { workshop_id: w.to_string(), title: format!("Item {}", w) };
+            Ok(match id {
+                "1" => vec![r("2"), r("3")],
+                "2" => vec![r("3"), r("4")],
+                "4" => vec![r("1")],
+                _ => vec![],
+            })
+        };
+        let (nodes, cut, unread) = required_chain_with(&["1".to_string()], page);
+        assert!(!cut && unread.is_empty());
+        let got: Vec<(String, u32, Vec<String>)> = nodes.iter().map(|n| (n.workshop_id.clone(), n.depth, n.required_by.clone())).collect();
+        assert_eq!(
+            got,
+            vec![
+                ("2".to_string(), 1, vec!["1".to_string()]),
+                ("3".to_string(), 1, vec!["1".to_string(), "Item 2".to_string()]),
+                ("4".to_string(), 2, vec!["Item 2".to_string()]),
+            ]
+        );
+        // Nothing listed: nothing to add.
+        assert!(required_chain_with(&["9".to_string()], page).0.is_empty());
+        // A page that cannot be read is named, and the rest is still followed.
+        let flaky = |id: &str| -> Result<Vec<RequiredItem>, String> {
+            if id == "2" { Err("429".into()) } else { page(id) }
+        };
+        let (nodes, _, unread) = required_chain_with(&["1".to_string()], flaky);
+        assert_eq!(unread, vec!["2".to_string()]);
+        assert_eq!(nodes.iter().map(|n| n.workshop_id.as_str()).collect::<Vec<_>>(), vec!["2", "3"]);
+    }
+
+    /// Live: `cargo test -- --ignored live_required_chain --nocapture` (reads Steam).
+    #[test]
+    #[ignore]
+    fn live_required_chain() {
+        let chain = required_chain(&["3490188370".to_string(), "3502080466".to_string()]).unwrap();
+        for n in &chain.items {
+            println!("{} {:?} depth {} by {:?} size {} found {}", n.workshop_id, n.title, n.depth, n.required_by, n.file_size, n.found);
+        }
+        println!("unread {:?}", chain.unread);
+        assert!(!chain.items.is_empty() || !chain.unread.is_empty());
+    }
+
+    #[test]
+    fn a_chain_that_never_ends_is_cut_short() {
+        let page = |id: &str| -> Result<Vec<RequiredItem>, String> {
+            let next = (id.parse::<u32>().unwrap() + 1).to_string();
+            Ok(vec![RequiredItem { title: next.clone(), workshop_id: next }])
+        };
+        let (nodes, cut, _) = required_chain_with(&["1".to_string()], page);
+        assert!(cut);
+        assert_eq!(nodes.len() as u32, CHAIN_MAX_DEPTH);
+    }
 
     #[test]
     fn finds_ids_in_pasted_text() {

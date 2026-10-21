@@ -5,7 +5,9 @@ import {
 import {
   CatalogModSummary, InstallResult, ModOrigin, NexusCategory, NexusMod, NexusSort, WorkshopInstallState, WorkshopItem, WorkshopLookup, WorkshopSort,
   AppInstance,
+  RequiredChain,
 } from '../../types';
+import { SubscribeRequirements } from './SubscribeRequirements';
 import { KeepActions, useKeepActions } from '../common/keep';
 import { ListsTab } from './ListsTab';
 import i18next from 'i18next';
@@ -879,14 +881,38 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
     };
   }, [paths]);
 
+  /**
+   * What a subscription needs too, asked before it is made: the dialog resolves with the extra
+   * items to subscribe to, or null when the player cancels.
+   */
+  const [requirements, setRequirements] = useState<{ chain: RequiredChain; resolve: (extra: string[] | null) => void; ids: string[] } | null>(null);
+  const askRequirements = useCallback(
+    async (ids: string[]): Promise<string[] | null> => {
+      const chain = await TauriService.workshopRequirements(ids);
+      if (!chain) return [];
+      const missing = chain.items.filter((n) => !installedByItem.has(n.workshop_id));
+      if (missing.length === 0 && chain.unread.length === 0) return [];
+      return await new Promise<string[] | null>((resolve) => setRequirements({ chain, resolve, ids }));
+    },
+    [installedByItem]
+  );
+
   const handleSubscribe = useCallback(
     async (ids: string[], subscribe: boolean) => {
       try {
-        const outcome = await TauriService.workshopSubscribe(paths, ids, subscribe);
+        // What it needs comes in the same subscription, if the player says so.
+        let extra: string[] = [];
+        if (subscribe) {
+          const answer = await askRequirements(ids);
+          if (answer === null) throw new Error('cancelled');
+          extra = answer.filter((id) => !ids.includes(id));
+        }
+        const all = [...ids, ...extra];
+        const outcome = await TauriService.workshopSubscribe(paths, all, subscribe);
         if (outcome.failed.length > 0) {
           reportBackendError(
             subscribe ? 'Subscribing' : 'Unsubscribing',
-            i18next.t('browse.subscribePartial', { failed: outcome.failed.length, total: ids.length, reason: outcome.failed[0][1] })
+            i18next.t('browse.subscribePartial', { failed: outcome.failed.length, total: all.length, reason: outcome.failed[0][1] })
           );
         }
         // Steam downloads in the background; pick up whatever has landed, and watch for the rest.
@@ -895,13 +921,13 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
         // Nothing went through: the button must not say it did.
         if (outcome.done.length === 0) throw new Error('none subscribed');
       } catch (err) {
-        if (!(err instanceof Error && err.message === 'none subscribed')) {
+        if (!(err instanceof Error && (err.message === 'none subscribed' || err.message === 'cancelled'))) {
           reportBackendError(subscribe ? 'Subscribing' : 'Unsubscribing', err);
         }
         throw err;
       }
     },
-    [paths, onInstalled, onSubscribed]
+    [paths, onInstalled, onSubscribed, askRequirements]
   );
 
   // The Mod List asked for one item: show it on its own, not stacked on whatever was open.
@@ -919,6 +945,25 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
 
   return (
     <div id={SCROLL_ID} className="flex-1 flex flex-col min-h-0 overflow-y-auto font-sans">
+      {requirements && (
+        <SubscribeRequirements
+          titles={requirements.chain.asked.length > 0 ? requirements.chain.asked.map((a) => a.title) : requirements.ids}
+          chain={requirements.chain}
+          installed={new Set(installedByItem.keys())}
+          onSubscribe={(extra) => {
+            requirements.resolve(extra);
+            setRequirements(null);
+          }}
+          onRetry={async () => {
+            const again = await TauriService.workshopRequirements(requirements.ids);
+            if (again) setRequirements({ ...requirements, chain: again });
+          }}
+          onCancel={() => {
+            requirements.resolve(null);
+            setRequirements(null);
+          }}
+        />
+      )}
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 px-6 py-3 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
         <div className="flex items-center gap-2 mr-2">
           <Globe className="w-5 h-5 text-emerald-400" aria-hidden="true" />

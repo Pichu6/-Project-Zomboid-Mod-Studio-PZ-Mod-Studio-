@@ -274,7 +274,17 @@
     "packageDeleteError": "No se pudo borrar {{folder}}: {{error}}",
     "deletedWithPackages": "Perfil '{{name}}' y sus {{count}} paquete(s) de parche borrados.",
     "deleted": "Perfil '{{name}}' borrado.",
-    "deleteError": "Error al borrar el perfil: {{error}}"
+    "deleteError": "Error al borrar el perfil: {{error}}",
+    "launchFile": {
+      "title": "Activar {{name}}",
+      "blurb": "Este perfil también cambia el archivo de inicio del juego, {{file}}: los agentes Java cargan fuera de la lista de mods, así que siguen al perfil. Antes se guarda una copia del archivo.",
+      "blurbLater": "Este perfil también cambia el archivo de inicio del juego, {{file}}. El juego está abierto y tiene ese archivo tomado, así que esta parte se hace apenas se cierre.",
+      "out": "Se saca del archivo de inicio",
+      "back": "Vuelve al archivo de inicio",
+      "outNote": "{{mod}} no está prendido en este perfil",
+      "backNote": "{{mod}} está prendido en este perfil",
+      "activate": "Activar {{name}}"
+    }
   },
   "modList": {
     "title": "Lista de mods y orden de carga",
@@ -975,7 +985,21 @@
       "reported": "reportado",
       "on": " en {{build}}"
     },
-    "subscribePartial": "{{failed}} de {{total}} no se pudieron: {{reason}}"
+    "subscribePartial": "{{failed}} de {{total}} no se pudieron: {{reason}}",
+    "requirements": {
+      "title": "{{name}} necesita otros mods",
+      "theseMods": "estos {{count}} mods",
+      "blurb": "Sus \"Elementos requeridos\" del Workshop, y lo que esos a su vez necesitan. Los marcados entran en la misma suscripción y se prenden con él en tu perfil.",
+      "installed": "Ya instalado",
+      "gone": "Ya no está en el Workshop (borrado o privado)",
+      "neededBy": "lo necesita {{names}}",
+      "unread": "No se pudo leer la página de {{count}} elemento(s) (¿Steam ocupado?), así que la lista puede estar incompleta.",
+      "cutShort": "La cadena de requisitos es muy larga; solo se lista la primera parte.",
+      "retry": "Reintentar",
+      "onlyThis": "Solo {{name}}",
+      "subscribeAll": "Suscribirse a los {{count}} {{size}}",
+      "subscribeAsked": "Suscribirse"
+    }
   },
   "merger": {
     "panels": {
@@ -2182,5 +2206,26 @@
   },
   "notices": {
     "javaAgentsLater": "Project Zomboid estaba abierto cuando cambió el perfil, así que su archivo de inicio (agentes Java como ZombieBuddy) esperó. Ahora que el juego se cerró, ya está hecho. Prendidos: {{on}}. Apagados: {{off}}."
+  },
+  "preview": {
+    "cancel": "Cancelar",
+    "onTitle": "Prender {{name}}",
+    "offTitle": "Apagar {{name}}",
+    "onBlurb": "Necesita otros mods. Se prenden con él y cargan antes.",
+    "offBlurb": "Hay mods prendidos que lo necesitan y fallarían sin él.",
+    "turnOn": "Se prenden con él",
+    "turnOff": "Se apagan con él",
+    "moved": "Pasan a cargar antes",
+    "missing": "No instalados",
+    "blocked": "No cargan en tu versión del juego",
+    "neededBy": "lo necesita {{name}}",
+    "needs": "necesita {{name}}",
+    "movedBefore": "{{name}} lo necesita cargado antes",
+    "missingNote": "lo pide {{name}}; suscribite desde Explorar mods",
+    "blockedNote": "lo pide {{name}}, pero no está hecho para la versión instalada del juego",
+    "onAll": "Prender los {{count}}",
+    "onAnyway": "Prenderlo igual",
+    "offAll": "Apagar los {{count}}",
+    "onlyThis": "Solo {{name}}"
   }
 }

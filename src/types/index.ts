@@ -367,6 +367,27 @@ export type AppProfile = AppInstance;
 
 export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'SAVES' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
 
+/** One item a subscription needs too (workshop::RequiredNode). */
+export interface RequiredNode {
+  workshop_id: string;
+  title: string;
+  preview_url: string | null;
+  file_size: number;
+  /** False when Steam no longer has it. */
+  found: boolean;
+  /** Titles of the items that list it. */
+  required_by: string[];
+  depth: number;
+}
+
+export interface RequiredChain {
+  items: RequiredNode[];
+  cut_short: boolean;
+  /** Items whose page could not be read: the list may be incomplete. */
+  unread: string[];
+  asked: { workshop_id: string; title: string }[];
+}
+
 /** One backup of one save (save_backup::BackupEntry). */
 export interface SaveBackupEntry {
   file: string;

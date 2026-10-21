@@ -1,4 +1,5 @@
 import { freshProfile } from '../../utils/profiles';
+import { ChangePreview } from '../common/ChangePreview';
 import React, { useState, useEffect } from 'react';
 import { Layers, Plus, Check, Trash2, Zap, FolderArchive, RefreshCw, Edit3, Share2, X, Save } from 'lucide-react';
 import { ModInfo, StudioPathsUI, AppInstance } from '../../types';
@@ -154,7 +155,21 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
     }
   };
 
+  /** A profile whose switch also changes the game's launch file, waiting to be confirmed. */
+  const [pendingActivation, setPendingActivation] = useState<{ inst: AppInstance; plan: NonNullable<Awaited<ReturnType<typeof TauriService.javaAgentsPlan>>> } | null>(null);
+
   const handleActivateInstance = async (inst: AppInstance) => {
+    // The launch file is the game's, outside the mods folder: its change is shown first.
+    const plan = await TauriService.javaAgentsPlan(paths, inst.active_mod_ids);
+    if (plan && (plan.removed.length > 0 || plan.restored.length > 0)) {
+      setPendingActivation({ inst, plan });
+      return;
+    }
+    await activateNow(inst);
+  };
+
+  const activateNow = async (inst: AppInstance) => {
+    setPendingActivation(null);
     try {
       await TauriService.activateInstance(paths.user_zomboid_dir, inst.id);
       onApplyInstanceLoadOrder(inst.load_order, inst.active_mod_ids);
@@ -241,6 +256,20 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
 
   return (
     <div className="space-y-6">
+      {pendingActivation && (
+        <ChangePreview
+          title={t('profiles.launchFile.title', { name: pendingActivation.inst.name })}
+          blurb={pendingActivation.plan.gameRunning
+            ? t('profiles.launchFile.blurbLater', { file: pendingActivation.plan.file })
+            : t('profiles.launchFile.blurb', { file: pendingActivation.plan.file })}
+          sections={[
+            { label: t('profiles.launchFile.out'), tone: 'off', rows: pendingActivation.plan.removed.map((m, k) => ({ name: pendingActivation.plan.removed_args[k] ?? m, note: t('profiles.launchFile.outNote', { mod: m }) })) },
+            { label: t('profiles.launchFile.back'), tone: 'on', rows: pendingActivation.plan.restored.map((m, k) => ({ name: pendingActivation.plan.restored_args[k] ?? m, note: t('profiles.launchFile.backNote', { mod: m }) })) },
+          ]}
+          primary={{ label: t('profiles.launchFile.activate', { name: pendingActivation.inst.name }), onClick: () => void activateNow(pendingActivation.inst) }}
+          onClose={() => setPendingActivation(null)}
+        />
+      )}
       {/* Top Banner */}
       <div className="p-5 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-teal-950/80 border border-emerald-800/60 rounded-2xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
