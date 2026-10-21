@@ -357,6 +357,12 @@ fn is_level_line(line: &str) -> bool {
 /// stack. Both name the mod, and each used to become a card: two cards for one error. Now the
 /// ERROR's card waits until its block ends and takes the exception line as what it says, or
 /// gives way to the card of a pattern the Studio knows in that line.
+///
+/// The Java stack under the ERROR lists the Lua levels too, each with its mod
+/// (`Lua((MOD:X)).fn(File.lua:48)`, `Lua(Vanilla).fn(...)`), the one that failed first: the mods
+/// below it called it, and the card says so ("called from"). The `STACK TRACE` dump the game
+/// prints elsewhere comes after the error, introduced by a `flushErrorMessage` line, and next to
+/// another error it is easy to take for that one's: only the block's own stack counts.
 pub struct CardMaker {
     blame: ModBlame,
     /// One card per mod and complaint: a mod that fails on every tick would otherwise bury
@@ -369,11 +375,13 @@ pub struct CardMaker {
     pending_has_detail: bool,
     /// The lines being read are under an ERROR (reported or not): its exception and stack.
     in_error: bool,
+    /// The mods of the Lua levels on the held card's stack, in order.
+    block_mods: Vec<String>,
 }
 
 impl CardMaker {
     pub fn new() -> Self {
-        CardMaker { blame: ModBlame::default(), already_reported: Default::default(), counter: 1, pending: None, pending_has_detail: false, in_error: false }
+        CardMaker { blame: ModBlame::default(), already_reported: Default::default(), counter: 1, pending: None, pending_has_detail: false, in_error: false, block_mods: Vec::new() }
     }
 
     /// A new game session (console.txt started over): what it blamed and reported is forgotten.
@@ -386,12 +394,24 @@ impl CardMaker {
 
     /// The card that was waiting for the rest of its block.
     pub fn flush(&mut self) -> Option<TranslatedErrorPayload> {
-        self.pending.take()
+        let mut card = self.pending.take()?;
+        // The mods below the one that failed, each once, nearest first (at most three).
+        let culprit = card.mod_name.clone().unwrap_or_default();
+        let mut callers: Vec<String> = Vec::new();
+        for name in self.block_mods.drain(..) {
+            if name != culprit && !callers.contains(&name) {
+                callers.push(name);
+            }
+        }
+        callers.truncate(3);
+        card.called_from = callers;
+        Some(card)
     }
 
     fn hold(&mut self, card: TranslatedErrorPayload) {
         self.pending = Some(card);
         self.pending_has_detail = false;
+        self.block_mods.clear();
     }
 
     /// The cards this line completes (usually none, at most two).
@@ -400,24 +420,25 @@ impl CardMaker {
         self.blame.observe(line);
         let level = is_level_line(line);
         if level {
-            out.extend(self.pending.take());
+            out.extend(self.flush());
             self.in_error = false;
         }
         let trimmed = line.trim();
+        if !level && self.pending.is_some() {
+            if let Some(name) = ModBlame::named_in(trimmed) {
+                self.block_mods.push(name);
+            }
+        }
         let is_error_level = level && trimmed.starts_with("ERROR");
         let culprit = self.blame.of(line);
         if let Some(mut card) = translate_log_error(line, self.counter) {
             self.counter += 1;
-            card.called_from = culprit.as_deref().map(|c| self.blame.callers(c)).unwrap_or_default();
             card.mod_name = culprit.clone();
             if !level && self.pending.is_some() {
                 // A pattern the Studio knows, in the exception under an ERROR: that card for it.
                 let held = self.pending.take().unwrap();
-                card.mod_name = card.mod_name.or(held.mod_name);
-                if card.called_from.is_empty() {
-                    card.called_from = held.called_from;
-                }
-                self.hold(card);
+                card.mod_name = held.mod_name.or(card.mod_name);
+                self.pending = Some(card);
                 self.pending_has_detail = true;
             } else if is_error_level {
                 self.hold(card);
@@ -440,9 +461,8 @@ impl CardMaker {
                 let complaining = line.contains("ERROR") || line.contains("Exception") || line.contains("KahluaThreadException") || trimmed.starts_with("WARN");
                 let key = format!("{}|{}", name, trimmed.chars().take(80).collect::<String>());
                 if complaining && self.already_reported.insert(key) {
-                    let mut card = blame_card(trimmed, &name, self.counter);
+                    let card = blame_card(trimmed, &name, self.counter);
                     self.counter += 1;
-                    card.called_from = self.blame.callers(&name);
                     if is_error_level {
                         self.hold(card);
                     } else {
@@ -487,16 +507,7 @@ pub struct ModBlame {
     /// read on its own it is one more anonymous Java exception, which is how 413 of them in one
     /// session went unattributed.
     recent: Option<(String, usize)>,
-    /// The frames of a `STACK TRACE` block being read: the game prints the whole stack, each
-    /// level with its mod (`Lua((MOD:X)).fn(File.lua:48)`, `Lua(Vanilla)...`), right before the
-    /// ERROR line it belongs to.
-    trace: Option<Vec<String>>,
-    /// That stack's mods, top (where it failed) first, for the level line that follows it.
-    chain: Vec<String>,
 }
-
-/// A stack level in the game's own files.
-const VANILLA_FRAME: &str = "\0vanilla";
 
 /// How many lines a mod's name carries forward. The frame and its error are next to each other;
 /// a wider window would start blaming whoever happened to be mentioned earlier.
@@ -506,24 +517,6 @@ impl ModBlame {
     /// Reads `mod "X" overrides <path>` lines as they go by, and remembers a mod named in a
     /// stack frame for the few lines that follow it.
     pub fn observe(&mut self, line: &str) {
-        let t = line.trim();
-        let level_line = ["LOG", "ERROR", "WARN", "DEBUG", "TRACE"].iter().any(|l| t.starts_with(l));
-        if t == "STACK TRACE" {
-            self.trace = Some(Vec::new());
-        } else if let Some(frames) = self.trace.as_mut() {
-            if !level_line {
-                if let Some(name) = Self::named_in(t) {
-                    frames.push(name);
-                } else if Self::is_vanilla_frame(t) {
-                    frames.push(VANILLA_FRAME.to_string());
-                }
-            } else {
-                // The error this stack belongs to.
-                self.chain = self.trace.take().unwrap_or_default();
-            }
-        } else if level_line {
-            self.chain.clear();
-        }
         self.recent = match self.recent.take() {
             Some((name, age)) if age + 1 < BLAME_WINDOW => Some((name, age + 1)),
             _ => None,
@@ -564,19 +557,6 @@ impl ModBlame {
     /// `Lua(Vanilla)`: the game says the file is its own, not a mod's.
     fn is_vanilla_frame(line: &str) -> bool {
         line.contains("Lua(Vanilla)")
-    }
-
-    /// The mods that called into `culprit` on the stack printed just before this line, nearest
-    /// first, each once (at most three): "error in A, called from B".
-    pub fn callers(&self, culprit: &str) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        for name in &self.chain {
-            if name != VANILLA_FRAME && name != culprit && !out.contains(name) {
-                out.push(name.clone());
-            }
-        }
-        out.truncate(3);
-        out
     }
 
     /// The mod this line is about, if the game said.
@@ -1659,6 +1639,14 @@ mod one_card_tests {
         "\tStack trace:",
     ];
 
+    /// The Lua levels of the Java stack under that ERROR, as the game wrote them.
+    const STACK: [&str; 4] = [
+        "\t\tse.krka.kahlua.vm.KahluaThread.tableget(KahluaThread.java:1430)",
+        "\t\tLua((MOD:Take A Bath And Shower [SP/MP])).isValid(TABAS_ISPlace3DItemCursor.lua:48)",
+        "\t\tLua(Vanilla).DoTileBuilding(ISBuildingObject.lua:144)",
+        "\t\tLua((MOD:Project Viewpoint: Visible Construction)).gameDoTileBuilding(VC_Construction.lua:308)",
+    ];
+
     fn run(maker: &mut CardMaker, lines: &[&str]) -> Vec<super::TranslatedErrorPayload> {
         let mut cards = Vec::new();
         for l in lines {
@@ -1671,7 +1659,7 @@ mod one_card_tests {
     fn an_error_and_the_exception_under_it_are_one_card() {
         let mut maker = CardMaker::new();
         let mut lines = BLOCK.to_vec();
-        lines.push("\t\tse.krka.kahlua.vm.KahluaThread.tableget(KahluaThread.java:1430)");
+        lines.extend(STACK);
         let mut cards = run(&mut maker, &lines);
         assert!(cards.is_empty(), "held until the block ends");
         cards.extend(maker.line("LOG  : General      f:29306> done"));
@@ -1687,6 +1675,28 @@ mod one_card_tests {
         let again = run(&mut maker, &BLOCK);
         let again_end = maker.line("LOG  : General      f:29307> done");
         assert!(again.is_empty() && again_end.is_empty());
+    }
+
+    #[test]
+    fn a_stack_dump_of_one_error_is_not_the_next_ones() {
+        let mut maker = CardMaker::new();
+        // An error of the Studio Link with only the game's own code under it, then the dump of
+        // an earlier error (other mods) and a different error.
+        let cards = run(&mut maker, &[
+            "ERROR: General      f:0> Lua((MOD:PZ Mod Studio Link)).report> Exception thrown",
+            "\tjava.lang.RuntimeException: attempted index: last of non-table: null at KahluaThread.tableget(KahluaThread.java:1430).",
+            "\tStack trace:",
+            "\t\tLua((MOD:PZ Mod Studio Link)).report(PZModStudio_Errors.lua:178)",
+            "\t\tLua(Vanilla).boom(Apocalypse.lua:2)",
+            "ERROR: General      f:0 at KahluaThread.flushErrorMessage > dumping Lua stack trace",
+            "STACK TRACE",
+            "\tLua((MOD:Some Other Mod)).fn(Other.lua:1)",
+            "\tLua((MOD:A Caller)).fn(Caller.lua:2)",
+            "LOG  : General      f:1> next",
+        ]);
+        let link = cards.iter().find(|c| c.mod_name.as_deref() == Some("PZ Mod Studio Link")).expect("its card");
+        assert!(link.called_from.is_empty(), "nothing but the game called it: {:?}", link.called_from);
+        assert!(link.explanation.starts_with("java.lang.RuntimeException"));
     }
 
     #[test]
@@ -1712,30 +1722,6 @@ mod one_card_tests {
 #[cfg(test)]
 mod blame_window_tests {
     use super::ModBlame;
-
-    #[test]
-    fn the_stack_before_an_error_names_the_mods_that_called_it() {
-        let mut blame = ModBlame::default();
-        // As the game wrote it on 2026-10-20.
-        let lines = [
-            "STACK TRACE",
-            "-----------------------------------------",
-            "\tLua((MOD:Take A Bath And Shower [SP/MP])).isValid(TABAS_ISPlace3DItemCursor.lua:48)",
-            "\tLua(Vanilla).DoTileBuilding(ISBuildingObject.lua:144)",
-            "\tLua((MOD:Project Viewpoint: Visible Construction)).gameDoTileBuilding(VC_Construction.lua:308).",
-            "ERROR: General      f:29305> Lua((MOD:Take A Bath And Shower [SP/MP])).isValid> Exception thrown",
-        ];
-        for line in lines {
-            blame.observe(line);
-        }
-        let culprit = blame.of(lines[5]).unwrap();
-        assert_eq!(culprit, "Take A Bath And Shower [SP/MP]");
-        assert_eq!(blame.callers(&culprit), vec!["Project Viewpoint: Visible Construction"]);
-        // The stack under the ERROR, and the next line, belong to no new stack.
-        blame.observe("\tjava.lang.RuntimeException: attempted index: getUnequippedWeight of non-table: null");
-        blame.observe("LOG  : General      f:29306> something else");
-        assert!(blame.callers(&culprit).is_empty());
-    }
 
     #[test]
     fn a_java_exception_is_blamed_on_the_lua_frame_just_above_it() {

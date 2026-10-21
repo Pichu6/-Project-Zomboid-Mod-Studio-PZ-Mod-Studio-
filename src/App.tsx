@@ -258,6 +258,13 @@ export const App: React.FC = () => {
     }).then((u) => {
       unlistenAgents = u;
     });
+    // The game's error notice: "See in the Studio" opens the Monitor, which has the error's card.
+    let unlistenNavigate: (() => void) | null = null;
+    TauriService.listenStudioNavigate((screen) => {
+      if (screen === 'monitor') setActiveTab('MONITOR');
+    }).then((u) => {
+      unlistenNavigate = u;
+    });
     TauriService.listenProfileChangedInGame(async () => {
       const current = pathsRef.current;
       if (!current.is_valid) return;
@@ -271,6 +278,7 @@ export const App: React.FC = () => {
       if (unlisten) unlisten();
       if (unlistenAgents) unlistenAgents();
       if (unlistenPanic) unlistenPanic();
+      if (unlistenNavigate) unlistenNavigate();
     };
   }, [refreshActiveProfile]);
 

@@ -190,5 +190,19 @@
     "UI_StudioLink_modsGetApp": "Get PZ Mod Studio",
     "UI_StudioLink_modsGetAppTip": "Mod profiles, a backup of each save before it loads, Mod Health, maps and servers. Free, for Windows. Copies the download page's address.",
     "UI_StudioLink_modsGetAppCopied": "Download link copied: paste it in your browser (Ctrl+V). {1}",
-    "UI_StudioLink_modsGetAppFailed": "The link could not be copied. Open it in your browser: {1}"
+    "UI_StudioLink_modsGetAppFailed": "The link could not be copied. Open it in your browser: {1}",
+    "UI_StudioLink_errTitle": "{1} new Lua error(s)",
+    "UI_StudioLink_errIn": "in {1}",
+    "UI_StudioLink_errCalledFrom": "called from {1}",
+    "UI_StudioLink_errOthers": "and {1} more in {2} other mod(s)",
+    "UI_StudioLink_errNoMod": "in the game's own code (no mod named)",
+    "UI_StudioLink_errCopy": "Copy report",
+    "UI_StudioLink_errCopied": "Report copied: paste it where the mod's author can see it.",
+    "UI_StudioLink_errShowMods": "Show in Mods",
+    "UI_StudioLink_errSeeStudio": "See in the Studio",
+    "UI_StudioLink_errClose": "Close",
+    "UI_StudioLink_errReportTitle": "Lua error in Project Zomboid {1}",
+    "UI_StudioLink_errReportMod": "Mod: {1}",
+    "UI_StudioLink_errReportCalled": "Called from: {1}",
+    "UI_StudioLink_errReportTimes": "Seen {1} time(s) in this session."
 }

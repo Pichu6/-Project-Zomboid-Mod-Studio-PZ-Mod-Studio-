@@ -220,6 +220,20 @@ local TEXT = {
     cardNoChanges = "same mods as its last session",
     cardChanges = "since its last session: {1} updated, {2} added, {3} taken out",
     cardNever = "PZ Mod Studio has not seen it played yet",
+    errTitle = "{1} new Lua error(s)",
+    errIn = "in {1}",
+    errCalledFrom = "called from {1}",
+    errOthers = "and {1} more in {2} other mod(s)",
+    errNoMod = "in the game's own code (no mod named)",
+    errCopy = "Copy report",
+    errCopied = "Report copied: paste it where the mod's author can see it.",
+    errShowMods = "Show in Mods",
+    errSeeStudio = "See in the Studio",
+    errClose = "Close",
+    errReportTitle = "Lua error in Project Zomboid {1}",
+    errReportMod = "Mod: {1}",
+    errReportCalled = "Called from: {1}",
+    errReportTimes = "Seen {1} time(s) in this session.",
     inviteCopied = "Link copied: paste it in your browser.",
     modsGetApp = "Get PZ Mod Studio",
     modsGetAppTip = "Mod profiles, a backup of each save before it loads, Mod Health, maps and servers. Free, for Windows. Copies the download page's address.",
@@ -355,12 +369,13 @@ function Link.requestAdd(ids)
     Link.addError = nil
 end
 
---- Asks the running Studio to bring its window to the front.
-function Link.requestShow()
+--- Asks the running Studio to bring its window to the front, on one of its screens ("monitor")
+--- or as it is.
+function Link.requestShow(screen)
     local writer = getFileWriter(REQUESTS_FILE, true, true)
     if not writer then return end
     Link.seq = (Link.seq or 0) + 1
-    writer:write(tostring(now()) .. "-" .. tostring(Link.seq) .. "\tshow\t\n")
+    writer:write(tostring(now()) .. "-" .. tostring(Link.seq) .. "\tshow\t" .. (screen or "") .. "\n")
     writer:close()
 end
 

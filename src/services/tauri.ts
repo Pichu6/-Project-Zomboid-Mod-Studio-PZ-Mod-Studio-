@@ -1896,6 +1896,11 @@ export const TauriService = {
     return await listen<AppInstance>('profile-changed-in-game', (event) => callback(event.payload));
   },
 
+  /** The game asked to see one of the Studio's screens ("monitor", from its error notice). */
+  listenStudioNavigate: async (callback: (screen: string) => void): Promise<UnlistenFn> => {
+    return await listen<string>('studio-navigate', (event) => callback(event.payload));
+  },
+
   saveMasterLoadOrder: async (
     userZomboidDir: string,
     loadOrder: string[],

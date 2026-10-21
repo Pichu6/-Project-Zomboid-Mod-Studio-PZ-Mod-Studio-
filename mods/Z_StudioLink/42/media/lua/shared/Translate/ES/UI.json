@@ -190,5 +190,19 @@
     "UI_StudioLink_modsGetApp": "Conseguir PZ Mod Studio",
     "UI_StudioLink_modsGetAppTip": "Perfiles de mods, una copia de cada partida antes de cargarla, Mod Health, mapas y servidores. Gratis, para Windows. Copia la dirección de la página de descarga.",
     "UI_StudioLink_modsGetAppCopied": "Link de descarga copiado: pegalo en tu navegador (Ctrl+V). {1}",
-    "UI_StudioLink_modsGetAppFailed": "No se pudo copiar el link. Abrilo en tu navegador: {1}"
+    "UI_StudioLink_modsGetAppFailed": "No se pudo copiar el link. Abrilo en tu navegador: {1}",
+    "UI_StudioLink_errTitle": "{1} error(es) de Lua nuevo(s)",
+    "UI_StudioLink_errIn": "en {1}",
+    "UI_StudioLink_errCalledFrom": "llamado desde {1}",
+    "UI_StudioLink_errOthers": "y {1} más en {2} mod(s) más",
+    "UI_StudioLink_errNoMod": "en el código del propio juego (no nombra ningún mod)",
+    "UI_StudioLink_errCopy": "Copiar reporte",
+    "UI_StudioLink_errCopied": "Reporte copiado: pegalo donde lo vea el autor del mod.",
+    "UI_StudioLink_errShowMods": "Ver en Mods",
+    "UI_StudioLink_errSeeStudio": "Ver en el Studio",
+    "UI_StudioLink_errClose": "Cerrar",
+    "UI_StudioLink_errReportTitle": "Error de Lua en Project Zomboid {1}",
+    "UI_StudioLink_errReportMod": "Mod: {1}",
+    "UI_StudioLink_errReportCalled": "Llamado desde: {1}",
+    "UI_StudioLink_errReportTimes": "Visto {1} vez/veces en esta sesión."
 }

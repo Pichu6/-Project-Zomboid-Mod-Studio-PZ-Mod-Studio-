@@ -53,11 +53,12 @@ const MOD_INFO: &str = include_str!("../../../mods/Z_StudioLink/mod.info");
 const MOD_INFO_42: &str = include_str!("../../../mods/Z_StudioLink/42/mod.info");
 const CLIENT_LUA: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_Link.lua");
 const SCREEN_LUA: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_ModsScreen.lua");
+const ERRORS_LUA: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_Errors.lua");
 
 const UI_EN: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/shared/Translate/EN/UI.json");
 const UI_ES: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/shared/Translate/ES/UI.json");
 
-fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 6] {
+fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 7] {
     let target = user_zomboid_dir.join("mods").join(LINK_MOD_ID);
     let lua = target.join("42").join("media").join("lua");
     let translate = lua.join("shared").join("Translate");
@@ -66,6 +67,7 @@ fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 6] {
         (target.join("42").join("mod.info"), MOD_INFO_42),
         (lua.join("client").join("PZModStudio_Link.lua"), CLIENT_LUA),
         (lua.join("client").join("PZModStudio_ModsScreen.lua"), SCREEN_LUA),
+        (lua.join("client").join("PZModStudio_Errors.lua"), ERRORS_LUA),
         (translate.join("EN").join("UI.json"), UI_EN),
         (translate.join("ES").join("UI.json"), UI_ES),
     ]
@@ -218,6 +220,8 @@ pub const ACKS_FILE: &str = "PZModStudio_LinkAcks.txt";
 pub const GAME_FILE: &str = "PZModStudio_LinkGame.txt";
 /// Sent to the window when the game file changed: the player entered the menu or a game.
 pub const GAME_STATE_EVENT: &str = "link-game-state";
+/// Sent to the window with the screen the game asked to see ("monitor").
+pub const NAVIGATE_EVENT: &str = "studio-navigate";
 const ACKS_KEPT: usize = 50;
 
 /// One thing the game asked for. `id` is empty for the first protocol's `add=<mod id>` lines.
@@ -388,6 +392,10 @@ fn handle_requests<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, r
     // "Open PZ Mod Studio" on the game's Mods screen: the window comes to the front.
     for r in requests.iter().filter(|r| r.verb == "show") {
         crate::window_prefs::bring_to_front(app);
+        // "show monitor": the error notice in the game opens the Monitor, which has its card.
+        if !r.arg.is_empty() {
+            let _ = app.emit(NAVIGATE_EVENT, r.arg.clone());
+        }
         answers.push((r.id.clone(), true, String::new()));
     }
     for r in requests.iter().filter(|r| !["add", "backup", "copy", "show"].contains(&r.verb.as_str())) {
@@ -1070,7 +1078,7 @@ waiting=C
             }
             out
         };
-        for (file, source) in [("PZModStudio_Link.lua", CLIENT_LUA), ("PZModStudio_ModsScreen.lua", SCREEN_LUA)] {
+        for (file, source) in [("PZModStudio_Link.lua", CLIENT_LUA), ("PZModStudio_ModsScreen.lua", SCREEN_LUA), ("PZModStudio_Errors.lua", ERRORS_LUA)] {
             for missing in ["next(", "goto ", "//"] {
                 let used = source.lines().any(|l| code(l).contains(missing));
                 assert!(!used, "{} uses {}", file, missing);
