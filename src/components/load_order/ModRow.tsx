@@ -16,6 +16,8 @@ export interface ModRowBodyProps {
   mod: ModInfo;
   /** The mod's place in the whole list (not the filtered one). */
   originalIndex: number;
+  /** Its place among the mods that are on: the game's load order (none when it is off). */
+  activeRank?: number;
   mods: ModInfo[];
   isOpenedPackage: boolean;
   isClosedPackage: boolean;
@@ -62,6 +64,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   paths,
   mod,
   originalIndex,
+  activeRank,
   mods,
   isOpenedPackage,
   isClosedPackage,
@@ -102,8 +105,9 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   return (
   <>
     {/* Fixed Line Number (Original Load Order Index) */}
-    <div title={t('modList.dragTitle')} className={`w-9 shrink-0 text-right font-mono text-[11px] cursor-grab ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
-      #{originalIndex + 1}
+    {/* Its place in the game's load order: counted among the mods that are on, as the game does. */}
+    <div title={activeRank ? t('modList.dragTitle') : t('modList.row.offNoPlace')} className={`w-9 shrink-0 text-right font-mono text-[11px] cursor-grab ${isOpenedPackage ? 'text-amber-400 font-bold' : mod.enabled ? 'text-emerald-400 font-extrabold' : 'text-slate-600 font-medium'}`}>
+      {activeRank ? `#${activeRank}` : '—'}
     </div>
 
     {/* Enable/Disable Toggle Checkbox */}
@@ -360,7 +364,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
         <button
           onClick={() => {
             setAssigningModId(mod.mod_id);
-            setTargetPosInput(String(originalIndex + 1));
+            setTargetPosInput(activeRank ? String(activeRank) : '');
           }}
           className="px-1.5 py-1 text-[10px] font-mono font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer flex items-center gap-0.5"
           title={t('modList.row.assignPosition')}

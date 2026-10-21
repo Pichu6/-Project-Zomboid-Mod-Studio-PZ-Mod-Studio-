@@ -479,7 +479,8 @@
       "fromConsoleNote": "From console.txt as it is now; the Monitor Center has the full cards.",
       "loadsInHead": "Loads in {{time}}",
       "loadTimeBody": "Of the time the game spent on the loading screen last session, {{time}} went to reading this mod's files.\nMost mods take a few milliseconds; tile and model packs take seconds. It says nothing about how the mod runs once loaded.",
-      "loadTimeHow": "The tag shows from {{min}} ms up: every mod has its time, but the faster ones (nearly all, 2 to 20 ms) get no tag so the list stays readable. Measured from the game's own DebugLog (Zomboid/Logs), from this mod's \"loading\" line to the next mod's; the Lua phase after that is one pass and is not timed per mod."
+      "loadTimeHow": "The tag shows from {{min}} ms up: every mod has its time, but the faster ones (nearly all, 2 to 20 ms) get no tag so the list stays readable. Measured from the game's own DebugLog (Zomboid/Logs), from this mod's \"loading\" line to the next mod's; the Lua phase after that is one pass and is not timed per mod.",
+      "offNoPlace": "Off: it has no place in the load order the game reads."
     },
     "health": {
       "labels": {

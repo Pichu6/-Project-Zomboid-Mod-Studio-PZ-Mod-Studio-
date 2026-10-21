@@ -817,18 +817,29 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     },
   ];
 
+  /** Its place among the mods that are on (1-based): the number the game shows. */
+  const activeRanks = useMemo(() => {
+    const out = new Map<string, number>();
+    let n = 0;
+    for (const m of mods) if (m.enabled) out.set(m.mod_id, ++n);
+    return out;
+  }, [mods]);
+
+  /** "Pos #": the mod goes to that place among the mods that are on (the game's number). */
   const handleAssignPosition = (modId: string, targetPos: number) => {
     const currentIndex = mods.findIndex((m) => m.mod_id === modId);
     if (currentIndex === -1) return;
-
-    let targetIndex = Math.max(1, Math.min(targetPos, mods.length)) - 1;
-    if (currentIndex === targetIndex) {
+    if (activeRanks.get(modId) === targetPos) {
       setAssigningModId(null);
       return;
     }
 
     const newOrder = [...mods];
     const [movedMod] = newOrder.splice(currentIndex, 1);
+    const onIndexes = newOrder.map((m, i) => (m.enabled ? i : -1)).filter((i) => i >= 0);
+    const n = Math.max(1, targetPos);
+    // Before the mod that is n-th on now, or after the last one that is on.
+    const targetIndex = n <= onIndexes.length ? onIndexes[n - 1] : (onIndexes.length > 0 ? onIndexes[onIndexes.length - 1] + 1 : 0);
     newOrder.splice(targetIndex, 0, movedMod);
 
     triggerReorder(newOrder);
@@ -1141,6 +1152,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       paths={paths}
                       mod={mod}
                       originalIndex={originalIndex}
+                      activeRank={activeRanks.get(mod.mod_id)}
                       mods={mods}
                       isOpenedPackage={isOpenedPackage}
                       isClosedPackage={isClosedPackage}

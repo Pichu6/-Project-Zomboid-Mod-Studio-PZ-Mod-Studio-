@@ -479,7 +479,8 @@
       "fromConsoleNote": "De console.txt tal como está ahora; el Centro de monitoreo tiene las tarjetas completas.",
       "loadsInHead": "Carga en {{time}}",
       "loadTimeBody": "Del tiempo que el juego pasó en la pantalla de carga la última sesión, {{time}} se fueron en leer los archivos de este mod.\nLa mayoría de los mods tardan unos milisegundos; los packs de tiles y modelos, segundos. No dice nada de cómo corre el mod una vez cargado.",
-      "loadTimeHow": "La etiqueta aparece solo desde {{min}} ms: todos los mods tienen su tiempo, pero los que tardan menos (casi todos, 2 a 20 ms) no llevan etiqueta para no llenar la lista. Medido del DebugLog del propio juego (Zomboid/Logs), desde la línea \"loading\" de este mod hasta la del siguiente; la fase de Lua que sigue es una sola pasada y no se mide por mod."
+      "loadTimeHow": "La etiqueta aparece solo desde {{min}} ms: todos los mods tienen su tiempo, pero los que tardan menos (casi todos, 2 a 20 ms) no llevan etiqueta para no llenar la lista. Medido del DebugLog del propio juego (Zomboid/Logs), desde la línea \"loading\" de este mod hasta la del siguiente; la fase de Lua que sigue es una sola pasada y no se mide por mod.",
+      "offNoPlace": "Desactivado: no tiene lugar en el orden de carga que lee el juego."
     },
     "health": {
       "labels": {
