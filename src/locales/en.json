@@ -1,4 +1,20 @@
 {
+  "assistant": {
+    "copy": "Copy for an assistant",
+    "copyTitle": "Copies this with what to ask, to paste into any chat assistant (ChatGPT, Claude, Gemini...): no key, nothing is sent from here",
+    "copied": "Copied: paste it into your assistant's chat.",
+    "unknownMod": "a mod the game did not name",
+    "monitorAsk": "I play Project Zomboid with mods and this error came up in {{mod}}. Below is everything PZ Mod Studio gathered (the log line, what led to it, the mod and its file). Tell me in plain words what is going wrong, whether the mod named is really the cause, and what I can do: a setting, a different load order, an update or a compatible version, turning it off, or a fix to the file (show it).",
+    "healthAsk": "I play Project Zomboid with mods and PZ Mod Studio's Mod Health shows this. Explain it in plain words, whether it can break my game or my save, and what I should do."
+  },
+  "help": {
+    "button": "Help for this screen (F1)",
+    "title": "Help",
+    "missing": "# Help\n\nThis screen has no help page yet.",
+    "allScreens": "All screens",
+    "thisScreen": "This screen",
+    "close": "Close the help"
+  },
   "nav": {
     "modules": "Studio Modules",
     "profiles": "Profiles",
@@ -311,6 +327,7 @@
     }
   },
   "modList": {
+    "go": "Go",
     "title": "Mod List & Load Order",
     "subscriptions": "Steam Subscriptions:",
     "cycleMissing": "Click to cycle through mods with missing dependencies (not installed)",
@@ -1918,7 +1935,7 @@
   "monitor": {
     "console": {
       "header1": "[PZ Monitor Center] Realtime client session monitor ready.",
-      "header2": "[PZ Monitor Center] Click \"Launch Game (Monitored)\" to start ProjectZomboid64.exe (-debug) and stream live output here.",
+      "header2": "[PZ Monitor Center] Start the game (the launch button at the top, or from Steam) and its live output shows here.",
       "serverHeader1": "[PZ Monitor Center] Dedicated server monitor ready.",
       "serverHeader2": "[PZ Monitor Center] Dedicated server is currently offline. Start the server in \"SERVERS\" tab to begin live monitoring.",
       "clientTab": "🔴 console.txt (Client)",

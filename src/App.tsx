@@ -1,3 +1,4 @@
+import { HelpButton } from './components/common/HelpPanel';
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor, profileMembers, STUDIO_LINK_MOD_ID } from './types';
 import { DeveloperModule } from './components/dev/DeveloperModule';
@@ -841,6 +842,8 @@ export const App: React.FC = () => {
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
       />
+      {/* The help of the screen in front: "?" in the corner, or F1. */}
+      <HelpButton tab={activeTab} />
 
 
       {/* Main Studio Body */}

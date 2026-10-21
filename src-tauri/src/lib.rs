@@ -1,3 +1,4 @@
+pub mod app_docs;
 pub mod bisect;
 pub mod catalog;
 pub mod claude_agent;

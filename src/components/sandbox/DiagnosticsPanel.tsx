@@ -5,7 +5,7 @@ import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError, reportBackendError } from '../../services/tauri';
 import { applyRequireFix, packageForPatch } from '../../utils/requireFix';
 import { errorShape } from '../../utils/errorShape';
-import { AlertCircle, AlertTriangle, Check, CheckCircle, Copy, Download, Search, Trash2, Wrench, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Check, CheckCircle, Copy, Download, MessageSquare, Search, Trash2, Wrench, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cardText } from '../../i18n/backendText';
 
@@ -105,6 +105,16 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
     if (!report) return;
     await navigator.clipboard.writeText(report);
     onStatus(t('monitor.cards.reportCopied'));
+  };
+
+  /** The report with what to ask first: pasted into any chat assistant, no key needed. */
+  const handleCopyForAssistant = async (card: TranslatedErrorCard) => {
+    const report = await buildReportFor(card);
+    if (!report) return;
+    await navigator.clipboard.writeText(`${t('assistant.monitorAsk', { mod: card.mod_name ?? t('assistant.unknownMod') })}
+
+${report}`);
+    onStatus(t('assistant.copied'));
   };
 
   const handleInspectInConsole = (card: TranslatedErrorCard) => {
@@ -644,6 +654,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 >
                   <Copy className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>{t('monitor.cards.copyReport')}</span>
+                </button>
+                <button
+                  onClick={() => handleCopyForAssistant(card)}
+                  className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition cursor-pointer"
+                  title={t('assistant.copyTitle')}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{t('assistant.copy')}</span>
                 </button>
               </div>
 

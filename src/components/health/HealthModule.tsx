@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, RefreshCw, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
@@ -273,6 +273,32 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
 
   /** The name the Mod List shows for a mod id. */
   const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
+
+  /** One warning, with what to ask, for any chat assistant (pasted; no key needed). */
+  const copyForAssistant = async (issue: HealthIssue) => {
+    const describe = (id: string) => {
+      const m = mods.find((x) => x.mod_id === id);
+      if (!m) return id;
+      const bits = [`${m.name} (id ${m.mod_id}`];
+      if (m.version) bits.push(`version ${m.version}`);
+      if (m.workshop_id) bits.push(`Workshop ${m.workshop_id}`);
+      return bits.join(', ') + ')';
+    };
+    const lines = [
+      t('assistant.healthAsk'),
+      '',
+      `Project Zomboid ${report?.game_version ?? ''}, ${report?.active_count ?? '?'} mods on`.trim(),
+      `Mod Health: ${issue.severity} ${issue.code}`,
+      issue.mod_id ? `Mod: ${describe(issue.mod_id)}` : '',
+      issue.related.length ? `Also involved: ${issue.related.map(describe).join('; ')}` : '',
+      '',
+      issue.message,
+      issueText(issue) !== issue.message ? `(${issueText(issue)})` : '',
+      issue.fixes.length ? `\nPZ Mod Studio offers: ${issue.fixes.map((f) => f.action).join(', ')}` : '',
+    ].filter((l, i, all) => l !== '' || (i > 0 && all[i - 1] !== ''));
+    await navigator.clipboard.writeText(lines.join('\n'));
+    say(t('assistant.copied'));
+  };
   /** Names and ids a message may mention, set in bold. */
   const modWords = useMemo(() => mods.flatMap((m) => [m.name, m.mod_id]), [mods]);
 
@@ -512,7 +538,17 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                       </div>
                     )}
                     <RichText text={issueText(issue)} mods={modWords} foldAt={320} className="text-xs text-slate-300 leading-relaxed" />
-                    <div className="text-[10px] font-mono text-slate-600 mt-0.5">{issue.code}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] font-mono text-slate-600">{issue.code}</span>
+                      <button
+                        type="button"
+                        onClick={() => void copyForAssistant(issue)}
+                        className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-200 cursor-pointer"
+                        title={t('assistant.copyTitle')}
+                      >
+                        <MessageSquare className="w-3 h-3" aria-hidden="true" /> {t('assistant.copy')}
+                      </button>
+                    </div>
                     {issue.details && issue.details.length > 0 && (
                       <details className="mt-1.5">
                         <summary className="text-[11px] text-sky-300 cursor-pointer select-none">

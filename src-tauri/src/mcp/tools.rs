@@ -91,6 +91,17 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "read_app_doc".to_string(),
+            description: "Reads PZ Mod Studio's own help pages, written for the player: what each screen of the app does and how to use it (profiles, saves, monitor, mod-list, whats-new, health, browse, maps, merger, developer, servers, settings; \"index\" is the overview and the in-game Studio Link mod). With no page, lists them. Use it to answer how-to questions about the Studio as it really works.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "page": { "type": "string", "description": "Page name, e.g. \"mod-list\" (omit to list the pages)" },
+                    "language": { "type": "string", "description": "\"en\" (default) or \"es\"" }
+                }
+            }),
+        },
+        McpTool {
             name: "install_bridge_companion_mod".to_string(),
             description: "Installs the Z_PZModStudio_Bridge companion mod into the user's Zomboid/mods directory to enable live in-game Lua execution and item equipping. Optionally also installs the Z_ClaudeAgent mod.".to_string(),
             input_schema: json!({
@@ -585,6 +596,7 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "terminate_game" => handle_terminate_game(args),
         "send_game_ipc_command" => handle_send_game_ipc_command(args),
         "get_game_ipc_response" => handle_get_game_ipc_response(args),
+        "read_app_doc" => handle_read_app_doc(args),
         "install_bridge_companion_mod" => handle_install_bridge_companion_mod(args),
         "install_claude_agent_mod" => handle_install_claude_agent_mod(args),
         "agent_eval_lua" => handle_agent_eval_lua(args),
@@ -1311,6 +1323,17 @@ fn handle_install_bridge_companion_mod(args: Value) -> ToolCallResult {
                 text: format!("Failed to install bridge companion mod: {}", e),
             }],
             is_error: true,
+        },
+    }
+}
+
+fn handle_read_app_doc(args: Value) -> ToolCallResult {
+    let language = args.get("language").and_then(|v| v.as_str()).unwrap_or("en");
+    match args.get("page").and_then(|v| v.as_str()).filter(|p| !p.trim().is_empty()) {
+        None => text_result(&json!({ "pages": crate::app_docs::list().into_iter().map(|(name, title)| json!({ "page": name, "title": title })).collect::<Vec<_>>() }), false),
+        Some(page) => match crate::app_docs::page(page, language) {
+            Some(text) => ToolCallResult { content: vec![ToolContent { content_type: "text".to_string(), text: text.to_string() }], is_error: false },
+            None => error_result(format!("There is no help page called \"{}\". Call read_app_doc with no page to list them.", page)),
         },
     }
 }

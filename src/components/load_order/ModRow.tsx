@@ -357,7 +357,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             onClick={() => handleAssignPosition(mod.mod_id, parseInt(targetPosInput) || 1)}
             className="px-1.5 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-bold"
           >
-            Go
+            {t('modList.go')}
           </button>
         </div>
       ) : (

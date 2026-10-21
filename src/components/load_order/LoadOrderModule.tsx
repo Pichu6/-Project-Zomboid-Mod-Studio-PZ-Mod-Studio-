@@ -1578,7 +1578,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               <ArrowDownCircle className="w-3.5 h-3.5" />
               {t('modList.loadsLast')}
             </span>
-            <span className="text-[10px] text-amber-500/80">{t('modList.position', { n: mods.length })}</span>
+            <span className="text-[10px] text-amber-500/80">{t('modList.position', { n: Math.max(activeRanks.size, 1) })}</span>
           </div>
         </div>
 
@@ -1587,11 +1587,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           paths={paths}
           mod={selectedMod}
           mods={mods}
-          position={selectedMod ? modIndexById.get(selectedMod.mod_id) ?? -1 : -1}
+          position={selectedMod ? (activeRanks.get(selectedMod.mod_id) ?? 0) - 1 : -1}
           problems={
             selectedMod
               ? {
-                  orderViolation: loadOrderViolationsMap[selectedMod.mod_id]?.[0],
+                  // Places among the mods that are on, as on the rows and in the game.
+                  orderViolation: (() => {
+                    const v = loadOrderViolationsMap[selectedMod.mod_id]?.[0];
+                    return v ? { ...v, requiredModIndex: (activeRanks.get(v.requiredModId) ?? 0) - 1 } : undefined;
+                  })(),
                   disabledDependency: missingActiveDependenciesMap[selectedMod.mod_id]?.[0],
                   incompatibility: activeConflictsMap[selectedMod.mod_id]?.[0],
                 }

@@ -1,4 +1,20 @@
 {
+  "assistant": {
+    "copy": "Copiar para un asistente",
+    "copyTitle": "Copia esto con qué preguntar, para pegar en cualquier asistente de chat (ChatGPT, Claude, Gemini...): sin clave, desde acá no se manda nada",
+    "copied": "Copiado: pegalo en el chat de tu asistente.",
+    "unknownMod": "un mod que el juego no nombró",
+    "monitorAsk": "Juego Project Zomboid con mods y apareció este error en {{mod}}. Abajo está todo lo que juntó PZ Mod Studio (la línea del log, lo que pasó antes, el mod y su archivo). Decime con palabras simples qué está fallando, si el mod nombrado es de verdad la causa, y qué puedo hacer: una opción, otro orden de carga, una actualización o una versión compatible, desactivarlo, o un arreglo al archivo (mostrámelo).",
+    "healthAsk": "Juego Project Zomboid con mods y el Mod Health de PZ Mod Studio muestra esto. Explicámelo con palabras simples, si puede romper mi partida o mi guardado, y qué debería hacer."
+  },
+  "help": {
+    "button": "Ayuda de esta pantalla (F1)",
+    "title": "Ayuda",
+    "missing": "# Ayuda\n\nEsta pantalla todavía no tiene página de ayuda.",
+    "allScreens": "Todas las pantallas",
+    "thisScreen": "Esta pantalla",
+    "close": "Cerrar la ayuda"
+  },
   "nav": {
     "modules": "Módulos del Studio",
     "profiles": "Perfiles",
@@ -311,6 +327,7 @@
     }
   },
   "modList": {
+    "go": "Ir",
     "title": "Lista de mods y orden de carga",
     "subscriptions": "Suscripciones de Steam:",
     "cycleMissing": "Clic para recorrer los mods con dependencias faltantes (no instaladas)",
@@ -1055,7 +1072,7 @@
       "loadsAfter": "Carga después de",
       "shimFix": "(el shim del Studio lo parchea)",
       "noFix": "(nada que arreglar)",
-      "studioFix": "(el Studio lo arregla: copia compatible, o Corregir la ruta en el Centro de monitoreo)",
+      "studioFix": "(el Studio lo arregla: copia compatible, o Arreglar la ruta en el Centro de monitoreo)",
       "verified": "verificado",
       "reported": "reportado",
       "on": " en {{build}}"
@@ -1918,7 +1935,7 @@
   "monitor": {
     "console": {
       "header1": "[PZ Monitor Center] Monitor de la sesión del cliente en tiempo real listo.",
-      "header2": "[PZ Monitor Center] Apretá \"Launch Game (Monitored)\" para iniciar ProjectZomboid64.exe (-debug) y ver la salida en vivo acá.",
+      "header2": "[PZ Monitor Center] Iniciá el juego (el botón de inicio de arriba, o desde Steam) y su salida en vivo se ve acá.",
       "serverHeader1": "[PZ Monitor Center] Monitor del servidor dedicado listo.",
       "serverHeader2": "[PZ Monitor Center] El servidor dedicado está apagado. Iniciá el servidor en la pestaña \"SERVIDORES\" para empezar el monitoreo en vivo.",
       "clientTab": "🔴 console.txt (Cliente)",
