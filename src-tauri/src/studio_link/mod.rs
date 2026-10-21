@@ -494,6 +494,37 @@ pub fn saves_file_text(user_zomboid_dir: &Path) -> String {
     out
 }
 
+/// The mods updated on the Workshop since the last session, and the ones Steam has a newer
+/// version of waiting, for the Link's Mods screen ("Updated" filter): `updated=<mod id>` and
+/// `waiting=<mod id>` lines. Nothing leaves the PC (Steam's own record on disk).
+pub const UPDATED_FILE: &str = "PZModStudio_LinkUpdated.txt";
+
+pub fn updated_file_text(items: &[crate::whats_new::UpdatedItem]) -> String {
+    let mut out = String::new();
+    for item in items {
+        let key = if item.pending { "waiting" } else if item.since_last_play { "updated" } else { continue };
+        for id in &item.mod_ids {
+            out.push_str(&format!("{}={}\n", key, crate::load_order::mod_info::sanitize_mod_id(id)));
+        }
+    }
+    out
+}
+
+pub fn write_updated_file(user_zomboid_dir: &Path) {
+    let lua_dir = user_zomboid_dir.join("Lua");
+    let workshop = crate::vfs::studio_paths().workshop_dir;
+    if !lua_dir.is_dir() || workshop.is_empty() {
+        return;
+    }
+    let news = crate::whats_new::whats_new(user_zomboid_dir, &workshop, false, None);
+    let text = updated_file_text(&news.items);
+    let path = lua_dir.join(UPDATED_FILE);
+    if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
+        return;
+    }
+    let _ = crate::load_order::ini_parser::atomic_write(path, text);
+}
+
 pub fn write_saves_file(user_zomboid_dir: &Path) {
     let lua_dir = user_zomboid_dir.join("Lua");
     if !lua_dir.is_dir() {
@@ -673,6 +704,7 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             // What the Link needs to know of each save, about once a minute.
             if now.saturating_sub(saves_written) >= 60 {
                 write_saves_file(&z_dir);
+                write_updated_file(&z_dir);
                 saves_written = now;
             }
 
@@ -927,6 +959,29 @@ mod tests {
         let diff = session_diff(&session, &ids(&["C", "A", "New"]), vec![]);
         assert_eq!((diff.added.clone(), diff.removed.clone(), diff.reordered), (ids(&["New"]), ids(&["B", "Local"]), true));
         assert!(!session_diff(&session, &ids(&["A", "B", "C", "Local"]), vec![]).reordered);
+    }
+
+    #[test]
+    fn the_updated_file_names_updated_and_waiting_mods() {
+        let item = |ids: &[&str], pending: bool, since: bool| crate::whats_new::UpdatedItem {
+            workshop_id: "1".into(),
+            title: "t".into(),
+            mod_ids: ids.iter().map(|s| s.to_string()).collect(),
+            active: true,
+            installed_time: None,
+            latest_time: None,
+            pending,
+            since_last_play: since,
+            map_mod: false,
+            notes: Vec::new(),
+            notes_error: None,
+            risks: Vec::new(),
+        };
+        let text = updated_file_text(&[item(&["A", "B"], false, true), item(&["C"], true, true), item(&["D"], false, false)]);
+        assert_eq!(text, "updated=A
+updated=B
+waiting=C
+");
     }
 
     #[test]

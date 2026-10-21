@@ -94,5 +94,21 @@
     "UI_StudioLink_modsWorkshopPage": "Página del Workshop",
     "UI_StudioLink_modsGameScreen": "Pantalla del juego",
     "UI_StudioLink_modsDiscard": "Hay {1} cambio(s) sin aceptar. ¿Los guardás?",
-    "UI_StudioLink_modsDiscardYes": "Descartarlos"
+    "UI_StudioLink_modsDiscardYes": "Descartarlos",
+    "UI_StudioLink_modsFilter_favourites": "Favoritos",
+    "UI_StudioLink_modsFilter_updated": "Actualizados",
+    "UI_StudioLink_modsUpdated": "actualizado",
+    "UI_StudioLink_modsWaiting": "actualización pendiente",
+    "UI_StudioLink_modsUpdatedLong": "Se actualizó en el Workshop desde tu última sesión.",
+    "UI_StudioLink_modsWaitingLong": "Steam tiene una versión más nueva, todavía sin descargar.",
+    "UI_StudioLink_modsCantUp": "{1} no puede ir arriba de {2}: lo necesita.",
+    "UI_StudioLink_modsCantDown": "{1} no puede ir abajo de {2}: {2} lo necesita.",
+    "UI_StudioLink_modsSortedByOrder": "Ordenado por orden de carga para ver el cambio.",
+    "UI_StudioLink_modsSortName": "Orden: nombre",
+    "UI_StudioLink_modsSortOrder": "Orden: de carga",
+    "UI_StudioLink_modsFavourite": "Agregar a favoritos",
+    "UI_StudioLink_modsUnfavourite": "Quitar de favoritos",
+    "UI_StudioLink_modsUp": "Subir",
+    "UI_StudioLink_modsDown": "Bajar",
+    "UI_StudioLink_modsSearchTip": "Nombre, id del mod, id del Workshop o autor"
 }

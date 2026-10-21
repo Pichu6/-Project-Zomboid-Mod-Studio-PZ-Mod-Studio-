@@ -94,5 +94,21 @@
     "UI_StudioLink_modsWorkshopPage": "Workshop page",
     "UI_StudioLink_modsGameScreen": "The game's screen",
     "UI_StudioLink_modsDiscard": "{1} change(s) not accepted yet. Keep them?",
-    "UI_StudioLink_modsDiscardYes": "Drop them"
+    "UI_StudioLink_modsDiscardYes": "Drop them",
+    "UI_StudioLink_modsFilter_favourites": "Favourites",
+    "UI_StudioLink_modsFilter_updated": "Updated",
+    "UI_StudioLink_modsUpdated": "updated",
+    "UI_StudioLink_modsWaiting": "update waiting",
+    "UI_StudioLink_modsUpdatedLong": "Updated on the Workshop since your last session.",
+    "UI_StudioLink_modsWaitingLong": "Steam has a newer version of it, not downloaded yet.",
+    "UI_StudioLink_modsCantUp": "{1} cannot go above {2}: it requires it.",
+    "UI_StudioLink_modsCantDown": "{1} cannot go below {2}: {2} requires it.",
+    "UI_StudioLink_modsSortedByOrder": "Sorted by load order to show the move.",
+    "UI_StudioLink_modsSortName": "Sort: name",
+    "UI_StudioLink_modsSortOrder": "Sort: load order",
+    "UI_StudioLink_modsFavourite": "Add to favourites",
+    "UI_StudioLink_modsUnfavourite": "Remove from favourites",
+    "UI_StudioLink_modsUp": "Move up",
+    "UI_StudioLink_modsDown": "Move down",
+    "UI_StudioLink_modsSearchTip": "Name, mod id, Workshop id or author"
 }

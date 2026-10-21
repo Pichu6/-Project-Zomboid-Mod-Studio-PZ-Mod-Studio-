@@ -1,5 +1,5 @@
 name=PZ Mod Studio Link
 id=Z_StudioLink
 description=The in-game side of PZ Mod Studio (free mod manager for Windows): the app's profile on the Mods screen, Mod Health marks, a check and a backup before a save loads, a card in the main menu. Without the app: a clearer Mods screen (search, filters, requirements) and where to get the app.
-modversion=1.8.0
+modversion=1.9.0
 versionMin=42.0.0
