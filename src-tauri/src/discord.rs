@@ -116,7 +116,12 @@ pub fn save(user_zomboid_dir: &Path, server: &str, settings: DiscordSettings, we
 }
 
 fn agent() -> ureq::Agent {
-    let tls = ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build();
+    // Windows' own certificate store: Discord's chain ends at a root the bundled list lacks
+    // ("unable to find any user-specified roots in the final cert chain").
+    let tls = ureq::tls::TlsConfig::builder()
+        .provider(ureq::tls::TlsProvider::NativeTls)
+        .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+        .build();
     ureq::Agent::config_builder()
         .tls_config(tls)
         .timeout_global(Some(Duration::from_secs(15)))
@@ -402,6 +407,14 @@ mod tests {
 
     fn set(list: &[&str]) -> BTreeSet<String> {
         list.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Posts one real message: PZMS_WEBHOOK=<url> cargo test real_discord_post -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_discord_post() {
+        let Ok(url) = std::env::var("PZMS_WEBHOOK") else { return };
+        post(&url, &say("es", "test", &["pZMSDiscordTest (cargo test)"])).unwrap();
     }
 
     #[test]
