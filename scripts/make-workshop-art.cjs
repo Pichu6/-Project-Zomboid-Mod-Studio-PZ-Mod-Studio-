@@ -31,21 +31,10 @@ function icon(name, size = 24, color = 'currentColor', stroke = 2) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 }
 
-// The mark: a shield (the Link keeps the game safe) around a fork joining back (mods merged).
-const LOGO = size => `<svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="1" stop-color="#10b981"/></linearGradient>
-    <filter id="gl" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>
-  <path d="M50 6 L86 19 V46 C86 70 70 86 50 94 C30 86 14 70 14 46 V19 Z" fill="#0b1712" stroke="url(#lg)" stroke-width="4.5" stroke-linejoin="round" filter="url(#gl)"/>
-  <g fill="none" stroke="url(#lg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" filter="url(#gl)">
-    <path d="M36 28 V44 C36 54 50 56 50 66 V76"/>
-    <path d="M64 28 V44 C64 54 50 56 50 66"/>
-  </g>
-  <circle cx="36" cy="28" r="6" fill="#0b1712" stroke="#6ee7b7" stroke-width="4"/>
-  <circle cx="64" cy="28" r="6" fill="#0b1712" stroke="#6ee7b7" stroke-width="4"/>
-  <circle cx="50" cy="76" r="6.5" fill="#6ee7b7"/>
-</svg>`;
+// The mark: the round badge of the key art (art/key-art.jpg), cut out as art/badge.png.
+const keyArt = path.join(ws, 'art', 'key-art.jpg');
+const badge = path.join(ws, 'art', 'badge.png');
+const LOGO = size => `<img src="${fileUrl(badge)}" style="width:${size}px;height:${size}px;border-radius:50%;flex:none;box-shadow:0 0 18px #14b8a640">`;
 
 // Lua in the background, faint, the way the app's editor looks.
 const CODE = `local Link = require "PZModStudioLink"
@@ -70,10 +59,10 @@ const CSS = `
 html, body { background: #070b0f; color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
 .bahn { font-family: Bahn, 'Segoe UI', sans-serif; }
 .mono { font-family: 'Cascadia Mono', Consolas, monospace; }
-.code { position: absolute; white-space: pre; font: 13px/1.55 'Cascadia Mono', Consolas, monospace; color: #10b981; opacity: .045; pointer-events: none; }
-.grid { position: absolute; inset: 0; background-image: linear-gradient(#10b98110 1px, transparent 1px), linear-gradient(90deg, #10b98110 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(90deg, transparent, #000 60%); }
-.glow { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, #10b98140, transparent); }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid #10b98155; background: #10b98114; color: #a7f3d0; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.code { position: absolute; white-space: pre; font: 13px/1.55 'Cascadia Mono', Consolas, monospace; color: #14b8a6; opacity: .045; pointer-events: none; }
+.grid { position: absolute; inset: 0; background-image: linear-gradient(#14b8a610 1px, transparent 1px), linear-gradient(90deg, #14b8a610 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(90deg, transparent, #000 60%); }
+.glow { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, #14b8a640, transparent); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid #14b8a655; background: #14b8a614; color: #99f6e4; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .02em; }
 `;
 
 const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -102,45 +91,32 @@ function shot(html, out, w, h, scale = 1, clear = false) {
 // ---------- Banners (636 px wide, the description column; drawn at 2x) ----------
 
 const W = 636;
-function hero() {
-  return `<div style="position:absolute;inset:0;background:linear-gradient(135deg,#0b1712,#070b0f 55%,#0a1016);border:1px solid #10b98140;border-radius:14px;overflow:hidden">
-    <div class="grid"></div><div class="code" style="right:-40px;top:-6px">${CODE}</div>
-    <div class="glow" style="left:-60px;top:-60px;width:320px;height:320px"></div>
-    <div style="position:absolute;left:34px;top:34px">${LOGO(150)}</div>
-    <div style="position:absolute;left:210px;top:40px;right:24px">
-      <div class="mono" style="font-size:11px;letter-spacing:.18em;color:#34d399">PROJECT ZOMBOID · BUILD 42</div>
-      <div class="bahn" style="font-size:46px;font-weight:700;line-height:1.05;margin-top:8px">PZ Mod Studio <span style="color:#34d399">Link</span></div>
-      <div style="font-size:17px;color:#b6c2cd;margin-top:8px">The in-game half of PZ Mod Studio</div>
-      <div style="display:flex;gap:8px;margin-top:16px"><span class="chip">${icon('heart', 12)} Free</span><span class="chip">${icon('code-xml', 12)} Open source</span><span class="chip">${icon('file-code', 12)} Lua only</span></div>
-    </div></div>`;
-}
 function section(n, title, sub, ic) {
-  return `<div style="position:absolute;inset:0;background:linear-gradient(90deg,#0d1a14,#070b0f 70%);border-left:4px solid #10b981;border-radius:4px 12px 12px 4px;overflow:hidden">
+  return `<div style="position:absolute;inset:0;background:linear-gradient(90deg,#0c1a1b,#070b0f 70%);border-left:4px solid #14b8a6;border-radius:4px 12px 12px 4px;overflow:hidden">
     <div class="grid"></div><div class="code" style="right:-20px;top:-40px">${CODE}</div>
     <div class="glow" style="left:-40px;top:-90px;width:260px;height:260px"></div>
     <div style="position:absolute;left:24px;right:90px;top:0;bottom:0;display:flex;align-items:center;gap:18px">
-      <div class="bahn" style="font-size:44px;font-weight:700;color:#10b98166">${n}</div>
+      <div class="bahn" style="font-size:44px;font-weight:700;color:#c62828">${n}</div>
       <div><div class="bahn" style="font-size:30px;font-weight:700;letter-spacing:.01em;text-transform:uppercase">${title}</div>
       <div style="font-size:14px;color:#8fa1b0;margin-top:2px">${sub}</div></div>
     </div>
-    <div style="position:absolute;right:26px;top:0;bottom:0;display:flex;align-items:center;opacity:.9">${icon(ic, 40, '#34d399', 1.6)}</div></div>`;
+    <div style="position:absolute;right:26px;top:0;bottom:0;display:flex;align-items:center;opacity:.9">${icon(ic, 40, '#2dd4bf', 1.6)}</div></div>`;
 }
 function feature(title, tag, ic) {
-  return `<div style="position:absolute;inset:0;display:flex;align-items:center;gap:14px;padding:0 16px 0 10px;background:linear-gradient(90deg,#0f1a17,#0a0f14 80%);border:1px solid #1d2a36;border-radius:10px;overflow:hidden">
-    <div style="width:42px;height:42px;border-radius:9px;background:#10b9811f;border:1px solid #10b98166;display:flex;align-items:center;justify-content:center;flex:none">${icon(ic, 22, '#34d399')}</div>
+  return `<div style="position:absolute;inset:0;display:flex;align-items:center;gap:14px;padding:0 16px 0 10px;background:linear-gradient(90deg,#0e1a1b,#0a0f14 80%);border:1px solid #1d2a36;border-radius:10px;overflow:hidden">
+    <div style="width:42px;height:42px;border-radius:9px;background:#14b8a61f;border:1px solid #14b8a666;display:flex;align-items:center;justify-content:center;flex:none">${icon(ic, 22, '#2dd4bf')}</div>
     <div class="bahn" style="font-size:21px;font-weight:600;flex:1">${title}</div>
-    <div class="mono" style="font-size:10px;letter-spacing:.16em;color:#34d399aa">${tag}</div></div>`;
+    <div class="mono" style="font-size:10px;letter-spacing:.16em;color:#2dd4bfaa">${tag}</div></div>`;
 }
 function button() {
-  return `<div style="position:absolute;inset:6px 0;display:flex;align-items:center;gap:16px;padding:0 22px;background:linear-gradient(90deg,#059669,#10b981);border-radius:12px;box-shadow:0 0 0 1px #6ee7b7 inset,0 6px 18px #10b98144">
+  return `<div style="position:absolute;inset:6px 0;display:flex;align-items:center;gap:16px;padding:0 22px;background:linear-gradient(90deg,#0d9488,#14b8a6);border-radius:12px;box-shadow:0 0 0 1px #5eead4 inset,0 6px 18px #14b8a644">
     ${icon('download', 30, '#ffffff', 2.4)}
     <div style="flex:1"><div class="bahn" style="font-size:26px;font-weight:700;color:#fff">Download PZ Mod Studio</div>
-    <div style="font-size:13px;color:#d1fae5">Free · open source · Windows · github.com</div></div>
+    <div style="font-size:13px;color:#ccfbf1">Free · open source · Windows · github.com</div></div>
     ${icon('arrow-right', 28, '#ffffff', 2.4)}</div>`;
 }
 
 const BANNERS = [
-  ['hero', hero(), 230],
   ['download', button(), 74],
   ['s1-app', section('01', 'What the app does', 'PZ Mod Studio, the program for Windows', 'monitor'), 92],
   ['s2-game', section('02', 'What the Link adds', 'In the game: the main menu, the Mods screen, before a save loads', 'gamepad-2'), 92],
@@ -161,7 +137,7 @@ const SW = 1280, SH = 720;
 function caption(kicker, title, line) {
   return `<div style="position:absolute;left:0;right:0;bottom:0;height:210px;background:linear-gradient(180deg,#070b0f00,#070b0fd9 45%,#070b0ff5)"></div>
     <div style="position:absolute;left:44px;right:44px;bottom:30px;display:flex;align-items:center;gap:20px">${LOGO(78)}
-      <div><div class="mono" style="font-size:14px;letter-spacing:.2em;color:#34d399">${kicker}</div>
+      <div><div class="mono" style="font-size:14px;letter-spacing:.2em;color:#2dd4bf">${kicker}</div>
       <div class="bahn" style="font-size:44px;font-weight:700;line-height:1.1;text-shadow:0 2px 12px #000">${title}</div>
       <div style="font-size:20px;color:#c3ced8;text-shadow:0 1px 8px #000">${line}</div></div></div>`;
 }
@@ -175,9 +151,9 @@ function fitted(img, iw, ih) {
   const s = Math.min(BOX.w / iw, BOX.h / ih, 1.8);
   const w = Math.round(iw * s), h = Math.round(ih * s);
   const x = BOX.x + Math.round((BOX.w - w) / 2), y = BOX.y + Math.round((BOX.h - h) / 2);
-  return `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#0b1712,#070b0f 45%,#0a1016)"><div class="grid"></div>
+  return `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#0a1617,#070b0f 45%,#0a1016)"><div class="grid"></div>
     <div class="glow" style="left:${x - 200}px;top:${y - 200}px;width:${w + 400}px;height:${h + 400}px"></div></div>
-    <img src="${fileUrl(img)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:10px;border:1px solid #10b98166;box-shadow:0 18px 50px #000c,0 0 0 6px #10b98112">`;
+    <img src="${fileUrl(img)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:10px;border:1px solid #14b8a666;box-shadow:0 18px 50px #000c,0 0 0 6px #14b8a612">`;
 }
 function size(file) {
   return execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', file]).toString().trim().split(',').map(Number);
@@ -201,21 +177,18 @@ const SLIDES = [
   ['10-error-notice', 'THE LINK, IN THE GAME', 'Errors, with the mod named', 'Copy report puts the details on the clipboard for its author.', media('06-error-notice.png')],
 ];
 
-function cover() {
-  return `<div style="position:absolute;inset:0;background:radial-gradient(900px 600px at 30% 40%,#0f2a1f,#070b0f 70%)">
-    <div class="grid"></div><div class="code" style="right:30px;top:40px;font-size:18px;opacity:.08">${CODE}</div>
-    <div style="position:absolute;left:110px;top:0;bottom:0;display:flex;align-items:center;gap:56px">${LOGO(300)}
-      <div><div class="mono" style="font-size:18px;letter-spacing:.22em;color:#34d399">PROJECT ZOMBOID · BUILD 42</div>
-      <div class="bahn" style="font-size:96px;font-weight:700;line-height:1;margin-top:14px">PZ Mod Studio</div>
-      <div class="bahn" style="font-size:96px;font-weight:700;line-height:1;color:#34d399">Link</div>
-      <div style="font-size:26px;color:#b6c2cd;margin-top:18px">Your mods, profiles and saves, inside the game.</div>
-      <div style="display:flex;gap:12px;margin-top:26px;transform:scale(1.4);transform-origin:left">
-        <span class="chip">${icon('heart', 12)} Free</span><span class="chip">${icon('code-xml', 12)} Open source</span><span class="chip">${icon('file-code', 12)} Lua only</span></div></div></div></div>`;
-}
-
 const kb = f => Math.round(fs.statSync(f).size / 1024) + ' KB';
+// The badge (also the Workshop preview, which the game's uploader wants at 256x256), the hero
+// banner and the cover slide all come straight from the key art.
+fs.mkdirSync(path.dirname(badge), { recursive: true });
+const BADGE_CROP = 'crop=560:560:425:26';
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', keyArt, '-vf', `${BADGE_CROP},scale=512:512:flags=lanczos`, badge]);
+// The preview keeps every line of text: a square the key art's full height, centred.
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', keyArt, '-vf', 'crop=ih:ih,scale=256:256:flags=lanczos', path.join(ws, 'preview.png')]);
 if (only !== 'slides') {
   fs.mkdirSync(bannerDir, { recursive: true });
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', keyArt, '-vf', 'scale=1272:-2:flags=lanczos', '-q:v', '3', path.join(bannerDir, 'hero.jpg')]);
+  console.log(`banners/hero.jpg  ${kb(path.join(bannerDir, 'hero.jpg'))}`);
   for (const [name, html, h] of BANNERS) {
     const out = path.join(bannerDir, `${name}.png`);
     // On a clear page: the rounded corners sit on the Workshop page's own background.
@@ -244,8 +217,14 @@ if (only !== 'banners') {
       console.log(`slides/${name}.gif  ${kb(out)}`);
       continue;
     }
-    if (!kicker) shot(cover(), png, SW, SH);
-    else if (src.startsWith(forum(''))) shot(full(src) + caption(kicker, title, line), png, SW, SH);
+    if (!kicker) {
+      // 16:9 out of the key art's wider frame, centred.
+      const out = path.join(slideDir, `${name}.jpg`);
+      execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', keyArt, '-vf', `crop=ih*16/9:ih,scale=${SW}:${SH}:flags=lanczos`, '-q:v', '2', out]);
+      console.log(`slides/${name}.jpg  ${kb(out)}`);
+      continue;
+    }
+    if (src.startsWith(forum(''))) shot(full(src) + caption(kicker, title, line), png, SW, SH);
     else shot(fitted(src, ...size(src)) + caption(kicker, title, line), png, SW, SH);
     const out = path.join(slideDir, `${name}.jpg`);
     execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', png, '-q:v', '2', out]);

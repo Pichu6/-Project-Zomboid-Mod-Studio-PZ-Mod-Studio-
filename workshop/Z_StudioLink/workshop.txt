@@ -1,7 +1,7 @@
 version=1
 id=3824256253
 title=PZ Mod Studio Link
-description=[img]https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/banners/hero.png[/img]
+description=[img]https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/banners/hero.jpg[/img]
 description=[b]PZ Mod Studio[/b] is a free, open-source program for Windows that manages your Project Zomboid (Build 42) mods: profiles, load order, error diagnosis, conflicts between mods, save backups and dedicated servers. [b]This mod, the Link, connects it to the game[/b], so what the app knows shows up where you actually play: on the main menu, on the Mods screen and before a save loads.
 description=
 description=The Link also works alone, but it is made to go with the app. Both are free.

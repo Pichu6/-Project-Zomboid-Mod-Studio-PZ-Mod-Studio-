@@ -5,7 +5,9 @@ The description ([workshop.txt](workshop.txt)) shows only the banners in `banner
 link, so those never load). The screens go in the carousel at the top of the page: the files in
 `slides/`, added by hand in "Add/edit images & videos" on the item's page, in their numbered
 order. `node scripts/make-workshop-art.cjs` draws both (`banners` or `slides` for one of them):
-the slides take the app's screens from `docs/forum/images`, the game's crops from `media/` and
+`art/key-art.jpg` is the project's key art: the hero banner, the cover slide, the 256x256
+`preview.png` (a square of its full height, so no text is cut) and the round badge on the slides
+(`art/badge.png`) come from it, and the banners use its teal and red. The slides take the app's screens from `docs/forum/images`, the game's crops from `media/` and
 the animated ones from `recordings/`.
 
 The screens in `media/` are each one of the game or the app (Link 1.13.1, B42.21), no zoom, cut to the part that
