@@ -37,7 +37,7 @@ description=[h2]And much more[/h2]
 description=[img]https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/raw/main/workshop/Z_StudioLink/media/app-browse.png[/img]
 description=[list]
 description=[*][b]What's new[/b]: your mods updated since you last played, with their change notes, the changelog each author ships, and which ones may break saves.
-description=[*][b]Mod authors come first[/b]: their "Support the author" links next to each mod, error reports ready to send them, and their mods never edited or re-uploaded.
+description=[*][b]Mod authors come first[/b]: the support links an author ships with their mod, shown beside it; error reports ready to send them; their mods never edited or re-uploaded.
 description=[*][b]Browse[/b]: the Steam Workshop and Nexus inside the app; subscribe to a whole collection in one click.
 description=[*][b]Community lists[/b]: mod lists shared by other players, copied into yours in one click, and an index of known issues and their fixes. Both on the [url=https://pichu6.github.io/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/]community index[/url].
 description=[*][b]Maps[/b]: every map mod drawn on the real map of Knox Country, and where two of them claim the same ground.
