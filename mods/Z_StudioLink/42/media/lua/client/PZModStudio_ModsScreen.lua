@@ -1445,6 +1445,8 @@ function Screen:updateButtons()
     self.summary.problems:setTitle(text("modsSumProblems", self.counts.problems))
     self.summary.favourites:setTitle(text("modsSumFavourites", self.counts.favourites))
     if self.summary.updated then self.summary.updated:setTitle(text("modsSumUpdated", self.counts.updated)) end
+    self.undoButton:setEnable(#self.history > 0)
+    self.redoButton:setEnable(#self.future > 0)
     if #many > 1 or (self.groupView and #self:multiMods() == 0) then
         local anyOff = false
         for _, m in ipairs(many) do
@@ -1480,8 +1482,6 @@ function Screen:updateButtons()
         self.favButton:setTitle(self.favs[mod.id] and text("modsUnfavourite") or text("modsFavourite"))
     end
     self.acceptButton:setTitle(self.changes > 0 and text("modsAcceptN", self.changes) or text("modsAccept"))
-    self.undoButton:setEnable(#self.history > 0)
-    self.redoButton:setEnable(#self.future > 0)
     for key, button in pairs(self.filterButtons) do
         styleButton(button, key == self.filter)
     end
@@ -1515,8 +1515,9 @@ function Screen:createChildren()
     self.searchBox:instantiate()
     self.searchBox:setClearButton(true)
     self.searchBox.tooltip = text("modsSearchTip")
+    -- getText() still holds the text before this key; getInternalText() has the key in it.
     self.searchBox.onTextChange = function()
-        self.search = self.searchBox:getText() or ""
+        self.search = self.searchBox:getInternalText() or ""
         self:refreshList()
     end
     self:addChild(self.searchBox)

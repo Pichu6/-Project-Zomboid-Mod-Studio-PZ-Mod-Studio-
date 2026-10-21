@@ -128,10 +128,13 @@ function Errors.collect()
     if n < Errors.seen then Errors.seen = 0 end
     if n == Errors.seen then return false end
     -- The game can add one error's entries over two frames, so the last error read stays open:
-    -- its stack, or its Java exception, may come on the next look.
+    -- its stack, or its Java exception, may come on the next look. An error from an event
+    -- handler has no "-----" entry: it starts with its stack, and its message is the Java
+    -- exception's first line. The stack written again after the exception closes the error.
     for i = Errors.seen, n - 1 do
         local entry = tostring(list:get(i))
         local last = Errors.lastRead
+        if last and last.closed then last = nil end
         if string.find(entry, "^%-%-%-%-%-") then
             local message = string.match(entry, "^[^\n]*\n(.*)$") or entry
             add({ message = string.match(message, "^%s*(.-)%s*$") })
@@ -139,6 +142,15 @@ function Errors.collect()
             if last and #last.frames == 0 then
                 last.frames = framesOf(entry)
                 settle(last)
+            elseif last and last.sawJava then
+                last.closed = true
+            else
+                add({ frames = framesOf(entry) })
+            end
+        elseif last and (string.find(entry, "^java%.") or string.find(entry, "KahluaThread", 1, true)) then
+            if not last.sawJava then
+                last.sawJava = true
+                if not last.message then last.message = string.gsub(firstLine(entry), "^[%w%.]+Exception: ", "") end
             end
         elseif not last or not (string.find(entry, "^java%.") or string.find(entry, "KahluaThread", 1, true)) then
             -- An entry of another shape starts an error of its own.

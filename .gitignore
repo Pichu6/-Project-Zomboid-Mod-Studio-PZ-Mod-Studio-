@@ -63,3 +63,4 @@ __pycache__/
 
 # Raw screen recordings for the Workshop GIFs (scripts/make-workshop-gifs.cjs)
 /workshop/Z_StudioLink/recordings/
+/workshop/Z_StudioLink/preview.html

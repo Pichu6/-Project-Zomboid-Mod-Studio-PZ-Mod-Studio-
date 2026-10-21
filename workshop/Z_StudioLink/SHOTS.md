@@ -1,48 +1,33 @@
-# Tomas para la página del Workshop
+# Images of the Workshop page
 
-Las imágenes de [workshop.txt](workshop.txt) se cargan desde GitHub (`workshop/Z_StudioLink/media/`).
-Grabás cada toma, la guardás en `workshop/Z_StudioLink/recordings/` con el nombre de la tabla y corrés:
+The page ([workshop.txt](workshop.txt)) loads its images from GitHub, from `media/`. Each one is
+a live recording of the game or the app (Link 1.13.1, B42.21), no zoom, cut to the part that
+matters:
 
-```
-node scripts/make-workshop-gifs.cjs
-```
-
-Eso deja los gifs en `media/` (menos de 5 MB cada uno). Después: commit y push, y las imágenes
-aparecen en la página de Steam (la descripción ya apunta ahí; no hace falta volver a subir el mod).
-
-## Cómo grabar
-
-- **Con qué:** OBS (captura de ventana) o la barra de juego de Windows (`Win+Alt+R` empieza y para;
-  guarda en `Videos\Capturas`). Cualquier mp4 sirve.
-- **El juego en ventana**, 1600x900 o 1920x1080. El gif se achica a 800 px de ancho, así que la letra
-  tiene que verse grande: si se puede, subí la escala de la interfaz (Opciones > Pantalla > tamaño de fuente).
-- **Mové el mouse despacio** y quedate quieto 1 segundo antes y después de cada clic: en un gif lo que
-  pasa rápido no se ve.
-- **Cortas:** 6 a 12 segundos por toma. Si te sobra al principio o al final, renombrá con el corte:
-  `03-requirements@2-11.mp4` guarda del segundo 2 al 11.
-- **Sin la app abierta** para las tomas 01 a 06 (así se ve lo que tiene alguien que solo se suscribe).
-  Con la app abierta para 07 y 08.
-
-## Lista
-
-| Archivo | Qué mostrar | Duración |
+| File | What it shows | How |
 | --- | --- | --- |
-| `01-mods-screen` | Menú principal → **MODS**. Se abre la pantalla nueva; bajá un poco por la lista y hacé clic en un mod con póster para ver su detalle. | ~8 s |
-| `02-search-filters` | Escribí algo en la búsqueda (un autor, por ejemplo), borrá; clic en **Problems**, después **Maps**, después **All**. Si da, **Groups: author** y plegá un grupo. | ~10 s |
-| `03-requirements` | Activá un mod que necesite una librería apagada → aparece el aviso "needs these… they come on with it" → aceptá. Después apagá una librería que otros usan → aviso "these go off with it" → volvé atrás. | ~12 s |
-| `04-load-order` | **Sort: load order**. Arrastrá un mod hacia arriba hasta que se frene en lo que requiere (se ve el aviso). Después **Undo**. | ~10 s |
-| `05-many-mods` | Ctrl+clic en 3 o 4 mods → **Turn all on**. Después abrí **Mod options** de un mod con opciones. | ~10 s |
-| `06-error-notice` (**png**) | Captura (no video) del aviso de error de Lua en el menú, con **Copy report** a la vista. Hace falta un mod que tire error; guardalo como `media/06-error-notice.png` directo. | foto |
-| `07-profiles` | Con la app abierta: cambiá de perfil en la app, pasá al juego y abrí **MODS**: se ve el perfil nuevo arriba. Si tenés mods fuera del perfil, que se vea el botón **+N new**. | ~12 s |
-| `08-save-check` (**png**) | Captura del aviso "What changed since its last session" al cargar una partida (con **Back / Play on a copy / Load it**). Aparece en una partida cuyos mods cambiaron. Guardalo como `media/08-save-check.png`. | foto |
+| `01-mods-screen.gif` | Main menu → MODS → the Link's screen, a mod's details | whole window, app closed |
+| `02-search-filters.gif` | search, On / Off / Maps / All, groups | top-left of the screen, app closed |
+| `03-requirements.gif` | turning on 3D Equipment Lockers brings 3D Gun Racks; turning Viewpoint off lists who needs it (Back, nothing applied) | list and dialogs, app closed |
+| `04-load-order.gif` | sort by load order, drag Blood FX Fixes up: it stops under Blood FX; Undo | list, app closed |
+| `05-many-mods.gif` | Ctrl+click five mods → Turn all on (with Gun Racks), Undo; Blood FX's options window | list and details, app closed |
+| `06-error-notice.png` | the notice for a Lua error in ModernStatus | crop of the main menu |
+| `07-profiles.gif` | the app switches to a small profile, the game's MODS screen shows it, then all installed | app, then game |
+| `08-save-check.png` | what changed in a save since its last session (a mod taken out, the order) | crop of the main menu |
 
-Las capturas de Mod Health y del Monitor ya están (`docs/forum/images/`). Si querés renovarlas,
-reemplazá esos png.
+"App closed" was the Link told in memory that PZ Mod Studio is not running, so the screen is
+what a subscriber without the app sees. Nothing was accepted on the Mods screen during the
+recordings; the profiles, mod list and app language were put back afterwards.
 
-## Video
+## Making them again
 
-Uno solo, **grabado de corrido** (sin zoom ni movimiento de cámara, que es lo que hacía temblar
-el anterior), 60-90 s: abrir MODS, buscar, activar un mod con requisitos, ordenar, y después la
-app (cambiar de perfil, Mod Health). Subilo a **YouTube** (puede ser "No listado") y en la página
-del Workshop: **Add/edit images & videos** → pegá el link. Ahí mismo podés subir también los png
-como capturas de la galería.
+1. Record each take (OBS, the Xbox Game Bar with `Win+Alt+R`, or ffmpeg's `gdigrab`) into
+   `workshop/Z_StudioLink/recordings/<name>.mp4`; that folder stays out of git.
+   `name@2-11.mp4` keeps seconds 2 to 11.
+2. `node scripts/make-workshop-gifs.cjs` writes `media/<name>.gif`, each under 5 MB.
+3. Commit and push: the page shows the new images, with no new upload of the mod.
+
+## The video
+
+`recordings/pz-studio-link.mp4` (about 2 minutes, 1080p): the same takes, captioned. For the
+Workshop page it goes on YouTube, then "Add/edit images & videos" on the item's page.
