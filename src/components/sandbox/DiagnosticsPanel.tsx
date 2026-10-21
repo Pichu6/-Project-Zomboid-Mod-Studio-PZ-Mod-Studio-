@@ -488,6 +488,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                       >
                         {card.mod_name ?? modFromStack(card)}
                       </span>
+                      {(card.called_from?.length ?? 0) > 0 && (
+                        /* The stack the game printed before the error: who called into it. */
+                        <span
+                          className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-700 text-slate-300"
+                          title={t('monitor.cards.calledFromTitle', { mod: card.mod_name ?? '', mods: card.called_from!.join(', ') })}
+                        >
+                          {t('monitor.cards.calledFrom', { mods: card.called_from!.join(', ') })}
+                        </span>
+                      )}
                       {(card.mod_name ?? '').startsWith(STUDIO_PACKAGE_PREFIX) ? (
                         /* The package's patched copy of a mod file. Taking it out is done from
                            here; the game then reads the mod's own file again. */

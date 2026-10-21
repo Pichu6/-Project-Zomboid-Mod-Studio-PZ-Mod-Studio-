@@ -513,7 +513,8 @@
         "translation_stale": "Chosen words out of date",
         "translation_settled": "Words settled in your package",
         "package_built_for_other_list": "Built for another list",
-        "two_mod_managers": "Two mod managers"
+        "two_mod_managers": "Two mod managers",
+        "floods_console": "Fills the console"
       },
       "fix": {
         "enable": "Switch on {{name}}",
@@ -1956,6 +1957,8 @@
       "timesSeenShare": " — {{pct}}% of every error line",
       "modOnLine": "The game named this mod on the log line",
       "modInStack": "The game named this mod in the stack trace under the error",
+      "calledFrom": "called from {{mods}}",
+      "calledFromTitle": "The error was in {{mod}}'s code, and the game's stack shows it was called from {{mods}}. The fault can be in either: the caller may pass something the other does not expect.",
       "logSnippet": "Log Snippet",
       "saveReport": "Save report",
       "saveReportTitle": "Writes a file with the error, your game build, the mod and the code, ready to hand to someone or to an AI assistant",
@@ -2070,7 +2073,8 @@
       "server_item_unused_holds_one": "WorkshopItems= has {{item}}, which holds {{mods}}, but Mods= does not list it. It is downloaded and never loaded.",
       "server_item_unused_holds_many": "WorkshopItems= has {{item}}, which holds {{mods}}, but Mods= does not list them. It is downloaded and never loaded.",
       "server_base_map_last": "Map= ends with {{map}}, which is not one of the game's own maps. The base map (for example Muldraugh, KY) belongs last.",
-      "two_mod_managers": "{{mod}} also draws the game's Mods screen. While it is on, the Studio leaves that screen to it (the save backups and the check before a save loads stay the Studio's). Turn it off in this profile to use the Studio's screen."
+      "two_mod_managers": "{{mod}} also draws the game's Mods screen. While it is on, the Studio leaves that screen to it (the save backups and the check before a save loads stay the Studio's). Turn it off in this profile to use the Studio's screen.",
+      "floods_console": "{{mod}} filled the console in the last session: {{lines}} lines of errors ({{share}}% of all of them), from {{exceptions}} exceptions and {{warnings}} warnings. Writing them slows the game, and other mods' errors are lost among them. Look at them in the Monitor, or turn it off in this profile."
     },
     "fragments": {
       "vs": " against ",

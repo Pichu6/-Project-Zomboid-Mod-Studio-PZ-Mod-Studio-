@@ -513,7 +513,8 @@
         "translation_stale": "Palabras elegidas desactualizadas",
         "translation_settled": "Palabras resueltas en tu paquete",
         "package_built_for_other_list": "Hecho para otra lista",
-        "two_mod_managers": "Dos administradores de mods"
+        "two_mod_managers": "Dos administradores de mods",
+        "floods_console": "Llena la consola"
       },
       "fix": {
         "enable": "Activar {{name}}",
@@ -1956,6 +1957,8 @@
       "timesSeenShare": " — el {{pct}}% de todas las líneas de error",
       "modOnLine": "El juego nombró este mod en la línea del log",
       "modInStack": "El juego nombró este mod en el stack trace debajo del error",
+      "calledFrom": "llamado desde {{mods}}",
+      "calledFromTitle": "El error ocurrió en el código de {{mod}}, y la pila del juego muestra que lo llamó {{mods}}. La falla puede estar en cualquiera de los dos: quien llama puede pasarle algo que el otro no espera.",
       "logSnippet": "Fragmento del log",
       "saveReport": "Guardar informe",
       "saveReportTitle": "Escribe un archivo con el error, tu build del juego, el mod y el código, listo para pasárselo a alguien o a un asistente de IA",
@@ -2070,7 +2073,8 @@
       "server_item_unused_holds_one": "WorkshopItems= tiene {{item}}, que trae {{mods}}, pero Mods= no lo incluye. Se descarga y nunca se carga.",
       "server_item_unused_holds_many": "WorkshopItems= tiene {{item}}, que trae {{mods}}, pero Mods= no los incluye. Se descarga y nunca se carga.",
       "server_base_map_last": "Map= termina con {{map}}, que no es uno de los mapas del juego. El mapa base (por ejemplo Muldraugh, KY) va último.",
-      "two_mod_managers": "{{mod}} también dibuja la pantalla de Mods del juego. Mientras esté activo, el Studio le deja esa pantalla (las copias de partidas y el aviso antes de cargar siguen siendo del Studio). Desactivalo en este perfil para usar la pantalla del Studio."
+      "two_mod_managers": "{{mod}} también dibuja la pantalla de Mods del juego. Mientras esté activo, el Studio le deja esa pantalla (las copias de partidas y el aviso antes de cargar siguen siendo del Studio). Desactivalo en este perfil para usar la pantalla del Studio.",
+      "floods_console": "{{mod}} llenó la consola en la última sesión: {{lines}} líneas de errores ({{share}}% del total), de {{exceptions}} excepciones y {{warnings}} advertencias. Escribirlas hace más lento el juego, y los errores de otros mods se pierden entre ellas. Miralas en el Monitor, o desactivalo en este perfil."
     },
     "fragments": {
       "vs": " contra ",

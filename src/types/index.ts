@@ -216,6 +216,8 @@ export interface TranslatedErrorCard {
   /** Which kind of card, and the values its texts are made of, for the chosen language (`backendText`). */
   code?: string;
   params?: Record<string, string>;
+  /** The other mods on the stack the game printed before the error, nearest caller first. */
+  called_from?: string[];
 }
 
 export interface SandboxSession {

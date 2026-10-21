@@ -152,8 +152,8 @@ Brief and review: [BRIEF-2026-10-21-asistente-discord-errores-recarga.md](BRIEF-
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | Console spam per mod (~2h) | Lines per mod and minute from console.txt with the Monitor's attribution; Mod Health warns "floods the console". App only |
-| ⬜ | Blame by the whole stack (~4h) | console.txt already has every level: `Lua((MOD:X)).fn(File.lua:48)`; the card says "error in A, called from B". App only, old logs and the dedicated server too |
+| ✅ | Console spam per mod (~2h) | Done 2026-10-21: every console line a mod's trouble takes (its ERROR / WARN line and the stack under it) counted with the Monitor's attribution; from 1,000 lines in the last session Mod Health warns `floods_console` with the count, the share and "turn it off". Measured on real sessions: Fancy Handwork 9,330 lines from 359 throws (97%); a mod with 51 throws made 407 lines, a broken mod rather than a flood, so the line is at 1,000. Per minute was dropped: console.txt has no clock |
+| ✅ | Blame by the whole stack (~4h) | Done 2026-10-21: the `STACK TRACE` block the game prints before an ERROR lists every level with its mod (`Lua((MOD:X)).fn(File.lua:48)`, `Lua(Vanilla)...`); the Monitor card shows "called from B" next to the mod, with what that means on hover. App only |
 | ⬜ | In-game notice of new errors (~5h) | The Link watches `getLuaDebuggerErrors()`; "See in the Studio" (only when it runs), "Turn this mod off" (through the app and the menu sync), "Copy report"; none when Error Magnifier is on |
 | ⬜ | Faster Lua reload (~5h) | `ReadDirectoryChangesW` in Rust, the game checking every 3 ticks while one waits, also paused and on the menu; checked by the parser before it is sent |
 | ⬜ | Discord by webhook (~3h) | Server up/down/crashed, joins and leaves (grouped: ~30 messages a minute per webhook), restarts, mods waiting for a restart |

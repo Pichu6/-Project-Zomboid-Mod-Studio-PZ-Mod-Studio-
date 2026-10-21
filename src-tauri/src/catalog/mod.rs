@@ -287,6 +287,7 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
     }
     let conflicts = crate::vfs::file_conflict_states(paths, &catalog, active);
     add_file_conflict_issues(&mut report, &conflicts);
+    add_console_flood_issues(&mut report, &catalog, active, &crate::sandbox::error_stats_from_console(&paths.user_zomboid_dir));
     // A package is a mod of its own, in every profile's list: it was built for one list, and this
     // profile's may not be it.
     if let Some((package_id, root)) = crate::vfs::active_package_dir(&catalog, active) {
@@ -301,6 +302,37 @@ pub fn mod_health_full(paths: &crate::vfs::StudioPaths, active: &[String]) -> Mo
         }
     }
     ModHealth { catalog, report }
+}
+
+/// From this many console lines of trouble in one session, a mod "floods the console". Measured
+/// on real sessions: Fancy Handwork's key handler threw 359 times for 9,330 lines; a mod that threw
+/// 51 times made 407, which is a broken mod (the Monitor's business) more than a flood.
+pub const FLOOD_LINES: usize = 1000;
+
+/// The mods on in this list whose errors filled the last session's console (`console.txt`): the
+/// game slows down writing them, and every other mod's errors are lost among them.
+pub fn add_console_flood_issues(report: &mut HealthReport, catalog: &ModCatalog, active: &[String], stats: &[crate::sandbox::ModErrorStat]) {
+    let total: usize = stats.iter().map(|s| s.lines).sum();
+    let on: Vec<&CatalogMod> = active.iter().filter_map(|e| resolve_entry(catalog, e.trim())).collect();
+    let mut list = IssueList(Vec::new());
+    for stat in stats.iter().filter(|s| s.lines >= FLOOD_LINES) {
+        // The game writes the name from mod.info; a mod with none is written by its id.
+        let Some(m) = on.iter().find(|m| m.name == stat.mod_name).or_else(|| on.iter().find(|m| m.id == stat.mod_name)) else { continue };
+        let share = if total > 0 { stat.lines * 100 / total } else { 0 };
+        let (lines, share_s, exceptions, warnings) = (stat.lines.to_string(), share.to_string(), stat.exceptions.to_string(), stat.warnings.to_string());
+        list.push(Severity::Warning, "floods_console", Some(&m.id),
+            format!("{} filled the console in the last session: {} lines of errors ({}% of all of them), from {} exceptions and {} warnings. Writing them slows the game, and other mods' errors are lost among them. Look at them in the Monitor, or turn it off in this profile.",
+                describe(m), lines, share_s, exceptions, warnings),
+            vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }]);
+        let name = describe(m);
+        list.with(&[("mod", &name), ("lines", &lines), ("share", &share_s), ("exceptions", &exceptions), ("warnings", &warnings)]);
+    }
+    if list.0.is_empty() {
+        return;
+    }
+    report.issues.extend(list.0);
+    report.issues.sort_by(|a, b| a.severity.cmp(&b.severity));
+    report.warnings = report.issues.iter().filter(|i| i.severity == Severity::Warning).count();
 }
 
 /// The package was built with one list and this profile has another: the mods it merged that
@@ -1641,6 +1673,32 @@ mod tests {
         // ...and an id that itself contains a slash (real mod 2858201402) is matched exactly.
         let slashy = health_report(&cat, &["11/slashy".to_string()]);
         assert!(slashy.issues.is_empty(), "{:?}", slashy.issues);
+    }
+
+    #[test]
+    fn a_mod_that_fills_the_console_is_reported() {
+        let f = fixture("flood");
+        let ws = f.root.join("workshop");
+        write_mod(&ws.join("1/mods/Noisy/42"), "id=Noisy
+name=Noisy Keys
+");
+        write_mod(&ws.join("2/mods/Quiet/42"), "id=Quiet
+");
+        write_mod(&ws.join("3/mods/OffNoisy/42"), "id=OffNoisy
+name=Off Noisy
+");
+        let (w, z) = paths(&f);
+        let cat = build_catalog(&w, &z, Some(42_021));
+        let stat = |name: &str, lines: usize| crate::sandbox::ModErrorStat { mod_name: name.into(), exceptions: lines / 4, lines, ..Default::default() };
+        let stats = vec![stat("Noisy Keys", 2970), stat("Quiet", 407), stat("Off Noisy", 1200)];
+        let mut report = health_report(&cat, &["Noisy".to_string(), "Quiet".to_string()]);
+        add_console_flood_issues(&mut report, &cat, &["Noisy".to_string(), "Quiet".to_string()], &stats);
+        let floods: Vec<&HealthIssue> = report.issues.iter().filter(|i| i.code == "floods_console").collect();
+        assert_eq!(floods.len(), 1, "only a mod that is on, and only past the threshold");
+        assert_eq!(floods[0].mod_id.as_deref(), Some("Noisy"));
+        assert_eq!(floods[0].params["lines"], "2970");
+        assert_eq!(floods[0].params["share"], "64");
+        assert!(matches!(floods[0].fixes[0], SuggestedFix::DisableMod { .. }));
     }
 
     #[test]

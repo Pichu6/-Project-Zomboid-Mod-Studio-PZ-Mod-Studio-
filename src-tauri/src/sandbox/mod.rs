@@ -42,6 +42,10 @@ pub struct TranslatedErrorPayload {
     pub code: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, String>,
+    /// The other mods on the stack the game printed before the error, nearest caller first: the
+    /// error was in `mod_name`, called from these ("error in A, called from B").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub called_from: Vec<String>,
 }
 
 /// What the game itself said about the line a card came from.
@@ -328,6 +332,7 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                         let culprit = blame.of(&trimmed);
 
                         if let Some(mut card) = translate_log_error(&trimmed, error_counter) {
+                            card.called_from = culprit.as_deref().map(|c| blame.callers(c)).unwrap_or_default();
                             card.mod_name = culprit.clone();
                             let _ = app.emit("sandbox-error-card", card);
                             error_counter += 1;
@@ -337,7 +342,9 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                             let complaining = is_error || trimmed.starts_with("WARN");
                             let key = format!("{}|{}", name, trimmed.chars().take(80).collect::<String>());
                             if complaining && already_reported.insert(key) {
-                                let _ = app.emit("sandbox-error-card", blame_card(&trimmed, &name, error_counter));
+                                let mut card = blame_card(&trimmed, &name, error_counter);
+                                card.called_from = blame.callers(&name);
+                                let _ = app.emit("sandbox-error-card", card);
                                 error_counter += 1;
                             }
                         }
@@ -374,7 +381,16 @@ pub struct ModBlame {
     /// read on its own it is one more anonymous Java exception, which is how 413 of them in one
     /// session went unattributed.
     recent: Option<(String, usize)>,
+    /// The frames of a `STACK TRACE` block being read: the game prints the whole stack, each
+    /// level with its mod (`Lua((MOD:X)).fn(File.lua:48)`, `Lua(Vanilla)...`), right before the
+    /// ERROR line it belongs to.
+    trace: Option<Vec<String>>,
+    /// That stack's mods, top (where it failed) first, for the level line that follows it.
+    chain: Vec<String>,
 }
+
+/// A stack level in the game's own files.
+const VANILLA_FRAME: &str = "\0vanilla";
 
 /// How many lines a mod's name carries forward. The frame and its error are next to each other;
 /// a wider window would start blaming whoever happened to be mentioned earlier.
@@ -384,6 +400,24 @@ impl ModBlame {
     /// Reads `mod "X" overrides <path>` lines as they go by, and remembers a mod named in a
     /// stack frame for the few lines that follow it.
     pub fn observe(&mut self, line: &str) {
+        let t = line.trim();
+        let level_line = ["LOG", "ERROR", "WARN", "DEBUG", "TRACE"].iter().any(|l| t.starts_with(l));
+        if t == "STACK TRACE" {
+            self.trace = Some(Vec::new());
+        } else if let Some(frames) = self.trace.as_mut() {
+            if !level_line {
+                if let Some(name) = Self::named_in(t) {
+                    frames.push(name);
+                } else if Self::is_vanilla_frame(t) {
+                    frames.push(VANILLA_FRAME.to_string());
+                }
+            } else {
+                // The error this stack belongs to.
+                self.chain = self.trace.take().unwrap_or_default();
+            }
+        } else if level_line {
+            self.chain.clear();
+        }
         self.recent = match self.recent.take() {
             Some((name, age)) if age + 1 < BLAME_WINDOW => Some((name, age + 1)),
             _ => None,
@@ -424,6 +458,19 @@ impl ModBlame {
     /// `Lua(Vanilla)`: the game says the file is its own, not a mod's.
     fn is_vanilla_frame(line: &str) -> bool {
         line.contains("Lua(Vanilla)")
+    }
+
+    /// The mods that called into `culprit` on the stack printed just before this line, nearest
+    /// first, each once (at most three): "error in A, called from B".
+    pub fn callers(&self, culprit: &str) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for name in &self.chain {
+            if name != VANILLA_FRAME && name != culprit && !out.contains(name) {
+                out.push(name.clone());
+            }
+        }
+        out.truncate(3);
+        out
     }
 
     /// The mod this line is about, if the game said.
@@ -472,6 +519,9 @@ pub struct ModErrorStat {
     pub warnings: usize,
     pub last_exception: Option<String>,
     pub last_warning: Option<String>,
+    /// Every console line its trouble took: the ERROR / WARN line and the stack lines under it.
+    #[serde(default)]
+    pub lines: usize,
 }
 
 /// Every mod the last session's log named on a line of trouble, with its counts.
@@ -483,9 +533,24 @@ pub struct ModErrorStat {
 pub fn error_stats_per_mod(lines: impl Iterator<Item = String>) -> Vec<ModErrorStat> {
     let mut blame = ModBlame::default();
     let mut stats: std::collections::BTreeMap<String, ModErrorStat> = Default::default();
+    // The mod whose ERROR / WARN the lines below belong to (its stack), until the next level line.
+    let mut block: Option<String> = None;
     for line in lines {
         blame.observe(&line);
         let trimmed = line.trim();
+        let level_line = ["LOG", "ERROR", "WARN", "DEBUG", "TRACE"].iter().any(|l| trimmed.starts_with(l));
+        if !level_line {
+            // A frame of another mod is the start of its own error (the game prints the frame
+            // first), not more of this one.
+            if ModBlame::named_in(trimmed).is_some_and(|n| Some(&n) != block.as_ref()) {
+                block = None;
+            }
+            if let Some(entry) = block.as_ref().and_then(|name| stats.get_mut(name)) {
+                entry.lines += 1;
+            }
+            continue;
+        }
+        block = None;
         // Only the game's own level lines count: the Java frames under an ERROR would count the
         // same throw three or four times over.
         let is_trouble = trimmed.starts_with("ERROR") || trimmed.starts_with("WARN");
@@ -493,7 +558,9 @@ pub fn error_stats_per_mod(lines: impl Iterator<Item = String>) -> Vec<ModErrorS
             continue;
         }
         let Some(name) = blame.of(trimmed) else { continue };
+        block = Some(name.clone());
         let entry = stats.entry(name.clone()).or_insert_with(|| ModErrorStat { mod_name: name, ..Default::default() });
+        entry.lines += 1;
         match Severity::of_line(trimmed) {
             Severity::Exception => {
                 entry.exceptions += 1;
@@ -562,6 +629,10 @@ pub fn tail_lines(path: &Path, n: usize) -> std::io::Result<Vec<String>> {
     }
 }
 
+/// The last count, kept while console.txt is unchanged: Mod Health asks on every refresh, and a
+/// long session's log runs to tens of megabytes.
+static STATS_CACHE: std::sync::Mutex<Option<(std::path::PathBuf, u64, Option<std::time::SystemTime>, Vec<ModErrorStat>)>> = std::sync::Mutex::new(None);
+
 pub fn error_stats_from_console(user_zomboid_dir: &str) -> Vec<ModErrorStat> {
     let Some(path) = crate::load_order::mod_info::get_all_user_zomboid_dirs(user_zomboid_dir)
         .into_iter()
@@ -570,8 +641,21 @@ pub fn error_stats_from_console(user_zomboid_dir: &str) -> Vec<ModErrorStat> {
     else {
         return Vec::new();
     };
+    let meta = std::fs::metadata(&path).ok();
+    let (len, modified) = (meta.as_ref().map(|m| m.len()).unwrap_or(0), meta.and_then(|m| m.modified().ok()));
+    if let Ok(cache) = STATS_CACHE.lock() {
+        if let Some((p, l, m, stats)) = cache.as_ref() {
+            if *p == path && *l == len && *m == modified {
+                return stats.clone();
+            }
+        }
+    }
     let Ok(file) = File::open(&path) else { return Vec::new() };
-    error_stats_per_mod(lossy_lines(BufReader::new(file)))
+    let stats = error_stats_per_mod(lossy_lines(BufReader::new(file)));
+    if let Ok(mut cache) = STATS_CACHE.lock() {
+        *cache = Some((path, len, modified, stats.clone()));
+    }
+    stats
 }
 
 /// A line worth showing even though it matches no known pattern, because the game named a mod.
@@ -591,6 +675,7 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
     if let Some(package) = mod_name.strip_prefix(STUDIO_PACKAGE_PREFIX) {
         let file = source_file.clone().unwrap_or_else(|| "a file".to_string());
         return TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "package_copy".to_string(),
             params: crate::catalog::issue_params(&[
@@ -613,6 +698,7 @@ fn blame_card(line: &str, mod_name: &str, counter: usize) -> TranslatedErrorPayl
         };
     }
     TranslatedErrorPayload {
+        called_from: Vec::new(),
         id: format!("err_{}", counter),
         code: match severity {
             Severity::Exception => "mod_named_exception",
@@ -663,6 +749,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
     }
     if line.contains("isLocalPlayer()") || line.contains("ToggleDoorActual") || line.contains("ToggleWindow") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "door_npc".to_string(),
             params: BTreeMap::new(),
@@ -678,6 +765,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("BWORoomPrograms") || (line.contains("restaurant") && line.contains("getName")) {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "bandits_room".to_string(),
             params: BTreeMap::new(),
@@ -693,6 +781,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("dSAG") || line.contains("onNewDay") || line.contains("ReportWindow") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "daily_report".to_string(),
             params: BTreeMap::new(),
@@ -708,6 +797,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("UnknownFormatConversionException") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "translator_format".to_string(),
             params: BTreeMap::new(),
@@ -730,6 +820,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
                 return card;
             }
             TranslatedErrorPayload {
+                called_from: Vec::new(),
                 code: "translator_text".to_string(),
                 source_file: None,
                 title: "A mod's text has a bare % sign".to_string(),
@@ -742,6 +833,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("attempted index of non-table") || line.contains("attempted index: getName of non-table") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "nil_table".to_string(),
             params: BTreeMap::new(),
@@ -760,6 +852,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         // before says which and from which mod (`cannot create item ... removed = true`). The
         // game skips it and goes on. Java, while reading the save: the shim never sees it.
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "save_item_missing".to_string(),
             params: BTreeMap::new(),
@@ -775,6 +868,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("NullPointerException") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "java_npe".to_string(),
             params: BTreeMap::new(),
@@ -790,6 +884,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("KahluaThreadException") || line.contains("se.krka.kahlua.vm.KahluaException") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "kahlua".to_string(),
             params: BTreeMap::new(),
@@ -805,6 +900,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("IndexOutOfBoundsException") || line.contains("Index 0 out of bounds") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "index_bounds".to_string(),
             params: BTreeMap::new(),
@@ -820,6 +916,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("FancyHandwork") || line.contains("fancyMP") || line.contains("aFancyHandwork") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "fancy_handwork".to_string(),
             params: BTreeMap::new(),
@@ -835,6 +932,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("SaucedCarts") || line.contains("Pushable Carts") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "sauced_carts".to_string(),
             params: BTreeMap::new(),
@@ -850,6 +948,7 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
         })
     } else if line.contains("duplicate recipe") || line.contains("duplicate item") {
         Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
             id: format!("err_{}", counter),
             code: "duplicate_id".to_string(),
             params: BTreeMap::new(),
@@ -1417,12 +1516,55 @@ mod error_stats_tests {
         assert_eq!(stats[1].mod_name, "The Only Cure");
         assert_eq!(stats[1].warnings, 1);
         assert_eq!(stats[1].exceptions, 0);
+        // Its two ERROR lines and the stack under them (the frame above the first is not its yet).
+        assert_eq!(stats[0].lines, 5);
+        assert_eq!(stats[1].lines, 1);
+    }
+
+    /// Read-only, over a real log: PZMS_LOG=<console.txt or a DebugLog> cargo test real_flood -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_flood() {
+        let Ok(path) = std::env::var("PZMS_LOG") else { return };
+        let file = File::open(path).unwrap();
+        // A DebugLog line has "[date time] " before what console.txt has.
+        let lines = lossy_lines(BufReader::new(file)).map(|l| if l.starts_with('[') { l.split_once("] ").map(|(_, r)| r.to_string()).unwrap_or(l) } else { l });
+        let stats = error_stats_per_mod(lines);
+        let total: usize = stats.iter().map(|s| s.lines).sum();
+        println!("{} lines of trouble", total);
+        for s in stats.iter().take(8) {
+            println!("{:>6} lines  {:>5} exc {:>5} warn  {}", s.lines, s.exceptions, s.warnings, s.mod_name);
+        }
     }
 }
 
 #[cfg(test)]
 mod blame_window_tests {
     use super::ModBlame;
+
+    #[test]
+    fn the_stack_before_an_error_names_the_mods_that_called_it() {
+        let mut blame = ModBlame::default();
+        // As the game wrote it on 2026-10-20.
+        let lines = [
+            "STACK TRACE",
+            "-----------------------------------------",
+            "\tLua((MOD:Take A Bath And Shower [SP/MP])).isValid(TABAS_ISPlace3DItemCursor.lua:48)",
+            "\tLua(Vanilla).DoTileBuilding(ISBuildingObject.lua:144)",
+            "\tLua((MOD:Project Viewpoint: Visible Construction)).gameDoTileBuilding(VC_Construction.lua:308).",
+            "ERROR: General      f:29305> Lua((MOD:Take A Bath And Shower [SP/MP])).isValid> Exception thrown",
+        ];
+        for line in lines {
+            blame.observe(line);
+        }
+        let culprit = blame.of(lines[5]).unwrap();
+        assert_eq!(culprit, "Take A Bath And Shower [SP/MP]");
+        assert_eq!(blame.callers(&culprit), vec!["Project Viewpoint: Visible Construction"]);
+        // The stack under the ERROR, and the next line, belong to no new stack.
+        blame.observe("\tjava.lang.RuntimeException: attempted index: getUnequippedWeight of non-table: null");
+        blame.observe("LOG  : General      f:29306> something else");
+        assert!(blame.callers(&culprit).is_empty());
+    }
 
     #[test]
     fn a_java_exception_is_blamed_on_the_lua_frame_just_above_it() {
