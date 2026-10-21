@@ -730,6 +730,15 @@ export interface GameBot {
   invite_url: string | null;
 }
 
+/** How the Studio's Discord commands are doing. */
+export interface DiscordCommandsStatus {
+  server: string;
+  listening: boolean;
+  channel: string;
+  /** "code: English text", empty while it works. */
+  error: string;
+}
+
 export interface DiscordView {
   settings: DiscordSettings;
   /** A webhook is stored (the address itself never comes back). */

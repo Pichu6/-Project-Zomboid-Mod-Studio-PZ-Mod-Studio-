@@ -894,6 +894,12 @@ fn save_game_bot_cmd(paths: StudioPaths, file_path: String, enabled: bool, token
 }
 
 /// Posts a test message to the server's channel.
+/// How the Discord commands are doing (None while they are off).
+#[tauri::command]
+fn discord_commands_status_cmd() -> Option<discord_commands::CommandsStatus> {
+    discord_commands::status()
+}
+
 #[tauri::command(async)]
 fn discord_test_cmd(paths: StudioPaths, server: String) -> Result<(), String> {
     discord::send_test(&zomboid_dir_of(&paths)?, &server)
@@ -1596,6 +1602,7 @@ pub fn run() {
             changelog_mark_read_cmd,
             discord_save_cmd,
             discord_test_cmd,
+            discord_commands_status_cmd,
             dev_watch_stop_cmd,
             dev_reload_all_cmd,
             create_mod_list_cmd,

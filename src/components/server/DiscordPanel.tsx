@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { Check, Loader2, Send, Terminal, Trash2 } from 'lucide-react';
-import { DiscordSettings, StudioPathsUI } from '../../types';
+import { DiscordCommandsStatus, DiscordSettings, StudioPathsUI } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { GameBotPanel } from './GameBotPanel';
 
@@ -19,6 +19,7 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; file
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [cmdChannel, setCmdChannel] = useState('');
   const [cmdRole, setCmdRole] = useState('');
+  const [cmdStatus, setCmdStatus] = useState<DiscordCommandsStatus | null>(null);
 
   useEffect(() => {
     setNote(null);
@@ -31,6 +32,18 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; file
       setCmdRole(v.settings.command_role ?? '');
     });
   }, [paths, server]);
+
+  const commandsOn = settings?.commands ?? false;
+  useEffect(() => {
+    if (!commandsOn) {
+      setCmdStatus(null);
+      return;
+    }
+    const look = () => void TauriService.discordCommandsStatus().then(setCmdStatus);
+    look();
+    const id = window.setInterval(look, 3000);
+    return () => window.clearInterval(id);
+  }, [commandsOn]);
 
   if (!settings) return null;
 
@@ -185,6 +198,22 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; file
             </button>
           )}
         </div>
+        {!settings.commands && (cmdChannel.trim() === '' || cmdRole.trim() === '') && (
+          <p className="text-[11px] text-slate-500">{t('servers.discord.commands.fillFirst')}</p>
+        )}
+        {settings.commands && cmdStatus && cmdStatus.server === server && (
+          <div className={`text-[11px] ${cmdStatus.listening ? 'text-emerald-300' : 'text-red-300'}`}>
+            {cmdStatus.listening
+              ? t('servers.discord.commands.listening', { channel: cmdStatus.channel })
+              : (() => {
+                  const m = cmdStatus.error.match(/^(no_channel|no_role|no_token|bad_token|forbidden|unreachable): (.*)$/s);
+                  return m ? t(`servers.discord.commands.errors.${m[1]}`, { channel: cmdStatus.channel, role: settings.command_role, detail: m[2] }) : cmdStatus.error;
+                })()}
+          </div>
+        )}
+        {settings.commands && cmdStatus && cmdStatus.server !== server && (
+          <div className="text-[11px] text-amber-300">{t('servers.discord.commands.otherServer', { server: cmdStatus.server })}</div>
+        )}
         <p className="text-[10.5px] text-amber-300/80">{t('servers.discord.commands.needs')}</p>
       </div>
     </div>

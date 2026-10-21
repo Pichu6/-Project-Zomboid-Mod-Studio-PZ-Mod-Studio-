@@ -166,7 +166,7 @@ fn call(token: &str, path: &str, body: Option<&Value>) -> Result<Value, String> 
             Some(b) => agent().post(&url).header("Authorization", &auth).send_json(b),
             None => agent().get(&url).header("Authorization", &auth).call(),
         };
-        let mut response = result.map_err(|e| format!("Discord could not be reached: {}", e))?;
+        let mut response = result.map_err(|e| format!("unreachable: Discord could not be reached: {}", e))?;
         let status = response.status().as_u16();
         let value = response.body_mut().read_json::<Value>().unwrap_or(Value::Null);
         if (200..300).contains(&status) {
@@ -178,8 +178,8 @@ fn call(token: &str, path: &str, body: Option<&Value>) -> Result<Value, String> 
             continue;
         }
         return Err(match status {
-            401 => "Discord does not take the bot's token (reset in the Developer Portal?).".to_string(),
-            403 => "The bot may not read or write in that channel (its permissions in Discord).".to_string(),
+            401 => "bad_token: Discord does not take the bot's token (reset in the Developer Portal?).".to_string(),
+            403 => "forbidden: The bot may not read or write in that channel (its permissions in Discord).".to_string(),
             _ => format!("Discord answered {} to {}.", status, path),
         });
     }
@@ -204,14 +204,14 @@ fn find_place(token: &str, channel_name: &str, role_name: &str) -> Result<Place,
         let Some(channel) = channels.as_array().into_iter().flatten().find(|c| c.get("name").and_then(|n| n.as_str()) == Some(channel_name) && c.get("type").and_then(|t| t.as_u64()) == Some(0)) else { continue };
         let roles = call(token, &format!("/guilds/{}/roles", gid), None)?;
         let role = roles.as_array().into_iter().flatten().find(|r| r.get("name").and_then(|n| n.as_str()).is_some_and(|n| n.eq_ignore_ascii_case(role_name)));
-        let Some(role) = role else { return Err(format!("There is no role called \"{}\" in that Discord.", role_name)) };
+        let Some(role) = role else { return Err(format!("no_role: There is no role called \"{}\" in that Discord.", role_name)) };
         return Ok(Place {
             guild: gid.to_string(),
             channel: channel.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             role: role.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
         });
     }
-    Err(format!("The bot sees no text channel called \"{}\" (is it invited to that Discord?).", channel_name))
+    Err(format!("no_channel: The bot sees no text channel called \"{}\" (is it invited to that Discord?).", channel_name))
 }
 
 fn reply(token: &str, channel: &str, to: &str, text: &str) {
@@ -275,6 +275,28 @@ struct State {
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 
+/// How the commands are doing, for the window: the server, and the channel read or what failed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CommandsStatus {
+    pub server: String,
+    pub listening: bool,
+    pub channel: String,
+    /// "code: English text", empty while it works.
+    pub error: String,
+}
+
+static STATUS: std::sync::Mutex<Option<CommandsStatus>> = std::sync::Mutex::new(None);
+
+pub fn status() -> Option<CommandsStatus> {
+    STATUS.lock().ok().and_then(|s| s.clone())
+}
+
+fn set_status(value: Option<CommandsStatus>) {
+    if let Ok(mut s) = STATUS.lock() {
+        *s = value;
+    }
+}
+
 /// Reads the commands channel of the server that has them on, while the Studio runs.
 pub fn watch() {
     if STARTED.swap(true, Ordering::Relaxed) {
@@ -285,6 +307,9 @@ pub fn watch() {
         loop {
             std::thread::sleep(EVERY);
             if let Err(e) = round(&mut st) {
+                if let Some((server, s)) = zomboid_dir().and_then(|z| crate::discord::commands_server(&z)) {
+                    set_status(Some(CommandsStatus { server, listening: false, channel: s.command_channel, error: e.clone() }));
+                }
                 let now = now_secs();
                 st.backoff = (st.backoff * 2).clamp(10, MAX_BACKOFF_SECS);
                 st.backoff_until = now + st.backoff;
@@ -296,12 +321,17 @@ pub fn watch() {
     });
 }
 
+fn zomboid_dir() -> Option<std::path::PathBuf> {
+    let chosen = crate::vfs::saved_user_zomboid_dir();
+    crate::load_order::mod_info::get_existing_user_zomboid_dirs(&chosen).into_iter().next()
+}
+
 fn round(st: &mut State) -> Result<(), String> {
     let now = now_secs();
-    let chosen = crate::vfs::saved_user_zomboid_dir();
-    let Some(z) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(&chosen).into_iter().next() else { return Ok(()) };
+    let Some(z) = zomboid_dir() else { return Ok(()) };
     let Some((server, s)) = crate::discord::commands_server(&z) else {
         st.place = None;
+        set_status(None);
         return Ok(());
     };
     let lang = s.language.clone();
@@ -336,7 +366,9 @@ fn round(st: &mut State) -> Result<(), String> {
     if now < st.backoff_until {
         return Ok(());
     }
-    let Some(token) = crate::discord::game_bot_token(&z, &server) else { return Ok(()) };
+    let Some(token) = crate::discord::game_bot_token(&z, &server) else {
+        return Err("no_token: The server's .ini has no bot token (Chat with the game, above).".to_string());
+    };
     let key = format!("{}|{}|{}|{}", server, s.command_channel, s.command_role, token.len());
     if st.key != key || st.place.is_none() {
         st.place = Some(find_place(&token, &s.command_channel, &s.command_role)?);
@@ -344,6 +376,7 @@ fn round(st: &mut State) -> Result<(), String> {
         st.last = None;
     }
     let place = st.place.clone().unwrap();
+    set_status(Some(CommandsStatus { server: server.clone(), listening: true, channel: s.command_channel.trim().trim_start_matches('#').to_string(), error: String::new() }));
     let Some(after) = st.last.clone() else {
         // From now on: what was written before the Studio looked is not a command for it.
         st.last = Some(read_messages(&token, &place.channel, None)?.last().and_then(|m| m.get("id").and_then(|v| v.as_str()).map(str::to_string)).unwrap_or_else(|| "0".into()));

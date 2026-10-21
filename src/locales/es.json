@@ -1748,6 +1748,10 @@
         "no_webhook": "Todavía no hay un webhook guardado para este servidor."
       },
       "commands": {
+        "fillFirst": "Escribí primero el canal y el rol; después se puede marcar.",
+        "listening": "Escuchando en #{{channel}}: escribí !ayuda ahí.",
+        "otherServer": "Los comandos están activados para {{server}}: solo un servidor los lee a la vez.",
+        "errors": {"no_channel": "El bot no ve ningún canal de texto llamado \"{{channel}}\". Crealo, o fijate que el bot pueda verlo (necesita \"Ver canal\" ahí).", "no_role": "No hay ningún rol llamado \"{{role}}\" en ese Discord.", "no_token": "Guardá primero el token del bot arriba (Chat con el juego).", "bad_token": "Discord no acepta el token del bot: reseteá el token en el Developer Portal y volvé a guardarlo arriba.", "forbidden": "El bot no puede leer o escribir en #{{channel}}: dale \"Ver canal\", \"Leer el historial de mensajes\" y \"Enviar mensajes\" ahí.", "unreachable": "No se pudo llegar a Discord; vuelve a intentar. ({{detail}})"},
         "title": "Comandos desde Discord (con el Studio abierto)",
         "intro": "Los miembros con el rol que elijas pueden escribir comandos en un canal; el Studio lo lee cada 5 segundos con el mismo bot del chat de arriba y contesta ahí. Solo funcionan mientras PZ Mod Studio está abierto, y nunca corren comandos de consola escritos a mano.",
         "list": "!estado · !jugadores · !reiniciar [minutos] · !reiniciar cancelar · !guardar · !mensaje <texto> · !ayuda (también en inglés)",
