@@ -207,12 +207,12 @@ if (only !== 'banners') {
     if (cut) {
       // A video: the clip fills the slide and the caption, drawn on a clear page, goes over it.
       shot(caption(kicker, title, line), png, SW, SH, 1, true);
-      // Kept under 3 MB, so Steam takes it as a preview: narrower and fewer frames until it fits.
+      // Steam refuses a preview image over 2 MB: narrower and fewer frames until it is under 1.9 MB.
       const out = path.join(slideDir, `${name}.gif`);
-      for (const [width, fps] of [[960, 10], [800, 10], [800, 8], [640, 8]]) {
+      for (const [width, fps] of [[960, 10], [800, 10], [800, 8], [720, 8], [640, 8], [640, 6]]) {
         const filter = `[1:v]fps=${fps},scale=${SW}:${SH}:force_original_aspect_ratio=increase:flags=lanczos,crop=${SW}:${SH}:0:0[v];[v][0:v]overlay=0:0:shortest=1,scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`;
         execFileSync('ffmpeg', ['-v', 'error', '-y', '-loop', '1', '-framerate', String(fps), '-i', png, '-ss', String(cut[0]), '-t', String(cut[1] - cut[0]), '-i', src, '-filter_complex', filter, '-loop', '0', out], { stdio: 'inherit' });
-        if (fs.statSync(out).size <= 3 * 1048576) break;
+        if (fs.statSync(out).size <= 1900000) break;
       }
       console.log(`slides/${name}.gif  ${kb(out)}`);
       continue;
