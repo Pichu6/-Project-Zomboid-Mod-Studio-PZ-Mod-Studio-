@@ -327,6 +327,14 @@
     }
   },
   "modList": {
+    "empty": {
+      "noPathsTitle": "Primero indicale al Studio dónde está tu juego",
+      "noPathsBody": "Elegí la carpeta de Project Zomboid y tu carpeta Zomboid en Configuración, y tus mods aparecen acá.",
+      "noPathsButton": "Elegir las carpetas en Configuración",
+      "noModsTitle": "No se encontraron mods",
+      "noModsBody": "No hay mods en tu carpeta del Workshop ni en <code class=\"text-emerald-400 font-mono\">Zomboid/mods</code>. Suscribite a alguno en el Workshop, o instalá uno desde Explorar mods, y después apretá Actualizar.",
+      "refresh": "Actualizar los mods"
+    },
     "go": "Ir",
     "title": "Lista de mods y orden de carga",
     "subscriptions": "Suscripciones de Steam:",
@@ -1298,8 +1306,8 @@
       "patchTitle": "Abre un archivo propio de un mod para parchear un bug. El paquete carga último, así que el juego lee tu copia de ese único archivo.",
       "patch": "Parchear un archivo de un mod",
       "allMergedTitle": "Todos los conflictos de este paquete ya están fusionados y resueltos",
-      "mergeAllTitle": "Aplica el motor AST automático a todos los conflictos desempaquetados",
-      "mergeAll": "⚡ Fusionar todo (AST)",
+      "mergeAllTitle": "Fusiona todos los conflictos de este paquete con el motor automático y publica el paquete de una vez: se escribe en Zomboid/mods y queda último en tu lista de mods. El juego lo lee la próxima vez que arranca.",
+      "mergeAll": "⚡ Fusionar todo y publicar",
       "noMergesTitle": "No hay fusiones activas en este paquete para desfusionar",
       "unmergeAllTitle": "Deshace todas las fusiones de este paquete y restaura los archivos originales",
       "unmergeAll": "↩️ Desfusionar todo",
@@ -1812,7 +1820,7 @@
       "checkAgain": "Chequear de nuevo",
       "check": "Chequear",
       "mpClean": "Ningún mod activo llama directamente desde su código de cliente a algo que el juego mantiene del lado del servidor. (Solo revisa esas llamadas.)",
-      "syncNote": "La sincronización incluye automáticamente tu paquete sintético publicado <b class=\"text-emerald-300\">Z_PZModStudio_*</b> para que los jugadores del servidor usen los parches 3-way unificados sin diferencias de checksum.",
+      "syncNote": "La sincronización escribe los mods que están activos en tu Lista de mods. Un paquete de PZ Mod Studio (<b class=\"text-emerald-300\">Z_PZModStudio_*</b>) activo también entra, pero es un mod local, no un ítem del Workshop: este servidor (en esta PC) lo tiene, los jugadores no lo reciben al descargar, y el juego no los deja entrar sin él. Compartiles el paquete, o apagalo antes de sincronizar.",
       "syncButton": "Escribir mi lista en este servidor (Mods, WorkshopItems y Map)"
     },
     "players": {

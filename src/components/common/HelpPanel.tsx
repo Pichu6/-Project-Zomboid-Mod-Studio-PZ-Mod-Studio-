@@ -28,7 +28,8 @@ const PAGE_OF_TAB: Record<ActiveTab, string> = {
 /** A page's text in this language, else in English. */
 export function helpPage(page: string, language: string): string | null {
   const lang = language.startsWith('es') ? 'es' : 'en';
-  const find = (l: string) => Object.entries(PAGES).find(([path]) => path.endsWith(`/${l}/${page}.md`))?.[1] ?? null;
+  // (a byte-order mark an editor left at the start would hide the title)
+  const find = (l: string) => Object.entries(PAGES).find(([path]) => path.endsWith(`/${l}/${page}.md`))?.[1]?.replace(/^﻿/, '') ?? null;
   return find(lang) ?? find('en');
 }
 

@@ -589,7 +589,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
     }
   };
 
-  // Step 1: Auto-Merge All in memory
+  // Every conflict through the automatic engine, and the package published (App: generateMasterPatch).
   const handleAutoMergeAllClick = async () => {
     // A failure was already shown by TauriService; don't claim success.
     if (onAutoMergeAll && !(await onAutoMergeAll(selectedPackageFolder))) return;

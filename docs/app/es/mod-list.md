@@ -1,4 +1,4 @@
-﻿# Lista de mods
+# Lista de mods
 
 Tus mods instalados: cuáles están prendidos y en qué orden los carga el juego. Cada cambio que hacés acá se guarda al instante en el perfil activo y en `Zomboid/mods/default.txt`, la lista que lee el juego.
 

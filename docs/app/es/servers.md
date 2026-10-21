@@ -40,6 +40,8 @@ Esto compara tus mods activos con lo que tiene el `.ini` del servidor. Un servid
 
 **Escribir mi lista en este servidor (Mods, WorkshopItems y Map)** escribe las tres líneas a partir de tus mods activos, en el orden de carga, y deja todo lo demás como estaba. El archivo anterior queda en `Zomboid/PZModStudio_Backups`.
 
+Un paquete de PZ Mod Studio (`Z_PZModStudio_*`) activo también entra en `Mods=`, pero es un mod local, no un ítem del Workshop: el servidor en esta PC lo tiene, los jugadores no lo reciben al descargar, y el juego no los deja entrar sin él. Compartiles el paquete, o apagalo antes de escribir la lista.
+
 **Chequeo multijugador de los mods activos** (**Chequear**) lista llamadas que el código de cliente de un mod hace directamente donde el juego las pasa por el servidor; en multijugador cambian solo el mundo de ese jugador, o se rechazan.
 
 ## Jugadores

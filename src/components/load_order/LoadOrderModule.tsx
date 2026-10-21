@@ -990,16 +990,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <FolderX className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Point the Studio at your game first</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Set your Project Zomboid folder and your Zomboid folder in App Settings, and your mods appear here.
-            </p>
+            <h3 className="text-base font-bold text-slate-100">{t('modList.empty.noPathsTitle')}</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">{t('modList.empty.noPathsBody')}</p>
           </div>
           <button
             onClick={onGoToSettings}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs py-2.5 rounded-lg shadow transition cursor-pointer"
           >
-            Configure Directory Paths in Settings
+            {t('modList.empty.noPathsButton')}
           </button>
         </div>
       </div>
@@ -1015,11 +1013,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             <ShieldCheck className="w-8 h-8" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-100">No Active Mods Found</h3>
-            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              No mods were found in your Workshop folder or in <code className="text-emerald-400 font-mono">Zomboid/mods</code>.
-              Subscribe to some on the Workshop, or install one from Browse Mods, then press Refresh.
-            </p>
+            <h3 className="text-lg font-bold text-slate-100">{t('modList.empty.noModsTitle')}</h3>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed" dangerouslySetInnerHTML={{ __html: tHtml('modList.empty.noModsBody') }} />
           </div>
 
           <div className="pt-2 flex justify-center">
@@ -1028,7 +1023,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               className="flex items-center justify-center gap-2 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-medium px-5 py-2.5 rounded-lg border border-emerald-800 transition cursor-pointer shadow"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh Subscribed Mods
+              {t('modList.empty.refresh')}
             </button>
           </div>
         </div>

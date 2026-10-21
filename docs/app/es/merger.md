@@ -26,7 +26,7 @@ La barra de arriba tiene **Cargar paquete (.pzmerge)** para importar un paquete 
 La barra de arriba muestra **← Volver a la lista**, un selector **Paquete:** para saltar a otro paquete, el estado y la visibilidad, y estos botones:
 
 - **Parchear un archivo de un mod**: abre un archivo propio de un mod para arreglarlo (ver más abajo).
-- **⚡ Fusionar todo (AST)**: fusiona automáticamente todos los archivos en conflicto, escribe el resultado en el paquete y lo pone en la lista de mods. Después revisá los archivos.
+- **⚡ Fusionar todo y publicar**: fusiona todos los archivos en conflicto con el motor automático y publica el paquete de una vez: se escribe en `Zomboid/mods` y queda último en tu lista de mods, y el juego lo lee la próxima vez que arranca. Después revisá los archivos.
 - **↩️ Desfusionar todo**: descarta todas las fusiones guardadas en este paquete. Queda una copia en `Zomboid/PZModStudio_Backups`, y los archivos ya publicados siguen hasta que publiques de nuevo.
 - **Todos** / **Sin duplicados**: oculta los archivos donde los mods traen copias idénticas, así solo se listan los choques reales.
 - Íconos de carpeta, exportar y reescanear.

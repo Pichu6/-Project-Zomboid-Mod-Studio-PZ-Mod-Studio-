@@ -327,6 +327,14 @@
     }
   },
   "modList": {
+    "empty": {
+      "noPathsTitle": "Point the Studio at your game first",
+      "noPathsBody": "Set your Project Zomboid folder and your Zomboid folder in App Settings, and your mods appear here.",
+      "noPathsButton": "Set the folders in Settings",
+      "noModsTitle": "No mods found",
+      "noModsBody": "No mods were found in your Workshop folder or in <code class=\"text-emerald-400 font-mono\">Zomboid/mods</code>. Subscribe to some on the Workshop, or install one from Browse Mods, then press Refresh.",
+      "refresh": "Refresh the mods"
+    },
     "go": "Go",
     "title": "Mod List & Load Order",
     "subscriptions": "Steam Subscriptions:",
@@ -1298,8 +1306,8 @@
       "patchTitle": "Open one mod's own file to patch a bug in it. The package loads last, so the game reads your copy of that one file.",
       "patch": "Patch a mod file",
       "allMergedTitle": "All conflicts in this package have already been merged and resolved",
-      "mergeAllTitle": "Applies the automatic AST engine to all unpacked conflicts",
-      "mergeAll": "⚡ Merge All (AST)",
+      "mergeAllTitle": "Merges every conflict of this package with the automatic engine and publishes the package at once: it is written to Zomboid/mods and put last in your mod list. The game reads it on its next launch.",
+      "mergeAll": "⚡ Merge all and publish",
       "noMergesTitle": "There are no active merges in this package to unmerge",
       "unmergeAllTitle": "Undoes all merges in this package and restores original files",
       "unmergeAll": "↩️ Unmerge All",
@@ -1812,7 +1820,7 @@
       "checkAgain": "Check again",
       "check": "Check",
       "mpClean": "Nothing the game keeps server-side is called directly by any active mod's client code. (It checks only those calls.)",
-      "syncNote": "The sync will automatically include your published synthetic package <b class=\"text-emerald-300\">Z_PZModStudio_*</b> to ensure server players use the unified 3-Way patches without checksum mismatches.",
+      "syncNote": "The sync writes the mods that are on in your Mod List. A PZ Mod Studio package (<b class=\"text-emerald-300\">Z_PZModStudio_*</b>) that is on goes in too, but it is a local mod, not a Workshop item: this server (on this PC) has it, players do not get it by downloading, and the game does not let them join without it. Share the package with them, or switch it off before syncing.",
       "syncButton": "Write my list into this server (Mods, WorkshopItems and Map)"
     },
     "players": {

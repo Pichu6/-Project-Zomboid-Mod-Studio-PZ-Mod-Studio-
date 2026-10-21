@@ -40,6 +40,8 @@ This compares your active mods with what the server's `.ini` has. A server does 
 
 **Write my list into this server (Mods, WorkshopItems and Map)** writes all three lines from your active mods, in load order, and keeps every other setting as it was. The previous file is saved in `Zomboid/PZModStudio_Backups`.
 
+A PZ Mod Studio package (`Z_PZModStudio_*`) that is on goes into `Mods=` too, but it is a local mod, not a Workshop item: the server on this PC has it, players do not get it by downloading, and the game does not let them join without it. Share the package with them, or switch it off before you write the list.
+
 **Multiplayer check of the active mods** (**Check**) lists calls that a mod's client code makes directly where the game routes them through the server; in multiplayer they change only that player's world, or are refused.
 
 ## Players

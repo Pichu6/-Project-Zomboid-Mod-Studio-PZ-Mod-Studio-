@@ -18,7 +18,8 @@ pages!("index", "profiles", "saves", "monitor", "mod-list", "whats-new", "health
 /// A page in a language ("es", else English); None for a page that is not there.
 pub fn page(name: &str, language: &str) -> Option<&'static str> {
     let name = name.trim().trim_end_matches(".md");
-    PAGES.iter().find(|(n, _, _)| *n == name).map(|(_, en, es)| if language.starts_with("es") { *es } else { *en })
+    // (a byte-order mark an editor left at the start would hide the title)
+    PAGES.iter().find(|(n, _, _)| *n == name).map(|(_, en, es)| if language.starts_with("es") { *es } else { *en }).map(|t| t.trim_start_matches('\u{feff}'))
 }
 
 /// Each page's name and its title (the first line).

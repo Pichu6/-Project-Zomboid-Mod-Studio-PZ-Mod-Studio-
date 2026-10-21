@@ -26,7 +26,7 @@ The top bar has **Load Package (.pzmerge)** to import a package someone sent you
 The top bar shows **← Back to List**, a **Package:** selector to jump to another package, the state and visibility, and these buttons:
 
 - **Patch a mod file**: opens one mod's own file to fix it (see below).
-- **⚡ Merge All (AST)**: merges every conflicting file automatically, writes the result into the package and puts it in the mod list. Review the files afterwards.
+- **⚡ Merge all and publish**: merges every conflicting file with the automatic engine and publishes the package at once: it is written to `Zomboid/mods` and put last in your mod list, and the game reads it on its next launch. Review the files afterwards.
 - **↩️ Unmerge All**: throws away every saved merge in this package. A copy is kept in `Zomboid/PZModStudio_Backups`, and the files already published stay until you publish again.
 - **All** / **No Duplicates**: hides files where the mods ship identical copies, so only real collisions are listed.
 - Folder, export and rescan icons.
