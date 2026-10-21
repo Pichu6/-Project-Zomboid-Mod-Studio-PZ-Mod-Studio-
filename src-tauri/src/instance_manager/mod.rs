@@ -70,7 +70,7 @@ impl AppInstance {
 /// the Java agents of the profile's mods (Zombie Buddy) in or out of the game's launch file.
 fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
     if let Err(e) = crate::studio_link::install_link_mod(z_dir) {
-        eprintln!("[StudioLink] {}", e);
+        crate::diagnostics::error(format!("[StudioLink] {}", e));
     }
     // What the other profiles hold, so the game can tell a mod that is in no profile at all.
     let mut others: Vec<String> = Vec::new();
@@ -89,13 +89,13 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
         }
     }
     if let Err(e) = crate::studio_link::write_link_file(z_dir, &instance.name, &instance.member_ids(), &others) {
-        eprintln!("[StudioLink] {}", e);
+        crate::diagnostics::error(format!("[StudioLink] {}", e));
     }
     // Tests run on throwaway folders and must never edit the real game's launch file.
     let install = if cfg!(test) { String::new() } else { crate::vfs::studio_paths().pz_install_dir };
     if !install.is_empty() {
         if let Err(e) = crate::studio_link::sync_java_agents_when_free(std::path::Path::new(&install), z_dir, &instance.active_mod_ids) {
-            eprintln!("[StudioLink] {}", e);
+            crate::diagnostics::error(format!("[StudioLink] {}", e));
         }
     }
 }

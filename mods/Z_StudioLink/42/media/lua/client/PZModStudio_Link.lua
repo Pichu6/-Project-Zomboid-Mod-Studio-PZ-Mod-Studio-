@@ -386,8 +386,14 @@ local function layoutRow(panel)
         x = panel.studioShowAll:getRight() + 12
     end
     if panel.studioNewButton and panel.studioNewButton:isVisible() then
-        panel.studioNewButton:setX(x)
-        x = panel.studioNewButton:getRight() + 12
+        local button = panel.studioNewButton
+        button:setX(x)
+        -- Not enough room before Favorites (small screens): just "+N", the rest on hover.
+        if button:getRight() > limit and panel.studioNewShort then
+            button:setTitle(panel.studioNewShort)
+            button:setWidth(getTextManager():MeasureStringX(UIFont.Small, panel.studioNewShort) + 16)
+        end
+        x = button:getRight() + 12
     end
     if panel.studioProfileLabel then
         panel.studioProfileLabel:setX(x)
@@ -482,6 +488,7 @@ function ModSelector.ModListPanel:updateView(...)
                     if i > 12 then table.insert(names, "..."); break end
                     table.insert(names, "- " .. modData.name)
                 end
+                self.studioNewShort = "+" .. #orphans
                 show(text("newMods", #orphans), text("newModsTip", #orphans, link.name, table.concat(names, "\n")), 0.3, 0.75, 1.0)
             else
                 button:setVisible(false)
@@ -750,21 +757,29 @@ end
 -- The Studio's own panel, for waiting on the app and for choices: a plain panel of this mod's, so
 -- UI mods that restyle the game's dialogs (and draw OK as a green tick) cannot change what it
 -- says. While it waits, the app's answer is looked for as it is drawn.
-local WaitPanel = ISPanel:derive("StudioLinkWaitPanel")
+local WaitPanel = ISPanelJoypad:derive("StudioLinkWaitPanel")
 Link.WaitPanel = WaitPanel
 
 local function openPanel(title, body, height, choices, waiting)
-    local w = 560
+    -- Fits small screens (1366x768 and less): never wider than the screen, never taller.
+    local w = math.min(560, getCore():getScreenWidth() - 40)
     local h = math.min(height, getCore():getScreenHeight() - 80)
     local panel = WaitPanel:new(getCore():getScreenWidth() / 2 - w / 2, getCore():getScreenHeight() / 2 - h / 2, w, h)
     panel.title = title
     panel.body = body
     panel.choices = choices
     panel.waiting = waiting
+    -- Known before the buttons are made, so they show the controller's buttons.
+    panel.joypad = JoypadState.getMainMenuJoypad()
     panel:initialise()
     panel:instantiate()
     panel:addToUIManager()
     panel:setAlwaysOnTop(true)
+    -- A controller drives it, as it does the game's own dialogs.
+    if panel.joypad then
+        panel.joypad.focus = panel
+        updateJoypadFocus(panel.joypad)
+    end
     return panel
 end
 
@@ -779,7 +794,7 @@ function WaitPanel.choose(title, body, height, choices)
 end
 
 function WaitPanel:new(x, y, w, h)
-    local o = ISPanel.new(self, x, y, w, h)
+    local o = ISPanelJoypad.new(self, x, y, w, h)
     o.backgroundColor = { r = 0.08, g = 0.08, b = 0.08, a = 0.97 }
     o.borderColor = { r = 0.35, g = 0.75, b = 1.0, a = 0.8 }
     o.moveWithMouse = true
@@ -796,10 +811,12 @@ function WaitPanel:createChildren()
     rich:paginate()
     self:addChild(rich)
     self.rich = rich
-    local bw, gap = 150, 10
     local count = #self.choices
+    local gap = 10
+    local bw = math.min(150, math.floor((self.width - 24 - (count - 1) * gap) / count))
     local x = (self.width - (count * bw + (count - 1) * gap)) / 2
-    for _, choice in ipairs(self.choices) do
+    self.buttons = {}
+    for i, choice in ipairs(self.choices) do
         local button = ISButton:new(x, self.height - 36, bw, 24, choice.label, self, function(panel)
             panel:close()
             if choice.onClick then choice.onClick() end
@@ -809,18 +826,40 @@ function WaitPanel:createChildren()
         if choice.accept then
             button.borderColor = { r = 0.35, g = 0.85, b = 0.5, a = 0.9 }
         end
+        -- With a controller: A the main choice, B the first (Back / Cancel), X the one between.
+        choice.pad = choice.accept and "A" or (i == 1 and "B" or "X")
+        if self.joypad and Joypad and Joypad.Texture then
+            button:setJoypadButton(Joypad.Texture[choice.pad .. "Button"])
+        end
+        self.buttons[choice.pad] = button
         self:addChild(button)
         x = x + bw + gap
+    end
+end
+
+function WaitPanel:onJoypadDown(button)
+    local pad = (button == Joypad.AButton and "A") or (button == Joypad.BButton and "B") or (button == Joypad.XButton and "X") or nil
+    local target = pad and self.buttons and self.buttons[pad]
+    -- Only one choice (Cancel): B and A both take it.
+    if not target and self.buttons and #self.choices == 1 and (pad == "A" or pad == "B") then
+        target = self.buttons[self.choices[1].pad]
+    end
+    if target then
+        target:forceClick()
     end
 end
 
 function WaitPanel:close()
     self:setVisible(false)
     self:removeFromUIManager()
+    if self.joypad and self.joypad.focus == self then
+        self.joypad.focus = MainScreen.instance
+        updateJoypadFocus(self.joypad)
+    end
 end
 
 function WaitPanel:prerender()
-    ISPanel.prerender(self)
+    ISPanelJoypad.prerender(self)
     if not self.waiting then return end
     local seconds = now() - (self.started or now())
     self:drawTextRight(tostring(seconds) .. " s", self.width - 12, self.height - 32, 0.6, 0.6, 0.6, 1, UIFont.Small)

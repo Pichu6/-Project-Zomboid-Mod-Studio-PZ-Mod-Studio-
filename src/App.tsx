@@ -240,6 +240,11 @@ export const App: React.FC = () => {
   pathsRef.current = paths;
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    // A background job of the Studio panicked: shown like any failure, with where it happened.
+    let unlistenPanic: (() => void) | null = null;
+    TauriService.listenStudioPanic((text) => reportBackendError('Studio background job', text)).then((u) => {
+      unlistenPanic = u;
+    });
     // A launch-file change the game kept from happening while it ran, made once it closed.
     let unlistenAgents: (() => void) | null = null;
     TauriService.listenJavaAgentsSynced((changes) => {
@@ -263,6 +268,7 @@ export const App: React.FC = () => {
     return () => {
       if (unlisten) unlisten();
       if (unlistenAgents) unlistenAgents();
+      if (unlistenPanic) unlistenPanic();
     };
   }, [refreshActiveProfile]);
 

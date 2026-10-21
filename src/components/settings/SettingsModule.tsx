@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { DiagnosticsCard } from './DiagnosticsCard';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb, KeyRound, ExternalLink, Loader2 } from 'lucide-react';
 import { PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
@@ -710,6 +711,8 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             </button>
           </div>
         )}
+
+        {activeSubTab === 'PATHS' && <DiagnosticsCard paths={paths} />}
 
         {activeSubTab === 'PATHS' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">

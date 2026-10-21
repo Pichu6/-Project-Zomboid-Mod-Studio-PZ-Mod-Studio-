@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod claude_agent;
 pub mod compat;
 pub mod devtools;
+pub mod diagnostics;
 pub mod diff_engine;
 pub mod error_report;
 pub mod images;
@@ -430,6 +431,29 @@ fn java_agents_plan_cmd(paths: StudioPaths, active_mod_ids: Vec<String>) -> Resu
 fn whats_new_cmd(paths: StudioPaths, with_notes: bool, since: Option<u64>) -> Result<whats_new::WhatsNew, String> {
     let workshop = vfs::studio_paths().workshop_dir;
     Ok(whats_new::whats_new(&zomboid_dir_of(&paths)?, &workshop, with_notes, since))
+}
+
+/// Everything a bug report needs, as text, with the user name and the PC's name masked.
+#[tauri::command(async)]
+fn diagnostics_report_cmd(paths: StudioPaths) -> Result<String, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let saved = vfs::studio_paths();
+    Ok(diagnostics::report(&z, &saved.pz_install_dir, &saved.workshop_dir))
+}
+
+/// A line from the window into the Studio's log (the errors it shows).
+#[tauri::command]
+fn log_from_window_cmd(level: String, text: String) {
+    let level = if level == "ERROR" || level == "WARN" { level } else { "INFO".to_string() };
+    diagnostics::log(&level, &text.chars().take(2000).collect::<String>());
+}
+
+/// Opens the folder of the Studio's log.
+#[tauri::command(async)]
+fn open_studio_log_folder_cmd() -> Result<(), String> {
+    let dir = diagnostics::log_path().and_then(|p| p.parent().map(|d| d.to_path_buf())).ok_or("The Zomboid folder was not found.")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    open::that(&dir).map_err(|e| e.to_string())
 }
 
 /// Every save, its backups, and the room on the disk that holds them.
@@ -1188,6 +1212,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // A panic anywhere is logged with where it happened, and the window is told.
+            let handle = app.handle().clone();
+            diagnostics::install_panic_hook(move |text| {
+                let _ = tauri::Emitter::emit(&handle, diagnostics::PANIC_EVENT, text);
+            });
+            diagnostics::log("INFO", &format!("PZ Mod Studio {} started", env!("CARGO_PKG_VERSION")));
             // Follow console.txt from the start: the game is often launched from Steam.
             sandbox::watch_console_log(app.handle().clone());
             // What the game's Mods screen changes comes back to the active profile.
@@ -1222,6 +1252,9 @@ pub fn run() {
             write_link_health_cmd,
             link_status_cmd,
             saves_overview_cmd,
+            diagnostics_report_cmd,
+            log_from_window_cmd,
+            open_studio_log_folder_cmd,
             whats_new_cmd,
             save_session_diffs_cmd,
             java_agents_plan_cmd,

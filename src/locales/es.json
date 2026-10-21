@@ -201,6 +201,14 @@
           "s3": "Asegurate de que el proceso se inicie con entrada y salida estándar (stdio)."
         }
       }
+    },
+    "diagnostics": {
+      "title": "Diagnóstico",
+      "blurb": "Para reportar un problema: versiones del Studio y de Windows, las carpetas, la versión del juego, el perfil activo, el Studio Link, Zombie Buddy, si Steam está limitando los pedidos y el final del registro del Studio. Tu nombre de usuario de Windows y el nombre de la PC se reemplazan por <user> y <pc>; revisalo antes de pegarlo en algún lado.",
+      "copy": "Copiar diagnóstico",
+      "copied": "Copiado",
+      "openLog": "Abrir carpeta de registros",
+      "failed": "No se pudo copiar."
     }
   },
   "profiles": {
@@ -1307,7 +1315,10 @@
       "Writing the error report": "Escribir el informe de error",
       "Subscribing": "Suscribirse",
       "Unsubscribing": "Desuscribirse",
-      "Changing the mods of the profile": "Cambiar los mods del perfil"
+      "Changing the mods of the profile": "Cambiar los mods del perfil",
+      "Studio background job": "Una tarea de fondo del Studio",
+      "Gathering the diagnostics": "Reunir el diagnóstico",
+      "Opening the logs folder": "Abrir la carpeta de registros"
     },
     "explain": {
       "noZomboid": "El Studio no encuentra tu carpeta Zomboid. Configurala en Configuración.",

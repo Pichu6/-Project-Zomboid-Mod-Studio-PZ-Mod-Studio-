@@ -144,7 +144,7 @@ fn sync_java_agents_for_launch(install_dir: &Path, user_zomboid_dir: &str) {
     // Only a list read whole: an unreadable default.txt must not take the agents out.
     if let Some(active) = crate::load_order::ini_parser::try_parse_default_txt(&z_dir.join("mods").join("default.txt")) {
         if let Err(e) = crate::studio_link::sync_java_agents_when_free(install_dir, &z_dir, &active) {
-            eprintln!("[StudioLink] {}", e);
+            crate::diagnostics::error(format!("[StudioLink] {}", e));
         }
     }
     // The companion mods the player has installed run this build's scripts, not an older Studio's.
@@ -152,7 +152,7 @@ fn sync_java_agents_for_launch(install_dir: &Path, user_zomboid_dir: &str) {
     let z = z_dir.to_string_lossy();
     if z_dir.join("mods").join("Z_PZModStudio_Bridge").is_dir() && bridge_companion_mod_needs_update(&z) {
         if let Err(e) = install_bridge_companion_mod(&z) {
-            eprintln!("[Bridge] {}", e);
+            crate::diagnostics::error(format!("[Bridge] {}", e));
         }
     }
 }

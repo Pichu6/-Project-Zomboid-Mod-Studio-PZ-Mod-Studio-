@@ -201,6 +201,14 @@
           "s3": "Make sure the process is started with standard input and output pipes (stdio)."
         }
       }
+    },
+    "diagnostics": {
+      "title": "Diagnostics",
+      "blurb": "For a bug report: the Studio's and Windows' versions, the folders, the game build, the active profile, the Studio Link, Zombie Buddy, whether Steam is limiting requests, and the end of the Studio's log. Your Windows user name and the PC's name are replaced with <user> and <pc>; look before you paste it anywhere.",
+      "copy": "Copy diagnostics",
+      "copied": "Copied",
+      "openLog": "Open the logs folder",
+      "failed": "Could not copy them."
     }
   },
   "profiles": {
@@ -1307,7 +1315,10 @@
       "Writing the error report": "Writing the error report",
       "Subscribing": "Subscribing",
       "Unsubscribing": "Unsubscribing",
-      "Changing the mods of the profile": "Changing the mods of the profile"
+      "Changing the mods of the profile": "Changing the mods of the profile",
+      "Studio background job": "A background job of the Studio",
+      "Gathering the diagnostics": "Gathering the diagnostics",
+      "Opening the logs folder": "Opening the logs folder"
     },
     "explain": {
       "noZomboid": "The Studio cannot find your Zomboid folder. Set it in App Settings.",

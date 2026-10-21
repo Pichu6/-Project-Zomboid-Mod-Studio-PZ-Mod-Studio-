@@ -129,6 +129,24 @@ impl Pace {
     }
 }
 
+impl Pace {
+    /// Each lane cooling now, and for how long, in words.
+    pub fn describe(&self, now: Instant) -> String {
+        let mut parts: Vec<String> = self
+            .lanes
+            .iter()
+            .filter_map(|(lane, s)| s.cool_until.filter(|u| *u > now).map(|u| format!("{:?} limiting us for {} s more", lane, (u - now).as_secs())))
+            .collect();
+        parts.sort();
+        if parts.is_empty() { "answering normally".to_string() } else { parts.join("; ") }
+    }
+}
+
+/// Whether Steam is limiting the Studio right now, for the diagnostics.
+pub fn state() -> String {
+    pace().lock().unwrap_or_else(|e| e.into_inner()).describe(Instant::now())
+}
+
 fn pace() -> &'static Mutex<Pace> {
     static PACE: OnceLock<Mutex<Pace>> = OnceLock::new();
     PACE.get_or_init(|| Mutex::new(Pace::default()))

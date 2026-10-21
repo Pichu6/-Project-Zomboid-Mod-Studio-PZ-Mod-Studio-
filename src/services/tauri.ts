@@ -213,6 +213,8 @@ export function explainError(err: unknown): string {
 /** Logs a failed backend call and tells the UI about it, so failures never look like success. */
 export const reportBackendError = (action: string, err: unknown): void => {
   console.error(`${action} failed:`, err);
+  // Into the Studio's own log too, so a bug report has it.
+  void invoke('log_from_window_cmd', { level: 'ERROR', text: `${action} failed: ${errorMessage(err)}` }).catch(() => undefined);
   window.dispatchEvent(
     new CustomEvent<BackendErrorDetail>(BACKEND_ERROR_EVENT, { detail: { action, message: errorMessage(err) } })
   );
@@ -1659,6 +1661,29 @@ export const TauriService = {
       reportBackendError('Changing the mods of the profile', err);
       throw err;
     }
+  },
+
+  /** Everything a bug report needs, with the user name and the PC's name masked. */
+  diagnosticsReport: async (paths: StudioPathsUI): Promise<string | null> => {
+    try {
+      return await invoke<string>('diagnostics_report_cmd', { paths });
+    } catch (err) {
+      reportBackendError('Gathering the diagnostics', err);
+      return null;
+    }
+  },
+
+  openStudioLogFolder: async (): Promise<void> => {
+    try {
+      await invoke('open_studio_log_folder_cmd');
+    } catch (err) {
+      reportBackendError('Opening the logs folder', err);
+    }
+  },
+
+  /** A background job of the Studio panicked: the text says where. */
+  listenStudioPanic: async (callback: (text: string) => void): Promise<UnlistenFn> => {
+    return await listen<string>('studio-panic', (event) => callback(event.payload));
   },
 
   /** Every save, its backups, and the room on the disk. */

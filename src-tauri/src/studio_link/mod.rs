@@ -300,7 +300,7 @@ fn handle_requests<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, r
                 let _ = app.emit(PROFILE_CHANGED_EVENT, profile.clone());
             }
             Ok(None) => {}
-            Err(e) => eprintln!("[StudioLink] could not add the mods the game asked for: {}", e),
+            Err(e) => crate::diagnostics::error(format!("[StudioLink] could not add the mods the game asked for: {}", e)),
         }
         for r in &adds {
             answers.push(match &result {
@@ -495,7 +495,7 @@ pub fn start_backup<R: tauri::Runtime>(app: &tauri::AppHandle<R>, z_dir: &Path, 
     thread::spawn(move || {
         let result = crate::save_backup::backup_save(&z_dir, &save_id, reason, false);
         if let Err(e) = &result {
-            eprintln!("[StudioLink] could not back up {}: {}", save_id, e);
+            crate::diagnostics::error(format!("[StudioLink] could not back up {}: {}", save_id, e));
         }
         write_saves_file(&z_dir);
         let _ = app.emit(SAVES_CHANGED_EVENT, &save_id);
@@ -587,7 +587,7 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                 game_seen = stamp;
                 if let Some(state) = std::fs::read_to_string(&game_file).ok().and_then(|t| parse_game_state(&t)) {
                     if let Err(e) = record_save_reference(&z_dir, &state) {
-                        eprintln!("[StudioLink] could not note the save's mods: {}", e);
+                        crate::diagnostics::error(format!("[StudioLink] could not note the save's mods: {}", e));
                     }
                     if state.state == "ingame" && !state.save.is_empty() {
                         playing = Some(state.save.clone());
@@ -647,7 +647,7 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                     let _ = app.emit(PROFILE_CHANGED_EVENT, profile);
                 }
                 Ok(None) => {}
-                Err(e) => eprintln!("[StudioLink] could not update the profile from the game: {}", e),
+                Err(e) => crate::diagnostics::error(format!("[StudioLink] could not update the profile from the game: {}", e)),
             }
         }
     });
@@ -724,7 +724,7 @@ fn finish_pending_agents(user_zomboid_dir: &Path) -> Option<AgentChanges> {
     match sync_java_agents_when_free(Path::new(&install), user_zomboid_dir, &active) {
         Ok(changes) => changes,
         Err(e) => {
-            eprintln!("[StudioLink] {}", e);
+            crate::diagnostics::error(format!("[StudioLink] {}", e));
             None
         }
     }
@@ -841,6 +841,17 @@ mod tests {
             let map: std::collections::BTreeMap<String, String> = serde_json::from_str(json).unwrap();
             assert_eq!(map.keys().cloned().collect::<Vec<_>>(), keys);
             assert!(map.values().all(|v| !v.contains('%')), "a % would be read by the game as a format");
+        }
+        // The same {1}, {2}... in both languages, line by line.
+        let marks = |v: &str| {
+            let mut m: Vec<String> = v.match_indices('{').filter_map(|(i, _)| v[i..].find('}').map(|j| v[i..i + j + 1].to_string())).collect();
+            m.sort();
+            m
+        };
+        let en: std::collections::BTreeMap<String, String> = serde_json::from_str(UI_EN).unwrap();
+        let es: std::collections::BTreeMap<String, String> = serde_json::from_str(UI_ES).unwrap();
+        for (k, v) in &en {
+            assert_eq!(marks(v), marks(&es[k]), "placeholders of {}", k);
         }
     }
 

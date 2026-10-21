@@ -65,7 +65,7 @@ pub fn refresh_if_installed(user_zomboid_dir: &Path) {
         return;
     }
     if let Err(e) = install_claude_agent_mod(&user_zomboid_dir.to_string_lossy()) {
-        eprintln!("[ClaudeAgent] {}", e);
+        crate::diagnostics::error(format!("[ClaudeAgent] {}", e));
     }
 }
 
