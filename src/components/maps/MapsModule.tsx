@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Map as MapIcon, RefreshCw, TriangleAlert, ZoomIn, ZoomOut } from 'lucide-react';
+import { Map as MapIcon, Maximize, RefreshCw, TriangleAlert } from 'lucide-react';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { MapCells, MapImage } from '../../types';
@@ -14,14 +14,24 @@ const key = (c: [number, number]) => `${c[0]},${c[1]}`;
 const colour = (i: number, alpha = 0.85) => `hsla(${(i * 137.5) % 360}, 70%, 55%, ${alpha})`;
 const VANILLA = 'rgba(71, 85, 105, 0.9)';
 const CLASH = 'rgba(239, 68, 68, 1)';
-/** Pixels per cell, smallest to largest. */
-const ZOOMS = [6, 10, 16, 24, 32];
 const SQUARES_PER_CELL = 256;
+/** Pixels per cell, the farthest and the closest the wheel goes. */
+const MIN_SCALE = 2;
+const MAX_SCALE = 64;
+const VIEW_HEIGHT = 560;
+
+/** Where the grid is on the canvas: a cell (x, y) is drawn at ((x - x0) * scale + ox, (y - y0) * scale + oy). */
+interface View {
+  scale: number;
+  ox: number;
+  oy: number;
+}
 
 /**
  * Every cell of the world the game ships and each installed map mod covers, on one grid over the
  * real map: which maps replace parts of the game's world, and where two maps fight over the same
- * cells. Below, the mods about maps with no cells of their own (spawn points, tiles).
+ * cells. The wheel zooms where the pointer is, dragging pans. Below, the mods about maps with no
+ * cells of their own (spawn points, tiles).
  */
 export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
   const { t } = useTranslation();
@@ -30,11 +40,14 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
   const [onlyActive, setOnlyActive] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ x: number; y: number; px: number; py: number } | null>(null);
-  const [realMap, setRealMap] = useState(true);
-  const [zoom, setZoom] = useState<number | null>(null);
   const [images, setImages] = useState<{ img: MapImage; el: HTMLImageElement }[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
+  const [width, setWidth] = useState(800);
+  const [view, setView] = useState<View | null>(null);
+  const [dragging, setDragging] = useState(false);
   const canvas = useRef<HTMLCanvasElement | null>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
   const load = async () => {
     if (!paths.user_zomboid_dir) return;
@@ -62,20 +75,41 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
   const vanillaSet = useMemo(() => new Set((data?.vanilla ?? []).map(key)), [data]);
   const clashSet = useMemo(() => new Set(clashes.flatMap((c) => c.cells.map(key))), [clashes]);
 
+  // The world plus every map mod, so a map does not jump when another is hidden.
   const bounds = useMemo(() => {
-    const all = [...(data?.vanilla ?? []), ...shown.flatMap((m) => m.cells)];
+    const all = [...(data?.vanilla ?? []), ...(data?.maps ?? []).flatMap((m) => m.cells)];
     if (all.length === 0) return null;
     const xs = all.map((c) => c[0]);
     const ys = all.map((c) => c[1]);
     return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
-  }, [data, shown]);
-  const fitted = bounds ? Math.max(3, Math.min(10, Math.floor(720 / Math.max(bounds.x1 - bounds.x0 + 1, bounds.y1 - bounds.y0 + 1)))) : 6;
-  const size = zoom ?? fitted;
+  }, [data]);
+
+  const fit = useCallback((): View | null => {
+    if (!bounds) return null;
+    const cw = bounds.x1 - bounds.x0 + 1;
+    const ch = bounds.y1 - bounds.y0 + 1;
+    const scale = Math.max(MIN_SCALE, Math.min((width - 16) / cw, (VIEW_HEIGHT - 16) / ch));
+    return { scale, ox: (width - cw * scale) / 2, oy: (VIEW_HEIGHT - ch * scale) / 2 };
+  }, [bounds, width]);
+  useEffect(() => {
+    if (!view) setView(fit());
+  }, [fit, view]);
+
+  // The canvas is as wide as its box.
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(Math.max(200, Math.floor(el.clientWidth))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [data]);
+
+  const scale = view?.scale ?? 8;
   // The images come at 16 px per cell, or 32 when zoomed in past 16.
-  const imagePx = size > 16 ? 32 : 16;
+  const imagePx = scale > 16 ? 32 : 16;
 
   useEffect(() => {
-    if (!realMap || !data || !paths.user_zomboid_dir) return;
+    if (!data || !paths.user_zomboid_dir) return;
     let gone = false;
     const urls: string[] = [];
     setImagesLoading(true);
@@ -104,43 +138,48 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
       gone = true;
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [realMap, data, paths, imagePx]);
+  }, [data, paths, imagePx]);
 
   useEffect(() => {
     const el = canvas.current;
-    if (!el || !bounds || !data) return;
-    const w = (bounds.x1 - bounds.x0 + 1) * size;
-    const h = (bounds.y1 - bounds.y0 + 1) * size;
-    el.width = w;
-    el.height = h;
+    if (!el || !bounds || !data || !view) return;
+    const dpr = window.devicePixelRatio || 1;
+    el.width = Math.round(width * dpr);
+    el.height = Math.round(VIEW_HEIGHT * dpr);
+    el.style.width = `${width}px`;
+    el.style.height = `${VIEW_HEIGHT}px`;
     const g = el.getContext('2d');
     if (!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = '#020617';
-    g.fillRect(0, 0, w, h);
-    const withMap = realMap && images.length > 0;
-    const gap = size > 4 ? 1 : 0;
-    const at = (c: [number, number]) => [(c[0] - bounds.x0) * size, (c[1] - bounds.y0) * size] as const;
+    g.fillRect(0, 0, width, VIEW_HEIGHT);
+    const s = view.scale;
+    const gap = s > 4 ? 1 : 0;
+    const at = (c: [number, number]) => [(c[0] - bounds.x0) * s + view.ox, (c[1] - bounds.y0) * s + view.oy] as const;
+    const visible = (x: number, y: number) => x > -s && y > -s && x < width && y < VIEW_HEIGHT;
     const cell = (c: [number, number], fill: string) => {
       const [x, y] = at(c);
+      if (!visible(x, y)) return;
       g.fillStyle = fill;
-      g.fillRect(x, y, size - gap, size - gap);
+      g.fillRect(x, y, s - gap, s - gap);
     };
+    const withMap = images.length > 0;
     if (withMap) {
-      g.imageSmoothingEnabled = true;
+      g.imageSmoothingEnabled = s < 32;
       for (const { img, el: im } of images) {
         const shownMod = img.folder === 'Muldraugh, KY' || shown.some((m) => m.folder === img.folder);
         if (!shownMod) continue;
-        const x = (img.bounds[0] / SQUARES_PER_CELL - bounds.x0) * size;
-        const y = (img.bounds[1] / SQUARES_PER_CELL - bounds.y0) * size;
-        g.drawImage(im, x, y, ((img.bounds[2] - img.bounds[0]) / SQUARES_PER_CELL) * size, ((img.bounds[3] - img.bounds[1]) / SQUARES_PER_CELL) * size);
+        const x = (img.bounds[0] / SQUARES_PER_CELL - bounds.x0) * s + view.ox;
+        const y = (img.bounds[1] / SQUARES_PER_CELL - bounds.y0) * s + view.oy;
+        g.drawImage(im, x, y, ((img.bounds[2] - img.bounds[0]) / SQUARES_PER_CELL) * s, ((img.bounds[3] - img.bounds[1]) / SQUARES_PER_CELL) * s);
       }
       // The game's world as a faint grid over its own picture.
-      if (size >= 6) {
+      if (s >= 6) {
         g.strokeStyle = 'rgba(15, 23, 42, 0.35)';
         g.lineWidth = 1;
         for (const c of data.vanilla) {
           const [x, y] = at(c);
-          g.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+          if (visible(x, y)) g.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
         }
       }
       for (const m of shown) for (const c of m.cells) cell(c, colour(m.idx, 0.45));
@@ -150,21 +189,56 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
       for (const m of shown) for (const c of m.cells) cell(c, colour(m.idx));
       for (const c of clashes) for (const x of c.cells) cell(x, CLASH);
     }
-  }, [data, shown, clashes, bounds, size, realMap, images]);
+  }, [data, shown, clashes, bounds, view, width, images]);
 
-  const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!bounds) return;
+  // The wheel zooms on the point under the pointer (not the page: the listener is not passive).
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const px = e.clientX - r.left;
+      const py = e.clientY - r.top;
+      setView((v) => {
+        if (!v) return v;
+        const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * Math.pow(1.0015, -e.deltaY)));
+        const k = next / v.scale;
+        return { scale: next, ox: px - (px - v.ox) * k, oy: py - (py - v.oy) * k };
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [data]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0 || !view) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
+    setDragging(true);
+  };
+  const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    drag.current = null;
+    setDragging(false);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!bounds || !view) return;
+    const d = drag.current;
+    if (d) {
+      setView({ ...view, ox: d.ox + e.clientX - d.x, oy: d.oy + e.clientY - d.y });
+      setHover(null);
+      return;
+    }
     const r = e.currentTarget.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / size) + bounds.x0;
-    const y = Math.floor((e.clientY - r.top) / size) + bounds.y0;
-    setHover({ x, y, px: e.clientX - r.left, py: e.clientY - r.top });
+    const px = e.clientX - r.left;
+    const py = e.clientY - r.top;
+    const x = Math.floor((px - view.ox) / view.scale) + bounds.x0;
+    const y = Math.floor((py - view.oy) / view.scale) + bounds.y0;
+    setHover({ x, y, px, py });
   };
   const hoverMaps = hover ? byCell.get(`${hover.x},${hover.y}`) ?? [] : [];
   const hoverVanilla = hover ? vanillaSet.has(`${hover.x},${hover.y}`) : false;
-  const zoomBy = (step: number) => {
-    const next = step > 0 ? ZOOMS.find((z) => z > size) : [...ZOOMS].reverse().find((z) => z < size);
-    if (next) setZoom(next);
-  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 space-y-4">
@@ -183,17 +257,8 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
           <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} className="accent-emerald-500" />
           {t('maps.onlyActive')}
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer w-fit">
-          <input type="checkbox" checked={realMap} onChange={(e) => setRealMap(e.target.checked)} className="accent-emerald-500" />
-          {t('maps.realMap')}
-        </label>
-        <span className="flex items-center gap-1 text-xs text-slate-400">
-          {t('maps.zoom')}
-          <button onClick={() => zoomBy(-1)} disabled={size <= ZOOMS[0]} aria-label={`${t('maps.zoom')} -`} className="p-1 rounded border border-slate-700 hover:bg-slate-800 disabled:opacity-40 cursor-pointer"><ZoomOut className="w-3.5 h-3.5" /></button>
-          <span className="w-10 text-center font-mono">{size}px</span>
-          <button onClick={() => zoomBy(1)} disabled={size >= ZOOMS[ZOOMS.length - 1]} aria-label={`${t('maps.zoom')} +`} className="p-1 rounded border border-slate-700 hover:bg-slate-800 disabled:opacity-40 cursor-pointer"><ZoomIn className="w-3.5 h-3.5" /></button>
-        </span>
-        {realMap && imagesLoading && <span className="text-[11px] text-slate-500 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />{t('maps.loadingImage')}</span>}
+        <span className="text-[11px] text-slate-500">{t('maps.howToMove')}</span>
+        {imagesLoading && <span className="text-[11px] text-slate-500 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />{t('maps.loadingImage')}</span>}
       </div>
 
       {(clashes.length > 0 || tiledefClashes.length > 0) && (
@@ -220,18 +285,33 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
 
       {data && (
         <div className="flex flex-col xl:flex-row gap-4 items-start">
-          <div className="relative rounded-lg border border-slate-800 bg-slate-950 p-2 overflow-auto max-w-full max-h-[75vh]">
-            <canvas ref={canvas} onMouseMove={onMove} onMouseLeave={() => setHover(null)} className="block" style={{ imageRendering: realMap && images.length > 0 ? 'auto' : 'pixelated' }} aria-label={t('maps.gridLabel')} />
-            {hover && (hoverVanilla || hoverMaps.length > 0) && (
-              <div className="absolute pointer-events-none rounded-md border border-slate-700 bg-slate-900/95 px-2 py-1 text-[11px] text-slate-200 shadow-lg" style={{ left: hover.px + 18, top: hover.py + 8 }}>
-                <div className="font-mono text-slate-400">{t('maps.cell', { x: hover.x, y: hover.y })}</div>
-                {hoverVanilla && <div className="text-slate-400">{t('maps.vanillaCell')}</div>}
-                {hoverMaps.map((name) => <div key={name}>{name}</div>)}
-                {clashSet.has(`${hover.x},${hover.y}`) && <div className="text-red-300">{t('maps.sharedCell')}</div>}
-              </div>
-            )}
+          <div className="flex-[3] min-w-0 w-full">
+            <div ref={box} className="relative rounded-lg border border-slate-800 bg-slate-950 overflow-hidden">
+              <canvas
+                ref={canvas}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerUp}
+                onPointerLeave={() => setHover(null)}
+                onDoubleClick={() => setView(fit())}
+                className={`block touch-none select-none ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                aria-label={t('maps.gridLabel')}
+              />
+              <button onClick={() => setView(fit())} aria-label={t('maps.fit')} title={t('maps.fit')} className="absolute top-2 right-2 p-1.5 rounded-md border border-slate-700 bg-slate-900/90 text-slate-300 hover:bg-slate-800 cursor-pointer">
+                <Maximize className="w-3.5 h-3.5" />
+              </button>
+              {hover && !dragging && (hoverVanilla || hoverMaps.length > 0) && (
+                <div className="absolute pointer-events-none rounded-md border border-slate-700 bg-slate-900/95 px-2 py-1 text-[11px] text-slate-200 shadow-lg" style={{ left: Math.min(hover.px + 18, width - 180), top: hover.py + 8 }}>
+                  <div className="font-mono text-slate-400">{t('maps.cell', { x: hover.x, y: hover.y })}</div>
+                  {hoverVanilla && <div className="text-slate-400">{t('maps.vanillaCell')}</div>}
+                  {hoverMaps.map((name) => <div key={name}>{name}</div>)}
+                  {clashSet.has(`${hover.x},${hover.y}`) && <div className="text-red-300">{t('maps.sharedCell')}</div>}
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-slate-400">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: VANILLA }} />{t('maps.legendVanilla')}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm border border-slate-600" />{t('maps.legendVanilla')}</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: CLASH }} />{t('maps.legendClash')}</span>
             </div>
           </div>

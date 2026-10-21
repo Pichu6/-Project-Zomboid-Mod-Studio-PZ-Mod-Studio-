@@ -2305,8 +2305,6 @@
     "outsideVanilla": "fuera del mundo del juego",
     "buildsOn": "se apoya en {{maps}}",
     "off": "apagado",
-    "realMap": "Mostrar el mapa real",
-    "zoom": "Zoom",
     "loadingImage": "Armando el mapa…",
     "related": "Otros mods de mapas ({{count}})",
     "relatedBlurb": "Estos mods son de mapas pero no agregan celdas propias: puntos de aparición o una lista de mapas para otro mapa, o las casillas y texturas con que se arman los mapas. Necesitan que esté activo aquello para lo que son (el mapa, o el mod que usa esas casillas).",
@@ -2314,6 +2312,8 @@
     "kind_tiles": "casillas",
     "noRelated": "No hay otros mods de mapas instalados.",
     "tiledefNow": "El número de definición de casillas {{number}} lo usan {{mods}}, y hay más de uno activo: sus casillas se pisan entre sí (paredes, pisos o muebles equivocados). Dejá activo solo uno.",
-    "tiledefIf": "El número de definición de casillas {{number}} lo usan {{mods}}: solo uno de ellos puede estar activo a la vez."
+    "tiledefIf": "El número de definición de casillas {{number}} lo usan {{mods}}: solo uno de ellos puede estar activo a la vez.",
+    "howToMove": "Rueda para hacer zoom, arrastrá para moverte, doble clic para verlo entero.",
+    "fit": "Ver el mapa entero"
   }
 }

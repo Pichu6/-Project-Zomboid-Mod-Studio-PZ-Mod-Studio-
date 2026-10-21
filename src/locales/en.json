@@ -2305,8 +2305,6 @@
     "outsideVanilla": "outside the game's world",
     "buildsOn": "builds on {{maps}}",
     "off": "off",
-    "realMap": "Show the real map",
-    "zoom": "Zoom",
     "loadingImage": "Putting the map together…",
     "related": "Other map mods ({{count}})",
     "relatedBlurb": "These mods are about maps but add no cells of their own: spawn points or a map list for another map, or the tiles and textures maps are built from. They need what they are for to be on (the map, or the mod that uses the tiles).",
@@ -2314,6 +2312,8 @@
     "kind_tiles": "tiles",
     "noRelated": "No other map mods installed.",
     "tiledefNow": "Tile definition number {{number}} is used by {{mods}}, and more than one is on: their tiles overwrite each other (wrong walls, floors or furniture). Keep only one of them on.",
-    "tiledefIf": "Tile definition number {{number}} is used by {{mods}}: only one of them can be on at a time."
+    "tiledefIf": "Tile definition number {{number}} is used by {{mods}}: only one of them can be on at a time.",
+    "howToMove": "Wheel to zoom, drag to move, double-click to see it all.",
+    "fit": "See the whole map"
   }
 }
