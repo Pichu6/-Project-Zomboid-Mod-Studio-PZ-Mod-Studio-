@@ -1829,15 +1829,17 @@
     },
     "reload": {
       "title": "Recargar en el juego mientras corre",
-      "intro": "Guardá un archivo Lua de este mod y el juego lo recarga sin reiniciar: el puente del Studio le pasa al juego <code class=\"mx-1\">reloadLuaFile</code> por cada archivo que cambió (lo mismo que hacen las ventanas de debug del juego), y lo que pasó se muestra acá y en la consola. El mod puente tiene que estar activo y el juego, más allá del menú principal. El código de nivel superior del archivo corre de nuevo; las tablas que reconstruye se reconstruyen, los hooks que agrega se agregan otra vez.",
+      "intro": "Guardá un archivo Lua de este mod y el juego lo recarga sin reiniciar. El Studio ve el archivo en cuanto se guarda, lo revisa con el parser (uno que no parsea no se manda: su línea y columna se muestran acá), y su puente le pasa al juego <code class=\"mx-1\">reloadLuaFile</code>, en el menú principal, en la partida o en pausa. El mod puente tiene que estar activo. El código de nivel superior del archivo corre de nuevo; sus manejadores de eventos pasan a las funciones nuevas (no se agregan dos veces), pero uno que el archivo agrega por primera vez recién se registra después de un Reset Lua completo.",
       "watchAria": "Vigilar los archivos Lua de este mod y recargarlos en el juego cuando cambien",
       "allTitle": "Todos los .lua de este mod, ahora",
       "all": "Recargar todos los Lua de este mod ahora",
-      "watching": "Vigilando {{name}}: un .lua guardado se recarga en menos de dos segundos.",
+      "watching": "Vigilando {{name}}: un .lua guardado se recarga en una fracción de segundo.",
       "notRunning": "El juego no está corriendo: no hay dónde recargar. Inicialo primero (con el puente activo).",
       "asked": "Se le pidió al juego recargar {{count}} archivo(s)…",
-      "noAnswer": "Sin respuesta del juego en 8 s: ¿está activo el mod puente (Z_PZModStudio_Bridge) y pasaste el menú principal? El Monitor muestra la consola.",
-      "changed": "cambió: {{path}}"
+      "noAnswer": "Sin respuesta del juego en 6 s: ¿está activo el mod puente (Z_PZModStudio_Bridge) en esta partida? El Monitor muestra la consola.",
+      "changed": "cambió: {{path}}",
+      "syntax": "no se mandó, no parsea: {{path}} línea {{line}}, columna {{col}}: {{message}}",
+      "timing": "detectado → enviado {{sent}} ms → aplicado {{applied}} ms → acá {{total}} ms"
     },
     "mp": {
       "title": "Revisión multijugador",

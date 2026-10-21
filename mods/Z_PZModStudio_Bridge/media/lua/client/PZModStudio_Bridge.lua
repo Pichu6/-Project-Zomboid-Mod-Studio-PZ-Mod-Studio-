@@ -396,7 +396,97 @@ function Bridge.ExecuteCommand(jsonStr, player)
     end
 end
 
+-- -----------------------------------------------------------------------------
+-- Developer reload. The Studio writes pz_dev_reload_queue.txt ("id=<id>", then a "file=<path>"
+-- line per file) the moment a Lua file of the mod under development is saved. It is looked at
+-- every few frames on the main menu, in game and paused (the queue above needs a player), and
+-- only while the Studio watches: pz_dev_watch.txt says on=1, looked at every two seconds.
+-- reloadLuaFile reroutes the file's event handlers to the new functions itself (an Events.X.Add
+-- during a reload does nothing), so handlers are not doubled.
+-- -----------------------------------------------------------------------------
+Bridge.DEV_QUEUE = "pz_dev_reload_queue.txt"
+Bridge.DEV_RESULT = "pz_dev_reload.json"
+Bridge.DEV_WATCH = "pz_dev_watch.txt"
+Bridge.devTicks = 0
+
+local function readLines(name)
+    local reader = getFileReader(name, false)
+    if not reader then return nil end
+    local out = {}
+    local line = reader:readLine()
+    while line do
+        table.insert(out, line)
+        line = reader:readLine()
+    end
+    reader:close()
+    return out
+end
+
+local function jsonString(s)
+    s = string.gsub(tostring(s), '\\', '\\\\')
+    s = string.gsub(s, '"', '\\"')
+    s = string.gsub(s, '\n', '\\n')
+    s = string.gsub(s, '\r', '\\r')
+    s = string.gsub(s, '\t', '\\t')
+    return '"' .. s .. '"'
+end
+
+function Bridge.DevReload(lines)
+    local id, files = "", {}
+    for _, l in ipairs(lines) do
+        local key, value = string.match(l, "^(%a+)=(.*)$")
+        if key == "id" then id = value end
+        if key == "file" and value ~= "" then table.insert(files, value) end
+    end
+    local results = {}
+    local player = getPlayer()
+    if isClient() and not (player and Bridge.IsStaff(player)) then
+        table.insert(results, jsonString("failed: reloading is refused on a multiplayer server unless you are admin/staff"))
+        files = {}
+    end
+    -- Under -debug an error in the reloaded file would stop the game in the Lua debugger.
+    local quiet = isDebugEnabled() and UIManager and UIManager.isShowLuaDebuggerOnError and UIManager.isShowLuaDebuggerOnError()
+    if quiet then pcall(UIManager.setShowLuaDebuggerOnError, false) end
+    for _, f in ipairs(files) do
+        local ok, err = pcall(reloadLuaFile, f)
+        local line = (ok and "ok " or "failed ") .. f .. (ok and "" or (": " .. tostring(err)))
+        table.insert(results, jsonString(line))
+        print("[PZModStudio] reload " .. line)
+    end
+    if quiet then pcall(UIManager.setShowLuaDebuggerOnError, true) end
+    local writer = getFileWriter(Bridge.DEV_RESULT, true, false)
+    if writer then
+        writer:write('{"id":' .. jsonString(id) .. ',"applied_ms":' .. string.format("%.0f", getTimestampMs()) .. ',"results":[' .. table.concat(results, ",") .. ']}')
+        writer:close()
+    end
+end
+
+function Bridge.DevTick()
+    Bridge.devTicks = Bridge.devTicks + 1
+    if Bridge.devWatching == nil or Bridge.devTicks % 120 == 0 then
+        local watch = readLines(Bridge.DEV_WATCH)
+        Bridge.devWatching = watch ~= nil and watch[1] == "on=1"
+    end
+    if not Bridge.devWatching or Bridge.devTicks % 3 ~= 0 then return end
+    local lines = readLines(Bridge.DEV_QUEUE)
+    if not lines or #lines == 0 then return end
+    -- Emptied first: a file that fails to reload is not reloaded again every few frames.
+    local writer = getFileWriter(Bridge.DEV_QUEUE, true, false)
+    if writer then writer:close() end
+    Bridge.DevReload(lines)
+end
+
+local function devTick()
+    local ok, err = pcall(Bridge.DevTick)
+    if not ok and not Bridge.devFailed then
+        Bridge.devFailed = true
+        print("[PZModStudio_Bridge] developer reload failed: " .. tostring(err))
+    end
+end
+
 if Events then
+    if Events.OnTickEvenPaused then Events.OnTickEvenPaused.Add(devTick) elseif Events.OnTick then Events.OnTick.Add(devTick) end
+    if Events.OnFETick then Events.OnFETick.Add(devTick) end
     if Events.OnTick then Events.OnTick.Add(Bridge.OnTick) end
     if Events.OnDisconnect then Events.OnDisconnect.Add(Bridge.ClearPlayersState) end
     if Events.OnMainMenuEnter then Events.OnMainMenuEnter.Add(Bridge.ClearPlayersState) end

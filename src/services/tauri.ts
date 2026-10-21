@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -612,22 +612,36 @@ export const TauriService = {
     }
   },
 
-  /** Asks the running game (through the bridge) to reload these files; resolves to the request id. */
-  reloadLuaInGame: async (paths: StudioPathsUI, files: string[]): Promise<string> => {
+  /** Watches a mod's folder: each Lua file saved is checked and reloaded in the running game. */
+  devWatchStart: async (paths: StudioPathsUI, rootDir: string): Promise<boolean> => {
     try {
-      return await invoke<string>('reload_lua_in_game_cmd', { paths, files });
+      await invoke('dev_watch_start_cmd', { paths, rootDir });
+      return true;
     } catch (err) {
-      reportBackendError('Reloading Lua in the game', err);
-      throw err;
+      reportBackendError('Watching the mod', err);
+      return false;
     }
   },
 
-  reloadResult: async (paths: StudioPathsUI): Promise<ReloadResult | null> => {
+  devWatchStop: async (paths: StudioPathsUI): Promise<void> => {
     try {
-      return await invoke<ReloadResult | null>('reload_result_cmd', { paths });
+      await invoke('dev_watch_stop_cmd', { paths });
     } catch {
-      return null;
+      // Nothing to stop.
     }
+  },
+
+  /** Every Lua file of the mod, reloaded now; the stages come as `dev-reload` events. */
+  devReloadAll: async (paths: StudioPathsUI, rootDir: string): Promise<void> => {
+    try {
+      await invoke('dev_reload_all_cmd', { paths, rootDir });
+    } catch (err) {
+      reportBackendError('Reloading Lua in the game', err);
+    }
+  },
+
+  listenDevReload: async (callback: (e: DevReloadEvent) => void): Promise<UnlistenFn> => {
+    return await listen<DevReloadEvent>('dev-reload', (event) => callback(event.payload));
   },
 
   /** The game's pid when ProjectZomboid64.exe is running, else null. */

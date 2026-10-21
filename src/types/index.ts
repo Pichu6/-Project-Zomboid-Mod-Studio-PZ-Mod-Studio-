@@ -676,6 +676,20 @@ export interface ReloadResult {
   results: string[];
 }
 
+/** One stage of reloading a mod's Lua in the running game (the `dev-reload` event). */
+export interface DevReloadEvent {
+  /** syntax (files not sent), sent, applied, no_answer, not_running */
+  stage: 'syntax' | 'sent' | 'applied' | 'no_answer' | 'not_running';
+  id: string;
+  files: string[];
+  results: string[];
+  problems: FileProblem[];
+  detected_ms: number;
+  sent_ms: number;
+  applied_ms: number;
+  answered_ms: number;
+}
+
 export interface ModValidation {
   root: string;
   lua_files: number;

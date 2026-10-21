@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { Code2, ExternalLink, FolderOpen, FolderPlus, Loader2, Map as MapIcon, Play, RefreshCw, RotateCcw, Users, Wrench } from 'lucide-react';
@@ -74,63 +74,63 @@ export const DeveloperModule: React.FC<DeveloperModuleProps> = ({ paths, mods, c
   };
 
   /**
-   * Reload in the game while it runs: the bridge hands the game `reloadLuaFile` for each file
-   * that changed, and the game writes back what happened. Watching looks every two seconds.
+   * Reload in the game while it runs. The Studio watches the mod's folder (Windows says the
+   * moment a file is saved), checks each changed Lua file with the parser, and hands the good
+   * ones to the bridge, which reloads them on the menu, in game or paused. Each stage comes back
+   * as an event with its time.
    */
   const [watching, setWatching] = useState(false);
   const [reloadLog, setReloadLog] = useState<string[]>([]);
   const [reloading, setReloading] = useState(false);
-  const lastCheck = useRef<number>(Date.now());
-  const log = (line: string) => setReloadLog((l) => [`${new Date().toLocaleTimeString()}  ${line}`, ...l].slice(0, 40));
+  const log = (line: string) => setReloadLog((l) => [`${new Date().toLocaleTimeString()}  ${line}`, ...l].slice(0, 60));
 
-  const reloadFiles = async (files: string[]) => {
-    if (files.length === 0) return;
-    if ((await TauriService.gameStatus()) === null) {
-      log(i18next.t('developer.reload.notRunning'));
-      return;
-    }
-    setReloading(true);
-    try {
-      const id = await TauriService.reloadLuaInGame(paths, files);
-      log(i18next.t('developer.reload.asked', { count: files.length }));
-      // The bridge looks at its queue about twice a second; give it a few seconds.
-      for (let i = 0; i < 16; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        const result = await TauriService.reloadResult(paths);
-        if (result && result.id === id) {
-          result.results.forEach((r) => log(r));
-          return;
-        }
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    TauriService.listenDevReload((e) => {
+      if (e.stage === 'syntax') {
+        e.problems.forEach((p) => log(i18next.t('developer.reload.syntax', { path: p.path, line: p.line ?? '?', col: p.col ?? '?', message: p.message })));
+      } else if (e.stage === 'sent') {
+        e.files.forEach((f) => log(i18next.t('developer.reload.changed', { path: f })));
+      } else if (e.stage === 'applied') {
+        e.results.forEach((r) => log(r));
+        log(i18next.t('developer.reload.timing', {
+          sent: Math.max(0, e.sent_ms - e.detected_ms),
+          applied: Math.max(0, e.applied_ms - e.detected_ms),
+          total: Math.max(0, e.answered_ms - e.detected_ms),
+        }));
+        setReloading(false);
+      } else if (e.stage === 'not_running') {
+        log(i18next.t('developer.reload.notRunning'));
+        setReloading(false);
+      } else if (e.stage === 'no_answer') {
+        log(i18next.t('developer.reload.noAnswer'));
+        setReloading(false);
       }
-      log(i18next.t('developer.reload.noAnswer'));
-    } catch {
-      // Already shown by TauriService.
-    } finally {
-      setReloading(false);
-    }
-  };
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   useEffect(() => {
     if (!watching || !root) return;
-    lastCheck.current = Date.now();
-    const t = setInterval(() => {
-      void (async () => {
-        const since = lastCheck.current;
-        const changed = await TauriService.changedLuaFiles(root, since);
-        if (changed.length === 0) return;
-        lastCheck.current = Math.max(...changed.map((c) => c.modified_ms)) + 1;
-        changed.forEach((c) => log(i18next.t('developer.reload.changed', { path: c.path })));
-        await reloadFiles(changed.map((c) => c.absolute));
-      })();
-    }, 2000);
-    return () => clearInterval(t);
+    void TauriService.devWatchStart(paths, root).then((ok) => {
+      if (!ok) setWatching(false);
+    });
+    return () => {
+      void TauriService.devWatchStop(paths);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watching, root]);
 
   const reloadAllNow = async () => {
     if (!root) return;
-    const all = await TauriService.changedLuaFiles(root, 0);
-    await reloadFiles(all.map((c) => c.absolute));
+    setReloading(true);
+    await TauriService.devReloadAll(paths, root);
+    // The stages come as events; this only keeps the button from being pressed twice.
+    setTimeout(() => setReloading(false), 7000);
   };
 
   /** A new mod: the form, and what came of it. */

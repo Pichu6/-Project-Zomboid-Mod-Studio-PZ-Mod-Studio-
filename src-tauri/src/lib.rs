@@ -817,16 +817,26 @@ fn changed_lua_files_cmd(root_dir: String, since_ms: u64) -> Vec<devtools::Chang
     devtools::changed_lua_files(std::path::Path::new(&root_dir), since_ms)
 }
 
-/// Asks the running game, through the bridge, to reload these Lua files; returns the request id.
+/// Starts watching a mod's folder: every Lua file saved under it is checked and reloaded in the
+/// running game, each stage sent as a `dev-reload` event.
 #[tauri::command(async)]
-fn reload_lua_in_game_cmd(paths: StudioPaths, files: Vec<String>) -> Result<String, String> {
-    devtools::reload_lua_in_game(&paths.user_zomboid_dir, &files)
+fn dev_watch_start_cmd(app: tauri::AppHandle, paths: StudioPaths, root_dir: String) -> Result<(), String> {
+    devtools::start_dev_watch(app, std::path::PathBuf::from(root_dir), paths.user_zomboid_dir)
 }
 
-/// What the game wrote back about the last reload request, when it has.
 #[tauri::command(async)]
-fn reload_result_cmd(paths: StudioPaths) -> Option<devtools::ReloadResult> {
-    devtools::read_reload_result(&paths.user_zomboid_dir)
+fn dev_watch_stop_cmd(paths: StudioPaths) {
+    devtools::stop_dev_watch(&paths.user_zomboid_dir);
+}
+
+/// Reloads every Lua file of the mod now (the same stages as the watcher, as events).
+#[tauri::command(async)]
+fn dev_reload_all_cmd(app: tauri::AppHandle, paths: StudioPaths, root_dir: String) {
+    let files = devtools::changed_lua_files(std::path::Path::new(&root_dir), 0);
+    std::thread::spawn(move || {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        devtools::send_reload(&app, &paths.user_zomboid_dir, files, now);
+    });
 }
 
 /// Whether ProjectZomboid64.exe is running, and its pid.
@@ -1515,8 +1525,9 @@ pub fn run() {
             mp_check_mods_cmd,
             launch_map_tool_cmd,
             changed_lua_files_cmd,
-            reload_lua_in_game_cmd,
-            reload_result_cmd,
+            dev_watch_start_cmd,
+            dev_watch_stop_cmd,
+            dev_reload_all_cmd,
             create_mod_list_cmd,
             rename_mod_list_cmd,
             delete_mod_list_cmd,

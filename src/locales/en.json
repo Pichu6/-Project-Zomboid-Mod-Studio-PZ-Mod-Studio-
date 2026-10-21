@@ -1829,15 +1829,17 @@
     },
     "reload": {
       "title": "Reload in the game while it runs",
-      "intro": "Save a Lua file of this mod and the game reloads it without restarting: the Studio's bridge hands the game <code class=\"mx-1\">reloadLuaFile</code> for each file that changed (what the game's own debug windows do), and what happened shows here and in the console. The bridge mod must be on and the game past the main menu. A file's top-level code runs again; tables it rebuilds are rebuilt, hooks it adds are added again.",
+      "intro": "Save a Lua file of this mod and the game reloads it without restarting. The Studio sees the file the moment it is saved, checks it with the parser (one that does not parse is not sent: its line and column show here), and its bridge hands the game <code class=\"mx-1\">reloadLuaFile</code> for it, on the main menu, in game or paused. The bridge mod must be on. A file's top-level code runs again; its event handlers are pointed at the new functions (not added twice), but a handler the file adds for the first time only registers after a full Reset Lua.",
       "watchAria": "Watch this mod's Lua files and reload them in the game when they change",
       "allTitle": "Every .lua of this mod, now",
       "all": "Reload every Lua of this mod now",
-      "watching": "Watching {{name}}: a saved .lua is reloaded within two seconds.",
+      "watching": "Watching {{name}}: a saved .lua is reloaded in a fraction of a second.",
       "notRunning": "The game is not running: nothing to reload into. Start it (with the bridge on) first.",
       "asked": "Asked the game to reload {{count}} file(s)…",
-      "noAnswer": "No answer from the game in 8 s: is the bridge mod (Z_PZModStudio_Bridge) on, and are you past the main menu? The Monitor shows the console.",
-      "changed": "changed: {{path}}"
+      "noAnswer": "No answer from the game in 6 s: is the bridge mod (Z_PZModStudio_Bridge) on in this game? The Monitor shows the console.",
+      "changed": "changed: {{path}}",
+      "syntax": "not sent, it does not parse: {{path}} line {{line}}, column {{col}}: {{message}}",
+      "timing": "detected → sent {{sent}} ms → applied {{applied}} ms → here {{total}} ms"
     },
     "mp": {
       "title": "Multiplayer check",

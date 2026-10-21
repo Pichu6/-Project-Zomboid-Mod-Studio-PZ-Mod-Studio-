@@ -257,11 +257,18 @@ mod tests {
 // ------------------------------------------------------------------------------------------
 // Reload a changed Lua file in the running game, through the bridge.
 //
-// The game's own debug windows call `reloadLuaFile(path)`; the bridge runs any Lua the Studio
-// hands it (`eval_lua`). So: find the files of the mod that changed since the last look, hand the
-// game a few lines that reload each one in a pcall, and have them write what happened to a file
-// of their own (`Zomboid/Lua/pz_dev_reload.json`), since the bridge overwrites its response file
-// with its own status after every command.
+// While the Developer screen watches a mod, Windows says the moment a file under it changes
+// (a change notification on the folder, not a look every two seconds). Each changed `.lua` goes
+// through the parser first: one that does not parse is not sent, and its line and column are
+// shown. The rest go to the bridge's own reload queue (`Zomboid/Lua/pz_dev_reload_queue.txt`),
+// which it reads every few frames on the main menu, in game and paused, while
+// `pz_dev_watch.txt` says on=1. It calls `reloadLuaFile` for each and writes what happened, and
+// when, to `pz_dev_reload.json`. Every stage goes to the window as a `dev-reload` event with its
+// time, so the log says "detected -> sent -> applied".
+//
+// `reloadLuaFile` reroutes the file's event handlers to the new functions itself (an
+// `Events.X.Add` during a reload does nothing), so handlers are not doubled; a handler added for
+// the first time in the edited file only registers after a full Lua reset.
 // ------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -299,73 +306,210 @@ pub fn changed_lua_files(root: &Path, since_ms: u64) -> Vec<ChangedFile> {
 }
 
 const RELOAD_RESULT_FILE: &str = "pz_dev_reload.json";
-
-/// A Lua string literal: backslashes and quotes escaped.
-fn lua_string(s: &str) -> String {
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
-/// The Lua the game runs: one `reloadLuaFile` per file, each in a pcall, the outcome printed to
-/// the console (where the Monitor sees it) and written to the result file with the request id.
-/// The JSON is built by hand because the game's Lua has no JSON library.
-pub fn reload_request_code(id: &str, files: &[String]) -> String {
-    let list: Vec<String> = files.iter().map(|f| lua_string(f)).collect();
-    let mut code = String::new();
-    code.push_str(&format!("local files = {{ {} }}\n", list.join(", ")));
-    code.push_str("local results = {}\n");
-    code.push_str("for _, f in ipairs(files) do\n");
-    code.push_str("  local ok, err = pcall(reloadLuaFile, f)\n");
-    code.push_str("  local line = (ok and 'ok ' or 'failed ') .. f .. (ok and '' or (': ' .. tostring(err)))\n");
-    code.push_str("  table.insert(results, line)\n");
-    code.push_str("  print('[PZModStudio] reload ' .. line)\n");
-    code.push_str("end\n");
-    code.push_str(&format!("local w = getFileWriter({}, true, false)\n", lua_string(RELOAD_RESULT_FILE)));
-    code.push_str("if w then\n");
-    // JSON-escape each result: a backslash becomes two, a quote gets one in front.
-    code.push_str("  local parts = {}\n");
-    code.push_str("  for _, r in ipairs(results) do\n");
-    code.push_str("    local s = string.gsub(tostring(r), '\\\\', '\\\\\\\\')\n");
-    code.push_str("    s = string.gsub(s, '\"', '\\\\\"')\n");
-    code.push_str("    table.insert(parts, '\"' .. s .. '\"')\n");
-    code.push_str("  end\n");
-    code.push_str(&format!("  w:write('{{\"id\":\"{}\",\"results\":[' .. table.concat(parts, ',') .. ']}}')\n", id));
-    code.push_str("  w:close()\n");
-    code.push_str("end\n");
-    code
-}
-
-/// Asks the running game to reload these files; returns the request id to wait for.
-pub fn reload_lua_in_game(user_zomboid_dir: &str, files: &[String]) -> Result<String, String> {
-    if files.is_empty() {
-        return Err("Nothing to reload.".to_string());
-    }
-    let id = format!("reload_{}", chrono::Utc::now().timestamp_millis());
-    // The result file from the last time would answer for this one.
-    for dir in [Path::new(user_zomboid_dir).join("Lua"), PathBuf::from(user_zomboid_dir)] {
-        let _ = std::fs::remove_file(dir.join(RELOAD_RESULT_FILE));
-    }
-    let command = serde_json::json!({ "id": id, "action": "eval_lua", "code": reload_request_code(&id, files) });
-    crate::sandbox::write_game_ipc_command(user_zomboid_dir, command)?;
-    Ok(id)
-}
+const RELOAD_QUEUE_FILE: &str = "pz_dev_reload_queue.txt";
+const WATCH_FILE: &str = "pz_dev_watch.txt";
+pub const DEV_RELOAD_EVENT: &str = "dev-reload";
+/// How long a reload is waited for; the bridge answers within a few frames.
+const ANSWER_WAIT_MS: u64 = 6000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReloadResult {
     pub id: String,
     /// "ok <file>" or "failed <file>: <error>", one per file.
     pub results: Vec<String>,
+    /// When the game applied it (unix ms, the game's clock: the same as this machine's).
+    #[serde(default)]
+    pub applied_ms: u64,
+}
+
+/// One stage of a reload, for the Developer screen's log.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DevReloadEvent {
+    /// `syntax` (files not sent), `sent`, `applied`, `no_answer`, `not_running`.
+    pub stage: String,
+    pub id: String,
+    /// From the mod's root.
+    pub files: Vec<String>,
+    pub results: Vec<String>,
+    /// The files that do not parse, with where.
+    pub problems: Vec<FileProblem>,
+    pub detected_ms: u64,
+    pub sent_ms: u64,
+    pub applied_ms: u64,
+    pub answered_ms: u64,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+/// The queue file the bridge reads: `id=<id>`, then `file=<path>` per file.
+pub fn reload_queue_text(id: &str, files: &[String]) -> String {
+    let mut out = format!("id={}\n", id);
+    for f in files {
+        out.push_str(&format!("file={}\n", f.replace(['\r', '\n'], "")));
+    }
+    out
 }
 
 /// What the game wrote back, when it has.
 pub fn read_reload_result(user_zomboid_dir: &str) -> Option<ReloadResult> {
-    for dir in [Path::new(user_zomboid_dir).join("Lua"), PathBuf::from(user_zomboid_dir)] {
-        if let Ok(text) = std::fs::read_to_string(dir.join(RELOAD_RESULT_FILE)) {
-            if let Ok(r) = serde_json::from_str::<ReloadResult>(&text) {
-                return Some(r);
-            }
+    let text = std::fs::read_to_string(Path::new(user_zomboid_dir).join("Lua").join(RELOAD_RESULT_FILE)).ok()?;
+    serde_json::from_str::<ReloadResult>(&text).ok()
+}
+
+/// The files that parse, and the problems of those that do not.
+pub fn check_before_reload(files: &[ChangedFile]) -> (Vec<ChangedFile>, Vec<FileProblem>) {
+    let mut good = Vec::new();
+    let mut problems = Vec::new();
+    for f in files {
+        match std::fs::read_to_string(&f.absolute) {
+            Ok(text) => match crate::diff_engine::lua::validate_lua_syntax(&text).error_message {
+                Some(msg) => problems.extend(lua_problems(&f.path, &msg)),
+                None => good.push(f.clone()),
+            },
+            // Not UTF-8: the game reads it, the parser cannot; sent as it is.
+            Err(_) => good.push(f.clone()),
         }
     }
-    None
+    (good, problems)
+}
+
+/// Checks these files, hands the good ones to the game and waits for its answer, telling the
+/// window at each stage.
+pub fn send_reload<R: tauri::Runtime>(app: &tauri::AppHandle<R>, user_zomboid_dir: &str, files: Vec<ChangedFile>, detected_ms: u64) {
+    use tauri::Emitter;
+    let emit = |e: DevReloadEvent| {
+        let _ = app.emit(DEV_RELOAD_EVENT, e);
+    };
+    let (good, problems) = check_before_reload(&files);
+    if !problems.is_empty() {
+        emit(DevReloadEvent { stage: "syntax".into(), problems, detected_ms, ..Default::default() });
+    }
+    if good.is_empty() {
+        return;
+    }
+    let names: Vec<String> = good.iter().map(|f| f.path.clone()).collect();
+    if crate::sandbox::find_running_pz_pid().is_none() {
+        emit(DevReloadEvent { stage: "not_running".into(), files: names, detected_ms, ..Default::default() });
+        return;
+    }
+    let lua = Path::new(user_zomboid_dir).join("Lua");
+    let id = format!("reload_{}", now_ms());
+    let _ = std::fs::remove_file(lua.join(RELOAD_RESULT_FILE));
+    let absolute: Vec<String> = good.iter().map(|f| f.absolute.clone()).collect();
+    if let Err(e) = crate::load_order::ini_parser::atomic_write(lua.join(RELOAD_QUEUE_FILE), reload_queue_text(&id, &absolute)) {
+        emit(DevReloadEvent { stage: "no_answer".into(), id, files: names, results: vec![e.to_string()], detected_ms, ..Default::default() });
+        return;
+    }
+    let sent_ms = now_ms();
+    emit(DevReloadEvent { stage: "sent".into(), id: id.clone(), files: names.clone(), detected_ms, sent_ms, ..Default::default() });
+    while now_ms().saturating_sub(sent_ms) < ANSWER_WAIT_MS {
+        if let Some(r) = read_reload_result(user_zomboid_dir).filter(|r| r.id == id) {
+            emit(DevReloadEvent { stage: "applied".into(), id, files: names, results: r.results, detected_ms, sent_ms, applied_ms: r.applied_ms, answered_ms: now_ms(), ..Default::default() });
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+    emit(DevReloadEvent { stage: "no_answer".into(), id, files: names, detected_ms, sent_ms, ..Default::default() });
+}
+
+/// The watcher running now: its stop flag.
+static WATCHER: std::sync::Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>> = std::sync::Mutex::new(None);
+
+fn write_watch_flag(user_zomboid_dir: &str, on: bool) {
+    let lua = Path::new(user_zomboid_dir).join("Lua");
+    if lua.is_dir() {
+        let _ = crate::load_order::ini_parser::atomic_write(lua.join(WATCH_FILE), if on { "on=1\n" } else { "on=0\n" });
+    }
+}
+
+/// Stops the watcher, and tells the bridge to stop looking at its queue.
+pub fn stop_dev_watch(user_zomboid_dir: &str) {
+    if let Ok(mut w) = WATCHER.lock() {
+        if let Some(flag) = w.take() {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    write_watch_flag(user_zomboid_dir, false);
+}
+
+/// Watches `root` until stopped (or another watch starts): every saved `.lua` under it is
+/// reloaded in the game.
+pub fn start_dev_watch<R: tauri::Runtime>(app: tauri::AppHandle<R>, root: PathBuf, user_zomboid_dir: String) -> Result<(), String> {
+    if !root.is_dir() {
+        return Err(format!("{} is not a folder.", root.display()));
+    }
+    stop_dev_watch(&user_zomboid_dir);
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    if let Ok(mut w) = WATCHER.lock() {
+        *w = Some(stop.clone());
+    }
+    write_watch_flag(&user_zomboid_dir, true);
+    std::thread::Builder::new()
+        .name("dev-watch".into())
+        .spawn(move || watch_loop(&app, &root, &user_zomboid_dir, &stop))
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Files changed since the last batch; `since` moves past them.
+fn take_changes(root: &Path, since: &mut u64) -> Vec<ChangedFile> {
+    let changed = changed_lua_files(root, *since);
+    if let Some(latest) = changed.iter().map(|c| c.modified_ms).max() {
+        *since = latest;
+    }
+    changed
+}
+
+#[cfg(windows)]
+fn watch_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, root: &Path, user_zomboid_dir: &str, stop: &std::sync::atomic::AtomicBool) {
+    use std::os::windows::ffi::OsStrExt;
+    use std::sync::atomic::Ordering;
+    use windows_sys::Win32::Foundation::{INVALID_HANDLE_VALUE, WAIT_OBJECT_0};
+    use windows_sys::Win32::Storage::FileSystem::{FindCloseChangeNotification, FindFirstChangeNotificationW, FindNextChangeNotification, FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE};
+    use windows_sys::Win32::System::Threading::WaitForSingleObject;
+
+    let wide: Vec<u16> = root.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let handle = unsafe { FindFirstChangeNotificationW(wide.as_ptr(), 1, FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME) };
+    if handle == INVALID_HANDLE_VALUE {
+        crate::diagnostics::error(format!("[Developer] cannot watch {}; looking every half second instead", root.display()));
+        return poll_loop(app, root, user_zomboid_dir, stop);
+    }
+    let mut since = now_ms();
+    while !stop.load(Ordering::Relaxed) {
+        // Woken the moment something changes; every 200 ms otherwise, to see the stop flag.
+        if unsafe { WaitForSingleObject(handle, 200) } != WAIT_OBJECT_0 {
+            continue;
+        }
+        let detected = now_ms();
+        unsafe { FindNextChangeNotification(handle) };
+        // An editor saves in a few writes: wait until the folder is quiet for 100 ms.
+        while unsafe { WaitForSingleObject(handle, 100) } == WAIT_OBJECT_0 {
+            unsafe { FindNextChangeNotification(handle) };
+        }
+        let changed = take_changes(root, &mut since);
+        if !changed.is_empty() && !stop.load(Ordering::Relaxed) {
+            send_reload(app, user_zomboid_dir, changed, detected);
+        }
+    }
+    unsafe { FindCloseChangeNotification(handle) };
+}
+
+#[cfg(not(windows))]
+fn watch_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, root: &Path, user_zomboid_dir: &str, stop: &std::sync::atomic::AtomicBool) {
+    poll_loop(app, root, user_zomboid_dir, stop)
+}
+
+fn poll_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, root: &Path, user_zomboid_dir: &str, stop: &std::sync::atomic::AtomicBool) {
+    let mut since = now_ms();
+    while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let changed = take_changes(root, &mut since);
+        if !changed.is_empty() {
+            send_reload(app, user_zomboid_dir, changed, now_ms());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -373,17 +517,26 @@ mod reload_tests {
     use super::*;
 
     #[test]
-    fn the_request_names_each_file_and_the_result_file_and_carries_its_id() {
-        let code = reload_request_code("reload_1", &["C:/Users/x/Zomboid/mods/My/42/media/lua/client/a.lua".into(), "D:/q\"uote.lua".into()]);
-        assert!(code.contains("\"C:/Users/x/Zomboid/mods/My/42/media/lua/client/a.lua\""));
-        assert!(code.contains("\"D:/q\\\"uote.lua\""), "{}", code);
-        assert!(code.contains("pcall(reloadLuaFile, f)"));
-        assert!(code.contains("getFileWriter(\"pz_dev_reload.json\""));
-        assert!(code.contains("\"id\":\"reload_1\""), "{}", code);
-        // The Lua escapes a backslash in a result as two, and a quote with one in front.
-        assert!(code.contains("string.gsub(tostring(r), '\\\\', '\\\\\\\\')"), "{}", code);
-        let r: ReloadResult = serde_json::from_str(r#"{"id":"reload_1","results":["ok a.lua","failed b.lua: nope"]}"#).unwrap();
+    fn the_queue_names_the_request_and_each_file() {
+        let text = reload_queue_text("reload_1", &["C:/Users/x/Zomboid/mods/My/42/media/lua/client/a.lua".into(), "D:/b\n.lua".into()]);
+        assert_eq!(text, "id=reload_1\nfile=C:/Users/x/Zomboid/mods/My/42/media/lua/client/a.lua\nfile=D:/b.lua\n");
+        let r: ReloadResult = serde_json::from_str(r#"{"id":"reload_1","applied_ms":1792590000123,"results":["ok a.lua","failed b.lua: nope"]}"#).unwrap();
         assert_eq!(r.results.len(), 2);
+        assert_eq!(r.applied_ms, 1792590000123);
+    }
+
+    #[test]
+    fn a_file_that_does_not_parse_is_not_sent() {
+        let dir = std::env::temp_dir().join(format!("pzms-reload-check-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("media/lua/client")).unwrap();
+        std::fs::write(dir.join("media/lua/client/good.lua"), "local x = 1\nreturn x\n").unwrap();
+        std::fs::write(dir.join("media/lua/client/bad.lua"), "local x = = 1\n").unwrap();
+        let (good, problems) = check_before_reload(&changed_lua_files(&dir, 0));
+        assert_eq!(good.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), vec!["media/lua/client/good.lua"]);
+        assert!(!problems.is_empty() && problems.iter().all(|p| p.path == "media/lua/client/bad.lua"), "{:?}", problems);
+        assert_eq!(problems[0].line, Some(1));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -396,6 +549,9 @@ mod reload_tests {
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].path, "media/lua/client/a.lua");
         assert!(changed_lua_files(&dir, all[0].modified_ms + 1).is_empty());
+        let mut since = 0;
+        assert_eq!(take_changes(&dir, &mut since).len(), 1);
+        assert!(take_changes(&dir, &mut since).is_empty(), "a batch is not sent twice");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
