@@ -84,7 +84,7 @@ Apagados salvo que los actives. Con el bot de arriba configurado, escribí un **
 - `!guardar` guarda el mundo; `!mensaje <texto>` le dice algo a todos en el juego.
 - `!ayuda` los lista. También funcionan en inglés (`!status`, `!players`, `!restart`, `!save`, `!msg`).
 
-Solo funcionan mientras PZ Mod Studio está abierto, y nunca corren un comando de consola escrito a mano. Usá un canal que solo vean los admins: el canal del chat también entra al juego.
+Le hablan al servidor por RCON: un servidor que creó el juego no tiene contraseña RCON, así que el Studio le pone una al azar la próxima vez que lo inicia (antes guarda una copia del `.ini`); eso también hace que **Detener** guarde antes de cerrar. Solo funcionan mientras PZ Mod Studio está abierto, y nunca corren un comando de consola escrito a mano. Usá un canal que solo vean los admins: el canal del chat también entra al juego.
 
 ## Bueno saber
 

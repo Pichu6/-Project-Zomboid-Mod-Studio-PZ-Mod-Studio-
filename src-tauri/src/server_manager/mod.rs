@@ -146,6 +146,19 @@ pub fn check_server_mods(
 }
 
 /// 32 hex characters from the process's random hash keys (no RNG crate needed for this).
+/// Sets a random `RCONPassword` in a server's `.ini` when it has none (backed up first).
+/// Returns whether it was set.
+pub fn ensure_rcon_password(ini_path: &Path, backups: &Path) -> Result<bool, String> {
+    let Ok(text) = fs::read_to_string(ini_path) else { return Ok(false) };
+    let has = text.lines().any(|l| l.trim().strip_prefix("RCONPassword=").is_some_and(|v| !v.trim().is_empty()));
+    if has {
+        return Ok(false);
+    }
+    let text = crate::discord::ini_set(&text, "RCONPassword", &random_password());
+    crate::load_order::ini_parser::write_file_with_backup(ini_path, &text, backups)?;
+    Ok(true)
+}
+
 fn random_password() -> String {
     use std::hash::{BuildHasher, Hasher};
     (0..2)
@@ -373,6 +386,13 @@ pub fn launch_dedicated_server(
     }
     if clean_admin_pass.chars().any(|c| "&|<>^%\"!()".contains(c) || c.is_control()) {
         return Err("The admin password cannot contain any of: & | < > ^ % \" ! ( )".to_string());
+    }
+
+    // A server the game made has no RCON password: give it one, so Stop saves before quitting and
+    // the Discord commands can talk to it.
+    let ini_path = Path::new(&user_zomboid_dir).join("Server").join(format!("{}.ini", clean_name));
+    if let Err(e) = ensure_rcon_password(&ini_path, &Path::new(&user_zomboid_dir).join("PZModStudio_Backups")) {
+        crate::diagnostics::error(format!("[Servers] Could not set an RCON password for {}: {}", clean_name, e));
     }
 
     let java_exe = install_path.join("jre64").join("bin").join("java.exe");

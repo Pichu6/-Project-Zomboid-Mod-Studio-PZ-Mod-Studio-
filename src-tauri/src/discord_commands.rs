@@ -126,6 +126,8 @@ fn say(language: &str, key: &str, args: &[&str]) -> String {
         ("saved", true) => "💾 **{0}** guardó el mundo.",
         ("sent", false) => "Said in the game.",
         ("sent", true) => "Dicho en el juego.",
+        ("noRcon", false) => "⚠️ **{0}** has no RCON password, so the Studio cannot talk to it. Stop it and start it again from the Studio: it sets one.",
+        ("noRcon", true) => "⚠️ **{0}** no tiene contraseña RCON, así que el Studio no puede hablarle. Detenelo y volvé a iniciarlo desde el Studio: le pone una.",
         ("failed", false) => "⚠️ It did not work: {0}",
         ("failed", true) => "⚠️ No funcionó: {0}",
         ("gameWarn", false) => "The server restarts in {0} minute(s).",
@@ -409,6 +411,14 @@ fn round(st: &mut State) -> Result<(), String> {
     Ok(())
 }
 
+fn failed(lang: &str, server: &str, error: &str) -> String {
+    if error.contains("no RCONPassword") {
+        say(lang, "noRcon", &[server])
+    } else {
+        say(lang, "failed", &[error])
+    }
+}
+
 /// Does one command and says how it went.
 fn run(z: &Path, server: &str, lang: &str, cmd: Command, countdown: &mut Option<Countdown>, now: u64) -> String {
     let up = running(z, server);
@@ -430,18 +440,21 @@ fn run(z: &Path, server: &str, lang: &str, cmd: Command, countdown: &mut Option<
         }
         Command::Save => match crate::server_manager::rcon_command(z, server, "save") {
             Ok(()) => say(lang, "saved", &[server]),
-            Err(e) => say(lang, "failed", &[&e]),
+            Err(e) => failed(lang, server, &e),
         },
         Command::Msg(text) => match crate::server_manager::rcon_command(z, server, &format!("servermsg \"{}\"", text)) {
             Ok(()) => say(lang, "sent", &[]),
-            Err(e) => say(lang, "failed", &[&e]),
+            Err(e) => failed(lang, server, &e),
         },
         Command::Restart(minutes) => {
             if !up {
                 return say(lang, "down", &[server]);
             }
+            // Without RCON the players would not be warned and the stop would not save: not done.
+            if let Err(e) = crate::server_manager::rcon_command(z, server, &format!("servermsg \"{}\"", say(lang, "gameWarn", &[&minutes.to_string()]))) {
+                return failed(lang, server, &e);
+            }
             *countdown = Some(Countdown::new(server, now, minutes));
-            let _ = crate::server_manager::rcon_command(z, server, &format!("servermsg \"{}\"", say(lang, "gameWarn", &[&minutes.to_string()])));
             say(lang, "restartAsked", &[server, &minutes.to_string()])
         }
         Command::RestartCancel => {
@@ -473,6 +486,25 @@ mod tests {
         assert_eq!(parse("!msg"), Some(Command::Help));
         assert_eq!(parse("hello"), None);
         assert_eq!(parse("!nope"), None, "another bot's command is not ours");
+    }
+
+    #[test]
+    fn a_server_without_rcon_gets_a_password_once() {
+        let dir = std::env::temp_dir().join(format!("pzms_rcon_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let ini = dir.join("s.ini");
+        std::fs::write(&ini, "PVP=true
+RCONPort=27015
+RCONPassword=
+Public=false
+").unwrap();
+        assert!(crate::server_manager::ensure_rcon_password(&ini, &dir.join("b")).unwrap());
+        let text = std::fs::read_to_string(&ini).unwrap();
+        let pass = text.lines().find_map(|l| l.strip_prefix("RCONPassword=")).unwrap().to_string();
+        assert!(pass.len() >= 16 && text.contains("Public=false") && text.matches("RCONPassword=").count() == 1);
+        assert!(!crate::server_manager::ensure_rcon_password(&ini, &dir.join("b")).unwrap(), "kept when there is one");
+        assert!(std::fs::read_to_string(&ini).unwrap().contains(&pass));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

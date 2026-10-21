@@ -84,7 +84,7 @@ Off unless you turn them on. With the bot above set up, write a **Commands chann
 - `!save` saves the world; `!msg <text>` says something to everyone in the game.
 - `!help` lists them. They also work in Spanish (`!estado`, `!jugadores`, `!reiniciar`, `!guardar`, `!mensaje`).
 
-They work only while PZ Mod Studio is open, and they never run a console command typed by hand. Use a channel only admins see: the chat channel also goes into the game.
+They talk to the server over RCON: a server the game made has no RCON password, so the Studio gives it a random one the next time it starts it (the `.ini` is backed up first); that also lets **Stop** save before quitting. They work only while PZ Mod Studio is open, and they never run a console command typed by hand. Use a channel only admins see: the chat channel also goes into the game.
 
 ## Good to know
 
