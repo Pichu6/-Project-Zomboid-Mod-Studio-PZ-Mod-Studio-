@@ -46,5 +46,9 @@
     "UI_StudioLink_copyTitle": "Copying the save",
     "UI_StudioLink_copyBody": "PZ Mod Studio is copying \"{1}\" ({2}). The copy loads; the save itself stays as it is.",
     "UI_StudioLink_copyNeedsApp": "Playing on a copy needs PZ Mod Studio open: it makes the copy.",
-    "UI_StudioLink_copyFailed": "The save could not be copied: {1}"
+    "UI_StudioLink_copyFailed": "The save could not be copied: {1}",
+    "UI_StudioLink_screenTitle": "Two mod managers",
+    "UI_StudioLink_screenBody": "PZ Mod Studio and {1} both draw the game's Mods screen, and only one can. Which one do you want? <LINE> <LINE> PZ Mod Studio's: {1} is turned off in this profile and the game reloads its mods (a few seconds). <LINE> The other one: PZ Mod Studio leaves the Mods screen to {1}; save backups and the check before a save loads stay with PZ Mod Studio. <LINE> <LINE> You can change it later in PZ Mod Studio, Settings.",
+    "UI_StudioLink_screenStudio": "PZ Mod Studio's",
+    "UI_StudioLink_screenOther": "The other one"
 }

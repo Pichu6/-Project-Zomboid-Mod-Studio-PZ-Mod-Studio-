@@ -11,6 +11,8 @@
 --   PZModStudio_LinkRequests.txt  this: <id>\t<verb>\t<argument> per request (add <mod id>)
 --   PZModStudio_LinkAcks.txt      app:  <id>\tok|error\t<text> per request it handled
 --   PZModStudio_LinkGame.txt      this: state=menu|ingame, save, mods, on entering either
+--   PZModStudio_LinkScreen.txt    both: screen=studio|other|ask, other=<mod id>: which Mods
+--                                       screen the player chose when another manager is on
 --
 -- What it does with them:
 -- - Mods screen: only the profile's mods ("Show all subscribed mods" brings the rest back); a
@@ -48,6 +50,7 @@ local REQUEST_TIMEOUT_SECONDS = 30
 -- screen alone (two mods reshaping one list fight) and keeps only the save checks.
 -- (mod.info ids: Definitive Mod Manager, PZMM's client, Mod Manager, Mod Load Order Sorter)
 local OTHER_MANAGERS = { "DefinitiveModManager", "PZMMClient", "ModManager", "ModLoadOrderSorter_b42" }
+local SCREEN_FILE = "PZModStudio_LinkScreen.txt"
 
 -- The texts, in English. The game's translations (media/lua/shared/Translate/<LANG>/UI.json,
 -- keys UI_StudioLink_<name>) win when they have the key. {1}, {2}... are filled in here: a "%"
@@ -101,6 +104,10 @@ local TEXT = {
     backupFailed = "The save could not be backed up: {1}",
     goOnAnyway = "Go on without a backup?",
     cancel = "Cancel",
+    screenTitle = "Two mod managers",
+    screenBody = "PZ Mod Studio and {1} both draw the game's Mods screen, and only one can. Which one do you want? <LINE> <LINE> PZ Mod Studio's: {1} is turned off in this profile and the game reloads its mods (a few seconds). <LINE> The other one: PZ Mod Studio leaves the Mods screen to {1}; save backups and the check before a save loads stay with PZ Mod Studio. <LINE> <LINE> You can change it later in PZ Mod Studio, Settings.",
+    screenStudio = "PZ Mod Studio's",
+    screenOther = "The other one",
 }
 
 local translated = {}
@@ -278,6 +285,83 @@ function Link.otherManager()
     return Link.otherManagerId or nil
 end
 
+--- Which Mods screen the player chose when another manager is on: { screen = "studio" |
+--- "other" | "ask", other = <mod id> }.
+function Link.readScreenChoice()
+    local choice = { screen = "ask", other = "" }
+    pcall(function()
+        local file = getFileReader(SCREEN_FILE, false)
+        if not file then return end
+        local line = file:readLine()
+        while line ~= nil do
+            local key, value = string.match(line, "^%s*([%w_]+)%s*=%s*(.-)%s*$")
+            if key == "screen" then choice.screen = value elseif key == "other" then choice.other = value end
+            line = file:readLine()
+        end
+        file:close()
+    end)
+    return choice
+end
+
+function Link.writeScreenChoice(screen, other)
+    pcall(function()
+        local file = getFileWriter(SCREEN_FILE, true, false)
+        file:write("screen=" .. screen .. "\nother=" .. (other or "") .. "\n")
+        file:close()
+    end)
+end
+
+--- The Studio's screen: every other manager off in the active list, saved and loaded the way the
+--- game's own Mods screen does it (the Studio reads mods/default.txt into the profile).
+function Link.useStudioScreen()
+    local ok, err = pcall(function()
+        local active = ActiveMods.getById("default")
+        for _, id in ipairs(OTHER_MANAGERS) do
+            if active:isModActive(id) then active:setModActive(id, false) end
+        end
+        Link.writeScreenChoice("studio", "")
+        saveModsFile()
+        ActiveMods.getById("currentGame"):copyFrom(active)
+        getCore():ResetLua("default", "modsChanged")
+    end)
+    if not ok then print("[StudioLink] could not turn the other manager off: " .. tostring(err)) end
+end
+
+--- In the main menu, once: another manager is on and the player has not chosen it.
+function Link.askScreen()
+    local other = Link.otherManager()
+    if not other or Link.screenAsked then return end
+    local choice = Link.readScreenChoice()
+    if choice.screen == "other" and choice.other == other then return end
+    Link.screenAsked = true
+    local name = other
+    pcall(function()
+        local info = getModInfoByID(other)
+        if info and info:getName() then name = info:getName() end
+    end)
+    local lines = 9
+    local height = 110 + lines * (getTextManager():getFontHeight(UIFont.Small) + 2)
+    -- Link.WaitPanel: the panel is defined further down this file.
+    Link.WaitPanel.choose(text("screenTitle"), text("screenBody", name), height, {
+        { label = text("screenOther"), onClick = function() Link.writeScreenChoice("other", other) end },
+        { label = text("screenStudio"), accept = true, onClick = Link.useStudioScreen },
+    })
+end
+
+-- Asked from the main menu's own drawing (OnTick does not run in the menu), a moment after it
+-- shows, and only in the menu (the same screen is the pause menu in a game).
+local askFrames = -1
+local mainPrerender = MainScreen.prerender
+function MainScreen:prerender(...)
+    mainPrerender(self, ...)
+    if askFrames < 0 or Link.inGame then return end
+    askFrames = askFrames + 1
+    if askFrames < 30 then return end
+    askFrames = -1
+    local ok, err = pcall(Link.askScreen)
+    if not ok then print("[StudioLink] the Mods screen question failed: " .. tostring(err)) end
+end
+
 --- Tells the app where the player is. state = "menu" or "ingame".
 function Link.writeGameState(state)
     local ok, err = pcall(function()
@@ -306,8 +390,15 @@ function Link.writeGameState(state)
 end
 
 -- Named, so another mod (or a reload of this one) can take them out again.
-function Link.onMainMenuEnter() Link.writeGameState("menu") end
-function Link.onGameStart() Link.writeGameState("ingame") end
+function Link.onMainMenuEnter()
+    Link.inGame = false
+    Link.writeGameState("menu")
+    askFrames = 0
+end
+function Link.onGameStart()
+    Link.inGame = true
+    Link.writeGameState("ingame")
+end
 Events.OnMainMenuEnter.Add(Link.onMainMenuEnter)
 Events.OnGameStart.Add(Link.onGameStart)
 

@@ -576,6 +576,19 @@ fn map_image_bytes_cmd(paths: StudioPaths, id: String) -> Result<tauri::ipc::Res
     Ok(tauri::ipc::Response::new(map_cells::images::image_bytes(&z, &id)?))
 }
 
+/// Which Mods screen the game uses when another mod manager is on: (choice, that manager).
+#[tauri::command(async)]
+fn link_screen_choice_cmd(paths: StudioPaths) -> Result<(String, String), String> {
+    Ok(studio_link::screen_choice(&zomboid_dir_of(&paths)?))
+}
+
+#[tauri::command(async)]
+fn set_link_screen_choice_cmd(paths: StudioPaths, screen: String) -> Result<(), String> {
+    let z = zomboid_dir_of(&paths)?;
+    let (_, other) = studio_link::screen_choice(&z);
+    studio_link::set_screen_choice(&z, &screen, &other)
+}
+
 /// How the Studio's window opens and what its close button does.
 #[tauri::command]
 fn window_prefs_cmd() -> window_prefs::WindowPrefs {
@@ -1425,6 +1438,8 @@ pub fn run() {
             link_status_cmd,
             saves_overview_cmd,
             map_cells_cmd,
+            link_screen_choice_cmd,
+            set_link_screen_choice_cmd,
             window_prefs_cmd,
             set_window_prefs_cmd,
             public_servers_cmd,

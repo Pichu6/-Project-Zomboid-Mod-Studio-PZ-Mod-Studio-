@@ -800,6 +800,23 @@ export const TauriService = {
     return await invoke<number>('join_server_cmd', { paths, address, name, password });
   },
 
+  /** Which Mods screen the game uses when another mod manager is on: [choice, that manager]. */
+  linkScreenChoice: async (paths: StudioPathsUI): Promise<[string, string]> => {
+    try {
+      return await invoke<[string, string]>('link_screen_choice_cmd', { paths });
+    } catch {
+      return ['ask', ''];
+    }
+  },
+
+  setLinkScreenChoice: async (paths: StudioPathsUI, screen: 'ask' | 'studio' | 'other'): Promise<void> => {
+    try {
+      await invoke('set_link_screen_choice_cmd', { paths, screen });
+    } catch (err) {
+      reportBackendError('Saving the Mods screen choice', err);
+    }
+  },
+
   /** How the Studio's window opens and what its close button does. */
   windowPrefs: async (): Promise<WindowPrefs | null> => {
     try {

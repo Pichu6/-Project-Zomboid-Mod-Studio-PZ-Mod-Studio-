@@ -147,6 +147,14 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       setGithubError(String(err));
     }
   };
+  // Which Mods screen the game uses when another mod manager is on.
+  const [screenChoice, setScreenChoice] = useState<string>('ask');
+  useEffect(() => {
+    if (!paths.user_zomboid_dir) return;
+    void TauriService.linkScreenChoice(paths).then(([c]) => setScreenChoice(c));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paths.user_zomboid_dir]);
+
   // The window: opened as it was left, and what the close button does.
   const [rememberWindow, setRememberWindow] = useState(true);
   const [closeToTray, setCloseToTray] = useState(false);
@@ -734,6 +742,29 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             >
               <span className="w-4 h-4 rounded-full bg-white shadow-md" />
             </button>
+          </div>
+        )}
+
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200">{t('settings.modsScreen')}</div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">{t('settings.modsScreenBlurb')}</p>
+            </div>
+            <select
+              value={screenChoice}
+              onChange={(e) => {
+                const v = e.target.value as 'ask' | 'studio' | 'other';
+                setScreenChoice(v);
+                void TauriService.setLinkScreenChoice(paths, v);
+              }}
+              aria-label={t('settings.modsScreen')}
+              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer"
+            >
+              <option value="ask">{t('settings.modsScreenAsk')}</option>
+              <option value="studio">{t('settings.modsScreenStudio')}</option>
+              <option value="other">{t('settings.modsScreenOther')}</option>
+            </select>
           </div>
         )}
 

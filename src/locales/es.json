@@ -219,7 +219,12 @@
     "closeToTray": "Lo deja en la bandeja, al lado del reloj",
     "closeToTrayBlurb": "La ventana se oculta y el Studio sigue atento al juego (copias al salir, el perfil en la pantalla de Mods). Hacé clic en su ícono al lado del reloj para volver a abrirlo; su menú tiene Salir.",
     "trayOpen": "Abrir PZ Mod Studio",
-    "trayQuit": "Salir"
+    "trayQuit": "Salir",
+    "modsScreen": "La pantalla de Mods del juego, con otro administrador de mods activo",
+    "modsScreenBlurb": "Solo un administrador de mods puede dibujar la pantalla de Mods del juego. Cuando hay otro activo (DMM, PZMM...), el juego pregunta una vez cuál querés y lo recuerda. Las copias de partidas y el aviso antes de cargar siguen siendo de PZ Mod Studio en los dos casos.",
+    "modsScreenAsk": "Preguntarme en el juego",
+    "modsScreenStudio": "La de PZ Mod Studio (vuelve a preguntar si activás el otro)",
+    "modsScreenOther": "La del otro administrador"
   },
   "profiles": {
     "title": "Perfiles de mods",
@@ -503,7 +508,8 @@
         "translation_conflict": "Nombra cosas distinto que otro mod",
         "translation_stale": "Palabras elegidas desactualizadas",
         "translation_settled": "Palabras resueltas en tu paquete",
-        "package_built_for_other_list": "Hecho para otra lista"
+        "package_built_for_other_list": "Hecho para otra lista",
+        "two_mod_managers": "Dos administradores de mods"
       },
       "fix": {
         "enable": "Activar {{name}}",
@@ -2014,7 +2020,8 @@
       "server_item_unused_not_installed": "WorkshopItems= tiene {{item}}, que no está instalado acá, y nada en Mods= lo usa. El servidor lo descarga y no carga nada de él.",
       "server_item_unused_holds_one": "WorkshopItems= tiene {{item}}, que trae {{mods}}, pero Mods= no lo incluye. Se descarga y nunca se carga.",
       "server_item_unused_holds_many": "WorkshopItems= tiene {{item}}, que trae {{mods}}, pero Mods= no los incluye. Se descarga y nunca se carga.",
-      "server_base_map_last": "Map= termina con {{map}}, que no es uno de los mapas del juego. El mapa base (por ejemplo Muldraugh, KY) va último."
+      "server_base_map_last": "Map= termina con {{map}}, que no es uno de los mapas del juego. El mapa base (por ejemplo Muldraugh, KY) va último.",
+      "two_mod_managers": "{{mod}} también dibuja la pantalla de Mods del juego. Mientras esté activo, el Studio le deja esa pantalla (las copias de partidas y el aviso antes de cargar siguen siendo del Studio). Desactivalo en este perfil para usar la pantalla del Studio."
     },
     "fragments": {
       "vs": " contra ",

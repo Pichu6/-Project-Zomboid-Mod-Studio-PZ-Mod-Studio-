@@ -18,6 +18,33 @@ use std::time::{Duration, SystemTime};
 use tauri::Emitter;
 
 pub const LINK_MOD_ID: &str = "Z_StudioLink";
+
+/// Other mod managers that draw the game's Mods screen (the Link's OTHER_MANAGERS).
+pub const OTHER_MANAGERS: [&str; 4] = ["DefinitiveModManager", "PZMMClient", "ModManager", "ModLoadOrderSorter_b42"];
+
+/// Where the Link keeps which Mods screen the player chose when another manager is on:
+/// `screen=studio|other|ask` and `other=<mod id>`, in Zomboid/Lua.
+pub const SCREEN_FILE: &str = "PZModStudio_LinkScreen.txt";
+
+/// The player's choice: "studio", "other" or "ask" (nothing chosen yet), and for which manager.
+pub fn screen_choice(user_zomboid_dir: &Path) -> (String, String) {
+    let text = std::fs::read_to_string(user_zomboid_dir.join("Lua").join(SCREEN_FILE)).unwrap_or_default();
+    let field = |k: &str| text.lines().find_map(|l| l.trim().strip_prefix(k).map(|v| v.trim().to_string())).unwrap_or_default();
+    let screen = field("screen=");
+    let screen = if screen == "studio" || screen == "other" { screen } else { "ask".to_string() };
+    (screen, field("other="))
+}
+
+/// Sets it from the Studio ("ask" makes the game ask again next time it opens).
+pub fn set_screen_choice(user_zomboid_dir: &Path, screen: &str, other: &str) -> Result<(), String> {
+    let screen = match screen {
+        "studio" | "other" => screen,
+        _ => "ask",
+    };
+    let dir = user_zomboid_dir.join("Lua");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    crate::load_order::ini_parser::atomic_write(dir.join(SCREEN_FILE), format!("screen={}\nother={}\n", screen, other.trim())).map_err(|e| e.to_string())
+}
 pub const LINK_FILE: &str = "PZModStudio_Link.txt";
 /// Sent to the window when the game changed the mod list of the active profile.
 pub const PROFILE_CHANGED_EVENT: &str = "profile-changed-in-game";

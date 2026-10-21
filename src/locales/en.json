@@ -219,7 +219,12 @@
     "closeToTray": "Keeps it in the tray, next to the clock",
     "closeToTrayBlurb": "The window hides and the Studio keeps watching the game (backups when you exit, the profile in the Mods screen). Click its icon next to the clock to open it again; its menu has Quit.",
     "trayOpen": "Open PZ Mod Studio",
-    "trayQuit": "Quit"
+    "trayQuit": "Quit",
+    "modsScreen": "The game's Mods screen, with another mod manager on",
+    "modsScreenBlurb": "Only one mod manager can draw the game's Mods screen. When another one is on (DMM, PZMM...), the game asks once which one you want and remembers it. Save backups and the check before a save loads stay with PZ Mod Studio either way.",
+    "modsScreenAsk": "Ask me in the game",
+    "modsScreenStudio": "PZ Mod Studio's (asks again if the other one is turned on)",
+    "modsScreenOther": "The other manager's"
   },
   "profiles": {
     "title": "Mod Profiles",
@@ -503,7 +508,8 @@
         "translation_conflict": "Names things differently from another mod",
         "translation_stale": "Chosen words out of date",
         "translation_settled": "Words settled in your package",
-        "package_built_for_other_list": "Built for another list"
+        "package_built_for_other_list": "Built for another list",
+        "two_mod_managers": "Two mod managers"
       },
       "fix": {
         "enable": "Switch on {{name}}",
@@ -2014,7 +2020,8 @@
       "server_item_unused_not_installed": "WorkshopItems= has {{item}}, which is not installed here, and nothing in Mods= uses it. The server downloads it and loads nothing from it.",
       "server_item_unused_holds_one": "WorkshopItems= has {{item}}, which holds {{mods}}, but Mods= does not list it. It is downloaded and never loaded.",
       "server_item_unused_holds_many": "WorkshopItems= has {{item}}, which holds {{mods}}, but Mods= does not list them. It is downloaded and never loaded.",
-      "server_base_map_last": "Map= ends with {{map}}, which is not one of the game's own maps. The base map (for example Muldraugh, KY) belongs last."
+      "server_base_map_last": "Map= ends with {{map}}, which is not one of the game's own maps. The base map (for example Muldraugh, KY) belongs last.",
+      "two_mod_managers": "{{mod}} also draws the game's Mods screen. While it is on, the Studio leaves that screen to it (the save backups and the check before a save loads stay the Studio's). Turn it off in this profile to use the Studio's screen."
     },
     "fragments": {
       "vs": " against ",

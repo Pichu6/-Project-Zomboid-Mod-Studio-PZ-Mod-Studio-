@@ -46,5 +46,9 @@
     "UI_StudioLink_copyTitle": "Copiando la partida",
     "UI_StudioLink_copyBody": "PZ Mod Studio está copiando \"{1}\" ({2}). Se carga la copia; la partida en sí queda como está.",
     "UI_StudioLink_copyNeedsApp": "Jugar en una copia necesita PZ Mod Studio abierto: es el que hace la copia.",
-    "UI_StudioLink_copyFailed": "No se pudo copiar la partida: {1}"
+    "UI_StudioLink_copyFailed": "No se pudo copiar la partida: {1}",
+    "UI_StudioLink_screenTitle": "Dos administradores de mods",
+    "UI_StudioLink_screenBody": "PZ Mod Studio y {1} dibujan los dos la pantalla de Mods del juego, y solo uno puede. ¿Cuál querés usar? <LINE> <LINE> La de PZ Mod Studio: {1} se desactiva en este perfil y el juego recarga sus mods (unos segundos). <LINE> La otra: PZ Mod Studio le deja la pantalla de Mods a {1}; las copias de partidas y el aviso antes de cargar siguen siendo de PZ Mod Studio. <LINE> <LINE> Lo podés cambiar después en PZ Mod Studio, Configuración.",
+    "UI_StudioLink_screenStudio": "La de PZ Mod Studio",
+    "UI_StudioLink_screenOther": "La otra"
 }

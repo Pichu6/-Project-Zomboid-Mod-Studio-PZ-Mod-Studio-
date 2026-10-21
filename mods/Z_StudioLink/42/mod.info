@@ -1,5 +1,5 @@
 name=PZ Mod Studio Link
 id=Z_StudioLink
 description=Shows the profile active in PZ Mod Studio on the Mods screen, marks the mods Mod Health warns about, offers to add newly subscribed mods to the profile and checks each save against it. Needs the PZ Mod Studio app.
-modversion=1.4.1
+modversion=1.5.0
 versionMin=42.0.0

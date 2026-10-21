@@ -1384,6 +1384,13 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
                 }
             }
         }
+        // Another mod manager that draws the game's Mods screen, on next to the Studio Link.
+        if crate::studio_link::OTHER_MANAGERS.contains(&m.id.as_str()) && position.contains_key(crate::studio_link::LINK_MOD_ID) {
+            list.push(Severity::Warning, "two_mod_managers", Some(id),
+                format!("{} also draws the game's Mods screen. While it is on, the Studio leaves that screen to it (the save backups and the check before a save loads stay the Studio's). Turn it off in this profile to use the Studio's screen.", describe(m)),
+                vec![SuggestedFix::DisableMod { mod_id: m.id.clone() }]);
+            list.with(&[("mod", &name)]);
+        }
         for other in &m.info.incompatible {
             if let Some(&p) = position.get(other.as_str()) {
                 // Report each pair once, on the later mod.
@@ -1608,6 +1615,7 @@ mod tests {
         assert!(has("not_for_build", "Old"));
         assert!(has("dependency_unavailable", "NeedsOld"));
         assert!(has("incompatible", "A"));
+        assert!(!report.issues.iter().any(|i| i.code == "two_mod_managers"), "no manager here");
         assert!(has("load_after_order", "Late"));
         assert!(has("outside_version_range", "Ranged"));
         assert!(has("invalid_mod_info", "Broken"));
