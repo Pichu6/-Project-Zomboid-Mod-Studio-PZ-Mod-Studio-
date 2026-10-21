@@ -63,6 +63,18 @@ Un webhook de Discord deja que el servidor publique en un canal: cuando arranca,
 
 **Olvidarlo** quita la dirección de esta PC. Cada servidor tiene su propio webhook.
 
+### Chat con el juego: el bot propio del servidor
+
+El servidor dedicado de Project Zomboid tiene un bot de Discord propio. El Studio lo configura en el `.ini` del servidor; vive dentro del servidor, así que funciona siempre que el servidor corre, aunque el Studio esté cerrado.
+
+1. En el Developer Portal de Discord: **New Application**, después **Bot**: **Reset Token** y copialo, y activá **Message Content Intent**.
+2. En **Chat con el juego**, pegá el **Token del bot**, escribí el **Canal del chat** (su nombre como está en Discord, sin `#`) y, si querés, el **Canal del registro**, marcá **Activar el bot** y apretá **Guardar en el .ini**.
+3. Apretá **Invitar el bot a tu Discord**, elegí tu servidor de Discord, e iniciá (o reiniciá) el servidor del juego.
+
+Desde ahí el chat general del juego va a ese canal, y lo que se escribe ahí entra al juego. El juego lee el token del `.ini`, así que se escribe ahí: quien tenga ese archivo puede usar el bot. Si el `.ini` tiene un canal de comandos, la pantalla te avisa: lo que cualquiera escriba ahí corre como un comando de la consola de admin; **Borrarlo** salvo que ese canal sea solo tuyo.
+
+Un **mensaje de estado que se edita solo** (activado de entrada) deja un solo mensaje en el canal que dice si el servidor está en línea, desde cuándo y quién está, en vez de publicar uno nuevo cada vez.
+
 ## Bueno saber
 
 - Discord solo recibe mensajes mientras PZ Mod Studio está abierto y alojando el servidor.

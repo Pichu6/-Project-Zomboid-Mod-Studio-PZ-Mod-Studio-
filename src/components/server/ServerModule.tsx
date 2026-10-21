@@ -885,7 +885,7 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
               )}
 
               {/* Sub-Tab 5: Quick Settings Editor */}
-              {activeSubTab === 'DISCORD' && <DiscordPanel paths={paths} server={selectedServer.name} />}
+              {activeSubTab === 'DISCORD' && <DiscordPanel paths={paths} server={selectedServer.name} filePath={selectedServer.file_path} />}
 
               {activeSubTab === 'SETTINGS' && quickSettings && (
                 <div className="space-y-4 flex-1 flex flex-col justify-between">

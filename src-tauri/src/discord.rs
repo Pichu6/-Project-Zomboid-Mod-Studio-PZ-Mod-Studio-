@@ -8,6 +8,16 @@
 //! and the server's Workshop mods updated since it started, which players with the new version
 //! cannot join with until it restarts.
 //!
+//! A status message that edits itself (on or off): one message in the channel says whether the
+//! server is up, since when, and who is in, edited as that changes instead of posting again.
+//!
+//! The game's own bot (the server's `.ini`: `DiscordEnable`, `DiscordToken`,
+//! `DiscordChatChannel`, `DiscordLogChannel`, `DiscordCommandChannel`; `zombie.network.DiscordBot`)
+//! is set up from here too: it lives inside the server process, so the chat goes both ways
+//! whenever the server runs, with or without the Studio. It finds channels by name, and its
+//! command channel runs whatever is written there as an RCON command (the whole admin console,
+//! for anyone who can write in it): the Studio never sets one and offers to clear one it finds.
+//!
 //! The webhook address is a secret (whoever has it can post as it): it lives in the Windows
 //! Credential Manager, never in a file, and only a Discord webhook address is accepted. Messages
 //! never ping anyone (`allowed_mentions` empty). It works while the Studio runs and hosts the
@@ -46,11 +56,17 @@ pub struct DiscordSettings {
     /// "en" or "es": the language of the messages (the Studio's when they were saved).
     #[serde(default)]
     pub language: String,
+    /// One message that says the server's state, edited as it changes.
+    #[serde(default = "yes")]
+    pub status_message: bool,
+    /// That message's id (the webhook's own message; empty until the first one).
+    #[serde(default)]
+    pub status_message_id: String,
 }
 
 impl Default for DiscordSettings {
     fn default() -> Self {
-        DiscordSettings { enabled: false, status: true, players: true, restarts: true, updates: true, language: "en".into() }
+        DiscordSettings { enabled: false, status: true, players: true, restarts: true, updates: true, language: "en".into(), status_message: true, status_message_id: String::new() }
     }
 }
 
@@ -109,6 +125,10 @@ pub fn save(user_zomboid_dir: &Path, server: &str, settings: DiscordSettings, we
         }
     }
     let mut all = read_all(user_zomboid_dir);
+    let mut settings = settings;
+    if settings.status_message_id.is_empty() {
+        settings.status_message_id = all.get(server).map(|s| s.status_message_id.clone()).unwrap_or_default();
+    }
     all.insert(server.to_string(), settings);
     let text = serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?;
     crate::load_order::ini_parser::atomic_write(settings_path(user_zomboid_dir), text).map_err(|e| e.to_string())?;
@@ -143,15 +163,26 @@ pub fn message_body(text: &str) -> serde_json::Value {
 /// Posts one message. Discord limits a webhook to about 30 a minute: when it says to wait, the
 /// message waits (once) and goes.
 pub fn post(webhook: &str, text: &str) -> Result<(), String> {
+    send(webhook, text, None).map(|_| ())
+}
+
+/// Posts a message (`edit` None) and returns its id, or edits the webhook's message `edit`.
+fn send(webhook: &str, text: &str, edit: Option<&str>) -> Result<String, String> {
     if !is_webhook_url(webhook) {
         return Err("not_webhook: Not a Discord webhook address.".to_string());
     }
+    let base = webhook.split('?').next().unwrap_or(webhook);
     let body = message_body(text);
     for _ in 0..2 {
-        let mut response = agent().post(webhook).send_json(&body).map_err(|e| format!("unreachable: Discord could not be reached: {}", e))?;
+        let request = match edit {
+            Some(id) => agent().patch(&format!("{}/messages/{}", base, id)).send_json(&body),
+            None => agent().post(&format!("{}?wait=true", base)).send_json(&body),
+        };
+        let mut response = request.map_err(|e| format!("unreachable: Discord could not be reached: {}", e))?;
         let status = response.status().as_u16();
         if (200..300).contains(&status) {
-            return Ok(());
+            let id = response.body_mut().read_json::<serde_json::Value>().ok().and_then(|v| v.get("id").and_then(|i| i.as_str()).map(str::to_string)).unwrap_or_default();
+            return Ok(id);
         }
         if status == 429 {
             let wait = response
@@ -202,6 +233,29 @@ pub fn say(language: &str, key: &str, args: &[&str]) -> String {
     out
 }
 
+/// The status message: up (since when, who is in) or down (since when).
+pub fn status_text(language: &str, server: &str, up: bool, since: Option<u64>, players: &[String]) -> String {
+    let es = language.starts_with("es");
+    let at = since
+        .and_then(|t| chrono::DateTime::from_timestamp(t as i64, 0))
+        .map(|d| d.with_timezone(&chrono::Local).format("%d/%m %H:%M").to_string())
+        .unwrap_or_default();
+    if up {
+        let who = if players.is_empty() {
+            if es { "nadie conectado".to_string() } else { "nobody on".to_string() }
+        } else if es {
+            format!("{} en línea: {}", players.len(), names(language, players))
+        } else {
+            format!("{} online: {}", players.len(), names(language, players))
+        };
+        if es { format!("🟢 **{}** en línea desde {} · {}", server, at, who) } else { format!("🟢 **{}** up since {} · {}", server, at, who) }
+    } else if es {
+        format!("🔴 **{}** apagado desde {}", server, at)
+    } else {
+        format!("🔴 **{}** down since {}", server, at)
+    }
+}
+
 /// "Ana, Beto and Carl" (or "Ana, Beto y Carl"); more than five are counted.
 pub fn names(language: &str, list: &[String]) -> String {
     let and = if language.starts_with("es") { " y " } else { " and " };
@@ -214,6 +268,118 @@ pub fn names(language: &str, list: &[String]) -> String {
         1 => shown[0].clone(),
         n => format!("{}{}{}", shown[..n - 1].join(", "), and, shown[n - 1]),
     }
+}
+
+// ------------------------------------------------------------------ the game's own bot
+
+/// What a server's `.ini` says about the game's own Discord bot (the token itself never leaves).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct GameBot {
+    pub enabled: bool,
+    pub has_token: bool,
+    /// Channel names, as the game looks them up.
+    pub chat_channel: String,
+    pub log_channel: String,
+    /// Set by hand in the `.ini`: anyone who can write there runs admin commands.
+    pub command_channel: String,
+    /// The link that adds the bot to a Discord server (from the token's bot id).
+    pub invite_url: Option<String>,
+}
+
+fn ini_value(text: &str, key: &str) -> Option<String> {
+    text.lines().find_map(|l| l.trim().strip_prefix(&format!("{}=", key)).map(|v| v.trim().to_string()))
+}
+
+/// `key=value` set in an `.ini`'s text: replaced where it is, else added at the end.
+pub fn ini_set(text: &str, key: &str, value: &str) -> String {
+    let mut found = false;
+    let mut out: Vec<String> = text
+        .lines()
+        .map(|l| {
+            if !found && l.trim().starts_with(&format!("{}=", key)) {
+                found = true;
+                format!("{}={}", key, value)
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    if !found {
+        out.push(format!("{}={}", key, value));
+    }
+    let mut joined = out.join("\n");
+    joined.push('\n');
+    joined
+}
+
+/// A bot token's first part is its user id in base64: the id the invite link needs.
+pub fn bot_id_from_token(token: &str) -> Option<String> {
+    let first = token.trim().split('.').next()?;
+    let mut bits: u32 = 0;
+    let mut n = 0;
+    let mut out = Vec::new();
+    for c in first.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            _ => return None,
+        };
+        bits = (bits << 6) | v as u32;
+        n += 6;
+        if n >= 8 {
+            n -= 8;
+            out.push((bits >> n) as u8);
+            bits &= (1 << n) - 1;
+        }
+    }
+    let id = String::from_utf8(out).ok()?;
+    (id.len() >= 15 && id.chars().all(|c| c.is_ascii_digit())).then_some(id)
+}
+
+/// The invite link: the bot may see the channels, read their history and write.
+pub fn invite_url(bot_id: &str) -> String {
+    format!("https://discord.com/oauth2/authorize?client_id={}&scope=bot&permissions=68608", bot_id)
+}
+
+pub fn game_bot(ini_path: &Path) -> Result<GameBot, String> {
+    let text = std::fs::read_to_string(ini_path).map_err(|e| format!("Cannot read {}: {}", ini_path.display(), e))?;
+    let token = ini_value(&text, "DiscordToken").unwrap_or_default();
+    Ok(GameBot {
+        enabled: ini_value(&text, "DiscordEnable").is_some_and(|v| v.eq_ignore_ascii_case("true")),
+        has_token: !token.is_empty(),
+        chat_channel: ini_value(&text, "DiscordChatChannel").unwrap_or_default(),
+        log_channel: ini_value(&text, "DiscordLogChannel").unwrap_or_default(),
+        command_channel: ini_value(&text, "DiscordCommandChannel").unwrap_or_default(),
+        invite_url: bot_id_from_token(&token).map(|id| invite_url(&id)),
+    })
+}
+
+/// Writes the game's bot settings into the server's `.ini` (backed up first). `token` None keeps
+/// the one there; a channel is a name (a leading `#` is dropped); the command channel can only be
+/// cleared.
+pub fn save_game_bot(user_zomboid_dir: &Path, ini_path: &Path, enabled: bool, token: Option<String>, chat_channel: &str, log_channel: &str, clear_command_channel: bool) -> Result<GameBot, String> {
+    let mut text = std::fs::read_to_string(ini_path).map_err(|e| format!("Cannot read {}: {}", ini_path.display(), e))?;
+    let clean = |c: &str| c.trim().trim_start_matches('#').replace(['\r', '\n'], "");
+    if let Some(t) = token {
+        let t = t.trim().to_string();
+        if !t.is_empty() && bot_id_from_token(&t).is_none() {
+            return Err("not_token: That is not a Discord bot token (Developer Portal, your application, Bot, Reset Token).".to_string());
+        }
+        text = ini_set(&text, "DiscordToken", &t);
+    }
+    text = ini_set(&text, "DiscordEnable", if enabled { "true" } else { "false" });
+    text = ini_set(&text, "DiscordChatChannel", &clean(chat_channel));
+    text = ini_set(&text, "DiscordLogChannel", &clean(log_channel));
+    if clear_command_channel {
+        text = ini_set(&text, "DiscordCommandChannel", "");
+    }
+    let backups = user_zomboid_dir.join("PZModStudio_Backups");
+    crate::load_order::ini_parser::write_file_with_backup(ini_path, &text, &backups)?;
+    game_bot(ini_path)
 }
 
 // ------------------------------------------------------------------ what the server does
@@ -251,6 +417,9 @@ struct Seen {
     updates_said: BTreeSet<String>,
     /// The stop request a restart already used: the next stop without a new one is a crash.
     stop_spent: u64,
+    /// The status message as last written, and when the server went down.
+    status_written: String,
+    down_since: Option<u64>,
 }
 
 /// What changed since the last look, as messages (the decisions, without the network or the
@@ -403,6 +572,34 @@ pub fn watch() {
                 }
                 std::thread::sleep(Duration::from_millis(1200));
             }
+            if settings.status_message {
+                if !status.is_running && seen.down_since.is_none() {
+                    seen.down_since = Some(now);
+                }
+                if status.is_running {
+                    seen.down_since = None;
+                }
+                let since = if status.is_running { status.start_timestamp } else { seen.down_since };
+                let list: Vec<String> = seen.players.iter().cloned().collect();
+                let text = status_text(&settings.language, &server, status.is_running, since, &list);
+                if text != seen.status_written {
+                    let id = settings.status_message_id.clone();
+                    let edited = !id.is_empty() && send(&webhook, &text, Some(&id)).is_ok();
+                    if edited {
+                        seen.status_written = text;
+                    } else if let Ok(new_id) = send(&webhook, &text, None) {
+                        // The first one, or the old one was deleted in Discord.
+                        seen.status_written = text;
+                        let mut all = read_all(&z);
+                        if let Some(entry) = all.get_mut(&server) {
+                            entry.status_message_id = new_id;
+                            if let Ok(t) = serde_json::to_string_pretty(&all) {
+                                let _ = crate::load_order::ini_parser::atomic_write(settings_path(&z), t);
+                            }
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -421,6 +618,38 @@ mod tests {
     fn real_discord_post() {
         let Ok(url) = std::env::var("PZMS_WEBHOOK") else { return };
         post(&url, &say("es", "test", &["pZMSDiscordTest (cargo test)"])).unwrap();
+    }
+
+    #[test]
+    fn the_game_bot_is_written_into_the_ini() {
+        let dir = std::env::temp_dir().join(format!("pzms-gamebot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let ini = dir.join("Coop.ini");
+        std::fs::write(&ini, "PVP=true\nDiscordEnable=false\nDiscordCommandChannel=admin\nPublic=false\n").unwrap();
+        // A token's first part is the bot's id in base64 ("123456789012345678").
+        let token = "MTIzNDU2Nzg5MDEyMzQ1Njc4.GabcDE.xyz";
+        assert_eq!(bot_id_from_token(token).as_deref(), Some("123456789012345678"));
+        assert!(save_game_bot(&dir, &ini, true, Some("nope".into()), "", "", false).is_err());
+        let bot = save_game_bot(&dir, &ini, true, Some(token.into()), "#general-chat", "server-log", false).unwrap();
+        assert!(bot.enabled && bot.has_token);
+        assert_eq!(bot.chat_channel, "general-chat", "a channel is a name, without its #");
+        assert_eq!(bot.command_channel, "admin", "left alone unless cleared");
+        assert_eq!(bot.invite_url.as_deref(), Some("https://discord.com/oauth2/authorize?client_id=123456789012345678&scope=bot&permissions=68608"));
+        let text = std::fs::read_to_string(&ini).unwrap();
+        assert!(text.contains("PVP=true\nDiscordEnable=true\n") && text.contains("Public=false\n"), "the rest stays where it was: {}", text);
+        let bot = save_game_bot(&dir, &ini, true, None, "general-chat", "", true).unwrap();
+        assert!(bot.has_token, "no token given: the one there stays");
+        assert!(bot.command_channel.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_status_message_says_who_is_in() {
+        let up = status_text("en", "Coop", true, None, &["Ana".into(), "Beto".into()]);
+        assert!(up.starts_with("🟢 **Coop** up since") && up.ends_with("2 online: Ana and Beto"), "{}", up);
+        assert!(status_text("es", "Coop", true, None, &[]).ends_with("nadie conectado"));
+        assert!(status_text("es", "Coop", false, None, &[]).starts_with("🔴 **Coop** apagado desde"));
     }
 
     #[test]

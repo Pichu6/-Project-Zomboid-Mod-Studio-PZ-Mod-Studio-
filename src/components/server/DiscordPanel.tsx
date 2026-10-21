@@ -4,12 +4,13 @@ import i18next from 'i18next';
 import { Check, Loader2, Send, Trash2 } from 'lucide-react';
 import { DiscordSettings, StudioPathsUI } from '../../types';
 import { TauriService } from '../../services/tauri';
+import { GameBotPanel } from './GameBotPanel';
 
 /**
  * A server's Discord channel, one way: the webhook the player made in Discord (kept in the
  * Windows Credential Manager, never shown again), and which news are posted to it.
  */
-export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string }> = ({ paths, server }) => {
+export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; filePath: string }> = ({ paths, server, filePath }) => {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<DiscordSettings | null>(null);
   const [hasWebhook, setHasWebhook] = useState(false);
@@ -63,8 +64,9 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string }> = 
     }
   };
 
-  const toggle = (key: 'status' | 'players' | 'restarts' | 'updates') => void save({ ...settings, [key]: !settings[key] });
-  const events: Array<'status' | 'players' | 'restarts' | 'updates'> = ['status', 'players', 'restarts', 'updates'];
+  type EventKey = 'status_message' | 'status' | 'players' | 'restarts' | 'updates';
+  const toggle = (key: EventKey) => void save({ ...settings, [key]: !settings[key] });
+  const events: EventKey[] = ['status_message', 'status', 'players', 'restarts', 'updates'];
 
   return (
     <div className="space-y-4">
@@ -140,6 +142,8 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string }> = 
           </div>
         </div>
       )}
+
+      <GameBotPanel paths={paths} filePath={filePath} />
     </div>
   );
 };

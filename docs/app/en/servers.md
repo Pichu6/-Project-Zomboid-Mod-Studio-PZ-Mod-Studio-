@@ -63,6 +63,18 @@ A Discord webhook lets the server post to one channel: when it is up, stopped, c
 
 **Forget it** removes the address from this PC. Each server has its own webhook.
 
+### Chat with the game: the server's own bot
+
+Project Zomboid's dedicated server has a Discord bot of its own. The Studio sets it up in the server's `.ini`; it lives inside the server, so it works whenever the server runs, even with the Studio closed.
+
+1. In the Discord Developer Portal: **New Application**, then **Bot**: **Reset Token** and copy it, and turn on **Message Content Intent**.
+2. In **Chat with the game**, paste the **Bot token**, write the **Chat channel** (its name as it is in Discord, without `#`) and, if you want one, the **Log channel**, tick **Turn the bot on** and press **Save in the .ini**.
+3. Press **Invite the bot to your Discord**, pick your Discord server, and start (or restart) the game server.
+
+The in-game general chat then goes to that channel, and what is written there goes into the game. The game reads the token from the `.ini`, so it is written there: whoever has that file can use the bot. If the `.ini` has a command channel, the screen warns you: whatever anyone writes there runs as an admin console command; **Clear it** unless that channel is only yours.
+
+A **status message that edits itself** (on by default) keeps one message in the channel saying whether the server is up, since when, and who is in, instead of posting a new one each time.
+
 ## Good to know
 
 - Posting to Discord only happens while PZ Mod Studio is open and hosting the server.

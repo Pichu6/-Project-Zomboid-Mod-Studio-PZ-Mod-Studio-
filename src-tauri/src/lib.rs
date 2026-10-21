@@ -868,6 +868,30 @@ fn discord_save_cmd(paths: StudioPaths, server: String, settings: discord::Disco
     discord::save(&zomboid_dir_of(&paths)?, &server, settings, webhook)
 }
 
+/// A server `.ini` of this Zomboid folder's `Server/` (nothing else is read or written as one).
+fn server_ini_of(paths: &StudioPaths, file_path: &str) -> Result<std::path::PathBuf, String> {
+    let dir = zomboid_dir_of(paths)?.join("Server");
+    let path = std::path::PathBuf::from(file_path);
+    let inside = path.parent().and_then(|p| p.canonicalize().ok()) == dir.canonicalize().ok();
+    if !inside || path.extension().and_then(|e| e.to_str()) != Some("ini") || !path.is_file() {
+        return Err(format!("{} is not a server .ini of Zomboid/Server.", file_path));
+    }
+    Ok(path)
+}
+
+/// What a server's `.ini` says about the game's own Discord bot (never the token).
+#[tauri::command(async)]
+fn game_bot_cmd(paths: StudioPaths, file_path: String) -> Result<discord::GameBot, String> {
+    discord::game_bot(&server_ini_of(&paths, &file_path)?)
+}
+
+/// Writes the game's own Discord bot settings into the server's `.ini`.
+#[tauri::command(async)]
+fn save_game_bot_cmd(paths: StudioPaths, file_path: String, enabled: bool, token: Option<String>, chat_channel: String, log_channel: String, clear_command_channel: bool) -> Result<discord::GameBot, String> {
+    let ini = server_ini_of(&paths, &file_path)?;
+    discord::save_game_bot(&zomboid_dir_of(&paths)?, &ini, enabled, token, &chat_channel, &log_channel, clear_command_channel)
+}
+
 /// Posts a test message to the server's channel.
 #[tauri::command(async)]
 fn discord_test_cmd(paths: StudioPaths, server: String) -> Result<(), String> {
@@ -1564,6 +1588,8 @@ pub fn run() {
             changed_lua_files_cmd,
             dev_watch_start_cmd,
             discord_view_cmd,
+            game_bot_cmd,
+            save_game_bot_cmd,
             mod_changelog_cmd,
             changelog_mark_read_cmd,
             discord_save_cmd,

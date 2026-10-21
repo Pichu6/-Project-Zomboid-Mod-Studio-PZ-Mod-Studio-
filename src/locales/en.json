@@ -1702,6 +1702,28 @@
     }
   },
   "servers": {
+    "gameBot": {
+      "title": "Chat with the game: the server's own bot",
+      "intro": "Project Zomboid's dedicated server has a Discord bot of its own: the in-game general chat goes to a channel, and what is written in that channel goes into the game. It lives inside the server, so it works whenever the server runs, even with the Studio closed.",
+      "step1": "In the Discord Developer Portal: New Application, then Bot: Reset Token and copy it, and turn on \"Message Content Intent\".",
+      "step2": "Paste the token here, write the channel names (as they are in Discord, without #), and save.",
+      "step3": "Invite the bot to your Discord with the button, and start (or restart) the server.",
+      "token": "Bot token",
+      "tokenPlaceholder": "From the Developer Portal: Bot, Reset Token",
+      "tokenSaved": "Saved in the .ini (paste a new one to replace it)",
+      "chatChannel": "Chat channel (name)",
+      "logChannel": "Log channel (name)",
+      "optional": "optional",
+      "enabled": "Turn the bot on",
+      "tokenInIni": "The game reads the token from the server's .ini, so it is written there: whoever has that file can use the bot. Never share the .ini.",
+      "save": "Save in the .ini",
+      "invite": "Invite the bot to your Discord",
+      "restartNote": "The server reads it when it starts.",
+      "saved": "Saved in the server's .ini (the previous one is in PZModStudio_Backups).",
+      "notToken": "That is not a Discord bot token (Developer Portal, your application, Bot, Reset Token).",
+      "commandChannel": "This server has a command channel (\"{{channel}}\"): whatever anyone writes there runs as an admin console command. Clear it unless that channel is locked to you.",
+      "clearCommand": "Clear it"
+    },
     "discord": {
       "title": "Discord: the server tells your channel",
       "intro": "A webhook posts to one channel of your Discord server: when this server is up, stopped, crashed or back after a restart, who joins and leaves, and when its Workshop mods were updated and it needs a restart. No one is pinged.",
@@ -1726,6 +1748,8 @@
         "no_webhook": "No webhook saved for this server yet."
       },
       "events": {
+        "status_message": "A status message that edits itself",
+        "status_messageExample": "🟢 Coop up since 21/10 14:05 · 2 online: Ana and Beto",
         "status": "Up, stopped and crashed",
         "statusExample": "🟢 Coop is up. · ⚠️ Coop stopped without being asked.",
         "players": "Players joining and leaving",

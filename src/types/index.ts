@@ -710,6 +710,20 @@ export interface DiscordSettings {
   restarts: boolean;
   updates: boolean;
   language: string;
+  /** One message that says the server's state, edited as it changes. */
+  status_message: boolean;
+  status_message_id?: string;
+}
+
+/** The game's own Discord bot, as the server's .ini has it (never the token itself). */
+export interface GameBot {
+  enabled: boolean;
+  has_token: boolean;
+  chat_channel: string;
+  log_channel: string;
+  /** Set by hand: anyone who can write there runs admin commands. */
+  command_channel: string;
+  invite_url: string | null;
 }
 
 export interface DiscordView {

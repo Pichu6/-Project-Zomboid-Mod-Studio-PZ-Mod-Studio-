@@ -1702,6 +1702,28 @@
     }
   },
   "servers": {
+    "gameBot": {
+      "title": "Chat con el juego: el bot propio del servidor",
+      "intro": "El servidor dedicado de Project Zomboid tiene un bot de Discord propio: el chat general del juego va a un canal, y lo que se escribe en ese canal entra al juego. Vive dentro del servidor, así que funciona siempre que el servidor corre, aunque el Studio esté cerrado.",
+      "step1": "En el Developer Portal de Discord: New Application, después Bot: Reset Token y copialo, y activá \"Message Content Intent\".",
+      "step2": "Pegá el token acá, escribí los nombres de los canales (como están en Discord, sin #), y guardá.",
+      "step3": "Invitá el bot a tu Discord con el botón, e iniciá (o reiniciá) el servidor.",
+      "token": "Token del bot",
+      "tokenPlaceholder": "Del Developer Portal: Bot, Reset Token",
+      "tokenSaved": "Guardado en el .ini (pegá uno nuevo para reemplazarlo)",
+      "chatChannel": "Canal del chat (nombre)",
+      "logChannel": "Canal del registro (nombre)",
+      "optional": "opcional",
+      "enabled": "Activar el bot",
+      "tokenInIni": "El juego lee el token del .ini del servidor, así que se escribe ahí: quien tenga ese archivo puede usar el bot. Nunca compartas el .ini.",
+      "save": "Guardar en el .ini",
+      "invite": "Invitar el bot a tu Discord",
+      "restartNote": "El servidor lo lee al arrancar.",
+      "saved": "Guardado en el .ini del servidor (el anterior queda en PZModStudio_Backups).",
+      "notToken": "Ese no es un token de bot de Discord (Developer Portal, tu aplicación, Bot, Reset Token).",
+      "commandChannel": "Este servidor tiene un canal de comandos (\"{{channel}}\"): lo que cualquiera escriba ahí corre como un comando de la consola de admin. Borralo salvo que ese canal sea solo tuyo.",
+      "clearCommand": "Borrarlo"
+    },
     "discord": {
       "title": "Discord: el servidor le avisa a tu canal",
       "intro": "Un webhook publica en un canal de tu servidor de Discord: cuando este servidor arranca, se detiene, se cae o vuelve después de reiniciarse, quién entra y quién sale, y cuando sus mods del Workshop se actualizaron y necesita reiniciarse. No menciona a nadie.",
@@ -1726,6 +1748,8 @@
         "no_webhook": "Todavía no hay un webhook guardado para este servidor."
       },
       "events": {
+        "status_message": "Un mensaje de estado que se edita solo",
+        "status_messageExample": "🟢 Coop en línea desde 21/10 14:05 · 2 en línea: Ana y Beto",
         "status": "Arranca, se detiene y se cae",
         "statusExample": "🟢 Coop está en línea. · ⚠️ Coop se detuvo sin que se lo pidieran.",
         "players": "Jugadores que entran y salen",

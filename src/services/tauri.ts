@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordSettings, DiscordView, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -1729,6 +1729,22 @@ export const TauriService = {
   /** `webhook`: a new address to store, "" to forget the stored one, undefined to keep it. */
   discordSave: async (paths: StudioPathsUI, server: string, settings: DiscordSettings, webhook?: string): Promise<DiscordView> => {
     return await invoke<DiscordView>('discord_save_cmd', { paths, server, settings, webhook: webhook ?? null });
+  },
+
+  gameBot: async (paths: StudioPathsUI, filePath: string): Promise<GameBot | null> => {
+    try {
+      return await invoke<GameBot>('game_bot_cmd', { paths, filePath });
+    } catch {
+      return null;
+    }
+  },
+
+  saveGameBot: async (
+    paths: StudioPathsUI,
+    filePath: string,
+    v: { enabled: boolean; token: string | null; chatChannel: string; logChannel: string; clearCommandChannel: boolean }
+  ): Promise<GameBot> => {
+    return await invoke<GameBot>('save_game_bot_cmd', { paths, filePath, ...v });
   },
 
   discordTest: async (paths: StudioPathsUI, server: string): Promise<void> => {
