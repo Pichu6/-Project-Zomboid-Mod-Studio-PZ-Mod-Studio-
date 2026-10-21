@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update — PZ Mod Studio 1.2.0: the game side, save backups, maps, servers and Discord</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px; line-height: 1.55; color: #1b1f24; background: #fff; }
+  img { max-width: 100%; border: 1px solid #ccd; border-radius: 6px; margin: 8px 0 4px; }
+  h1 { font-size: 26px; } h2 { font-size: 21px; margin-top: 28px; border-bottom: 1px solid #e3e6ea; padding-bottom: 4px; }
+  code { background: #f1f3f5; padding: 1px 4px; border-radius: 3px; font-size: 90%; }
+  hr { border: 0; border-top: 1px solid #e3e6ea; margin: 24px 0; }
+  .howto { background: #fff8e1; border: 1px solid #f0d27a; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+</style></head><body>
+<p class="howto"><b>How to post this:</b> press Ctrl+A, Ctrl+C here, then Ctrl+V in the forum editor. Images load from GitHub once the repository has them.</p>
+<h1>Update — PZ Mod Studio 1.2.0: the game side, save backups, maps, servers and Discord</h1>
+<p><img src="https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/banners/hero.jpg" alt="PZ Mod Studio"></p>
+<p>Hello again!</p>
+<p>Since the walkthrough above, PZ Mod Studio grew in two directions: <strong>into the game itself</strong>, through its companion mod, and <strong>around your saves</strong>, so a mod update or a changed list doesn&#39;t cost you a world. Here is what is new in 1.2.0, one screen at a time.</p>
+<p><strong><a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest">Download PZ Mod Studio 1.2.0</a></strong> (portable, nothing to install) · <strong><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3824256253">PZ Mod Studio Link on the Steam Workshop</a></strong></p>
+<hr>
+<h2>1. PZ Mod Studio Link — now on the Steam Workshop</h2>
+<p><img src="https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/media/07-profiles.gif" alt="Profiles in the game"></p>
+<p>The companion mod is now a Workshop item you can subscribe to, and it does a lot more than before. With the app:</p>
+<ul>
+<li><strong>The active profile on the game&#39;s Mods screen</strong>: its mods first, and what you switch on or off in the game goes back to the profile. New subscriptions show as &quot;+N new&quot;.</li>
+<li><strong>Mod Health marks</strong> on the mods with a problem, with the reason, and <strong>your notes and groups</strong> of mods, made in the app and shown in the game.</li>
+<li><strong>A card on the main menu</strong>: the active profile, how many problems Mod Health found, and what changed in the save Continue would load.</li>
+</ul>
+<p>And even without the app, it gives you a clearer Mods screen:</p>
+<p><img src="https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/media/01-mods-screen.gif" alt="The Link&#39;s Mods screen"></p>
+<ul>
+<li>Search, filters (on, off, problems, maps), each mod&#39;s poster, description, version, what it requires and what needs it.</li>
+<li>Switching a mod on brings what it requires; switching one off tells you first what needs it.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/media/03-requirements.gif" alt="Requirements"></p>
+<ul>
+<li>Drag to reorder, select several mods at once, Undo, and the game&#39;s own screen is always one button away.</li>
+</ul>
+<p>It is only Lua: plain-text files you can read in its folder. It writes nothing but its own small files and your mod list, the same way the game&#39;s screen does.</p>
+<h2>2. Your saves, backed up</h2>
+<p><img src="https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/media/08-save-check.png" alt="A check before a save loads"></p>
+<p>Loading a save with different mods can lose items, vehicles or whole map areas for good. So now:</p>
+<ul>
+<li><strong>A check before every save loads</strong>: when a save&#39;s mods changed since you last played it (added, taken out, updated, reordered), the Link shows what changed and you choose: <strong>Load it</strong> (the app backs it up first), <strong>Play on a copy</strong>, or <strong>Back</strong>.</li>
+<li><strong>Automatic backups</strong>: a zip of the save when you leave it, before it loads with changed mods, before its mod list is changed, and before a restore. Each zip is read back after it is written.</li>
+<li><strong>A new Saves screen</strong>: every save, whether its newest backup matches it, the room left on your disk, and <strong>Restore</strong> (it backs up the save as it is first, so a restore can be undone too). Pin a backup to keep it for good.</li>
+</ul>
+<h2>3. What&#39;s new since you last played</h2>
+<p>Your Workshop mods updated since your last session, and the ones whose update is still waiting in Steam, each with its change notes — read before you load a save in progress.</p>
+<ul>
+<li>A <strong>May break saves</strong> mark when a map mod changed or the notes talk about new saves, wipes, things removed or renamed (hover it to see the words that raised it).</li>
+<li><strong>Keep the version I have</strong>: when an update is still waiting in Steam, keep a copy of the current one, to put back if the update breaks your save.</li>
+<li><strong>The mod&#39;s own changelog</strong> (<code>ChangeLog.txt</code>, <code>CHANGELOG.md</code>), read from its folder, offline too.</li>
+</ul>
+<h2>4. Errors, named in the game</h2>
+<p><img src="https://raw.githubusercontent.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/main/workshop/Z_StudioLink/media/06-error-notice.png" alt="The error notice in the game"></p>
+<ul>
+<li>When a mod&#39;s Lua fails, the Link shows a notice <strong>in the game</strong> with the mod it came from, and the one that called it. <strong>Copy report</strong> puts the details on the clipboard for its author. (The picture shows an example mod made to fail, not a real one.)</li>
+<li>In the Monitor: <strong>one card per error</strong>, &quot;called from&quot; read from the game&#39;s own stack, a card for an item a save cannot rebuild (naming the mod), and Mod Health now points out a mod that fills the console.</li>
+</ul>
+<h2>5. Maps</h2>
+<p>Every map mod drawn on <strong>the real map of Knox Country</strong>: which cells each one replaces, and where two map mods fight over the same ground (or use the same tile numbers, which gives you wrong walls and floors). Zoom with the wheel, drag to move, and switch a clashing map off from there.</p>
+<h2>6. Servers: join one, and Discord</h2>
+<ul>
+<li><strong>Join a server</strong>: Steam&#39;s public server list (no key needed), with filters for your build, players, password, modded or vanilla. Add a private server by its address. Before joining you see its mods, which ones you have, and you can <strong>make a profile with its mods</strong>.</li>
+<li><strong>Discord for your hosted server</strong>: a webhook posts when the server is up, stopped, crashed or restarted, who joins and leaves, and when Workshop mods need a restart. The Studio also sets up <strong>the game&#39;s own Discord bot</strong> (game chat ↔ a channel), and optional commands (<code>!status</code>, <code>!players</code>, <code>!restart</code>) for a role you choose.</li>
+</ul>
+<h2>7. For mod authors</h2>
+<ul>
+<li><strong>Support the author</strong>: the Ko-fi, Patreon and other support links an author ships with the mod (in its changelog or its Workshop description), shown beside each of their mods.</li>
+<li><strong>Error reports ready to send</strong> them, from the Monitor or from the notice in the game.</li>
+<li>Their mods are never edited or re-uploaded: fixes stay in separate folders.</li>
+</ul>
+<h2>8. Community lists</h2>
+<p>Mod lists shared by other players: see how many of their mods you already have, <strong>copy one into your lists</strong>, then subscribe to what is missing or make a profile from it. Every list is read by a person before it is published, and they are all on the <strong><a href="https://pichu6.github.io/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/">community web page</a></strong>, next to the index of known issues and their fixes.</p>
+<h2>9. For modders: Lua reload in a fraction of a second</h2>
+<p>Save a <code>.lua</code> file and it is checked and running in the game in about <strong>0.3 s</strong> — on the main menu, in game or paused — without restarting. Event handlers and your global tables are kept, so open windows and their state carry on with the new code. <code>PZStudio.onReload(...)</code> runs your own set-up again after a reload.</p>
+<h2>And smaller things</h2>
+<ul>
+<li><strong>Help on every screen</strong>, in English and Spanish.</li>
+<li><strong>Preview before a change</strong>: switching mods on or off, subscribing with requirements, and the launch file show what will change first.</li>
+<li>The window opens as you left it, and closing it can keep it in the tray.</li>
+<li>Steam requests are paced and cached, so browsing the Workshop is faster and never hammers Steam.</li>
+<li>Safer writes: the app never writes over a file it could not read, and waits for files another program is holding.</li>
+</ul>
+<hr>
+<p><strong>Download:</strong> <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest">PZ Mod Studio 1.2.0</a> · <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3824256253">PZ Mod Studio Link (Workshop)</a> · <a href="https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-">Source code</a> · <a href="https://pichu6.github.io/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/">Community index and lists</a></p>
+<p>As always: if something breaks, post here or open an issue on GitHub, with the <strong>Save report</strong> file (or the in-game <strong>Copy report</strong>) if it is about an error.</p>
+<p>Thanks for reading, and happy surviving!</p>
+
+</body></html>
