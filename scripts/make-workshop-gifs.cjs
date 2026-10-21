@@ -14,8 +14,9 @@ const inDir = path.join(root, 'workshop', 'Z_StudioLink', 'recordings');
 const outDir = path.join(root, 'workshop', 'Z_StudioLink', 'media');
 const only = process.argv[2];
 const MAX = 5 * 1024 * 1024;
-// Tried in order until one fits: [frames per second, width].
-const SIZES = [[15, 800], [12, 800], [12, 720], [10, 640], [8, 560]];
+// Tried in order until one fits: [frames per second, width]. 600 px is about the width of the
+// Workshop page's description column, so a wider GIF only costs bytes.
+const SIZES = [[12, 600], [10, 600], [10, 520], [8, 480]];
 
 fs.mkdirSync(outDir, { recursive: true });
 const files = fs.existsSync(inDir) ? fs.readdirSync(inDir).filter(f => /\.(mp4|mkv|mov|webm)$/i.test(f)) : [];
@@ -26,7 +27,8 @@ if (!files.length) {
 for (const file of files) {
   const m = path.parse(file).name.match(/^(.*?)(?:@([\d.]+)-([\d.]+))?$/);
   const name = m[1];
-  if (only && name !== only) continue;
+  // Only the page's takes (01-..., 02-...): the video in the same folder is not one.
+  if (!/^\d\d-/.test(name) || (only && name !== only)) continue;
   const trim = m[2] ? ['-ss', m[2], '-to', m[3]] : [];
   const out = path.join(outDir, `${name}.gif`);
   for (const [fps, width] of SIZES) {

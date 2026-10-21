@@ -14,6 +14,7 @@ matters:
 | `06-error-notice.png` | the notice for a Lua error, from a throwaway example mod (not active, so the game calls it "Unnamed Mod"); no real mod is shown failing | crop of the main menu, app open |
 | `07-profiles.gif` | the app switches to a small profile, the game's MODS screen shows it, then all installed | app, then game |
 | `08-save-check.png` | what changed in a save since its last session (a mod taken out, the order) | crop of the main menu |
+| `app-mod-list.png`, `app-mod-health.png`, `app-monitor.png`, `app-browse.png` | the app's Mod List, Mod Health, Monitor and Browse | `docs/forum/images` at 720 px |
 | `09-profile-in-game.png` | the Mods screen with the app open: profile's mods, a player's note on a mod | crop of the screen, opened from Lua |
 
 "App closed" was the Link told in memory that PZ Mod Studio is not running, so the screen is
