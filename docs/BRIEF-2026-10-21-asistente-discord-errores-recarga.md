@@ -153,3 +153,65 @@ En total, ~1,3 s de promedio y hasta ~2,7 s. Además, `Bridge.OnTick` se corta s
 - que las funciones de pila funcionen sin `-debug`.
 
 Las partes A y C solas (~5h) ya dan casi toda la mejora de velocidad.
+
+---
+
+## Revisión (2026-10-21)
+
+Verificado contra el juego instalado (42.21) y contra el código actual del Studio antes de construir nada.
+
+### Lo que ya está confirmado
+- **Las funciones existen en 42.21:** `getLuaDebuggerErrors`, `getCurrentCoroutine`, `getCallframeTop`, `getCoroutineCallframeStack`, `getFilenameOfCallframe`, `getFilenameOfClosure`, `getLuaStackTrace`, `reloadLuaFile` y `isDebugEnabled` están en `LuaManager$GlobalObject`. `getLuaDebuggerErrors()` devuelve una copia de `KahluaThread.m_errors_list`. Que se llene sin `-debug` hay que probarlo en vivo: está en la librería Kahlua, que no está descompilada. Error Magnifier funciona para jugadores comunes, lo que sugiere que sí.
+- **El canal juego ↔ app ya existe y está probado:** Link 1.13.0, con pedidos y respuestas (`LinkRequests`/`LinkAcks`), el pedido `show` que trae la ventana al frente, la copia de la lista activa y la sincronización en el menú. Varios puntos del brief salen casi gratis de ahí (ver abajo).
+- **Contexto que el brief no tenía:**
+  - **Abrir el Studio desde el juego solo funciona si está abierto** (o en la bandeja). Con Steam, `openUrl` va al overlay de Steam, y Lua no tiene otra forma de lanzar un programa (`showFolderInDesktop` no ejecuta un exe). Los "Ver en el Studio" del punto 3 tienen que decir eso cuando la app está cerrada, como ya hace "Open PZ Mod Studio".
+  - **Ya está hecho:** errores por mod de la última sesión ("413× threw" en la Mod List) y tiempos de carga por mod (Phase 4).
+  - **No hay `notify` ni WebSocket en `Cargo.toml`.**
+
+### Mejoras propuestas
+
+**3. Errores (empezar por acá: es para todos y reutiliza el Link)**
+- **3.1 y 3.2: la pila completa ya está en `console.txt`.** Verificado en los logs: cada error trae un bloque `STACK TRACE` con todos los niveles, y cada nivel con su mod: `Lua((MOD:Take A Bath And Shower [SP/MP])).isValid(TABAS_ISPlace3DItemCursor.lua:48)`, después `Lua(Vanilla).DoTileBuilding(...)`, después `Lua((MOD:Project Viewpoint: Visible Construction))...`.
+  - **La atribución por cadena se hace del lado del app**, leyendo ese bloque entero en lugar de la ventana de 3 líneas de `ModBlame`: "error en A, llamado desde B". No hace falta tocar el juego, y funciona también con logs viejos y con el servidor dedicado (3.14).
+  - Los niveles sin `MOD:` (`KahluaThread.call`, `require`) se resuelven con el mapa de rutas que ya existe.
+  - **Leer `getLuaDebuggerErrors()` desde el Link queda solo para el aviso dentro del juego (3.5):** el juego sabe al instante que hubo un error nuevo, sin esperar a que el app lea el log.
+- **3.4 (detector de spam) se puede hacer ya, solo del lado del app**, leyendo `console.txt` con la atribución que ya existe. No necesita el juego. Es la mejora más rápida (~2h).
+- **3.3 (`print` por mod): no hacerlo, o dejarlo al final.** Cuesta rendimiento en cada `print` y choca con fingerPrint y Error Magnifier (el usuario tiene `errorMagnifier` activo). El detector de spam cubre el caso real (un mod que inunda la consola).
+- **3.5 "Desactivar este mod" ya no necesita esperar al próximo inicio** en el menú: el Link pide `disable <id>` al app, el app cambia el perfil y `default.txt`, y la sincronización nueva hace que el juego lo tome en segundos. En partida sí queda para la próxima vez que se vuelva al menú.
+- **3.6 "Arreglo listo"** sale del mismo canal: el app escribe una línea en un archivo de avisos del Link.
+- **3.8 Avisos en el menú:** conviene integrarlos a la tarjeta del Studio que ya está en el menú (perfil, Mod Health) en lugar de crear otro panel, para no tapar el sistema de alertas de Chuckleberry ni la invitación.
+- **3.9 Error Magnifier:** si está activo, no mostrar popup propio. Se detecta con `getActivatedMods():contains(...)`, que es más confiable que buscar la variable global.
+
+**4. Recarga de Lua (modo developer)**
+- **A (velocidad):** en lugar de la crate `notify`, `ReadDirectoryChangesW` de `windows-sys`, que ya es dependencia. Agrega menos peso, y el app es solo para Windows.
+- **El juego no puede saber que hay una recarga pendiente sin leer el archivo.** Leerlo en cada tick (60 por segundo) es caro: mejor cada 3 ticks (~50 ms), y con `OnFETick`/`OnTickEvenPaused` para que funcione en el menú y en pausa.
+- **B5 (eventos duplicados), más simple:** durante `reloadLuaFile(F)`, reemplazar temporalmente `Events[X].Add` por una versión que anota `(X, fn)` para F, y quitar esos handlers antes de la próxima recarga de F. No hace falta recorrer la pila.
+  - El problema es la **primera** recarga, porque los `Add` del arranque no quedaron anotados. Hay que anotar desde el arranque con un archivo `media/lua/shared/!PZStudio_DevHooks.lua` en el bridge: el juego carga los archivos de Lua por ruta en orden alfabético, y "!" va primero. Hay que verificarlo en 42.21.
+- **C (validar antes de enviar)** ya existe en el app (`validate_lua_syntax`). Solo falta usarlo en ese paso.
+
+**2. Discord**
+- **Para los comandos, comandos de barra (`/players`, `/restart`) en lugar de `!players`.** No necesitan el intent privilegiado "Message Content", y los permisos por rol los maneja el propio Discord (Integraciones del servidor), así que el Studio no necesita su propia lista de roles.
+- **El puente de chat Discord → juego sí necesita "Message Content":** la interfaz tiene que indicar que hay que activarlo en el Developer Portal.
+- **Webhooks:** Discord limita a ~30 mensajes por minuto por webhook. Las entradas y salidas se agrupan ("3 jugadores entraron") para no cortarse en un reinicio.
+- **WebSocket:** `tungstenite` (sincrónico, con el `native-tls` que ya usa `ureq`) en lugar de twilight, que trae tokio y es mucho más pesado.
+
+**1. Asistente IA**
+- **Antes del chat, `docs/app/`:** es ayuda en línea para todos y la base del contexto del asistente. Tiene valor aunque el chat nunca se haga.
+- **Un paso intermedio barato y para todos: "Copiar para un asistente"** en las tarjetas de error y en Mod Health. Copia el reporte de `get_error_report` con una consigna lista para pegar en cualquier chat, sin API key.
+- **Antes de tener una UI propia, el MCP ya permite** usar Claude Desktop, Cursor y otros clientes con todas las herramientas. El chat integrado suma comodidad, no capacidad nueva: dejarlo para el final.
+- **Streaming desde Rust con `ureq`** (líneas SSE) alcanza: no hace falta tokio.
+
+### Orden recomendado
+| # | Tarea | Estimación |
+|---|---|---|
+| 1 | Detector de spam en la consola (3.4), solo app | ~2h |
+| 2 | Atribución por la pila completa del log, "error en A, llamado desde B" (3.1 + 3.2), solo app | ~4h |
+| 3 | Aviso en el juego desde `getLuaDebuggerErrors()`: Ver / Desactivar / Copiar reporte (3.5), y no mostrar si está Error Magnifier (3.9) | ~5h |
+| 4 | Recarga de Lua: velocidad + validación (4A + 4C) | ~5h |
+| 5 | Discord por webhook (2.1) | ~3h |
+| 6 | `docs/app/` + "Copiar para un asistente" | ~5h |
+| 7 | Changelogs dentro del mod + "Apoyar al autor" + respetar lo leído (3.11–3.13) | ~6h |
+| 8 | Recarga sin romper el estado (4B) | ~1 día |
+| 9 | Bot de Discord de dos vías (2.2) | ~1 día |
+| 10 | Chat del asistente con proveedor y herramientas (1) | ~2 días |
+| — | `print` por mod (3.3) | no por ahora |

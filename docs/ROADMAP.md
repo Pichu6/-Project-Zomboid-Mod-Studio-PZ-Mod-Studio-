@@ -146,6 +146,23 @@ Asked 2026-10-18: the Studio already carries developer tools (the MCP server, th
 
 ---
 
+## Phase 10: Errors from the game, Lua reload, Discord, an assistant (asked 2026-10-21)
+
+Brief and review: [BRIEF-2026-10-21-asistente-discord-errores-recarga.md](BRIEF-2026-10-21-asistente-discord-errores-recarga.md). Errors and Discord are for everyone; the Lua reload and the assistant only with Developer features on.
+
+| | Item | Notes |
+|---|---|---|
+| ⬜ | Console spam per mod (~2h) | Lines per mod and minute from console.txt with the Monitor's attribution; Mod Health warns "floods the console". App only |
+| ⬜ | Blame by the whole stack (~4h) | console.txt already has every level: `Lua((MOD:X)).fn(File.lua:48)`; the card says "error in A, called from B". App only, old logs and the dedicated server too |
+| ⬜ | In-game notice of new errors (~5h) | The Link watches `getLuaDebuggerErrors()`; "See in the Studio" (only when it runs), "Turn this mod off" (through the app and the menu sync), "Copy report"; none when Error Magnifier is on |
+| ⬜ | Faster Lua reload (~5h) | `ReadDirectoryChangesW` in Rust, the game checking every 3 ticks while one waits, also paused and on the menu; checked by the parser before it is sent |
+| ⬜ | Discord by webhook (~3h) | Server up/down/crashed, joins and leaves (grouped: ~30 messages a minute per webhook), restarts, mods waiting for a restart |
+| ⬜ | `docs/app/` help pages + "Copy for an assistant" (~5h) | Help for everyone, and the assistant's context later |
+| ⬜ | Changelogs inside mods, "Support the author", what was read in the game (~6h) | The `ChangeLog.txt` / `[ALERT_CONFIG]` format 8 installed mods use; read only, no code of theirs |
+| ⬜ | Reload without breaking state (~1 day) | Handlers added by a file noted and removed before it reloads (a `!`-named shared file records them from the start); functions copied into the old table |
+| ⬜ | Two-way Discord bot (~1 day) | The player's own bot; slash commands (no privileged intent, roles set in Discord); chat bridge needs Message Content; `tungstenite`, not twilight |
+| ⬜ | Assistant chat (~2 days) | Provider (API key in the Credential Manager, or Ollama / LM Studio), the MCP tools in process, writes confirmed on a card |
+
 ## Facts from the game code (42.20.4) that the Studio relies on
 
 - Mod folders are searched in the order Workshop uploads → subscribed Workshop → `Zomboid/mods`;
