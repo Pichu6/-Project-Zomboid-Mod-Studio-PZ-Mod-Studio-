@@ -249,6 +249,8 @@ struct Seen {
     gathering_since: Option<u64>,
     updates_checked_at: u64,
     updates_said: BTreeSet<String>,
+    /// The stop request a restart already used: the next stop without a new one is a crash.
+    stop_spent: u64,
 }
 
 /// What changed since the last look, as messages (the decisions, without the network or the
@@ -256,13 +258,17 @@ struct Seen {
 fn step(seen: &mut Seen, running: bool, server: &str, started_at: Option<u64>, players: Option<BTreeSet<String>>, now: u64, stop_asked_at: u64, s: &DiscordSettings) -> Vec<String> {
     let mut out = Vec::new();
     let lang = s.language.as_str();
-    let stop_asked = stop_asked_at > 0 && now.saturating_sub(stop_asked_at) <= STOP_GRACE_SECS;
+    let stop_asked = stop_asked_at > 0 && stop_asked_at != seen.stop_spent && now.saturating_sub(stop_asked_at) <= STOP_GRACE_SECS;
     match (seen.running, running) {
         (Some(false), true) => {
             if stop_asked && s.restarts {
                 out.push(say(lang, "restarted", &[server]));
             } else if s.status {
                 out.push(say(lang, "up", &[server]));
+            }
+            // Up again: that stop request is used, whatever comes next is not it.
+            if stop_asked {
+                seen.stop_spent = stop_asked_at;
             }
             seen.players.clear();
             seen.updates_said.clear();
@@ -460,6 +466,8 @@ mod tests {
         step(&mut seen, true, "Coop", Some(160), Some(set(&[])), 160, 0, &s);
         assert_eq!(step(&mut seen, false, "Coop", None, None, 200, 195, &s), vec!["🔴 **Coop** was stopped from PZ Mod Studio."]);
         assert_eq!(step(&mut seen, true, "Coop", Some(230), Some(set(&[])), 230, 195, &s), vec!["🔄 **Coop** restarted and is up again."]);
+        // Killed a minute later, the same stop request long used: a crash (seen live 2026-10-21).
+        assert_eq!(step(&mut seen, false, "Coop", None, None, 300, 195, &s), vec!["⚠️ **Coop** stopped without being asked (a crash, or closed outside PZ Mod Studio)."]);
         // What is switched off is not said.
         let quiet = DiscordSettings { enabled: true, status: false, ..Default::default() };
         assert!(step(&mut seen, false, "Coop", None, None, 900, 0, &quiet).is_empty());
