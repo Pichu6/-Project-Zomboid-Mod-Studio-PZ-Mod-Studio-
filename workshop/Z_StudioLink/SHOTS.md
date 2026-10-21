@@ -1,7 +1,14 @@
 # Images of the Workshop page
 
-The page ([workshop.txt](workshop.txt)) loads its images from GitHub, from `media/`. Each one is
-a live recording of the game or the app (Link 1.13.1, B42.21), no zoom, cut to the part that
+The description ([workshop.txt](workshop.txt)) shows only the banners in `banners/`, loaded from
+`raw.githubusercontent.com` (Steam does not follow the redirect of a `github.com/.../raw/...`
+link, so those never load). The screens go in the carousel at the top of the page: the files in
+`slides/`, added by hand in "Add/edit images & videos" on the item's page, in their numbered
+order. `node scripts/make-workshop-art.cjs` draws both (`banners` or `slides` for one of them):
+the slides take the app's screens from `docs/forum/images`, the game's crops from `media/` and
+the animated ones from `recordings/`.
+
+The screens in `media/` are each one of the game or the app (Link 1.13.1, B42.21), no zoom, cut to the part that
 matters:
 
 | File | What it shows | How |
