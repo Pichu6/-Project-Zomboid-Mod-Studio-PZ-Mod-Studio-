@@ -5,12 +5,19 @@ This folder holds what the Workshop page needs (`workshop.txt`: title, descripti
 
 ## What the mod does on its own
 
-Anyone can subscribe without the app. Without it the mod changes nothing in the game: no screen
-is replaced, no save is touched, no question is asked. The main menu shows a small card saying
-what the app does, with Download (the releases page, in the browser) and Hide (for good:
-`Zomboid/Lua/PZModStudio_LinkInvite.txt`). "Has the app" means PZ Mod Studio has run on this PC
-(its heartbeat file `PZModStudio_LinkApp.txt` exists); with it, the card shows the profile, Mod
-Health and the save Continue would load instead.
+Anyone can subscribe without the app. Without it the main menu's MODS button opens the Link's
+own Mods screen (`PZModStudio_ModsScreen.lua`): search, filters (on, off, problems, maps), each
+mod's poster, description, version, what it requires and what needs it, turning a mod on with
+what it requires and off with what needs it (said first), Accept and Back like the game's screen,
+which stays one button away. It writes `mods/default.txt` the way the game's screen does; no save
+is touched. The main menu also shows a small card saying what the app does, with Download (the
+releases page, in the browser) and Hide (for good: `Zomboid/Lua/PZModStudio_LinkInvite.txt`).
+
+"Has the app" means PZ Mod Studio has run on this PC (its heartbeat file
+`PZModStudio_LinkApp.txt` exists). With it the same screen shows the profile's mods first, Mod
+Health's marks and the mods in no profile; the menu card shows the profile, Mod Health and the
+save Continue would load. Another mod manager that owns the Mods screen keeps it (the game asks
+which one, only when the app is in use).
 
 ## Publishing
 

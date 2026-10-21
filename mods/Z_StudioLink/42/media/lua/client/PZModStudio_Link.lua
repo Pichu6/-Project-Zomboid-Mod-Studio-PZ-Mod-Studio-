@@ -116,6 +116,36 @@ local TEXT = {
     inviteLine2 = "Mod Health, maps and servers. Free, for Windows.",
     inviteDownload = "Download",
     inviteHide = "Hide",
+    modsTitle = "Mods",
+    modsSub = "{1} mods installed, {2} on",
+    modsSubProfile = "Profile: {1}   {2} on of {3} installed",
+    modsFilter_all = "All",
+    modsFilter_on = "On",
+    modsFilter_off = "Off",
+    modsFilter_problems = "Problems",
+    modsFilter_maps = "Maps",
+    modsOnlyProfileOn = "Profile's mods",
+    modsOnlyProfileOff = "All installed",
+    modsMap = "map",
+    modsNotForBuild = "not for this build",
+    modsNeedsMore = "needs more",
+    modsCannotTurnOn = "The game cannot load this mod on this build (or something it requires is not installed).",
+    modsAlsoOn = "{1} needs these, which are off: they come on with it.",
+    modsMissingReq = "{1} also needs these, which are not installed (subscribe to them on the Workshop):",
+    modsAlsoOff = "These need {1} and are on: they go off with it.",
+    modsTurnOn = "Turn on",
+    modsTurnOff = "Turn off",
+    modsBy = "By {1}",
+    modsRequires = "Requires:",
+    modsNotInstalled = "not installed",
+    modsOff = "off",
+    modsNeededBy = "Needed by:",
+    modsAccept = "Accept",
+    modsAcceptN = "Accept ({1})",
+    modsWorkshopPage = "Workshop page",
+    modsGameScreen = "The game's screen",
+    modsDiscard = "{1} change(s) not accepted yet. Keep them?",
+    modsDiscardYes = "Drop them",
     cardOpen = "open",
     cardClosed = "closed",
     cardProfile = "Profile: {1} ({2} mods)",
@@ -1460,3 +1490,11 @@ function MainScreen.onCheckSavefileModalClick(model, button, ...)
     end
     return goOn()
 end
+
+-- For PZModStudio_ModsScreen.lua (loaded after this file): the helpers it shares.
+Link.text = text
+Link.plainId = plainId
+Link.isMapMod = isMapMod
+Link.now = now
+Link.SELF_ID = SELF_ID
+Link.STUDIO_PACKAGE = STUDIO_PACKAGE

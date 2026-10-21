@@ -52,11 +52,12 @@ pub const PROFILE_CHANGED_EVENT: &str = "profile-changed-in-game";
 const MOD_INFO: &str = include_str!("../../../mods/Z_StudioLink/mod.info");
 const MOD_INFO_42: &str = include_str!("../../../mods/Z_StudioLink/42/mod.info");
 const CLIENT_LUA: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_Link.lua");
+const SCREEN_LUA: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/client/PZModStudio_ModsScreen.lua");
 
 const UI_EN: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/shared/Translate/EN/UI.json");
 const UI_ES: &str = include_str!("../../../mods/Z_StudioLink/42/media/lua/shared/Translate/ES/UI.json");
 
-fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 5] {
+fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 6] {
     let target = user_zomboid_dir.join("mods").join(LINK_MOD_ID);
     let lua = target.join("42").join("media").join("lua");
     let translate = lua.join("shared").join("Translate");
@@ -64,6 +65,7 @@ fn link_files(user_zomboid_dir: &Path) -> [(PathBuf, &'static str); 5] {
         (target.join("mod.info"), MOD_INFO),
         (target.join("42").join("mod.info"), MOD_INFO_42),
         (lua.join("client").join("PZModStudio_Link.lua"), CLIENT_LUA),
+        (lua.join("client").join("PZModStudio_ModsScreen.lua"), SCREEN_LUA),
         (translate.join("EN").join("UI.json"), UI_EN),
         (translate.join("ES").join("UI.json"), UI_ES),
     ]
@@ -958,9 +960,11 @@ mod tests {
             }
             out
         };
-        for missing in ["next(", "goto ", "//"] {
-            let used = CLIENT_LUA.lines().any(|l| code(l).contains(missing));
-            assert!(!used, "PZModStudio_Link.lua uses {}", missing);
+        for (file, source) in [("PZModStudio_Link.lua", CLIENT_LUA), ("PZModStudio_ModsScreen.lua", SCREEN_LUA)] {
+            for missing in ["next(", "goto ", "//"] {
+                let used = source.lines().any(|l| code(l).contains(missing));
+                assert!(!used, "{} uses {}", file, missing);
+            }
         }
         assert!(code(r#"x = "a//b" -- c // d"#).trim() == "x =", "quotes and comments are not code");
         assert!(code("y = 7 // 2").contains("//"), "integer division in code is found");
