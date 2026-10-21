@@ -11,7 +11,7 @@ Your installed mods: which ones are on and the order the game loads them in. Eve
 
 ## Support the author
 
-When the selected mod ships a changelog, the inspector shows **Support the author** with the links its author put in it (opened in your browser), and **Latest in its changelog**, which opens its newest entry. The same buttons are on a mod's page in Browse when it is installed.
+The inspector shows **Support the author** with the links its author put in the mod's changelog or in its Workshop description (Ko-fi, Patreon, Buy Me a Coffee...), opened in your browser, and, when the mod ships a changelog, **Latest in its changelog**, which opens its newest entry. The same buttons are on a Workshop item's page in Browse, installed or not.
 
 ## The # column
 

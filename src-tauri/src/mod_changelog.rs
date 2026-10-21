@@ -205,9 +205,86 @@ pub fn newer_than<'a>(entries: &'a [LogEntry], seen: Option<&str>, limit: usize)
     &entries[..cut.min(entries.len())]
 }
 
+/// Sites where people support a mod's author, and the name a link to one is shown with. A host
+/// with a path wants that path to start the way written (a PayPal page is a donation page only
+/// under these), and every link needs something after the host: the author's own page.
+const SUPPORT_SITES: &[(&str, &str, &str)] = &[
+    ("ko-fi.com", "", "Ko-fi"),
+    ("patreon.com", "", "Patreon"),
+    ("buymeacoffee.com", "", "Buy Me a Coffee"),
+    ("paypal.me", "", "PayPal"),
+    ("paypal.com", "/donate", "PayPal"),
+    ("paypal.com", "/paypalme", "PayPal"),
+    ("github.com", "/sponsors", "GitHub Sponsors"),
+    ("liberapay.com", "", "Liberapay"),
+    ("boosty.to", "", "Boosty"),
+    ("opencollective.com", "", "Open Collective"),
+];
+const MAX_SUPPORT_LINKS: usize = 4;
+
+/// The support links in a mod's Workshop description (Steam BBCode or plain text): Ko-fi, Patreon
+/// and the like, written as `[url=...]`, as bare links or without `https://`. Only those sites,
+/// only https, Steam's link filter taken off; each address once.
+pub fn support_links(text: &str) -> Vec<AuthorLink> {
+    let mut out: Vec<AuthorLink> = Vec::new();
+    for raw in text.split(|c: char| c.is_whitespace() || "[]\"'<>(),|".contains(c)) {
+        let token = raw.strip_prefix("url=").unwrap_or(raw);
+        let token = match token.split_once("linkfilter/?u=").or_else(|| token.split_once("linkfilter/?url=")) {
+            Some((_, inner)) => inner.replace("%3A", ":").replace("%2F", "/").replace("%3a", ":").replace("%2f", "/"),
+            None => token.to_string(),
+        };
+        let bare = token.strip_prefix("https://").or_else(|| token.strip_prefix("http://")).unwrap_or(&token);
+        let bare = bare.strip_prefix("www.").unwrap_or(bare).trim_end_matches(['.', ';', ':', '!', '?', '/']);
+        let (host, path) = bare.split_once('/').map(|(h, p)| (h, format!("/{}", p))).unwrap_or((bare, String::new()));
+        let host = host.to_ascii_lowercase();
+        let Some((_, _, name)) = SUPPORT_SITES.iter().find(|(h, prefix, _)| host == *h && path.to_ascii_lowercase().starts_with(prefix)) else { continue };
+        if path.trim_matches('/').is_empty() || path.contains(char::is_whitespace) {
+            continue;
+        }
+        let url = format!("https://{}{}", host, path);
+        if !out.iter().any(|l| l.url.eq_ignore_ascii_case(&url)) {
+            out.push(AuthorLink { name: name.to_string(), url });
+        }
+        if out.len() == MAX_SUPPORT_LINKS {
+            break;
+        }
+    }
+    out
+}
+
+/// The changelog's links and the description's, the changelog's first, each address once.
+pub fn merge_links(first: Vec<AuthorLink>, more: &[AuthorLink]) -> Vec<AuthorLink> {
+    let mut out = first;
+    for l in more {
+        if !out.iter().any(|o| o.url.eq_ignore_ascii_case(&l.url)) {
+            out.push(l.clone());
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn support_links_in_a_workshop_description() {
+        let text = "[h2]Support me[/h2]\r\n[url=https://steamcommunity.com/linkfilter/?u=https%3A%2F%2Fko-fi.com%2Fsomeone]Ko-fi[/url] | patreon.com/someone.\nAlso https://www.buymeacoffee.com/someone and https://ko-fi.com/someone again.\n\
+            https://github.com/sponsors/dev https://github.com/dev/repo https://paypal.com/donate/?hosted_button_id=X https://paypal.com/us/home https://patreon.com/ ko-fi.com";
+        let links = support_links(text);
+        assert_eq!(links.iter().map(|l| (l.name.as_str(), l.url.as_str())).collect::<Vec<_>>(), vec![
+            ("Ko-fi", "https://ko-fi.com/someone"),
+            ("Patreon", "https://patreon.com/someone"),
+            ("Buy Me a Coffee", "https://buymeacoffee.com/someone"),
+            ("GitHub Sponsors", "https://github.com/sponsors/dev"),
+        ], "the link filter off, no scheme or www needed, each once, a repo or a page with no author is not a support link, at most four");
+        let paypal = support_links("[url=https://www.paypal.com/donate/?hosted_button_id=ABC]donate[/url] http://paypal.me/someone");
+        assert_eq!(paypal.iter().map(|l| l.url.as_str()).collect::<Vec<_>>(), vec!["https://paypal.com/donate/?hosted_button_id=ABC", "https://paypal.me/someone"]);
+        assert!(support_links("[url=https://discord.gg/abc]Discord[/url] https://steamcommunity.com/id/x").is_empty());
+        let merged = merge_links(vec![AuthorLink { name: "Chuck's Kofi".into(), url: "https://ko-fi.com/someone".into() }], &links);
+        assert_eq!(merged.len(), 4, "the changelog's Ko-fi is the description's Ko-fi");
+        assert_eq!(merged[0].name, "Chuck's Kofi");
+    }
 
     #[test]
     fn the_alert_format_with_its_links() {

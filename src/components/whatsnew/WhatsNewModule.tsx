@@ -5,7 +5,7 @@ import i18next from 'i18next';
 import { Archive, ExternalLink, Loader2, Newspaper, RefreshCw, ShieldAlert, TriangleAlert } from 'lucide-react';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { UpdatedItem, WhatsNew } from '../../types';
+import { AuthorLink, UpdatedItem, WhatsNew } from '../../types';
 
 interface WhatsNewModuleProps {
   paths: StudioPathsUI;
@@ -49,6 +49,20 @@ export const WhatsNewModule: React.FC<WhatsNewModuleProps> = ({ paths }) => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Workshop id -> the support links in its Workshop description (one request for all). */
+  const [support, setSupport] = useState<Map<string, AuthorLink[]>>(new Map());
+  const workshopIds = useMemo(() => (data?.items ?? []).map((i) => i.workshop_id).filter((id) => /^\d+$/.test(id)).sort().join(','), [data]);
+  useEffect(() => {
+    if (!workshopIds) return;
+    let cancelled = false;
+    TauriService.workshopDetails(workshopIds.split(','))
+      .then((found) => !cancelled && setSupport(new Map(found.filter((i) => i.support?.length).map((i) => [i.workshop_id, i.support!]))))
+      .catch(() => undefined); // offline: the changelog's links still show
+    return () => {
+      cancelled = true;
+    };
+  }, [workshopIds]);
 
   const items = (data?.items ?? []).filter((i) => !onlyActive || i.active);
   const unread = items.filter((i) => i.notes_error === 'later' || i.notes_error === 'busy').length;
@@ -181,7 +195,7 @@ export const WhatsNewModule: React.FC<WhatsNewModuleProps> = ({ paths }) => {
                     ))}
                   </div>
                 )}
-                <SupportLinks links={item.support} />
+                <SupportLinks links={item.support} more={support.get(item.workshop_id)} />
                 {item.notes.length === 0 && !item.local && (
                   <div className="text-[11px] text-slate-500">
                     {item.notes_error === 'busy'

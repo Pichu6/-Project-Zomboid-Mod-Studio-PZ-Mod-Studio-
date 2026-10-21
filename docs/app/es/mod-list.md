@@ -11,7 +11,7 @@ Tus mods instalados: cuáles están prendidos y en qué orden los carga el juego
 
 ## Apoyar al autor
 
-Cuando el mod elegido trae un changelog, el inspector muestra **Apoyar al autor** con los links que puso su autor (se abren en tu navegador), y **Lo último de su changelog**, que despliega su entrada más nueva. Los mismos botones están en la página del mod en Explorar mods cuando está instalado.
+El inspector muestra **Apoyar al autor** con los links que su autor puso en el changelog del mod o en su descripción del Workshop (Ko-fi, Patreon, Buy Me a Coffee...), que se abren en tu navegador, y, cuando el mod trae un changelog, **Lo último de su changelog**, que despliega su entrada más nueva. Los mismos botones están en la página de un mod del Workshop en Explorar mods, instalado o no.
 
 ## La columna #
 

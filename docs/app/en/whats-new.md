@@ -48,7 +48,7 @@ Many mods ship a changelog in their own folder (`ChangeLog.txt`, `CHANGELOG.md`)
 - A card shows the entries you have not read yet, under **From the mod's own changelog**, next to the Workshop notes. Words like "new save" or "removed" in them raise **May break saves** or **Read first** too.
 - **read in the game**: the game's mod alerts (the "Mod Update and Alert System" mod) already showed you the newest entry, so it is not new here either.
 - Mods in `Zomboid/mods` (local, or from Nexus) appear here when their changelog gets a new entry, marked **local mod**. **Mark as read** takes the card away until the next entry. The first time the Studio sees a mod's changelog it only remembers it, without showing it.
-- **Support the author**: the links the author put in the changelog (Ko-fi, Patreon, GitHub, Discord...), opened in your browser.
+- **Support the author**: the links the author put in the changelog (Ko-fi, Patreon, GitHub, Discord...) and the support links of its Workshop description (Ko-fi, Patreon, Buy Me a Coffee, PayPal, GitHub Sponsors, Liberapay, Boosty, Open Collective), opened in your browser.
 
 ## Good to know
 

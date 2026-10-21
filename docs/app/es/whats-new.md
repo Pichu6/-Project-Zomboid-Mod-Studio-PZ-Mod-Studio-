@@ -48,7 +48,7 @@ Muchos mods traen un changelog en su propia carpeta (`ChangeLog.txt`, `CHANGELOG
 - Una tarjeta muestra las entradas que todavía no leíste, en **Del changelog del propio mod**, al lado de las notas del Workshop. Palabras como "new save" o "removed" también levantan **Puede romper partidas** o **Conviene leer**.
 - **leído en el juego**: los avisos de mods del juego (el mod "Mod Update and Alert System") ya te mostraron la entrada más nueva, así que acá tampoco es nueva.
 - Los mods de `Zomboid/mods` (locales, o de Nexus) aparecen acá cuando su changelog tiene una entrada nueva, marcados como **mod local**. **Marcar como leído** saca la tarjeta hasta la próxima entrada. La primera vez que el Studio ve el changelog de un mod solo lo recuerda, sin mostrarlo.
-- **Apoyar al autor**: los links que el autor puso en el changelog (Ko-fi, Patreon, GitHub, Discord...), que se abren en tu navegador.
+- **Apoyar al autor**: los links que el autor puso en el changelog (Ko-fi, Patreon, GitHub, Discord...) y los de apoyo de su descripción del Workshop (Ko-fi, Patreon, Buy Me a Coffee, PayPal, GitHub Sponsors, Liberapay, Boosty, Open Collective), que se abren en tu navegador.
 
 ## Bueno saber
 

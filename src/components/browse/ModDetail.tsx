@@ -174,8 +174,9 @@ function useDetails<T>(load: () => Promise<T>, key: string, what: string) {
   return { data, loading };
 }
 
-/** "Support the author", from the changelog of the copy installed here. */
-const InstalledSupport: React.FC<{ paths: StudioPathsUI; modId: string }> = ({ paths, modId }) => {
+/** "Support the author", from the changelog of the copy installed here and, for a Workshop item,
+ *  its description. */
+const InstalledSupport: React.FC<{ paths: StudioPathsUI; modId: string; more?: AuthorLink[] }> = ({ paths, modId, more }) => {
   const [links, setLinks] = useState<AuthorLink[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -186,7 +187,7 @@ const InstalledSupport: React.FC<{ paths: StudioPathsUI; modId: string }> = ({ p
       cancelled = true;
     };
   }, [paths, modId]);
-  return <SupportLinks links={links} />;
+  return <SupportLinks links={links} more={more} />;
 };
 
 const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, paths, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, installedBuild = null, keep }) => {
@@ -220,7 +221,9 @@ const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } &
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {steamReady || installed.length > 0 ? i18next.t('browse.detail.openWorkshop') : i18next.t('browse.detail.openToSubscribe')}
             </ActionButton>
             {installed.length > 0 && <div className="text-[10px] font-mono text-emerald-400/80 break-all">{i18next.t('browse.detail.installedAs', { ids: installed.join(', ') })}</div>}
-            {installed.length > 0 && <InstalledSupport paths={paths} modId={installed[0]} />}
+            {installed.length > 0
+              ? <InstalledSupport paths={paths} modId={installed[0]} more={data?.item.support} />
+              : <SupportLinks links={[]} more={data?.item.support} />}
           </div>
           {item && (
             <Section title={i18next.t('browse.detail.info')}>

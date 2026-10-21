@@ -1055,6 +1055,8 @@ export interface WorkshopItem {
   /** A collection's items, in the author's order (empty for a normal mod). */
   children: string[];
   is_collection: boolean;
+  /** Where to support its author (Ko-fi, Patreon...), from the full Workshop description. */
+  support?: AuthorLink[];
 }
 
 /** What to list on the Workshop browse page. */

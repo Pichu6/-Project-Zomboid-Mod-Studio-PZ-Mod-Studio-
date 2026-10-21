@@ -43,6 +43,10 @@ pub struct WorkshopItem {
     pub children: Vec<String>,
     /// True when this is a collection rather than a single mod.
     pub is_collection: bool,
+    /// Where to support its author (Ko-fi, Patreon...), from the full description; empty when
+    /// Steam sent only a short one (a search) or the author put none.
+    #[serde(default)]
+    pub support: Vec<crate::mod_changelog::AuthorLink>,
 }
 
 /// What Steam has installed for one subscribed item (from appworkshop_108600.acf, offline).
@@ -207,6 +211,12 @@ fn parse_item(v: &Value) -> Option<WorkshopItem> {
             .map(|a| a.iter().filter_map(|c| c.get("publishedfileid").and_then(|x| x.as_str()).map(str::to_string)).collect())
             .unwrap_or_default(),
         is_collection: num("file_type") == Some(2) || v.get("num_children").and_then(|c| c.as_u64()).unwrap_or(0) > 0,
+        // Only a full description: a search's short one is cut and may cut a link.
+        support: ["description", "file_description"]
+            .iter()
+            .find_map(|k| v.get(*k).and_then(|x| x.as_str()).filter(|s| !s.is_empty()))
+            .map(crate::mod_changelog::support_links)
+            .unwrap_or_default(),
         tags,
         builds,
         workshop_id: id,
@@ -1096,5 +1106,22 @@ mod live_collection_tests {
                 println!("none of this page's collections overlaps what is installed here");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod live_support {
+    /// The support links of every installed Workshop item, from Steam. cargo test --lib installed_support_links -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn installed_support_links() {
+        let dir = r"D:\Apps\Steam\steamapps\workshop\content\108600";
+        let ids: Vec<String> = std::fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        let items = super::get_details(&ids).unwrap();
+        let with: Vec<_> = items.iter().filter(|i| !i.support.is_empty()).collect();
+        for i in &with {
+            println!("{:<45} {}", i.title.chars().take(45).collect::<String>(), i.support.iter().map(|l| format!("{} {}", l.name, l.url)).collect::<Vec<_>>().join(" | "));
+        }
+        println!("{} of {} installed items have support links", with.len(), items.len());
     }
 }

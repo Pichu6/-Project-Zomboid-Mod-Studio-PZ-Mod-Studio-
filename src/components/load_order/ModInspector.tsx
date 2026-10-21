@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ModChangelog, ModInfo } from '../../types';
+import { AuthorLink, ModChangelog, ModInfo } from '../../types';
 import { SupportLinks } from '../common/SupportLinks';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
@@ -155,6 +155,8 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
   const [posterSrc, setPosterSrc] = useState<string | null>(null);
   /** Workshop id -> the picture on its Workshop page, for the mods that ship none. */
   const [workshopPreviews, setWorkshopPreviews] = useState<Map<string, string>>(new Map());
+  /** Workshop id -> the support links (Ko-fi, Patreon...) in its Workshop description. */
+  const [workshopSupport, setWorkshopSupport] = useState<Map<string, AuthorLink[]>>(new Map());
 
   // Most mods ship no picture of their own, so ask Steam once for all of them instead of
   // waiting for a request every time the user picks a different mod.
@@ -169,6 +171,7 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
       .then((items) => {
         if (cancelled) return;
         setWorkshopPreviews(new Map(items.filter((i) => i.preview_url).map((i) => [i.workshop_id, i.preview_url!])));
+        setWorkshopSupport(new Map(items.filter((i) => i.support?.length).map((i) => [i.workshop_id, i.support!])));
       })
       .catch(() => undefined); // offline: the mods that ship a poster still show one
     return () => {
@@ -348,10 +351,10 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
           </div>
         )}
 
-        {changelog && (changelog.links.length > 0 || changelog.entries.length > 0) && (
+        {((changelog && (changelog.links.length > 0 || changelog.entries.length > 0)) || (mod.workshop_id && workshopSupport.has(mod.workshop_id))) && (
           <div className="space-y-2 p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-            <SupportLinks links={changelog.links} />
-            {changelog.entries[0] && (
+            <SupportLinks links={changelog?.links ?? []} more={mod.workshop_id ? workshopSupport.get(mod.workshop_id) : undefined} />
+            {changelog?.entries[0] && (
               <details>
                 <summary className="text-[11px] text-sky-300 cursor-pointer select-none">
                   {t('inspector.changelog')}
