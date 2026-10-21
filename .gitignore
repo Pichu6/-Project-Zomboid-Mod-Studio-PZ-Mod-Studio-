@@ -60,3 +60,6 @@ __pycache__/
 /updates.gif
 /viewpoint.gif
 /workshop.gif
+
+# Raw screen recordings for the Workshop GIFs (scripts/make-workshop-gifs.cjs)
+/workshop/Z_StudioLink/recordings/
