@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, PublicServer, ServerRules, SavedServer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, PublicServer, ServerRules, SavedServer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -60,6 +60,8 @@ export interface MergedPackageInfoUI {
   is_packaged: boolean;
   is_active_in_modlist: boolean;
   is_companion_bridge: boolean;
+  /** The Studio Link mod (also a locked system mod). */
+  is_studio_link?: boolean;
   created_at?: string;
   packaged_mods: string[];
   merged_files: string[];
@@ -796,6 +798,22 @@ export const TauriService = {
   /** Starts the game joining this server. Throws when the game is already running. */
   joinServer: async (paths: StudioPathsUI, address: string, name: string, password: string | null): Promise<number> => {
     return await invoke<number>('join_server_cmd', { paths, address, name, password });
+  },
+
+  /** How the Studio's window opens and what its close button does. */
+  windowPrefs: async (): Promise<WindowPrefs | null> => {
+    try {
+      return await invoke<WindowPrefs>('window_prefs_cmd');
+    } catch {
+      return null;
+    }
+  },
+
+  /** Saves them, with the tray menu's words in the Studio's language. */
+  setWindowPrefs: async (prefs: Pick<WindowPrefs, 'remember_window' | 'close_to_tray'>): Promise<void> => {
+    await invoke('set_window_prefs_cmd', {
+      prefs: { ...prefs, tray_open: i18next.t('settings.trayOpen'), tray_quit: i18next.t('settings.trayQuit'), tray_tip: 'PZ Mod Studio' },
+    });
   },
 
   /** Whether a Steam Web API key is saved (the key is never returned). */

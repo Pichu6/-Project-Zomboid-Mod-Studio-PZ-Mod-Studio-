@@ -373,10 +373,11 @@ export const App: React.FC = () => {
   const [serversView, setServersView] = useState<'JOIN' | 'HOST'>('JOIN');
 
   /** A profile with the mods a server loaded, in its order. */
-  const handleMakeProfileFromServer = async (name: string, modIds: string[]) => {
+  const handleMakeProfileFromServer = async (name: string, modIds: string[], announcedOf?: number) => {
     const installed = new Set(mods.map((m) => m.mod_id));
     const missing = modIds.filter((id) => !installed.has(id));
-    const ok = confirm(i18next.t('join.profileConfirm', { name, count: modIds.length, missing: missing.length > 0 ? i18next.t('join.profileMissing', { count: missing.length }) : '' }));
+    const partial = announcedOf ? i18next.t('join.profilePartial', { count: modIds.length, total: announcedOf }) : '';
+    const ok = confirm(i18next.t(announcedOf ? 'join.profileConfirmAnnounced' : 'join.profileConfirm', { name, count: modIds.length, missing: (missing.length > 0 ? i18next.t('join.profileMissing', { count: missing.length }) : '') + partial }));
     if (!ok) return;
     try {
       await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('join.profileDescription'), modIds, modIds);

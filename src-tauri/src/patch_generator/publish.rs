@@ -437,7 +437,7 @@ pub fn clean_master_patch(req: MasterPatchRequest) -> Result<bool, String> {
             .filter(|s| !s.trim().is_empty())
             .unwrap_or("Z_PZModStudio_MergedPatch"),
     )?;
-    if target_folder_name == BRIDGE_FOLDER {
+    if super::is_system_folder(&target_folder_name) {
         return Err(format!("The companion mod '{}' cannot be cleaned.", BRIDGE_FOLDER));
     }
 

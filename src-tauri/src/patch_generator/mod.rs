@@ -6,6 +6,12 @@ use crate::load_order::ini_parser::{read_mod_list_ini, write_mod_list_ini};
 pub const PACKAGE_PREFIX: &str = "Z_PZModStudio_";
 pub const BRIDGE_FOLDER: &str = "Z_PZModStudio_Bridge";
 
+/// The Studio's own mods (the Live Bridge companion and the Studio Link): listed with the
+/// packages so they can be seen, never renamed, filled, published over, cleaned or deleted.
+pub fn is_system_folder(folder: &str) -> bool {
+    folder == BRIDGE_FOLDER || folder == crate::studio_link::LINK_MOD_ID
+}
+
 /// Maps a package name ("My Patch", "PZ Mod Studio Patch: My Patch" or "Z_PZModStudio_My_Patch")
 /// to its folder name, and refuses anything that is not one plain folder name inside the
 /// Z_PZModStudio_ namespace. Every function that creates, writes or deletes a package folder
@@ -76,7 +82,11 @@ pub struct MergedPackageInfo {
     pub description: Option<String>,
     pub is_packaged: bool,
     pub is_active_in_modlist: bool,
+    /// One of the Studio's own mods (see is_system_folder): shown, locked.
     pub is_companion_bridge: bool,
+    /// The Studio Link mod in particular (the game's Mods screen and the profile).
+    #[serde(default)]
+    pub is_studio_link: bool,
     pub created_at: Option<String>,
     pub packaged_mods: Vec<String>,
     pub merged_files: Vec<String>,

@@ -108,7 +108,7 @@
     "sortNoticeBlurb": "Shows an explanatory informational dialog when clicking the sort dependencies button in the mod list.",
     "restoreNotification": "Restore Notification",
     "silenceNotification": "Silence Notification",
-    "startup": "Startup Behavior",
+    "startup": "Remember how PZ Mod Studio starts",
     "profilesScreen": "Profiles Screen",
     "lastProfile": "Last Active Profile",
     "startupQuestion": "What should open when the Studio starts?",
@@ -117,7 +117,7 @@
     "profilesStartBlurb": "Shows the profile manager so you can choose or activate the combination you are going to work with.",
     "openLast": "Open Last Profile Directly",
     "openLastBlurb": "Loads the previous active profile and takes you directly to the mod list.",
-    "rememberMode": "Remember the launch mode",
+    "rememberMode": "Remember how the game starts",
     "rememberModeBlurb": "The Launch button starts on the mode you used last time (Debug, Windowed, Normal...). Off: it always starts on Debug Mode (Fullscreen), the recommended one.",
     "community": "Download the community rules and mod index",
     "communityBlurb": "Once a day, from the Studio's own repository on GitHub: load-order rules, incompatible pairs, and one registry per mod with the builds it runs on, what it clashes with and its known issues with the fix the Studio can apply. Auto-Sort, Mod Health, the Mod List and the Browse page use them. Off: the last copy is kept and nothing is fetched. Nothing is ever sent.",
@@ -210,7 +210,16 @@
       "copied": "Copied",
       "openLog": "Open the logs folder",
       "failed": "Could not copy them."
-    }
+    },
+    "rememberWindow": "Open the window as I left it",
+    "rememberWindowBlurb": "Same size and place, on the same monitor, maximized or fullscreen if it was. If that monitor is no longer connected, it opens on the main one.",
+    "closeButton": "The close button (X)",
+    "closeQuits": "Closes the Studio",
+    "closeQuitsBlurb": "The Studio quits. The game, if it is running, keeps going.",
+    "closeToTray": "Keeps it in the tray, next to the clock",
+    "closeToTrayBlurb": "The window hides and the Studio keeps watching the game (backups when you exit, the profile in the Mods screen). Click its icon next to the clock to open it again; its menu has Quit.",
+    "trayOpen": "Open PZ Mod Studio",
+    "trayQuit": "Quit"
   },
   "profiles": {
     "title": "Mod Profiles",
@@ -1254,7 +1263,8 @@
       "collidingFile": "Colliding File:",
       "line": "Line #{{line}}",
       "sources": "{{count}} Sources",
-      "dragTitle": "Drag to resize the top panel and editor"
+      "dragTitle": "Drag to resize the top panel and editor",
+      "link": "STUDIO LINK"
     }
   },
   "backend": {
@@ -2345,7 +2355,6 @@
     "col_ping": "Ping",
     "col_build": "Build",
     "modded": "mods",
-    "moreHidden": "Showing {{shown}} of {{count}}: narrow it down with the filters.",
     "noneMatch": "No server matches the filters.",
     "addTitle": "Add a server by its address",
     "addressPlaceholder": "ip:port (port 16261 if left out)",
@@ -2387,6 +2396,17 @@
     "profileName": "Server: {{name}}",
     "profileDescription": "The mods a server loaded, in its order.",
     "profileConfirm": "Make the profile \"{{name}}\" with the {{count}} mods this server loaded?{{missing}}",
-    "profileMissing": "\n\n{{count}} of them are not installed now (the game had them only for that session, or they were removed)."
+    "profileMissing": "\n\n{{count}} of them are not installed now (the game had them only for that session, or they were removed).",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
+    "pageOf": "{{from}}–{{to}} of {{count}}",
+    "menuDetails": "See what it says",
+    "menuCopy": "Copy the address",
+    "copied": "{{address}} copied.",
+    "menuProfileAnnounced": "Make a profile with its mods",
+    "makeProfileAnnounced": "Make a profile with the {{count}} mods it announces",
+    "noModsToProfile": "This server announces no mods: there is nothing to put in a profile.",
+    "profileConfirmAnnounced": "Make the profile \"{{name}}\" with the {{count}} mods this server announces?{{missing}}",
+    "profilePartial": "\n\nThe server only announces {{count}} of its {{total}} mods. Join it once from here and make the profile again to get all of them."
   }
 }

@@ -32,6 +32,7 @@ pub mod translations;
 pub mod vdf;
 pub mod vfs;
 pub mod whats_new;
+pub mod window_prefs;
 pub mod workshop;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
@@ -573,6 +574,17 @@ fn map_images_cmd(paths: StudioPaths, px_per_cell: u32) -> Result<Vec<map_cells:
 fn map_image_bytes_cmd(paths: StudioPaths, id: String) -> Result<tauri::ipc::Response, String> {
     let z = zomboid_dir_of(&paths)?;
     Ok(tauri::ipc::Response::new(map_cells::images::image_bytes(&z, &id)?))
+}
+
+/// How the Studio's window opens and what its close button does.
+#[tauri::command]
+fn window_prefs_cmd() -> window_prefs::WindowPrefs {
+    window_prefs::prefs()
+}
+
+#[tauri::command]
+fn set_window_prefs_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, prefs: window_prefs::WindowPrefs) {
+    window_prefs::set_prefs(&app_handle, prefs);
 }
 
 /// Everything a bug report needs, as text, with the user name and the PC's name masked.
@@ -1351,6 +1363,7 @@ fn toggle_package_in_modlist_cmd(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::Manager;
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -1364,7 +1377,24 @@ pub fn run() {
             sandbox::watch_console_log(app.handle().clone());
             // What the game's Mods screen changes comes back to the active profile.
             studio_link::watch_mod_list(app.handle().clone());
+            // The window opens where and how it was left (it starts hidden so it does not jump).
+            if let Some(window) = app.get_webview_window("main") {
+                window_prefs::restore(&window);
+                let _ = window.show();
+                window_prefs::restore_state(&window);
+            }
+            if window_prefs::prefs().close_to_tray {
+                window_prefs::ensure_tray(app.handle());
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            let Some(webview) = window.app_handle().get_webview_window(window.label()) else { return };
+            match event {
+                tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => window_prefs::remember(&webview),
+                tauri::WindowEvent::CloseRequested { api, .. } => window_prefs::on_close_requested(&webview, api),
+                _ => {}
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_auto_paths,
@@ -1395,6 +1425,8 @@ pub fn run() {
             link_status_cmd,
             saves_overview_cmd,
             map_cells_cmd,
+            window_prefs_cmd,
+            set_window_prefs_cmd,
             public_servers_cmd,
             stop_server_search_cmd,
             server_rules_cmd,

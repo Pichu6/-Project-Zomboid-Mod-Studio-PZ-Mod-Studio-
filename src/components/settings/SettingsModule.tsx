@@ -147,6 +147,22 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       setGithubError(String(err));
     }
   };
+  // The window: opened as it was left, and what the close button does.
+  const [rememberWindow, setRememberWindow] = useState(true);
+  const [closeToTray, setCloseToTray] = useState(false);
+  useEffect(() => {
+    void TauriService.windowPrefs().then((p) => {
+      if (!p) return;
+      setRememberWindow(p.remember_window);
+      setCloseToTray(p.close_to_tray);
+    });
+  }, []);
+  const saveWindowPrefs = (remember_window: boolean, close_to_tray: boolean) => {
+    setRememberWindow(remember_window);
+    setCloseToTray(close_to_tray);
+    void TauriService.setWindowPrefs({ remember_window, close_to_tray });
+  };
+
   const [startupBehavior, setStartupBehavior] = useState<'SHOW_STARTUP_SCREEN' | 'OPEN_LAST_PROFILE'>(() => {
     return (localStorage.getItem('pz_startup_behavior') as any) || 'SHOW_STARTUP_SCREEN';
   });
@@ -641,6 +657,38 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                       {t('settings.openLastBlurb')}
                     </p>
                   </div>
+                </div>
+              </div>
+
+              <div className="flex items-start justify-between gap-4 pt-2 border-t border-slate-800">
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-slate-200">{t('settings.rememberWindow')}</div>
+                  <p className="text-[11px] text-slate-400 max-w-2xl">{t('settings.rememberWindowBlurb')}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={rememberWindow}
+                  aria-label={t('settings.rememberWindow')}
+                  onClick={() => saveWindowPrefs(!rememberWindow, closeToTray)}
+                  className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${rememberWindow ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'}`}
+                >
+                  <span className="w-4 h-4 rounded-full bg-white shadow-md" />
+                </button>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className="text-xs font-bold text-slate-200">{t('settings.closeButton')}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {([false, true] as const).map((tray) => (
+                    <label key={String(tray)} className={`p-3 rounded-xl border cursor-pointer flex items-start gap-3 ${closeToTray === tray ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/50' : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'}`}>
+                      <input type="radio" name="closeButton" checked={closeToTray === tray} onChange={() => saveWindowPrefs(rememberWindow, tray)} className="mt-1 accent-emerald-500 cursor-pointer" />
+                      <div className="space-y-1">
+                        <div className="text-xs font-bold text-slate-200">{tray ? t('settings.closeToTray') : t('settings.closeQuits')}</div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">{tray ? t('settings.closeToTrayBlurb') : t('settings.closeQuitsBlurb')}</p>
+                      </div>
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>

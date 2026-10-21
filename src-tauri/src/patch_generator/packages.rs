@@ -224,6 +224,7 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
                             is_packaged,
                             is_active_in_modlist,
                             is_companion_bridge,
+                            is_studio_link: false,
                             created_at,
                             packaged_mods,
                             merged_files,
@@ -232,6 +233,28 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
                     }
                 }
             }
+        }
+    }
+
+    // The Studio Link mod, shown like the companion: the Studio installs and updates it.
+    if let Some(dir) = candidate_dirs.iter().map(|d| d.join(crate::studio_link::LINK_MOD_ID)).find(|d| d.is_dir()) {
+        if seen_folders.insert(crate::studio_link::LINK_MOD_ID.to_string()) {
+            let info = fs::read_to_string(dir.join("42").join("mod.info")).or_else(|_| fs::read_to_string(dir.join("mod.info"))).unwrap_or_default();
+            let version = info.lines().find_map(|l| l.trim().strip_prefix("modversion=").map(|v| v.trim().to_string())).unwrap_or_default();
+            packages.push(MergedPackageInfo {
+                folder_name: crate::studio_link::LINK_MOD_ID.to_string(),
+                display_name: if version.is_empty() { "PZ Mod Studio Link".to_string() } else { format!("PZ Mod Studio Link {}", version) },
+                mod_id: crate::studio_link::LINK_MOD_ID.to_string(),
+                description: Some("Official companion mod that shows the active profile in the game's Mods screen, sends what you change there back to the Studio, and guards saves from loading with the wrong mods.".to_string()),
+                is_packaged: true,
+                is_active_in_modlist: true,
+                is_companion_bridge: true,
+                is_studio_link: true,
+                created_at: None,
+                packaged_mods: Vec::new(),
+                merged_files: Vec::new(),
+                version_check: None,
+            });
         }
     }
 
@@ -251,7 +274,7 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
         return Err("Package name cannot be empty.".to_string());
     }
     let folder_name = to_package_folder(name)?;
-    if folder_name == BRIDGE_FOLDER {
+    if super::is_system_folder(&folder_name) {
         return Err(format!("'{}' is reserved for the companion mod.", BRIDGE_FOLDER));
     }
     let clean_sub = folder_name[PACKAGE_PREFIX.len()..].to_string();
@@ -306,6 +329,7 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
         is_packaged: false,
         is_active_in_modlist: true,
         is_companion_bridge: false,
+        is_studio_link: false,
         created_at: None,
         packaged_mods: Vec::new(),
         merged_files: Vec::new(),
@@ -335,7 +359,7 @@ pub fn rename_merged_package(
         return Err("The new name cannot be empty.".to_string());
     }
     let new_folder = to_package_folder(new_name)?;
-    if new_folder == BRIDGE_FOLDER {
+    if super::is_system_folder(&new_folder) {
         return Err(format!("'{}' is reserved for the companion mod.", BRIDGE_FOLDER));
     }
     let clean_new_sub = new_folder[PACKAGE_PREFIX.len()..].to_string();
@@ -409,6 +433,7 @@ pub fn rename_merged_package(
         is_packaged: false,
         is_active_in_modlist: is_active,
         is_companion_bridge: false,
+        is_studio_link: false,
         created_at: None,
         packaged_mods: Vec::new(),
         merged_files: Vec::new(),
@@ -543,7 +568,7 @@ pub(crate) fn package_folder_candidates(folder_name: &str) -> Result<Vec<String>
             candidates.push(alt);
         }
     }
-    if candidates.iter().any(|c| c == BRIDGE_FOLDER) {
+    if candidates.iter().any(|c| super::is_system_folder(c)) {
         return Err(format!("The companion mod '{}' is an internal system component.", BRIDGE_FOLDER));
     }
     Ok(candidates)

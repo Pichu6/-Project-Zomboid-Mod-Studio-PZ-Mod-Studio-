@@ -1033,7 +1033,7 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
 
               {currentPackage?.is_companion_bridge && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                  {i18next.t('merger.workspace.companion')}
+                  {currentPackage.is_studio_link ? i18next.t('merger.workspace.link') : i18next.t('merger.workspace.companion')}
                 </span>
               )}
 

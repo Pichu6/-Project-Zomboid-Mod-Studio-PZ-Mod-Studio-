@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Globe, Lock, Play, RefreshCw, Search, Square, Star, Trash2, UserPlus, Users, Wifi } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Globe, Info, Lock, Play, RefreshCw, Search, Square, Star, Trash2, UserPlus, Users, Wifi } from 'lucide-react';
+import { useContextMenu, MenuItem } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
 import { ModInfo, PublicServer, SavedServer, ServerRules } from '../../types';
@@ -10,8 +11,9 @@ interface JoinServersProps {
   mods: ModInfo[];
   /** "42.21" when known. */
   installedBuild: string | null;
-  /** Makes a profile with these mods, in this order. */
-  onMakeProfile: (name: string, modIds: string[]) => Promise<void>;
+  /** Makes a profile with these mods, in this order; `announcedOf` when they are only the first
+   * ones the server announces out of that many. */
+  onMakeProfile: (name: string, modIds: string[], announcedOf?: number) => Promise<void>;
 }
 
 /** What is selected: a server from the public list, or one of the player's own. */
@@ -22,7 +24,8 @@ interface Picked {
   listed?: PublicServer;
 }
 
-const SHOWN = 200;
+/** Rows per page of the public list. */
+const PAGE = 50;
 const bare = (id: string) => id.replace(/^\\+/, '').trim();
 const majorMinor = (v: string) => v.split('.').slice(0, 2).join('.');
 
@@ -54,7 +57,9 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
   const [joining, setJoining] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [direct, setDirect] = useState({ name: '', address: '', password: '' });
+  const [page, setPage] = useState(0);
   const asked = useRef(0);
+  const showMenu = useContextMenu();
 
   const loadSaved = async () => setSaved(await TauriService.savedServers(paths));
   useEffect(() => {
@@ -100,6 +105,10 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
     out.sort((a, b) => sort === 'players' ? b.players - a.players : sort === 'ping' ? (a.ping_ms ?? 9999) - (b.ping_ms ?? 9999) : a.name.localeCompare(b.name));
     return out;
   }, [list, text, sameBuild, build, hideFull, hideEmpty, hideLocked, kind, sort]);
+  // A new filter or order starts on the first page; more servers answering only add pages.
+  useEffect(() => setPage(0), [text, sameBuild, hideFull, hideEmpty, hideLocked, kind, sort]);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const shownPage = Math.min(page, pages - 1);
 
   const pick = async (p: Picked) => {
     setPicked(p);
@@ -142,20 +151,63 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
     }
   };
 
-  const join = async () => {
-    if (!picked) return;
+  const joinNow = async (target: Picked) => {
     setJoining(true);
     setNotice(null);
+    const typed = picked?.address === target.address ? password : '';
     try {
-      if (remember && password) await keep(picked, savedOf(picked.address)?.starred ?? true, password);
-      await TauriService.joinServer(paths, picked.address, picked.name, password || null);
-      setNotice(t('join.started', { name: picked.name }));
+      if (remember && typed) await keep(target, savedOf(target.address)?.starred ?? true, typed);
+      await TauriService.joinServer(paths, target.address, target.name, typed || null);
+      setNotice(t('join.started', { name: target.name }));
       void loadSaved();
     } catch (err) {
       setNotice(explainError(err));
     } finally {
       setJoining(false);
     }
+  };
+  const join = () => (picked ? joinNow(picked) : Promise.resolve());
+
+  const makeProfileFor = async (p: Picked) => {
+    const kept = savedOf(p.address);
+    if (kept && kept.mods.length > 0) {
+      await onMakeProfile(t('join.profileName', { name: p.name }), kept.mods.map(bare));
+      return;
+    }
+    let r = picked?.address === p.address ? rules : null;
+    if (!r) {
+      try {
+        r = await TauriService.serverRules(p.queryAddress);
+      } catch (err) {
+        setNotice(t('join.noAnswer', { error: explainError(err) }));
+        return;
+      }
+    }
+    if (r.mods.length === 0) {
+      setNotice(t('join.noModsToProfile'));
+      return;
+    }
+    const total = r.mod_count ?? r.mods.length;
+    await onMakeProfile(t('join.profileName', { name: p.name }), r.mods.map(bare), total > r.mods.length ? total : undefined);
+  };
+
+  const copyAddress = (address: string) => {
+    void navigator.clipboard?.writeText(address);
+    setNotice(t('join.copied', { address }));
+  };
+
+  /** Right-click on a server, in either list. */
+  const menuFor = (p: Picked): MenuItem[] => {
+    const kept = savedOf(p.address);
+    const items: MenuItem[] = [
+      { label: t('join.menuDetails'), icon: Info, onSelect: () => void pick(p) },
+      { label: t('join.join'), icon: Play, onSelect: () => { void pick(p); void joinNow(p); } },
+      { label: kept?.starred ? t('join.unstar') : t('join.star'), icon: Star, onSelect: () => void keep(p, !(kept?.starred ?? false), null), separatorBefore: true },
+      { label: t('join.menuCopy'), icon: Copy, onSelect: () => copyAddress(p.address) },
+      { label: kept && kept.mods.length > 0 ? t('join.makeProfile', { count: kept.mods.length }) : t('join.menuProfileAnnounced'), icon: UserPlus, onSelect: () => void makeProfileFor(p), separatorBefore: true },
+    ];
+    if (kept) items.push({ label: t('join.forget'), icon: Trash2, danger: true, separatorBefore: true, onSelect: () => void TauriService.forgetServer(paths, p.address).then(setSaved) });
+    return items;
   };
 
   const byId = useMemo(() => new Map(mods.map((m) => [bare(m.mod_id), m])), [mods]);
@@ -168,7 +220,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
   const recent = saved.filter((s) => !s.starred);
 
   const row = (s: SavedServer) => (
-    <button key={s.address} onClick={() => void pick({ name: s.name, address: s.address, queryAddress: s.address })} className={`w-full text-left rounded-md border px-3 py-2 cursor-pointer ${picked?.address === s.address ? 'border-emerald-600 bg-emerald-950/30' : 'border-slate-800 bg-slate-900/60 hover:bg-slate-900'}`}>
+    <button key={s.address} onClick={() => void pick({ name: s.name, address: s.address, queryAddress: s.address })} onContextMenu={(e) => showMenu(e, menuFor({ name: s.name, address: s.address, queryAddress: s.address }))} className={`w-full text-left rounded-md border px-3 py-2 cursor-pointer ${picked?.address === s.address ? 'border-emerald-600 bg-emerald-950/30' : 'border-slate-800 bg-slate-900/60 hover:bg-slate-900'}`}>
       <div className="flex items-center gap-2 text-xs text-slate-100">
         {s.starred && <Star className="w-3 h-3 text-amber-300 fill-amber-300" />}
         <span className="truncate">{s.name}</span>
@@ -236,8 +288,8 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
                       <tr><th className="text-left px-3 py-1.5">{t('join.col_name')}</th><th className="px-2">{t('join.col_players')}</th><th className="px-2">{t('join.col_ping')}</th><th className="px-2">{t('join.col_build')}</th></tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, SHOWN).map((s) => (
-                        <tr key={s.address} onClick={() => void pick({ name: s.name, address: s.address, queryAddress: s.query_address, listed: s })} className={`cursor-pointer border-t border-slate-800/70 ${picked?.address === s.address ? 'bg-emerald-950/40' : 'hover:bg-slate-900/80'}`}>
+                      {filtered.slice(shownPage * PAGE, shownPage * PAGE + PAGE).map((s) => (
+                        <tr key={s.address} onClick={() => void pick({ name: s.name, address: s.address, queryAddress: s.query_address, listed: s })} onContextMenu={(e) => showMenu(e, menuFor({ name: s.name, address: s.address, queryAddress: s.query_address, listed: s }))} className={`cursor-pointer border-t border-slate-800/70 ${picked?.address === s.address ? 'bg-emerald-950/40' : 'hover:bg-slate-900/80'}`}>
                           <td className="px-3 py-1.5 max-w-0 w-full">
                             <div className="flex items-center gap-1.5 min-w-0">
                               {s.password && <Lock className="w-3 h-3 shrink-0 text-slate-400" />}
@@ -253,7 +305,21 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
                       ))}
                     </tbody>
                   </table>
-                  {filtered.length > SHOWN && <div className="px-3 py-1.5 text-[10px] text-slate-500 bg-slate-900/60">{t('join.moreHidden', { shown: SHOWN, count: filtered.length })}</div>}
+                  {pages > 1 && (
+                    <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 bg-slate-900/60 text-[11px] text-slate-400">
+                      <button onClick={() => setPage(Math.max(0, shownPage - 1))} disabled={shownPage === 0} aria-label={t('join.prevPage')} className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                      {Array.from({ length: pages }, (_, i) => i)
+                        .filter((i) => i === 0 || i === pages - 1 || Math.abs(i - shownPage) <= 2)
+                        .map((i, n, all) => (
+                          <React.Fragment key={i}>
+                            {n > 0 && i - all[n - 1] > 1 && <span className="px-1">…</span>}
+                            <button onClick={() => setPage(i)} className={`min-w-[26px] px-1.5 py-0.5 rounded cursor-pointer ${i === shownPage ? 'bg-emerald-700/50 text-emerald-100' : 'hover:bg-slate-800'}`}>{i + 1}</button>
+                          </React.Fragment>
+                        ))}
+                      <button onClick={() => setPage(Math.min(pages - 1, shownPage + 1))} disabled={shownPage >= pages - 1} aria-label={t('join.nextPage')} className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"><ChevronRight className="w-3.5 h-3.5" /></button>
+                      <span className="ml-2">{t('join.pageOf', { from: shownPage * PAGE + 1, to: Math.min(filtered.length, shownPage * PAGE + PAGE), count: filtered.length })}</span>
+                    </div>
+                  )}
                   {filtered.length === 0 && <div className="px-3 py-4 text-center text-[11px] text-slate-500">{t('join.noneMatch')}</div>}
                 </div>
               </>
@@ -346,7 +412,14 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
                   <UserPlus className="w-3.5 h-3.5" />{t('join.makeProfile', { count: fullMods.length })}
                 </button>
               )}
-              {!fullMods && shownMods.length > 0 && <p className="text-[10px] text-slate-500">{t('join.profileAfterJoin')}</p>}
+              {!fullMods && shownMods.length > 0 && (
+                <>
+                  <button onClick={() => void makeProfileFor(picked)} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 cursor-pointer">
+                    <UserPlus className="w-3.5 h-3.5" />{t('join.makeProfileAnnounced', { count: shownMods.length })}
+                  </button>
+                  <p className="text-[10px] text-slate-500">{t('join.profileAfterJoin')}</p>
+                </>
+              )}
               {notice && <div className="text-[11px] text-slate-200 bg-slate-800/70 rounded-md px-2.5 py-1.5">{notice}</div>}
             </div>
           </div>

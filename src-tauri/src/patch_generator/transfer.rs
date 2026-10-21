@@ -188,7 +188,7 @@ pub fn import_merged_package(
     }
 
     let clean_folder = to_package_folder(&imported.folder_name)?;
-    if clean_folder == BRIDGE_FOLDER {
+    if super::is_system_folder(&clean_folder) {
         return Err("A .pzmerge package cannot replace the companion mod 'Z_PZModStudio_Bridge'.".to_string());
     }
     if imported.merged_files.is_empty() {
@@ -319,6 +319,7 @@ pub fn import_merged_package(
         description: Some(description),
         is_active_in_modlist: false,
         is_companion_bridge: false,
+        is_studio_link: false,
         created_at: Some(meta.created_at),
         packaged_mods: imported.packaged_mod_ids,
         merged_files: imported.merged_files.iter().map(|f| f.relative_path.clone()).collect(),

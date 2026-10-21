@@ -416,6 +416,15 @@ export interface MapCells {
   tiledef_clashes: TiledefClash[];
 }
 
+/** The Studio's window (window_prefs::WindowPrefs). */
+export interface WindowPrefs {
+  remember_window: boolean;
+  close_to_tray: boolean;
+  tray_open: string;
+  tray_quit: string;
+  tray_tip: string;
+}
+
 /** One server in Steam's list (server_browser::PublicServer). */
 export interface PublicServer {
   name: string;

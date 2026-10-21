@@ -108,7 +108,7 @@
     "sortNoticeBlurb": "Muestra un diálogo explicativo al apretar el botón de ordenar dependencias en la lista de mods.",
     "restoreNotification": "Volver a mostrar",
     "silenceNotification": "Silenciar",
-    "startup": "Al iniciar",
+    "startup": "Recordar el inicio de PZ Mod Studio",
     "profilesScreen": "Pantalla de perfiles",
     "lastProfile": "Último perfil activo",
     "startupQuestion": "¿Qué se abre cuando arranca el Studio?",
@@ -117,7 +117,7 @@
     "profilesStartBlurb": "Muestra el administrador de perfiles para elegir o activar la combinación con la que vas a trabajar.",
     "openLast": "Abrir el último perfil directamente",
     "openLastBlurb": "Carga el último perfil activo y te lleva directo a la lista de mods.",
-    "rememberMode": "Recordar el modo de inicio",
+    "rememberMode": "Recordar el inicio del juego",
     "rememberModeBlurb": "El botón de inicio arranca en el modo que usaste la última vez (depuración, ventana, normal...). Apagado: siempre arranca en Modo depuración (pantalla completa), el recomendado.",
     "community": "Descargar las reglas y el índice de mods de la comunidad",
     "communityBlurb": "Una vez al día, del repositorio del Studio en GitHub: reglas de orden de carga, pares incompatibles, y un registro por mod con las builds en que corre, con qué choca y sus problemas conocidos con el arreglo que el Studio aplica. Los usan Ordenar, Salud de mods, la Lista de mods y Explorar. Apagado: se conserva la última copia y no se descarga nada. Nunca se envía nada.",
@@ -210,7 +210,16 @@
       "copied": "Copiado",
       "openLog": "Abrir carpeta de registros",
       "failed": "No se pudo copiar."
-    }
+    },
+    "rememberWindow": "Abrir la ventana como la dejé",
+    "rememberWindowBlurb": "Mismo tamaño y lugar, en el mismo monitor, maximizada o en pantalla completa si lo estaba. Si ese monitor ya no está conectado, abre en el principal.",
+    "closeButton": "El botón de cerrar (X)",
+    "closeQuits": "Cierra el Studio",
+    "closeQuitsBlurb": "El Studio se cierra. El juego, si está abierto, sigue.",
+    "closeToTray": "Lo deja en la bandeja, al lado del reloj",
+    "closeToTrayBlurb": "La ventana se oculta y el Studio sigue atento al juego (copias al salir, el perfil en la pantalla de Mods). Hacé clic en su ícono al lado del reloj para volver a abrirlo; su menú tiene Salir.",
+    "trayOpen": "Abrir PZ Mod Studio",
+    "trayQuit": "Salir"
   },
   "profiles": {
     "title": "Perfiles de mods",
@@ -1254,7 +1263,8 @@
       "collidingFile": "Archivo en conflicto:",
       "line": "Línea #{{line}}",
       "sources": "{{count}} fuentes",
-      "dragTitle": "Arrastrá para cambiar el tamaño del panel de arriba y el editor"
+      "dragTitle": "Arrastrá para cambiar el tamaño del panel de arriba y el editor",
+      "link": "MOD LINK DEL STUDIO"
     }
   },
   "backend": {
@@ -2345,7 +2355,6 @@
     "col_ping": "Ping",
     "col_build": "Versión",
     "modded": "mods",
-    "moreHidden": "Se muestran {{shown}} de {{count}}: acotá con los filtros.",
     "noneMatch": "Ningún servidor coincide con los filtros.",
     "addTitle": "Agregar un servidor por su dirección",
     "addressPlaceholder": "ip:puerto (16261 si no lo ponés)",
@@ -2387,6 +2396,17 @@
     "profileName": "Servidor: {{name}}",
     "profileDescription": "Los mods que cargó un servidor, en su orden.",
     "profileConfirm": "¿Crear el perfil \"{{name}}\" con los {{count}} mods que cargó este servidor?{{missing}}",
-    "profileMissing": "\n\n{{count}} de ellos no están instalados ahora (el juego los tuvo solo para esa partida, o se quitaron)."
+    "profileMissing": "\n\n{{count}} de ellos no están instalados ahora (el juego los tuvo solo para esa partida, o se quitaron).",
+    "prevPage": "Página anterior",
+    "nextPage": "Página siguiente",
+    "pageOf": "{{from}}–{{to}} de {{count}}",
+    "menuDetails": "Ver lo que dice",
+    "menuCopy": "Copiar la dirección",
+    "copied": "{{address}} copiada.",
+    "menuProfileAnnounced": "Crear un perfil con sus mods",
+    "makeProfileAnnounced": "Crear un perfil con los {{count}} mods que anuncia",
+    "noModsToProfile": "Este servidor no anuncia mods: no hay nada para poner en un perfil.",
+    "profileConfirmAnnounced": "¿Crear el perfil \"{{name}}\" con los {{count}} mods que anuncia este servidor?{{missing}}",
+    "profilePartial": "\n\nEl servidor anuncia solo {{count}} de sus {{total}} mods. Entrá una vez desde acá y creá el perfil de nuevo para tenerlos todos."
   }
 }
