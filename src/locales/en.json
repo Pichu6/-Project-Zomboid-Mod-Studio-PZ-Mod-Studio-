@@ -2288,7 +2288,7 @@
   },
   "maps": {
     "title": "Maps",
-    "blurb": "Every cell of the world: the game's own (grey) and each installed map mod's. A map mod's cells over the game's world replace what was there. Two map mods with cells in common fight over them (red): what one built there is gone, unless one builds on the other (its map.info names it in lots=). One cell is 256 x 256 tiles.",
+    "blurb": "Every cell of the world, over the game's own map: the game's world (grey outline) and each installed map mod's cells. A map mod's cells over the game's world replace what was there. Two map mods with cells in common fight over them (red): what one built there is gone, unless one builds on the other (its map.info names it in lots=). One cell is 256 x 256 tiles.",
     "refresh": "Refresh",
     "onlyActive": "Only map mods on in my list",
     "clashNow": "{{a}} and {{b}} share {{count}} cell(s) and both are on: in the next game one replaces the other there.",
@@ -2304,6 +2304,16 @@
     "overVanilla": "{{count}} over the game's world",
     "outsideVanilla": "outside the game's world",
     "buildsOn": "builds on {{maps}}",
-    "off": "off"
+    "off": "off",
+    "realMap": "Show the real map",
+    "zoom": "Zoom",
+    "loadingImage": "Putting the map together…",
+    "related": "Other map mods ({{count}})",
+    "relatedBlurb": "These mods are about maps but add no cells of their own: spawn points or a map list for another map, or the tiles and textures maps are built from. They need what they are for to be on (the map, or the mod that uses the tiles).",
+    "kind_spawn": "spawn points / map list",
+    "kind_tiles": "tiles",
+    "noRelated": "No other map mods installed.",
+    "tiledefNow": "Tile definition number {{number}} is used by {{mods}}, and more than one is on: their tiles overwrite each other (wrong walls, floors or furniture). Keep only one of them on.",
+    "tiledefIf": "Tile definition number {{number}} is used by {{mods}}: only one of them can be on at a time."
   }
 }

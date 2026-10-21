@@ -2288,7 +2288,7 @@
   },
   "maps": {
     "title": "Mapas",
-    "blurb": "Todas las celdas del mundo: las del juego (gris) y las de cada mod de mapa instalado. Las celdas de un mod de mapa sobre el mundo del juego reemplazan lo que había. Dos mods de mapa con celdas en común se pelean por ellas (rojo): lo que uno construyó ahí se pierde, salvo que uno se apoye en el otro (su map.info lo nombra en lots=). Una celda son 256 x 256 casillas.",
+    "blurb": "Todas las celdas del mundo, sobre el mapa del juego: el mundo del juego (contorno gris) y las celdas de cada mod de mapa instalado. Las celdas de un mod sobre el mundo del juego reemplazan lo que había. Dos mods de mapa con celdas en común se pelean por ellas (rojo): lo que uno construyó ahí desaparece, salvo que uno se apoye en el otro (su map.info lo nombra en lots=). Una celda son 256 x 256 casillas.",
     "refresh": "Actualizar",
     "onlyActive": "Solo mods de mapa prendidos en mi lista",
     "clashNow": "{{a}} y {{b}} comparten {{count}} celda(s) y los dos están prendidos: en la próxima partida uno reemplaza al otro ahí.",
@@ -2304,6 +2304,16 @@
     "overVanilla": "{{count}} sobre el mundo del juego",
     "outsideVanilla": "fuera del mundo del juego",
     "buildsOn": "se apoya en {{maps}}",
-    "off": "apagado"
+    "off": "apagado",
+    "realMap": "Mostrar el mapa real",
+    "zoom": "Zoom",
+    "loadingImage": "Armando el mapa…",
+    "related": "Otros mods de mapas ({{count}})",
+    "relatedBlurb": "Estos mods son de mapas pero no agregan celdas propias: puntos de aparición o una lista de mapas para otro mapa, o las casillas y texturas con que se arman los mapas. Necesitan que esté activo aquello para lo que son (el mapa, o el mod que usa esas casillas).",
+    "kind_spawn": "puntos de aparición / lista de mapas",
+    "kind_tiles": "casillas",
+    "noRelated": "No hay otros mods de mapas instalados.",
+    "tiledefNow": "El número de definición de casillas {{number}} lo usan {{mods}}, y hay más de uno activo: sus casillas se pisan entre sí (paredes, pisos o muebles equivocados). Dejá activo solo uno.",
+    "tiledefIf": "El número de definición de casillas {{number}} lo usan {{mods}}: solo uno de ellos puede estar activo a la vez."
   }
 }

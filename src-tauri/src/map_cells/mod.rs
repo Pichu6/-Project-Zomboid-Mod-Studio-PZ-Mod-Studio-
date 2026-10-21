@@ -10,6 +10,8 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
+pub mod images;
+
 /// The game's own world.
 pub const VANILLA_MAP: &str = "Muldraugh, KY";
 
@@ -30,6 +32,24 @@ pub struct MapFolder {
     pub cells: Vec<[i32; 2]>,
     /// How many of its cells are over the game's own world.
     pub over_vanilla: usize,
+    /// The folder on disk (for its image).
+    #[serde(skip)]
+    pub dir: PathBuf,
+}
+
+/// A mod that is about maps without cells of its own on the grid: spawn points, a map list, or
+/// the tiles and textures maps are built from.
+#[derive(Debug, Clone, Serialize)]
+pub struct MapRelated {
+    pub mod_id: String,
+    pub mod_name: String,
+    pub workshop_id: Option<String>,
+    pub active: bool,
+    /// What it brings: "spawn" (map folders with spawn points or a map list, no cells),
+    /// "tiles" (pack= / tiledef= in its mod.info).
+    pub kinds: Vec<String>,
+    /// The map folders it has, the tile packs and tile definitions it names.
+    pub detail: Vec<String>,
 }
 
 /// Two map folders with cells in common, neither building on the other.
@@ -48,7 +68,43 @@ pub struct Clash {
 pub struct MapCells {
     pub vanilla: Vec<[i32; 2]>,
     pub maps: Vec<MapFolder>,
+    /// Mods about maps that have no cells of their own.
+    pub related: Vec<MapRelated>,
     pub clashes: Vec<Clash>,
+    /// Tile definition numbers more than one mod uses.
+    pub tiledef_clashes: Vec<TiledefClash>,
+}
+
+/// One tile definition number (`tiledef=<name> <number>`) used by more than one mod. The number
+/// has to be unique: two mods on with the same one overwrite each other's tiles.
+#[derive(Debug, Clone, Serialize)]
+pub struct TiledefClash {
+    pub number: u32,
+    /// (mod id, mod name, tiledef name, on).
+    pub mods: Vec<(String, String, String, bool)>,
+    /// More than one of them is on.
+    pub both_active: bool,
+}
+
+/// Tile definition numbers in more than one mod (a mod naming one twice is not a clash).
+pub fn tiledef_clashes(entries: &[(String, String, String, u32, bool)]) -> Vec<TiledefClash> {
+    let mut by_number: BTreeMap<u32, Vec<(String, String, String, bool)>> = BTreeMap::new();
+    for (id, name, def, number, active) in entries {
+        let list = by_number.entry(*number).or_default();
+        if !list.iter().any(|m| &m.0 == id) {
+            list.push((id.clone(), name.clone(), def.clone(), *active));
+        }
+    }
+    let mut out: Vec<TiledefClash> = by_number
+        .into_iter()
+        .filter(|(_, mods)| mods.len() > 1)
+        .map(|(number, mods)| {
+            let both_active = mods.iter().filter(|m| m.3).count() > 1;
+            TiledefClash { number, mods, both_active }
+        })
+        .collect();
+    out.sort_by(|a, b| b.both_active.cmp(&a.both_active).then(a.number.cmp(&b.number)));
+    out
 }
 
 /// The cells of one map folder, from its `X_Y.lotheader` files.
@@ -94,13 +150,22 @@ fn mod_roots(workshop_dir: &str, user_zomboid_dir: &Path) -> Vec<(PathBuf, Optio
     out
 }
 
-fn mod_id_and_name(root: &Path) -> Option<(String, String)> {
+/// A mod's id, name, and the tile packs and tile definitions its mod.info names.
+fn mod_info_fields(root: &Path) -> Option<(String, String, Vec<String>)> {
     let info = [root.join("42").join("mod.info"), root.join("mod.info")].into_iter().find(|p| p.is_file())?;
     let text = std::fs::read_to_string(info).ok()?;
     let field = |k: &str| text.lines().find_map(|l| l.trim().strip_prefix(k).map(|v| v.trim().to_string()));
     let id = crate::load_order::mod_info::sanitize_mod_id(&field("id=")?);
     let name = field("name=").unwrap_or_else(|| id.clone());
-    Some((id, name))
+    let tiles: Vec<String> = text
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim();
+            l.strip_prefix("pack=").map(|v| format!("pack {}", v.trim())).or_else(|| l.strip_prefix("tiledef=").map(|v| format!("tiledef {}", v.trim())))
+        })
+        .filter(|v| !v.ends_with(' '))
+        .collect();
+    Some((id, name, tiles))
 }
 
 /// Where map folders clash: cells in common, neither naming the other in `lots=`.
@@ -137,15 +202,49 @@ pub fn map_cells(pz_install_dir: &str, workshop_dir: &str, user_zomboid_dir: &Pa
 
     // One entry per (mod, folder): the version folder wins over common for the same map.
     let mut found: BTreeMap<(String, String), MapFolder> = BTreeMap::new();
+    let mut related: BTreeMap<String, MapRelated> = BTreeMap::new();
+    let mut tiledefs: Vec<(String, String, String, u32, bool)> = Vec::new();
     for (root, wid) in mod_roots(workshop_dir, user_zomboid_dir) {
-        let Some((mod_id, mod_name)) = mod_id_and_name(&root) else { continue };
+        let Some((mod_id, mod_name, tiles)) = mod_info_fields(&root) else { continue };
+        for t in &tiles {
+            if let Some(rest) = t.strip_prefix("tiledef ") {
+                let mut parts = rest.split_whitespace();
+                if let (Some(def), Some(Ok(number))) = (parts.next(), parts.next().map(str::parse::<u32>)) {
+                    tiledefs.push((mod_id.clone(), mod_name.clone(), def.to_string(), number, active.contains(&mod_id)));
+                }
+            }
+        }
+        let mut note = |kind: &str, detail: String| {
+            let r = related.entry(mod_id.clone()).or_insert_with(|| MapRelated {
+                mod_id: mod_id.clone(),
+                mod_name: mod_name.clone(),
+                workshop_id: wid.clone(),
+                active: active.contains(&mod_id),
+                kinds: Vec::new(),
+                detail: Vec::new(),
+            });
+            if !r.kinds.iter().any(|k| k == kind) {
+                r.kinds.push(kind.to_string());
+            }
+            if !r.detail.contains(&detail) {
+                r.detail.push(detail);
+            }
+        };
+        for t in &tiles {
+            note("tiles", t.clone());
+        }
         for layer in crate::load_order::mod_info::media_layers_for_build(&root, game) {
             for dir in std::fs::read_dir(layer.join("media").join("maps")).into_iter().flatten().flatten() {
-                let cells = folder_cells(&dir.path());
-                if cells.is_empty() {
-                    continue; // spawn points or a map list, no cells of its own
+                if !dir.path().is_dir() {
+                    continue;
                 }
                 let folder = dir.file_name().to_string_lossy().to_string();
+                let cells = folder_cells(&dir.path());
+                if cells.is_empty() {
+                    // Spawn points or a map list: no cells of its own, still about maps.
+                    note("spawn", folder.clone());
+                    continue;
+                }
                 let (title, lots) = map_info(&dir.path());
                 let over_vanilla = cells.iter().filter(|c| vanilla_set.contains(*c)).count();
                 found.insert(
@@ -160,6 +259,7 @@ pub fn map_cells(pz_install_dir: &str, workshop_dir: &str, user_zomboid_dir: &Pa
                         active: active.contains(&mod_id),
                         cells,
                         over_vanilla,
+                        dir: dir.path(),
                     },
                 );
             }
@@ -168,7 +268,17 @@ pub fn map_cells(pz_install_dir: &str, workshop_dir: &str, user_zomboid_dir: &Pa
     let mut maps: Vec<MapFolder> = found.into_values().collect();
     maps.sort_by(|a, b| b.active.cmp(&a.active).then(a.mod_name.to_lowercase().cmp(&b.mod_name.to_lowercase())));
     let clashes = clashes(&maps);
-    MapCells { vanilla, maps, clashes }
+    // A mod with cells is on the grid already; the others are listed with what they bring.
+    let with_cells: HashSet<&String> = maps.iter().map(|m| &m.mod_id).collect();
+    let mut related: Vec<MapRelated> = related.into_values().filter(|r| !with_cells.contains(&r.mod_id)).collect();
+    related.sort_by(|a, b| b.active.cmp(&a.active).then(a.mod_name.to_lowercase().cmp(&b.mod_name.to_lowercase())));
+    let tiledef_clashes = tiledef_clashes(&tiledefs);
+    MapCells { vanilla, maps, related, clashes, tiledef_clashes }
+}
+
+/// The map folders with cells, for their images.
+pub fn image_dirs(cells: &MapCells) -> Vec<(PathBuf, String)> {
+    cells.maps.iter().map(|m| (m.dir.clone(), m.folder.clone())).collect()
 }
 
 #[cfg(test)]
@@ -186,6 +296,7 @@ mod tests {
             active,
             cells: cells.to_vec(),
             over_vanilla: 0,
+            dir: PathBuf::new(),
         }
     }
 
@@ -214,6 +325,15 @@ mod tests {
         assert_eq!(pairs, vec![("TownA".into(), "TownB".into(), 2, true), ("TownB".into(), "Far".into(), 1, false)]);
     }
 
+    #[test]
+    fn a_tile_definition_number_in_two_mods_clashes() {
+        let e = |id: &str, n: u32, on: bool| (id.to_string(), id.to_string(), format!("{}_tiles", id), n, on);
+        let c = tiledef_clashes(&[e("A", 7811, true), e("B", 7811, true), e("C", 7811, false), e("D", 500, true), e("A", 7811, true), e("E", 900, true), e("F", 900, false)]);
+        assert_eq!(c.len(), 2);
+        assert_eq!((c[0].number, c[0].mods.len(), c[0].both_active), (7811, 3, true));
+        assert_eq!((c[1].number, c[1].both_active), (900, false));
+    }
+
     /// Live: `cargo test -- --ignored live_map_cells --nocapture` on this PC's game and mods.
     #[test]
     #[ignore]
@@ -226,6 +346,12 @@ mod tests {
         }
         for f in &m.maps {
             println!("{} / {} ({}) active={} cells={} over_vanilla={} lots={:?}", f.mod_name, f.folder, f.title, f.active, f.cells.len(), f.over_vanilla, f.lots);
+        }
+        for r in &m.related {
+            println!("related {} {:?} active={} {:?}", r.mod_name, r.kinds, r.active, r.detail);
+        }
+        for t in &m.tiledef_clashes {
+            println!("TILEDEF {} both on={} {:?}", t.number, t.both_active, t.mods);
         }
         for c in &m.clashes {
             println!("CLASH {} x {}: {} cells, both on={}", c.a, c.b, c.cells.len(), c.both_active);

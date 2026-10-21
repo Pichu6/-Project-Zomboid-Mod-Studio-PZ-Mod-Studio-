@@ -442,6 +442,23 @@ fn map_cells_cmd(paths: StudioPaths) -> Result<map_cells::MapCells, String> {
     Ok(map_cells::map_cells(&saved.pz_install_dir, &saved.workshop_dir, &z))
 }
 
+/// The real map under the grid: the game's world and each map mod with an image pyramid, put
+/// together at about `px_per_cell` pixels per cell (cached).
+#[tauri::command(async)]
+fn map_images_cmd(paths: StudioPaths, px_per_cell: u32) -> Result<Vec<map_cells::images::MapImage>, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let saved = vfs::studio_paths();
+    let cells = map_cells::map_cells(&saved.pz_install_dir, &saved.workshop_dir, &z);
+    Ok(map_cells::images::map_images(&saved.pz_install_dir, &map_cells::image_dirs(&cells), &z, px_per_cell.clamp(4, 64)))
+}
+
+/// The PNG of one map image made by map_images_cmd, as raw bytes.
+#[tauri::command(async)]
+fn map_image_bytes_cmd(paths: StudioPaths, id: String) -> Result<tauri::ipc::Response, String> {
+    let z = zomboid_dir_of(&paths)?;
+    Ok(tauri::ipc::Response::new(map_cells::images::image_bytes(&z, &id)?))
+}
+
 /// Everything a bug report needs, as text, with the user name and the PC's name masked.
 #[tauri::command(async)]
 fn diagnostics_report_cmd(paths: StudioPaths) -> Result<String, String> {
@@ -1262,6 +1279,8 @@ pub fn run() {
             link_status_cmd,
             saves_overview_cmd,
             map_cells_cmd,
+            map_images_cmd,
+            map_image_bytes_cmd,
             diagnostics_report_cmd,
             log_from_window_cmd,
             open_studio_log_folder_cmd,

@@ -389,10 +389,40 @@ export interface MapClash {
   both_active: boolean;
 }
 
+/** A mod about maps with no cells of its own (map_cells::MapRelated). */
+export interface MapRelated {
+  mod_id: string;
+  mod_name: string;
+  workshop_id: string | null;
+  active: boolean;
+  /** "spawn" (map folders with spawn points or a map list), "tiles" (pack= / tiledef=). */
+  kinds: string[];
+  detail: string[];
+}
+
+/** One tile definition number several mods use (map_cells::TiledefClash). */
+export interface TiledefClash {
+  number: number;
+  /** [mod id, mod name, tiledef name, on]. */
+  mods: [string, string, string, boolean][];
+  both_active: boolean;
+}
+
 export interface MapCells {
   vanilla: [number, number][];
   maps: MapFolder[];
+  related: MapRelated[];
   clashes: MapClash[];
+  tiledef_clashes: TiledefClash[];
+}
+
+/** One real map image, placed in squares (map_cells::images::MapImage). */
+export interface MapImage {
+  id: string;
+  folder: string;
+  bounds: [number, number, number, number];
+  width: number;
+  height: number;
 }
 
 /** One update of one Workshop item (whats_new::ChangeNote). */
