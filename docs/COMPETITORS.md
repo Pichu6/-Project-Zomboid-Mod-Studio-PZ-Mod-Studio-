@@ -108,11 +108,7 @@ Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager
 5. ~~**Shared Steam limiter.**~~ Done (`workshop/polite.rs`): every Steam request goes through one place with a spacing per host, a cooldown on 429/503 that follows Retry-After (else 10, 20, 40... s up to 5 min; waits of 10 s or less are sat out, longer ones refused at once), one request in flight per key, and a disk cache (`Zomboid/PZModStudio_Cache/steam`, 5 to 30 min by kind; never for requests carrying the Web API key).
 6. ~~**What's new since you last played,**~~ Done (What's new screen, `whats_new`): mods updated since the last session (or the last 7 / 30 days) and updates waiting in Steam, with their change notes (cached, read at most 12 pages at a time and stopping at Steam's first refusal), a "May break saves" mark (a map mod, or notes about new saves, wipes, removed items, changed ids) and a weaker "Read first" one, and "Keep the version I have" for an update still waiting.
 7. **Map cells grid and clashes.**
-8. **Release integrity.**
-   - Sign the app updater and the checksums.
-   - Run the tests in the release job.
-   - Pin the Actions by commit.
-   - Code-sign the Windows build when possible.
+8. ~~**Release integrity.**~~ Done (`docs/RELEASES.md`): every Action pinned by commit with least permissions, the release job checks the version and runs the tests first and builds without caches, `SHA256SUMS.txt` signed with the project's ed25519 key (`keys/release-signing.pub.pem`, `scripts/verify-release.cjs`) and every file attested by GitHub (Sigstore). Still open: Authenticode code signing (needs a certificate) and an in-app updater built on these signatures.
 9. **"Copy diagnostics" with the user name masked,** and panics shown in the app's log.
 10. **In-game details.** Low-resolution layout and controller support for the Link's screens; translations kept in sync by a check in CI.
 

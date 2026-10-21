@@ -9,15 +9,19 @@ on:
     branches: [main]
     paths: ['community/index/**', 'scripts/community-index.js']
 
+permissions:
+  contents: read
+
 jobs:
+  # Read-only: runs for pull requests from anyone.
   check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
 
@@ -27,12 +31,24 @@ jobs:
       - name: Rules file is well formed
         run: node -e "const r=require('./community/rules.json'); for (const x of r.load_after) if (!x.mod_id||!x.after||x.mod_id===x.after) throw new Error('bad rule '+JSON.stringify(x)); for (const x of r.incompatible) if (!x.a||!x.b||x.a===x.b) throw new Error('bad pair '+JSON.stringify(x)); console.log('rules.json ok')"
 
+  # Writes: only on main, after the check passed.
+  build:
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
       - name: Build index.json
-        if: github.event_name == 'push'
         run: node scripts/community-index.js build
 
       - name: Commit index.json when it changed
-        if: github.event_name == 'push'
         run: |
           if git diff --quiet -- community/index.json; then echo "index.json unchanged"; exit 0; fi
           git config user.name "github-actions[bot]"

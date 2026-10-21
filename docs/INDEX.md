@@ -19,6 +19,7 @@ This documentation details the internal mechanics of The Indie Stone's engine, t
 | **07** | [**FMOD Audio, JSON Translations & 3D Z-Levels**](07-sound-translations-and-b42-space.md) | Sound definition scripts (`media/scripts/*.txt`), mandatory JSON translation format (B42.15+), `-debugtranslation` validation, and expanded vertical space (Z-coordinates from -32 to +32). |
 | **08** | [**Crash Diagnostics, VFS & 3-Way AST Merging**](08-crash-diagnostics-and-vfs.md) | `console.txt` error taxonomy (`KahluaThreadException`, `NoSuchMethodError`, `UnknownFormatConversionException`), Virtual File System overwrites, and 3-way AST merge algorithms. |
 | **09** | [**Game Process Control & Live IPC Bridge**](09-game-control-and-ipc-bridge.md) | `ProjectZomboid64.exe` lifecycle control (launching with `-debug`, terminating process), and the companion mod `Z_PZModStudio_Bridge` for real-time Lua evaluation and hot item equipping. |
+| — | [**Releases**](RELEASES.md) | How a release is built (version check, tests, no caches, pinned Actions), signed (ed25519 sums, GitHub attestations) and checked by a player. |
 | — | [**Other Mod Managers**](COMPETITORS.md) | PZMM and DMM studied (pages, files, PZMM's source read but not run): what they do, where the Studio is ahead, what to do next for reliability and safety, and their mistakes to avoid. |
 
 ---

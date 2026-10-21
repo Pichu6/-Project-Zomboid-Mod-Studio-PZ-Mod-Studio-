@@ -46,3 +46,7 @@ __pycache__/
 
 # Preset exports the app writes next to the exe (the player's own)
 *.pzpack
+
+# Release signing: only the public half belongs in the repository.
+*.pem
+!keys/*.pub.pem

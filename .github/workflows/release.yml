@@ -5,31 +5,51 @@ on:
     tags:
       - 'v*'
 
+# Nothing more than reading, unless a job says so.
+permissions:
+  contents: read
+
 jobs:
   release:
-    permissions:
-      contents: write
     runs-on: windows-latest
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # the build attestations (Sigstore)
+      attestations: write
     steps:
+      # Every Action is pinned to a commit: a tag can be moved, a commit cannot. The comment says
+      # which tag the commit was (2026-10-20); Dependabot proposes newer ones.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
+      # No caches here: what is published is built from the tagged sources alone, never from
+      # a cache another run left.
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
+      - name: The tag is the version in every manifest
+        shell: bash
+        run: node scripts/check-release-version.cjs "${GITHUB_REF_NAME}"
 
       - name: Install dependencies
         run: npm ci
+
+      # Type-checks and builds dist/, which the Rust build embeds.
+      - name: Build frontend
+        run: npm run build
+
+      - name: Frontend tests
+        run: npm test
+
+      - name: Rust tests
+        run: cargo test --lib --manifest-path src-tauri/Cargo.toml
 
       - name: Build app and installers
         run: npx tauri build
@@ -46,8 +66,43 @@ jobs:
           Copy-Item Project-Zomboid-Mod-Studio.exe, pz-mcp-server.exe, README_PORTABLE.txt, LICENSE $dir
           Compress-Archive -Path "$dir/*" -DestinationPath "PZ-Mod-Studio-Portable-${{ github.ref_name }}.zip"
 
+      # Everything published goes in one folder, with its SHA-256 sums.
+      - name: Gather the files and their checksums
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force publish | Out-Null
+          Copy-Item "PZ-Mod-Studio-Portable-${{ github.ref_name }}.zip" publish/
+          Copy-Item src-tauri/target/release/bundle/nsis/*.exe publish/
+          Copy-Item src-tauri/target/release/bundle/msi/*.msi publish/
+          $lines = Get-ChildItem publish -File | Sort-Object Name | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          }
+          [IO.File]::WriteAllText("$PWD/publish/SHA256SUMS.txt", ($lines -join "`n") + "`n")
+          Get-Content publish/SHA256SUMS.txt
+
+      # The project's own signature of the sums (ed25519; the public key is keys/release-signing.pub.pem).
+      # Without the RELEASE_SIGNING_KEY secret the release goes out unsigned by it, and says so.
+      - name: Sign the checksums
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -z "$RELEASE_SIGNING_KEY" ]; then
+            echo "::warning::RELEASE_SIGNING_KEY is not set: SHA256SUMS.txt is not signed with the project key (the GitHub attestation still is)."
+          else
+            node scripts/sign-release.cjs publish/SHA256SUMS.txt
+            node scripts/verify-release.cjs publish
+          fi
+
+      # GitHub's own signed record of which workflow, commit and runner built each file:
+      # `gh attestation verify <file> --repo Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-`.
+      - name: Attest the build
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: 'publish/*'
+
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: 'PZ Mod Studio ${{ github.ref_name }}'
           body: |
@@ -55,7 +110,6 @@ jobs:
             It also contains `pz-mcp-server.exe` for AI agents (see AGENTS.md).
 
             **Installer:** the `.exe` (NSIS) or `.msi` setup below.
-          files: |
-            PZ-Mod-Studio-Portable-${{ github.ref_name }}.zip
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
+
+            **Check your download:** `SHA256SUMS.txt` lists every file's SHA-256, signed by the project key in `SHA256SUMS.txt.sig` (`node scripts/verify-release.cjs <folder>` checks both). GitHub also attests each file was built by this workflow from this tag: `gh attestation verify <file> --repo ${{ github.repository }}`.
+          files: publish/*
