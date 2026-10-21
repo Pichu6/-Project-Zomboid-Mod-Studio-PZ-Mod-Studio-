@@ -7,6 +7,7 @@
     "modList": "Mod List",
     "whatsNew": "What's new",
     "health": "Mod Health",
+    "maps": "Maps",
     "browse": "Browse Mods",
     "merger": "Mod Merger",
     "developer": "Developer",
@@ -1318,7 +1319,8 @@
       "Changing the mods of the profile": "Changing the mods of the profile",
       "Studio background job": "A background job of the Studio",
       "Gathering the diagnostics": "Gathering the diagnostics",
-      "Opening the logs folder": "Opening the logs folder"
+      "Opening the logs folder": "Opening the logs folder",
+      "Reading the map mods": "Reading the map mods"
     },
     "explain": {
       "noZomboid": "The Studio cannot find your Zomboid folder. Set it in App Settings.",
@@ -2283,5 +2285,25 @@
       "week": "Last 7 days",
       "month": "Last 30 days"
     }
+  },
+  "maps": {
+    "title": "Maps",
+    "blurb": "Every cell of the world: the game's own (grey) and each installed map mod's. A map mod's cells over the game's world replace what was there. Two map mods with cells in common fight over them (red): what one built there is gone, unless one builds on the other (its map.info names it in lots=). One cell is 256 x 256 tiles.",
+    "refresh": "Refresh",
+    "onlyActive": "Only map mods on in my list",
+    "clashNow": "{{a}} and {{b}} share {{count}} cell(s) and both are on: in the next game one replaces the other there.",
+    "clashIf": "{{a}} and {{b}} share {{count}} cell(s): they would clash if both were on.",
+    "none": "No installed mod adds cells to the world.",
+    "gridLabel": "Grid of the world's cells",
+    "cell": "Cell {{x}}, {{y}}",
+    "vanillaCell": "The game's world",
+    "sharedCell": "More than one map here",
+    "legendVanilla": "The game's world",
+    "legendClash": "Cells two maps share",
+    "cells": "{{count}} cells",
+    "overVanilla": "{{count}} over the game's world",
+    "outsideVanilla": "outside the game's world",
+    "buildsOn": "builds on {{maps}}",
+    "off": "off"
   }
 }

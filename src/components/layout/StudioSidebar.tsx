@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActiveTab } from '../../types';
 import { useTranslation } from 'react-i18next';
-import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2, Archive, Newspaper } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2, Archive, Newspaper, Map as MapIcon } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -88,6 +88,14 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       badge: null,
       badgeColor: '',
       requiresProfile: true,
+    },
+    {
+      id: 'MAPS' as ActiveTab,
+      label: t('nav.maps'),
+      icon: MapIcon,
+      badge: null,
+      badgeColor: '',
+      requiresProfile: false,
     },
     {
       id: 'MERGER' as ActiveTab,

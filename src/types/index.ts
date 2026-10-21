@@ -365,7 +365,35 @@ export const profileBuildMajor = (p: AppInstance | null | undefined): string | n
 
 export type AppProfile = AppInstance;
 
-export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'SAVES' | 'WHATS_NEW' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'SAVES' | 'WHATS_NEW' | 'MAPS' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+
+/** One map folder of one mod, and its cells (map_cells::MapFolder). */
+export interface MapFolder {
+  mod_id: string;
+  mod_name: string;
+  workshop_id: string | null;
+  folder: string;
+  title: string;
+  lots: string[];
+  active: boolean;
+  cells: [number, number][];
+  over_vanilla: number;
+}
+
+export interface MapClash {
+  a: string;
+  b: string;
+  mod_a: string;
+  mod_b: string;
+  cells: [number, number][];
+  both_active: boolean;
+}
+
+export interface MapCells {
+  vanilla: [number, number][];
+  maps: MapFolder[];
+  clashes: MapClash[];
+}
 
 /** One update of one Workshop item (whats_new::ChangeNote). */
 export interface ChangeNote {

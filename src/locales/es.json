@@ -7,6 +7,7 @@
     "modList": "Lista de mods",
     "whatsNew": "Novedades",
     "health": "Salud de mods",
+    "maps": "Mapas",
     "browse": "Explorar mods",
     "merger": "Fusionador de mods",
     "developer": "Desarrollador",
@@ -1318,7 +1319,8 @@
       "Changing the mods of the profile": "Cambiar los mods del perfil",
       "Studio background job": "Una tarea de fondo del Studio",
       "Gathering the diagnostics": "Reunir el diagnóstico",
-      "Opening the logs folder": "Abrir la carpeta de registros"
+      "Opening the logs folder": "Abrir la carpeta de registros",
+      "Reading the map mods": "Leer los mods de mapa"
     },
     "explain": {
       "noZomboid": "El Studio no encuentra tu carpeta Zomboid. Configurala en Configuración.",
@@ -2283,5 +2285,25 @@
       "week": "Últimos 7 días",
       "month": "Últimos 30 días"
     }
+  },
+  "maps": {
+    "title": "Mapas",
+    "blurb": "Todas las celdas del mundo: las del juego (gris) y las de cada mod de mapa instalado. Las celdas de un mod de mapa sobre el mundo del juego reemplazan lo que había. Dos mods de mapa con celdas en común se pelean por ellas (rojo): lo que uno construyó ahí se pierde, salvo que uno se apoye en el otro (su map.info lo nombra en lots=). Una celda son 256 x 256 casillas.",
+    "refresh": "Actualizar",
+    "onlyActive": "Solo mods de mapa prendidos en mi lista",
+    "clashNow": "{{a}} y {{b}} comparten {{count}} celda(s) y los dos están prendidos: en la próxima partida uno reemplaza al otro ahí.",
+    "clashIf": "{{a}} y {{b}} comparten {{count}} celda(s): chocarían si prendieras los dos.",
+    "none": "Ningún mod instalado agrega celdas al mundo.",
+    "gridLabel": "Grilla de las celdas del mundo",
+    "cell": "Celda {{x}}, {{y}}",
+    "vanillaCell": "El mundo del juego",
+    "sharedCell": "Más de un mapa acá",
+    "legendVanilla": "El mundo del juego",
+    "legendClash": "Celdas que comparten dos mapas",
+    "cells": "{{count}} celdas",
+    "overVanilla": "{{count}} sobre el mundo del juego",
+    "outsideVanilla": "fuera del mundo del juego",
+    "buildsOn": "se apoya en {{maps}}",
+    "off": "apagado"
   }
 }

@@ -14,6 +14,7 @@ import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SavesModule } from './components/saves/SavesModule';
 import { WhatsNewModule } from './components/whatsnew/WhatsNewModule';
+import { MapsModule } from './components/maps/MapsModule';
 import { ChangePreview } from './components/common/ChangePreview';
 import { TogglePlan, applyPlan, enableWithRequirements, planIsSimple, planToggle } from './utils/planner';
 import { SplashScreen } from './components/layout/SplashScreen';
@@ -848,6 +849,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'SAVES' && <SavesModule paths={paths} />}
           {activeTab === 'WHATS_NEW' && <WhatsNewModule paths={paths} />}
+          {activeTab === 'MAPS' && <MapsModule paths={paths} />}
 
           {activeTab === 'MOD_LIST' && (
             <LoadOrderModule

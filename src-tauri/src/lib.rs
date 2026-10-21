@@ -10,6 +10,7 @@ pub mod images;
 pub mod instance_manager;
 pub mod lists;
 pub mod load_order;
+pub mod map_cells;
 pub mod mcp;
 pub mod mod_install;
 pub mod mplint;
@@ -431,6 +432,14 @@ fn java_agents_plan_cmd(paths: StudioPaths, active_mod_ids: Vec<String>) -> Resu
 fn whats_new_cmd(paths: StudioPaths, with_notes: bool, since: Option<u64>) -> Result<whats_new::WhatsNew, String> {
     let workshop = vfs::studio_paths().workshop_dir;
     Ok(whats_new::whats_new(&zomboid_dir_of(&paths)?, &workshop, with_notes, since))
+}
+
+/// The game's world and every installed map mod's cells, and where two of them clash.
+#[tauri::command(async)]
+fn map_cells_cmd(paths: StudioPaths) -> Result<map_cells::MapCells, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let saved = vfs::studio_paths();
+    Ok(map_cells::map_cells(&saved.pz_install_dir, &saved.workshop_dir, &z))
 }
 
 /// Everything a bug report needs, as text, with the user name and the PC's name masked.
@@ -1252,6 +1261,7 @@ pub fn run() {
             write_link_health_cmd,
             link_status_cmd,
             saves_overview_cmd,
+            map_cells_cmd,
             diagnostics_report_cmd,
             log_from_window_cmd,
             open_studio_log_folder_cmd,
