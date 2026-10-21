@@ -3,7 +3,9 @@
 -- On its own (no app): every installed mod with search (name, id, Workshop id, author) and
 -- filters, favourites (the same ones the game's screen keeps), its details (poster, description,
 -- what it requires and what needs it), turning mods on and off with what they require, the load
--- order (sorted by it, moved up and down), and Accept / Back like the game's screen. What it
+-- order (sorted by it, moved up and down or dragged), several mods at once (Ctrl / Shift),
+-- grouping by author or category, each mod's options page (Mod Options), a summary on top that
+-- filters, and Accept / Back like the game's screen. What it
 -- changes goes to mods/default.txt exactly as the game's screen writes it.
 -- With PZ Mod Studio: the profile's mods first, Mod Health's warnings on each mod, the mods
 -- updated since the last session, and the mods installed but in no profile, added in one click.
@@ -171,6 +173,21 @@ function ModList:doDrawItem(y, item, alt)
     if y + self:getYScroll() + h < 0 or y + self:getYScroll() >= self.height then return y + h end
     local mod = item.item
     local screen = self.screen
+    -- A group's heading (grouped by author or category).
+    if mod.header then
+        self:drawRect(0, y, self.width, h, 0.9, C.bg[1], C.bg[2], C.bg[3])
+        local ty = y + (h - fontH(UIFont.Small)) / 2
+        self:drawText(mod.header .. "  (" .. tostring(mod.count) .. ")", 12, ty, C.accent[1], C.accent[2], C.accent[3], 1, UIFont.Small)
+        self:drawRect(0, y + h - 1, self.width, 1, 0.8, C.border[1], C.border[2], C.border[3])
+        return y + h
+    end
+    -- Where a dragged mod would land.
+    if self.dragging and self.dropRow == item.index then
+        self:drawRect(0, y, self.width, 3, 1, C.accent[1], C.accent[2], C.accent[3])
+    end
+    if screen.multi[mod.id] then
+        self:drawRect(0, y, self.width, h, 0.35, C.accentDark[1], C.accentDark[2], C.accentDark[3])
+    end
     if self.selected == item.index then
         self:drawRect(0, y, self.width, h, 0.55, C.accentDark[1], C.accentDark[2], C.accentDark[3])
     elseif self.mouseoverselected == item.index and self:isMouseOver() then
@@ -221,21 +238,70 @@ function ModList:onMouseDown(x, y)
     if #self.items == 0 then return end
     local row = self:rowAt(x, y)
     if row < 1 or row > #self.items then return end
-    self.selected = row
-    getSoundManager():playUISound("UISelectListItem")
     local mod = self.items[row].item
-    -- Shown first (the list keeps the shown mod selected when it is redrawn).
-    self.screen:select(mod)
-    if x < STAR_RIGHT then
-        self.screen:toggleFavourite(mod)
-    elseif x < TICK_RIGHT then
-        self.screen:toggle(mod)
+    if mod.header then return end
+    getSoundManager():playUISound("UISelectListItem")
+    local screen = self.screen
+    -- Ctrl adds or takes one mod, Shift takes the rows from the last one clicked: several mods.
+    if isCtrlKeyDown() or isShiftKeyDown() then
+        if isShiftKeyDown() and self.anchor then
+            screen.multi = {}
+            local a, b = math.min(self.anchor, row), math.max(self.anchor, row)
+            for i = a, b do
+                local m = self.items[i] and self.items[i].item
+                if m and not m.header then screen.multi[m.id] = true end
+            end
+        else
+            if screen.selectedMod and not screen.selectedMod.header then screen.multi[screen.selectedMod.id] = true end
+            screen.multi[mod.id] = not screen.multi[mod.id] or nil
+            self.anchor = row
+        end
+        self.selected = row
+        screen:select(mod)
+        return
     end
+    screen.multi = {}
+    self.anchor = row
+    self.selected = row
+    -- Shown first (the list keeps the shown mod selected when it is redrawn).
+    screen:select(mod)
+    if x < STAR_RIGHT then
+        screen:toggleFavourite(mod)
+    elseif x < TICK_RIGHT then
+        screen:toggle(mod)
+    else
+        -- Held and moved, it is dragged to another place of the load order.
+        self.dragFrom = row
+        self.dragStartY = y
+        self.dragging = false
+    end
+end
+
+function ModList:onMouseMove(dx, dy)
+    ISScrollingListBox.onMouseMove(self, dx, dy)
+    if self.dragFrom then
+        local my = self:getMouseY()
+        if not self.dragging and math.abs(my - self.dragStartY) > 6 then self.dragging = true end
+        if self.dragging then self.dropRow = self:rowAt(self:getMouseX(), my) end
+    end
+end
+
+function ModList:onMouseUp(x, y)
+    ISScrollingListBox.onMouseUp(self, x, y)
+    if self.dragging and self.dropRow and self.items[self.dragFrom] and self.items[self.dropRow] then
+        self.screen:dropAt(self.items[self.dragFrom].item, self.items[self.dropRow].item)
+    end
+    self.dragFrom, self.dragging, self.dropRow = nil, false, nil
+end
+
+function ModList:onMouseUpOutside(x, y)
+    ISScrollingListBox.onMouseUpOutside(self, x, y)
+    self.dragFrom, self.dragging, self.dropRow = nil, false, nil
 end
 
 function ModList:onMouseDoubleClick(x, y)
     local row = self:rowAt(x, y)
-    if row >= 1 and row <= #self.items and x >= TICK_RIGHT then self.screen:toggle(self.items[row].item) end
+    if row >= 1 and row <= #self.items and x >= TICK_RIGHT and not self.items[row].item.header then self.screen:toggle(self.items[row].item) end
 end
 
 -- ------------------------------------------------------------------ the screen
@@ -246,6 +312,8 @@ function Screen:new(x, y, w, h)
     o.borderColor = { r = C.border[1], g = C.border[2], b = C.border[3], a = 1 }
     o.filter = "all"
     o.sort = "name"
+    o.group = "none"
+    o.multi = {}
     o.search = ""
     o.on, o.changed, o.position, o.missingReq, o.health, o.updated, o.favs = {}, {}, {}, {}, {}, {}, {}
     -- Big screens get bigger rows and text.
@@ -304,6 +372,13 @@ function Screen:recount()
         if kept[i] ~= now[i] then self.orderChanged = true end
     end
     if self.orderChanged then self.changes = self.changes + 1 end
+    -- The summary on top.
+    self.counts = { problems = 0, updated = 0, favourites = 0 }
+    for _, mod in ipairs(self.mods) do
+        if self.health[mod.id] or self.missingReq[mod.id] or (self.on[mod.id] and not mod.available) then self.counts.problems = self.counts.problems + 1 end
+        if self.updated[mod.id] then self.counts.updated = self.counts.updated + 1 end
+        if self.favs[mod.id] then self.counts.favourites = self.counts.favourites + 1 end
+    end
 end
 
 --- The mods the list shows now, in the order chosen.
@@ -339,18 +414,60 @@ function Screen:visibleMods()
     return out
 end
 
+--- A mod's group: its author(s), or its category (a map mod with none set is a map).
+function Screen:groupOf(mod)
+    if self.group == "author" then
+        return mod.author ~= "" and mod.author or text("modsNoAuthor")
+    end
+    local category = mod.info:getCategory() or ""
+    if category == "" and mod.map then category = "map" end
+    if category == "" then return text("modsNoCategory") end
+    local label = text("modsCategory_" .. category)
+    return label ~= "modsCategory_" .. category and label or category
+end
+
 function Screen:refreshList()
     local keep = self.selectedMod
     self.list:clear()
-    local pick = 1
-    for i, mod in ipairs(self:visibleMods()) do
-        self.list:addItem(mod.name, mod)
-        if keep and mod.id == keep.id then pick = i end
+    local mods = self:visibleMods()
+    local rows = {}
+    if self.group == "none" then
+        rows = mods
+    else
+        -- Groups by name, the mods of each in the order chosen, a heading above each.
+        local groups, keys = {}, {}
+        for _, mod in ipairs(mods) do
+            local g = self:groupOf(mod)
+            if not groups[g] then
+                groups[g] = {}
+                table.insert(keys, g)
+            end
+            table.insert(groups[g], mod)
+        end
+        table.sort(keys, function(a, b) return string.lower(a) < string.lower(b) end)
+        for _, g in ipairs(keys) do
+            table.insert(rows, { header = g, count = #groups[g], id = "\0" .. g })
+            for _, mod in ipairs(groups[g]) do table.insert(rows, mod) end
+        end
     end
-    self.list.selected = math.min(pick, #self.list.items)
-    if #self.list.items > 0 then
-        self:select(self.list.items[self.list.selected].item)
-        self.list:ensureVisible(self.list.selected)
+    local pick
+    for i, mod in ipairs(rows) do
+        self.list:addItem(mod.name or mod.header, mod)
+        if keep and mod.id == keep.id then pick = i end
+        if not pick and not mod.header and not keep then pick = i end
+    end
+    if not pick then
+        for i, row in ipairs(rows) do
+            if not row.header then
+                pick = i
+                break
+            end
+        end
+    end
+    self.list.selected = pick or 1
+    if pick then
+        self:select(self.list.items[pick].item)
+        self.list:ensureVisible(pick)
     else
         self:select(nil)
     end
@@ -474,6 +591,128 @@ function Screen:toggle(mod)
     end
 end
 
+-- ------------------------------------------------------------------ several mods at once
+
+function Screen:multiMods()
+    local out = {}
+    for _, mod in ipairs(self.mods) do
+        if self.multi[mod.id] then table.insert(out, mod) end
+    end
+    return out
+end
+
+--- Turns on (when any of them is off) or off all the mods selected, with what they require or
+--- what needs them, said first.
+function Screen:toggleMany(mods)
+    local anyOff = false
+    for _, mod in ipairs(mods) do
+        if not self.on[mod.id] and mod.available then anyOff = true end
+    end
+    local inSet = {}
+    for _, mod in ipairs(mods) do inSet[mod.id] = true end
+    if anyOff then
+        local extra, missing, seen = {}, {}, {}
+        for _, mod in ipairs(mods) do
+            if not self.on[mod.id] and mod.available then
+                local e, m = {}, {}
+                self:needed(mod, e, m)
+                for _, r in ipairs(e) do
+                    if not inSet[r.id] and not seen[r.id] then
+                        seen[r.id] = true
+                        table.insert(extra, r)
+                    end
+                end
+                for _, id in ipairs(m) do
+                    if not seen[id] then
+                        seen[id] = true
+                        table.insert(missing, id)
+                    end
+                end
+            end
+        end
+        local function apply()
+            for _, r in ipairs(extra) do self:setOn(r, true) end
+            for _, mod in ipairs(mods) do
+                if mod.available then self:setOn(mod, true) end
+            end
+            self:recount()
+            self:refreshList()
+        end
+        if #extra == 0 and #missing == 0 then return apply() end
+        local body = ""
+        if #extra > 0 then body = body .. text("modsAlsoOnMany") .. " <LINE> " .. names(extra) .. " <LINE> <LINE> " end
+        if #missing > 0 then body = body .. " <RGB:1,0.6,0.3> " .. text("modsMissingReqMany") .. " <RGB:1,1,1> <LINE> " .. names(missing) .. " <LINE> " end
+        Link.WaitPanel.choose(text("modsSelected", #mods), body, 100 + (#extra + #missing + 6) * (fontH(UIFont.Small) + 2), {
+            { label = text("back") },
+            { label = text("modsTurnOnAll"), accept = true, onClick = apply },
+        })
+    else
+        local deps, seen = {}, {}
+        for _, mod in ipairs(mods) do
+            local d = {}
+            self:dependents(mod, d)
+            for _, x in ipairs(d) do
+                if not inSet[x.id] and not seen[x.id] then
+                    seen[x.id] = true
+                    table.insert(deps, x)
+                end
+            end
+        end
+        local function apply()
+            for _, d in ipairs(deps) do self:setOn(d, false) end
+            for _, mod in ipairs(mods) do self:setOn(mod, false) end
+            self:recount()
+            self:refreshList()
+        end
+        if #deps == 0 then return apply() end
+        Link.WaitPanel.choose(text("modsSelected", #mods), text("modsAlsoOffMany") .. " <LINE> " .. names(deps), 100 + (#deps + 4) * (fontH(UIFont.Small) + 2), {
+            { label = text("back") },
+            { label = text("modsTurnOffAll"), accept = true, onClick = apply },
+        })
+    end
+end
+
+function Screen:favouriteMany(mods)
+    local all = true
+    for _, mod in ipairs(mods) do
+        if not self.favs[mod.id] then all = false end
+    end
+    for _, mod in ipairs(mods) do self.favs[mod.id] = (not all) or nil end
+    pcall(writeFavourites, self.favs)
+    self:recount()
+    if self.filter == "favourites" then self:refreshList() else self:updateButtons() end
+end
+
+-- ------------------------------------------------------------------ Mod Options
+
+--- The game's options page of a mod (B42 Mod Options), when it registered one: only mods that
+--- are on run their code, so only those can have it.
+function Screen:hasOptions(mod)
+    if not mod or not self.startOn[mod.id] then return false end
+    local found = false
+    pcall(function()
+        local api = PZAPI and PZAPI.ModOptions
+        if not api then return end
+        if api.Dict and api.Dict[mod.id] then found = true return end
+        for _, o in ipairs(api.Data or {}) do
+            if o.modOptionsID == mod.id or o.modOptionsID == mod.gameId or getText(o.name or "") == mod.name then found = true end
+        end
+    end)
+    return found
+end
+
+--- Opens the game's Options on its Mods page (the options of every mod that has some).
+function Screen:openOptions()
+    if self.changes > 0 then return self:say(text("modsOptionsAcceptFirst")) end
+    self:close()
+    local ms = MainScreen.instance
+    if not ms or not ms.mainOptions then return end
+    ms.bottomPanel:setVisible(false)
+    ms.mainOptions:toUI()
+    ms.mainOptions:setVisible(true, JoypadState.getMainMenuJoypad())
+    pcall(function() ms.mainOptions.tabs:activateView(getText("UI_mainscreen_mods")) end)
+end
+
 -- ------------------------------------------------------------------ load order
 
 --- Moves a mod that is on one place up or down the load order. A mod never goes above what it
@@ -508,11 +747,70 @@ function Screen:move(mod, step)
     self:refreshList()
 end
 
+--- A mod dropped on another row of the load order: it goes there, but never above what it
+--- requires nor below a mod that requires it (it stops at the nearest place it can go).
+function Screen:dropAt(mod, target)
+    if not mod or not target or target.header or mod.id == target.id then return end
+    if self.sort ~= "order" or self.group ~= "none" then return self:say(text("modsDragNeedsOrder")) end
+    if not self.on[mod.id] or not self.on[target.id] then return self:say(text("modsDragOnlyOn")) end
+    local from
+    for i, id in ipairs(self.order) do
+        if plainId(id) == mod.id then from = i end
+    end
+    local entry = table.remove(self.order, from)
+    local to
+    for i, id in ipairs(self.order) do
+        if plainId(id) == target.id then to = i end
+    end
+    -- Dropped below a row it was above: after that row.
+    if to >= from then to = to + 1 end
+    local lo, hi = 1, #self.order + 1
+    for i, id in ipairs(self.order) do
+        local other = self.byId[plainId(id)]
+        for _, req in ipairs(mod.requires) do
+            if req == plainId(id) and i + 1 > lo then lo = i + 1 end
+        end
+        if other then
+            for _, req in ipairs(other.requires) do
+                if req == mod.id and i < hi then hi = i end
+            end
+        end
+    end
+    local wanted = to
+    if to < lo then to = lo end
+    if to > hi then to = hi end
+    table.insert(self.order, to, entry)
+    if to ~= wanted then self:say(text("modsDragLimited", mod.name)) else self.note = nil end
+    self:recount()
+    self:refreshList()
+end
+
 -- ------------------------------------------------------------------ details
 
 function Screen:select(mod)
+    if mod and mod.header then mod = nil end
     self.selectedMod = mod
     if not self.desc then return end
+    local many = self:multiMods()
+    if #many > 1 then
+        local list = {}
+        for i, m in ipairs(many) do
+            if i > 30 then
+                table.insert(list, text("andMore", #many - 30))
+                break
+            end
+            -- "Name, on": the rich text drops a space that stands alone before a colour.
+            local state = self.on[m.id] and " <RGB:0.45,0.9,0.65> " .. text("modsOnShort") or " <RGB:0.58,0.64,0.72> " .. text("modsOff")
+            table.insert(list, " <RGB:1,1,1> - " .. m.name .. "," .. state .. " <RGB:1,1,1> ")
+        end
+        self.desc:setText(" <RGB:0.58,0.64,0.72> " .. text("modsManyHelp") .. " <RGB:1,1,1> <LINE> <LINE> " .. table.concat(list, " <LINE> "))
+        self.desc:paginate()
+        self.desc:setYScroll(0)
+        self.poster = nil
+        self.posterPath = nil
+        self:updateButtons()
+        return
+    end
     if not mod then
         self.desc:setText("")
         self.desc:paginate()
@@ -583,6 +881,32 @@ end
 function Screen:updateButtons()
     if not self.toggleButton then return end
     local mod = self.selectedMod
+    local many = self:multiMods()
+    self.groupButton:setTitle(text("modsGroup_" .. self.group))
+    self.summary.problems:setTitle(text("modsSumProblems", self.counts.problems))
+    self.summary.favourites:setTitle(text("modsSumFavourites", self.counts.favourites))
+    if self.summary.updated then self.summary.updated:setTitle(text("modsSumUpdated", self.counts.updated)) end
+    if #many > 1 then
+        local anyOff = false
+        for _, m in ipairs(many) do
+            if not self.on[m.id] and m.available then anyOff = true end
+        end
+        self.toggleButton:setVisible(true)
+        self.toggleButton:setEnable(true)
+        self.toggleButton:setTitle(anyOff and text("modsTurnOnAll") or text("modsTurnOffAll"))
+        styleButton(self.toggleButton, anyOff)
+        self.favButton:setVisible(true)
+        self.favButton:setTitle(text("modsFavouriteAll"))
+        self.upButton:setVisible(false)
+        self.downButton:setVisible(false)
+        self.workshopButton:setVisible(false)
+        self.optionsButton:setVisible(false)
+        self.acceptButton:setTitle(self.changes > 0 and text("modsAcceptN", self.changes) or text("modsAccept"))
+        for key, button in pairs(self.filterButtons) do styleButton(button, key == self.filter) end
+        self.sortButton:setTitle(self.sort == "order" and text("modsSortOrder") or text("modsSortName"))
+        return
+    end
+    self.optionsButton:setVisible(self:hasOptions(mod))
     local has = mod ~= nil
     self.toggleButton:setVisible(has)
     self.workshopButton:setVisible(has)
@@ -656,6 +980,31 @@ function Screen:createChildren()
         screen:refreshList()
     end)
     fx = self.sortButton:getRight() + 6
+    local gw = 0
+    for _, g in ipairs({ "none", "author", "category" }) do gw = math.max(gw, measure(UIFont.Small, text("modsGroup_" .. g))) end
+    self.groupButton = button(self, fx, top, gw + 22, bh, text("modsGroup_none"), function(screen)
+        screen.group = (screen.group == "none" and "author") or (screen.group == "author" and "category") or "none"
+        screen:refreshList()
+    end)
+    fx = self.groupButton:getRight() + 6
+
+    -- The summary, right of the title: each one shows its mods.
+    self.summary = {}
+    local sx = self.width - pad
+    local sy = self.top
+    local function summaryButton(key, label)
+        local w = measure(UIFont.Small, label) + 40
+        sx = sx - w
+        local b = button(self, sx, sy, w, bh, label, function(screen)
+            screen.filter = key
+            screen:refreshList()
+        end)
+        sx = sx - 6
+        self.summary[key] = b
+    end
+    summaryButton("favourites", text("modsSumFavourites", 999))
+    if Link.appInstalled() then summaryButton("updated", text("modsSumUpdated", 999)) end
+    summaryButton("problems", text("modsSumProblems", 999))
 
     if self.link then
         local w = math.max(measure(UIFont.Small, text("modsOnlyProfileOn")), measure(UIFont.Small, text("modsOnlyProfileOff"))) + 22
@@ -698,8 +1047,14 @@ function Screen:createChildren()
     local bw = math.min(200, dw - self.posterSize - 16)
     local nameH = fontH(UIFont.Medium) * 2 + fontH(UIFont.Small) * 2 + 18
     local by = listTop + nameH
-    self.toggleButton = button(self, bx, by, bw, bh, text("modsTurnOn"), function(screen) screen:toggle(screen.selectedMod) end, true)
-    self.favButton = button(self, bx, by + bh + 6, bw, bh, text("modsFavourite"), function(screen) screen:toggleFavourite(screen.selectedMod) end)
+    self.toggleButton = button(self, bx, by, bw, bh, text("modsTurnOn"), function(screen)
+        local many = screen:multiMods()
+        if #many > 1 then screen:toggleMany(many) else screen:toggle(screen.selectedMod) end
+    end, true)
+    self.favButton = button(self, bx, by + bh + 6, bw, bh, text("modsFavourite"), function(screen)
+        local many = screen:multiMods()
+        if #many > 1 then screen:favouriteMany(many) else screen:toggleFavourite(screen.selectedMod) end
+    end)
     local half = math.floor((bw - 6) / 2)
     self.upButton = button(self, bx, by + (bh + 6) * 2, half, bh, text("modsUp"), function(screen) screen:move(screen.selectedMod, -1) end)
     self.downButton = button(self, bx + half + 6, by + (bh + 6) * 2, bw - half - 6, bh, text("modsDown"), function(screen) screen:move(screen.selectedMod, 1) end)
@@ -707,7 +1062,8 @@ function Screen:createChildren()
         local mod = screen.selectedMod
         if mod then pcall(function() openUrl(WORKSHOP_URL .. mod.workshop) end) end
     end)
-    local descTop = math.max(listTop + self.posterSize, self.workshopButton:getBottom()) + 14
+    self.optionsButton = button(self, bx, by + (bh + 6) * 4, bw, bh, text("modsOptions"), function(screen) screen:openOptions() end)
+    local descTop = math.max(listTop + self.posterSize, self.optionsButton:getBottom()) + 14
     self.desc = ISRichTextPanel:new(dx, descTop, dw, bottom - descTop - 24)
     self.desc.background = false
     self.desc.autosetheight = false
@@ -762,7 +1118,10 @@ function Screen:prerender()
         self:drawRectBorder(self.detailX, self.detailY, self.posterSize, self.posterSize, 0.6, C.border[1], C.border[2], C.border[3])
     end
     local mod = self.selectedMod
-    if mod then
+    local many = #self:multiMods()
+    if many > 1 then
+        self:drawText(text("modsSelected", many), self.detailX + self.posterSize + 16, self.detailY, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
+    elseif mod then
         -- Beside the poster: the name (up to two lines), then id, Workshop, version, author.
         local nx = self.detailX + self.posterSize + 16
         local nw = self.detailW - self.posterSize - 16
@@ -896,8 +1255,18 @@ function Screen:selectRow()
     local row = self.list.items[self.list.selected]
     self:select(row and row.item)
 end
-function Screen:onJoypadDirUp() self.list:onJoypadDirUp(); self:selectRow() end
-function Screen:onJoypadDirDown() self.list:onJoypadDirDown(); self:selectRow() end
+function Screen:onJoypadDirUp()
+    self.list:onJoypadDirUp()
+    local row = self.list.items[self.list.selected]
+    if row and row.item.header then self.list:onJoypadDirUp() end
+    self:selectRow()
+end
+function Screen:onJoypadDirDown()
+    self.list:onJoypadDirDown()
+    local row = self.list.items[self.list.selected]
+    if row and row.item.header then self.list:onJoypadDirDown() end
+    self:selectRow()
+end
 
 function Screen:onKeyRelease(key)
     if key == Keyboard.KEY_ESCAPE then self:back() end
