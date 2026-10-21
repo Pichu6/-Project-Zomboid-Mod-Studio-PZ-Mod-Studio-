@@ -1,4 +1,7 @@
 {
+  "support": {
+    "title": "Support the author"
+  },
   "assistant": {
     "copy": "Copy for an assistant",
     "copyTitle": "Copies this with what to ask, to paste into any chat assistant (ChatGPT, Claude, Gemini...): no key, nothing is sent from here",
@@ -1594,6 +1597,7 @@
     "apply": "Apply Preset to my Game"
   },
   "inspector": {
+    "changelog": "Latest in its changelog",
     "noDescription": "No description provided in mod.info manifest.",
     "selectOne": "Select a mod from the left list to view Workshop metadata details.",
     "mapMod": "MAP MOD",
@@ -2385,6 +2389,11 @@
     "onlyThis": "Only {{name}}"
   },
   "whatsNew": {
+    "localMod": "local mod",
+    "readInGame": "read in the game",
+    "readInGameTitle": "The game's mod alerts already showed you this mod's newest entry",
+    "markRead": "Mark as read",
+    "ownChangelog": "From the mod's own changelog ({{file}})",
     "title": "What's new",
     "blurb": "Your Workshop mods updated since you last played, and the ones whose update is waiting in Steam, with each update's change notes. \"May break saves\" is a guess (a map mod, or notes that talk about new saves, wipes, things removed or renamed): read the notes before you load a save in progress. An update still waiting in Steam can be headed off by keeping the version you have first.",
     "refresh": "Refresh",

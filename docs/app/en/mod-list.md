@@ -9,6 +9,10 @@ Your installed mods: which ones are on and the order the game loads them in. Eve
 - The list. The green bar on top (**LOADS FIRST**) is where libraries go; the amber bar at the bottom (**LOADS LAST**) is where a mod wins any file two mods share.
 - On the right, the inspector for the selected mod: its details, what it requires, and warnings with buttons (**Move After ...**, **Activate Library**, **Deactivate**).
 
+## Support the author
+
+When the selected mod ships a changelog, the inspector shows **Support the author** with the links its author put in it (opened in your browser), and **Latest in its changelog**, which opens its newest entry. The same buttons are on a mod's page in Browse when it is installed.
+
 ## The # column
 
 The number on each row is the mod's place among the mods that are **on**: the load order the game reads, and the same number the game shows. A mod that is off shows **—** and the **OFF** tag, because it has no place in the load order. Off mods keep their spot in the list, so switching one on usually puts it back where it was.

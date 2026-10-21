@@ -517,6 +517,32 @@ export interface UpdatedItem {
   /** "later", "busy", or what went wrong reading the notes. */
   notes_error: string | null;
   risks: { code: string; level: 'breaks' | 'read'; detail: string }[];
+  /** The entries of the mod's own changelog not read yet, newest first. */
+  changelog: LogEntry[];
+  changelog_file: string | null;
+  /** The links its author put in it to support them (https only). */
+  support: AuthorLink[];
+  /** The newest entry was already shown in the game (its alert system). */
+  read_in_game: boolean;
+  /** A mod in Zomboid/mods, not from the Workshop: its changelog is what is new. */
+  local: boolean;
+}
+
+export interface LogEntry {
+  title: string;
+  text: string;
+}
+
+export interface AuthorLink {
+  name: string;
+  url: string;
+}
+
+/** The changelog a mod ships in its own folder. */
+export interface ModChangelog {
+  file: string;
+  entries: LogEntry[];
+  links: AuthorLink[];
 }
 
 export interface WhatsNew {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Download, ExternalLink, FileArchive, Heart, Layers, Loader2, Play, Plus, Trash2, Users, X } from 'lucide-react';
-import { NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, WorkshopItemDetails, WorkshopLookup } from '../../types';
+import { AuthorLink, NexusMod, NexusModDetails, WorkshopInstallState, WorkshopItem, WorkshopItemDetails, WorkshopLookup } from '../../types';
+import { SupportLinks } from '../common/SupportLinks';
 import { TauriService, reportBackendError } from '../../services/tauri';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { BBCode } from './BBCode';
@@ -173,6 +174,21 @@ function useDetails<T>(load: () => Promise<T>, key: string, what: string) {
   return { data, loading };
 }
 
+/** "Support the author", from the changelog of the copy installed here. */
+const InstalledSupport: React.FC<{ paths: StudioPathsUI; modId: string }> = ({ paths, modId }) => {
+  const [links, setLinks] = useState<AuthorLink[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void TauriService.modChangelog(paths, modId).then((log) => {
+      if (!cancelled) setLinks(log?.links ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [paths, modId]);
+  return <SupportLinks links={links} />;
+};
+
 const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } & DetailTarget }> = ({ target, paths, installedByItem, stateByItem, onOpen, steamReady, onSubscribe, installedBuild = null, keep }) => {
   const { data, loading } = useDetails<WorkshopItemDetails>(() => TauriService.workshopItemDetails(target.id), target.id, i18next.t('browse.detail.loadingWorkshop'));
   const index = useCommunityIndex(paths);
@@ -204,6 +220,7 @@ const WorkshopDetail: React.FC<ModDetailProps & { target: { kind: 'workshop' } &
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {steamReady || installed.length > 0 ? i18next.t('browse.detail.openWorkshop') : i18next.t('browse.detail.openToSubscribe')}
             </ActionButton>
             {installed.length > 0 && <div className="text-[10px] font-mono text-emerald-400/80 break-all">{i18next.t('browse.detail.installedAs', { ids: installed.join(', ') })}</div>}
+            {installed.length > 0 && <InstalledSupport paths={paths} modId={installed[0]} />}
           </div>
           {item && (
             <Section title={i18next.t('browse.detail.info')}>
@@ -251,7 +268,7 @@ const FILE_STYLE: Record<string, string> = {
   OPTIONAL: 'border-violet-600/60 text-violet-300',
 };
 
-const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & DetailTarget }> = ({ target, installedByNexusId, onNexusDownload, onOpen, keep }) => {
+const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & DetailTarget }> = ({ target, paths, installedByNexusId, onNexusDownload, onOpen, keep }) => {
   const { data, loading } = useDetails<NexusModDetails>(() => TauriService.nexusModDetails(target.modId), String(target.modId), i18next.t('browse.detail.loadingNexus'));
   const m = data?.mod ?? target.preview;
   const installed = installedByNexusId.get(target.modId) ?? [];
@@ -283,6 +300,7 @@ const NexusDetail: React.FC<ModDetailProps & { target: { kind: 'nexus' } & Detai
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {i18next.t('browse.detail.openNexus')}
             </ActionButton>
             {installed.length > 0 && <div className="text-[10px] font-mono text-emerald-400/80 break-all">{i18next.t('browse.detail.installedAs', { ids: installed.join(', ') })}</div>}
+            {installed.length > 0 && <InstalledSupport paths={paths} modId={installed[0]} />}
             <p className="text-[10px] text-slate-500" dangerouslySetInnerHTML={{ __html: tHtml('browse.detail.afterDownload') }} />
           </div>
           {m && (

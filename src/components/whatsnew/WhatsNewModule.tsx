@@ -1,3 +1,4 @@
+import { SupportLinks } from '../common/SupportLinks';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
@@ -52,6 +53,16 @@ export const WhatsNewModule: React.FC<WhatsNewModuleProps> = ({ paths }) => {
   const items = (data?.items ?? []).filter((i) => !onlyActive || i.active);
   const unread = items.filter((i) => i.notes_error === 'later' || i.notes_error === 'busy').length;
   const breaking = items.filter((i) => i.risks.some((r) => r.level === 'breaks')).length;
+
+  /** A local mod's changelog entries are read: it leaves the list until a new one comes. */
+  const markRead = async (item: UpdatedItem) => {
+    try {
+      for (const id of item.mod_ids) await TauriService.changelogMarkRead(paths, id);
+      setData((d) => (d ? { ...d, items: d.items.filter((x) => x.workshop_id !== item.workshop_id) } : d));
+    } catch (err) {
+      setNotice({ tone: 'error', text: String(err) });
+    }
+  };
 
   const keep = async (item: UpdatedItem) => {
     setNotice(null);
@@ -118,6 +129,8 @@ export const WhatsNewModule: React.FC<WhatsNewModuleProps> = ({ paths }) => {
                       <span className="px-1.5 py-0.5 rounded border border-slate-700 text-slate-300">{t('whatsNew.updatedOn', { date: day(item.installed_time) })}</span>
                     )}
                     <span className={`px-1.5 py-0.5 rounded border ${item.active ? 'border-emerald-700/60 text-emerald-300' : 'border-slate-700 text-slate-500'}`}>{item.active ? t('whatsNew.inProfile') : t('whatsNew.notInProfile')}</span>
+                    {item.local && <span className="px-1.5 py-0.5 rounded border border-sky-700/60 text-sky-300">{t('whatsNew.localMod')}</span>}
+                    {item.read_in_game && <span className="px-1.5 py-0.5 rounded border border-slate-700 text-slate-400" title={t('whatsNew.readInGameTitle')}>{t('whatsNew.readInGame')}</span>}
                     {breaks.map((r, k) => (
                       <span key={`b${k}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-red-600/70 text-red-300" title={r.detail ? t('whatsNew.because', { words: r.detail }) : undefined}>
                         <ShieldAlert className="w-3 h-3" />{t('whatsNew.mayBreak')}{r.code === 'map' ? ` · ${t('whatsNew.mapMod')}` : r.detail ? ` · ${r.detail}` : ''}
@@ -131,10 +144,17 @@ export const WhatsNewModule: React.FC<WhatsNewModuleProps> = ({ paths }) => {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  <button onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/changelog/${item.workshop_id}`)}
-                    className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer">
-                    <ExternalLink className="w-3 h-3" />{t('whatsNew.allNotes')}
-                  </button>
+                  {item.local ? (
+                    <button onClick={() => void markRead(item)}
+                      className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer">
+                      {t('whatsNew.markRead')}
+                    </button>
+                  ) : (
+                    <button onClick={() => TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/changelog/${item.workshop_id}`)}
+                      className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer">
+                      <ExternalLink className="w-3 h-3" />{t('whatsNew.allNotes')}
+                    </button>
+                  )}
                   {item.pending && (
                     <button onClick={() => void keep(item)} disabled={kept.has(item.workshop_id)} title={t('whatsNew.keepTitle')}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-sky-800/60 hover:bg-sky-700/70 text-[11px] text-sky-50 disabled:opacity-50 cursor-pointer">
@@ -150,7 +170,19 @@ export const WhatsNewModule: React.FC<WhatsNewModuleProps> = ({ paths }) => {
                     <div className="text-xs text-slate-300 whitespace-pre-wrap break-words line-clamp-6">{n.text || t('whatsNew.noText')}</div>
                   </div>
                 ))}
-                {item.notes.length === 0 && (
+                {item.changelog.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{t('whatsNew.ownChangelog', { file: item.changelog_file ?? '' })}</div>
+                    {item.changelog.map((e, k) => (
+                      <div key={`${e.title}-${k}`} className="border-l-2 border-sky-800/70 pl-3">
+                        {e.title && <div className="text-[10px] text-sky-300/80">{e.title}</div>}
+                        <div className="text-xs text-slate-300 whitespace-pre-wrap break-words line-clamp-6">{e.text || t('whatsNew.noText')}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <SupportLinks links={item.support} />
+                {item.notes.length === 0 && !item.local && (
                   <div className="text-[11px] text-slate-500">
                     {item.notes_error === 'busy'
                       ? t('whatsNew.notesBusy')

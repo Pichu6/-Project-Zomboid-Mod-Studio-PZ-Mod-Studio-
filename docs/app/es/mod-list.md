@@ -9,6 +9,10 @@ Tus mods instalados: cuáles están prendidos y en qué orden los carga el juego
 - La lista. La barra verde de arriba (**CARGA PRIMERO**) es donde van las librerías; la barra ámbar de abajo (**CARGA ÚLTIMO**) es donde un mod gana cualquier archivo que compartan dos mods.
 - A la derecha, el inspector del mod elegido: sus datos, lo que requiere, y avisos con botones (**Mover después de ...**, **Activar la librería**, **Desactivar**).
 
+## Apoyar al autor
+
+Cuando el mod elegido trae un changelog, el inspector muestra **Apoyar al autor** con los links que puso su autor (se abren en tu navegador), y **Lo último de su changelog**, que despliega su entrada más nueva. Los mismos botones están en la página del mod en Explorar mods cuando está instalado.
+
 ## La columna #
 
 El número de cada fila es el lugar del mod entre los mods **prendidos**: el orden de carga que lee el juego, y el mismo número que muestra el juego. Un mod apagado muestra **—** y la etiqueta **APAGADO**, porque no tiene lugar en el orden de carga. Los mods apagados conservan su lugar en la lista, así que al prenderlos normalmente vuelven a donde estaban.

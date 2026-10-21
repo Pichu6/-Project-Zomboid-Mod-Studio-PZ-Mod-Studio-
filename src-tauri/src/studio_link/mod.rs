@@ -520,7 +520,8 @@ pub const UPDATED_FILE: &str = "PZModStudio_LinkUpdated.txt";
 
 pub fn updated_file_text(items: &[crate::whats_new::UpdatedItem]) -> String {
     let mut out = String::new();
-    for item in items {
+    // (a local mod with new changelog entries was not updated on the Workshop)
+    for item in items.iter().filter(|i| !i.local) {
         let key = if item.pending { "waiting" } else if item.since_last_play { "updated" } else { continue };
         for id in &item.mod_ids {
             out.push_str(&format!("{}={}\n", key, crate::load_order::mod_info::sanitize_mod_id(id)));
@@ -1039,6 +1040,11 @@ mod tests {
             notes: Vec::new(),
             notes_error: None,
             risks: Vec::new(),
+            changelog: Vec::new(),
+            changelog_file: None,
+            support: Vec::new(),
+            read_in_game: false,
+            local: false,
         };
         let text = updated_file_text(&[item(&["A", "B"], false, true), item(&["C"], true, true), item(&["D"], false, false)]);
         assert_eq!(text, "updated=A

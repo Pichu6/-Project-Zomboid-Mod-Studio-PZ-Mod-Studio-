@@ -11,6 +11,11 @@
 //!   read, through the shared limiter, stopping at Steam's first "slow down".
 //! - "May break saves" is a guess, said as one: a map mod (its cells can change under a save),
 //!   or notes that talk about new saves, wipes, removed or renamed things, reworks.
+//! - The changelog a mod ships in its own folder (`mod_changelog`) is read too: offline, and for
+//!   mods that are not on the Workshop (Zomboid/mods: local, Nexus). What the player already read
+//!   in the game's alert system is not new; a local mod's entries are new until "Mark as read"
+//!   (the newest one seen is kept in `PZModStudio_ChangelogSeen.json`, the first time without
+//!   showing anything, or every mod would be new).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -58,6 +63,16 @@ pub struct UpdatedItem {
     /// limiting requests), or what went wrong.
     pub notes_error: Option<String>,
     pub risks: Vec<Risk>,
+    /// The entries of the mod's own changelog not read yet, newest first.
+    pub changelog: Vec<crate::mod_changelog::LogEntry>,
+    /// That file, from the mod's folder.
+    pub changelog_file: Option<String>,
+    /// The links its author put in it to support them.
+    pub support: Vec<crate::mod_changelog::AuthorLink>,
+    /// The newest entry was already shown in the game (its alert system).
+    pub read_in_game: bool,
+    /// A mod in Zomboid/mods, not from the Workshop: its changelog is what is new.
+    pub local: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -73,6 +88,75 @@ const NOTES_KEPT: usize = 10;
 /// Pages read in one go: Steam starts refusing after a few dozen quick ones.
 const PAGES_PER_READ: usize = 12;
 const CACHE_FILE: &str = "PZModStudio_Changelogs.json";
+/// Local mods: the newest changelog entry the player has seen (mod id -> its key).
+const LOCAL_SEEN_FILE: &str = "PZModStudio_ChangelogSeen.json";
+/// Entries shown when nothing says which were read.
+const LOG_ENTRIES_SHOWN: usize = 3;
+
+/// An entry's identity: its title, or the start of its text when it has none.
+fn entry_key(e: &crate::mod_changelog::LogEntry) -> String {
+    if e.title.trim().is_empty() { e.text.chars().take(60).collect() } else { e.title.trim().to_string() }
+}
+
+fn read_local_seen(z: &Path) -> BTreeMap<String, String> {
+    std::fs::read_to_string(z.join(LOCAL_SEEN_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+fn write_local_seen(z: &Path, seen: &BTreeMap<String, String>) {
+    if let Ok(text) = serde_json::to_string_pretty(seen) {
+        let _ = crate::load_order::ini_parser::atomic_write(z.join(LOCAL_SEEN_FILE), text);
+    }
+}
+
+/// "Mark as read" on a local mod: its newest changelog entry is the last one seen.
+pub fn mark_changelog_read(user_zomboid_dir: &Path, mod_id: &str) -> Result<(), String> {
+    let root = local_mod_roots(user_zomboid_dir).into_iter().find(|(id, _, _)| id == mod_id).map(|(_, _, r)| r).ok_or("That mod is not in Zomboid/mods.")?;
+    let log = crate::mod_changelog::for_mod(&root).ok_or("That mod has no changelog.")?;
+    let newest = log.entries.first().map(entry_key).ok_or("That changelog has no entries.")?;
+    let mut seen = read_local_seen(user_zomboid_dir);
+    seen.insert(mod_id.to_string(), newest);
+    write_local_seen(user_zomboid_dir, &seen);
+    Ok(())
+}
+
+/// A mod folder's id, from its mod.info (the Build 42 one first).
+fn mod_id_of(root: &Path) -> Option<String> {
+    let info = [root.join("42").join("mod.info"), root.join("mod.info")].into_iter().find(|p| p.is_file())?;
+    let text = std::fs::read_to_string(info).ok()?;
+    text.lines().find_map(|l| l.trim().strip_prefix("id=").map(|v| crate::load_order::mod_info::sanitize_mod_id(v.trim())))
+}
+
+/// The mods in `Zomboid/mods` (not the Studio's own): id, name, folder.
+fn local_mod_roots(z: &Path) -> Vec<(String, String, std::path::PathBuf)> {
+    let mut out = Vec::new();
+    for m in std::fs::read_dir(z.join("mods")).into_iter().flatten().flatten() {
+        let root = m.path();
+        let folder = m.file_name().to_string_lossy().to_string();
+        if !root.is_dir() || folder.starts_with("Z_PZModStudio_") || folder == crate::studio_link::LINK_MOD_ID {
+            continue;
+        }
+        let info = [root.join("42").join("mod.info"), root.join("mod.info")].into_iter().find(|p| p.is_file());
+        let Some(text) = info.and_then(|i| std::fs::read_to_string(i).ok()) else { continue };
+        let field = |k: &str| text.lines().find_map(|l| l.trim().strip_prefix(k).map(|v| v.trim().to_string()));
+        let Some(id) = field("id=") else { continue };
+        let name = field("name=").unwrap_or_else(|| id.clone());
+        out.push((crate::load_order::mod_info::sanitize_mod_id(&id), name, root));
+    }
+    out
+}
+
+/// An item's own changelog: what is new in it, given what was read in the game.
+fn attach_changelog(item: &mut UpdatedItem, roots: &[(String, std::path::PathBuf)], seen_in_game: &BTreeMap<String, String>) {
+    for (id, root) in roots {
+        let Some(log) = crate::mod_changelog::for_mod(root) else { continue };
+        let game_seen = seen_in_game.get(id).map(String::as_str);
+        item.read_in_game = log.entries.first().is_some_and(|e| game_seen == Some(e.title.trim()));
+        item.changelog = crate::mod_changelog::newer_than(&log.entries, game_seen, LOG_ENTRIES_SHOWN).to_vec();
+        item.changelog_file = Some(log.file);
+        item.support = log.links;
+        return;
+    }
+}
 
 /// Words in change notes that say a save in progress may not take the update.
 const BREAKS: &[&str] = &[
@@ -237,8 +321,71 @@ pub fn whats_new(user_zomboid_dir: &Path, workshop_dir: &str, with_notes: bool, 
             notes: Vec::new(),
             notes_error: None,
             risks: Vec::new(),
+            changelog: Vec::new(),
+            changelog_file: None,
+            support: Vec::new(),
+            read_in_game: false,
+            local: false,
         });
     }
+
+    // Each item's own changelog, and what was read of it in the game.
+    let seen_in_game = crate::mod_changelog::seen_in_game(user_zomboid_dir);
+    for item in items.iter_mut() {
+        let item_dir = Path::new(workshop_dir).join(&item.workshop_id).join("mods");
+        let roots: Vec<(String, std::path::PathBuf)> = std::fs::read_dir(&item_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|m| mod_id_of(&m.path()).map(|id| (id, m.path())))
+            .collect();
+        attach_changelog(item, &roots, &seen_in_game);
+    }
+
+    // Mods in Zomboid/mods that are on: their changelog's new entries.
+    let mut local_seen = read_local_seen(user_zomboid_dir);
+    let mut learned = false;
+    for (id, name, root) in local_mod_roots(user_zomboid_dir) {
+        if !active.contains(&id) {
+            continue;
+        }
+        let Some(log) = crate::mod_changelog::for_mod(&root) else { continue };
+        let Some(newest) = log.entries.first().map(entry_key) else { continue };
+        let game_seen = seen_in_game.get(&id).cloned();
+        let Some(recorded) = local_seen.get(&id).cloned() else {
+            // The first time: what is there now is what the player has.
+            local_seen.insert(id.clone(), newest);
+            learned = true;
+            continue;
+        };
+        if recorded == newest || game_seen.as_deref() == Some(newest.as_str()) {
+            continue;
+        }
+        let cut = log.entries.iter().position(|e| entry_key(e) == recorded).unwrap_or(LOG_ENTRIES_SHOWN.min(log.entries.len()));
+        items.push(UpdatedItem {
+            workshop_id: format!("local:{}", id),
+            title: name,
+            mod_ids: vec![id],
+            active: true,
+            installed_time: None,
+            latest_time: None,
+            pending: false,
+            since_last_play: true,
+            map_mod: false,
+            notes: Vec::new(),
+            notes_error: None,
+            risks: Vec::new(),
+            changelog: log.entries[..cut].to_vec(),
+            changelog_file: Some(log.file),
+            support: log.links,
+            read_in_game: false,
+            local: true,
+        });
+    }
+    if learned {
+        write_local_seen(user_zomboid_dir, &local_seen);
+    }
+
     // Mods that are on first, then the newest.
     items.sort_by(|a, b| b.active.cmp(&a.active).then(b.latest_time.cmp(&a.latest_time)));
 
@@ -285,11 +432,14 @@ pub fn whats_new(user_zomboid_dir: &Path, workshop_dir: &str, with_notes: bool, 
         if item.map_mod {
             item.risks.push(Risk { code: "map".into(), level: "breaks".into(), detail: String::new() });
         }
-        let strong = risky_words(&item.notes);
+        // The mod's own changelog says it too.
+        let own: Vec<ChangeNote> = item.changelog.iter().map(|e| ChangeNote { at: 0, text: format!("{}\n{}", e.title, e.text) }).collect();
+        let all_notes: Vec<ChangeNote> = item.notes.iter().cloned().chain(own).collect();
+        let strong = risky_words(&all_notes);
         if !strong.is_empty() {
             item.risks.push(Risk { code: "notes".into(), level: "breaks".into(), detail: strong.join(", ") });
         }
-        let weak = read_first_words(&item.notes);
+        let weak = read_first_words(&all_notes);
         if !weak.is_empty() {
             item.risks.push(Risk { code: "notes".into(), level: "read".into(), detail: weak.join(", ") });
         }
@@ -371,5 +521,21 @@ mod tests {
         assert_eq!(last_played(&z, Some(150)), Some(150));
         assert_eq!(last_played(&z, None), Some(100));
         let _ = std::fs::remove_dir_all(&z);
+    }
+}
+
+#[cfg(test)]
+mod real {
+    /// Read-only, no network: PZMS_ZOMBOID_DIR=... PZMS_WORKSHOP_DIR=... cargo test real_whats_new_logs -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_whats_new_logs() {
+        let (Ok(z), Ok(w)) = (std::env::var("PZMS_ZOMBOID_DIR"), std::env::var("PZMS_WORKSHOP_DIR")) else { return };
+        let month_ago = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 30 * 86400;
+        let news = super::whats_new(std::path::Path::new(&z), &w, false, Some(month_ago));
+        for i in news.items.iter().filter(|i| i.changelog_file.is_some()) {
+            println!("{:<34} new entries {:>2} {:<28} read in game {:<5} links {} risks {:?}", i.title, i.changelog.len(), i.changelog.first().map(|e| e.title.clone()).unwrap_or_default(), i.read_in_game, i.support.len(), i.risks.iter().map(|r| format!("{}:{}", r.level, r.detail)).collect::<Vec<_>>());
+        }
+        println!("{} items, {} with a changelog", news.items.len(), news.items.iter().filter(|i| i.changelog_file.is_some()).count());
     }
 }

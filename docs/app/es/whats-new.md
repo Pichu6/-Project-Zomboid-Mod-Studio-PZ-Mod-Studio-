@@ -41,6 +41,15 @@ Hacelo antes de que Steam baje la actualización: una vez que la baja, los archi
 - Las notas ya leídas quedan guardadas en tu PC y se vuelven a pedir solo cuando Steam tiene una versión más nueva.
 - **El autor no escribió notas para estas actualizaciones** significa que la página de notas estaba vacía.
 
+## El changelog del propio mod
+
+Muchos mods traen un changelog en su propia carpeta (`ChangeLog.txt`, `CHANGELOG.md`). El Studio lo lee del disco, así que funciona sin internet y para mods que no están en el Workshop.
+
+- Una tarjeta muestra las entradas que todavía no leíste, en **Del changelog del propio mod**, al lado de las notas del Workshop. Palabras como "new save" o "removed" también levantan **Puede romper partidas** o **Conviene leer**.
+- **leído en el juego**: los avisos de mods del juego (el mod "Mod Update and Alert System") ya te mostraron la entrada más nueva, así que acá tampoco es nueva.
+- Los mods de `Zomboid/mods` (locales, o de Nexus) aparecen acá cuando su changelog tiene una entrada nueva, marcados como **mod local**. **Marcar como leído** saca la tarjeta hasta la próxima entrada. La primera vez que el Studio ve el changelog de un mod solo lo recuerda, sin mostrarlo.
+- **Apoyar al autor**: los links que el autor puso en el changelog (Ko-fi, Patreon, GitHub, Discord...), que se abren en tu navegador.
+
 ## Bueno saber
 
 - Acá aparecen solo mods del Workshop; los que instalaste a mano no tienen historial del Workshop.

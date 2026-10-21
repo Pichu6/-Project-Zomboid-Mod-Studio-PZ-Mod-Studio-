@@ -13,6 +13,7 @@ pub mod instance_manager;
 pub mod lists;
 pub mod load_order;
 pub mod map_cells;
+pub mod mod_changelog;
 pub mod mod_meta;
 pub mod mcp;
 pub mod mod_install;
@@ -841,6 +842,20 @@ fn dev_reload_all_cmd(app: tauri::AppHandle, paths: StudioPaths, root_dir: Strin
     });
 }
 
+/// A mod's own changelog (its entries, newest first, and its author's support links), if it ships one.
+#[tauri::command(async)]
+fn mod_changelog_cmd(paths: StudioPaths, mod_id: String) -> Option<mod_changelog::ModChangelog> {
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let m = catalog.mods.iter().find(|m| m.id == mod_id && m.shadowed_by.is_none())?;
+    mod_changelog::for_mod(std::path::Path::new(&m.root_dir))
+}
+
+/// What's new: a local mod's changelog entries are read.
+#[tauri::command(async)]
+fn changelog_mark_read_cmd(paths: StudioPaths, mod_id: String) -> Result<(), String> {
+    whats_new::mark_changelog_read(&zomboid_dir_of(&paths)?, &mod_id)
+}
+
 /// A server's Discord settings, and whether a webhook is stored for it.
 #[tauri::command(async)]
 fn discord_view_cmd(paths: StudioPaths, server: String) -> Result<discord::DiscordView, String> {
@@ -1549,6 +1564,8 @@ pub fn run() {
             changed_lua_files_cmd,
             dev_watch_start_cmd,
             discord_view_cmd,
+            mod_changelog_cmd,
+            changelog_mark_read_cmd,
             discord_save_cmd,
             discord_test_cmd,
             dev_watch_stop_cmd,

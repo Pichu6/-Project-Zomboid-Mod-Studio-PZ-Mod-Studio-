@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ModInfo } from '../../types';
+import { ModChangelog, ModInfo } from '../../types';
+import { SupportLinks } from '../common/SupportLinks';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { findInstalledDependencyInMods } from './modLookup';
@@ -136,6 +137,20 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
 }) => {
   const { t } = useTranslation();
   const [imageError, setImageError] = useState<boolean>(false);
+  /** The changelog the mod ships, for its newest entry and its author's support links. */
+  const [changelog, setChangelog] = useState<ModChangelog | null>(null);
+  useEffect(() => {
+    setChangelog(null);
+    if (!mod || mod.not_installed) return;
+    let cancelled = false;
+    void TauriService.modChangelog(paths, mod.mod_id).then((log) => {
+      if (!cancelled) setChangelog(log);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mod?.mod_id]);
   /** The selected mod's poster, read from disk as a data URL (the webview cannot open files). */
   const [posterSrc, setPosterSrc] = useState<string | null>(null);
   /** Workshop id -> the picture on its Workshop page, for the mods that ship none. */
@@ -330,6 +345,21 @@ export const ModInspector: React.FC<ModInspectorProps> = ({
                 <span>{t('inspector.deactivate')}</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {changelog && (changelog.links.length > 0 || changelog.entries.length > 0) && (
+          <div className="space-y-2 p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+            <SupportLinks links={changelog.links} />
+            {changelog.entries[0] && (
+              <details>
+                <summary className="text-[11px] text-sky-300 cursor-pointer select-none">
+                  {t('inspector.changelog')}
+                  {changelog.entries[0].title ? `: ${changelog.entries[0].title}` : ''}
+                </summary>
+                <div className="mt-1.5 text-[11px] text-slate-300 whitespace-pre-wrap break-words max-h-40 overflow-y-auto">{changelog.entries[0].text}</div>
+              </details>
+            )}
           </div>
         )}
 

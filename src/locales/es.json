@@ -1,4 +1,7 @@
 {
+  "support": {
+    "title": "Apoyar al autor"
+  },
   "assistant": {
     "copy": "Copiar para un asistente",
     "copyTitle": "Copia esto con qué preguntar, para pegar en cualquier asistente de chat (ChatGPT, Claude, Gemini...): sin clave, desde acá no se manda nada",
@@ -1594,6 +1597,7 @@
     "apply": "Aplicar el preset a mi juego"
   },
   "inspector": {
+    "changelog": "Lo último de su changelog",
     "noDescription": "El mod.info no trae descripción.",
     "selectOne": "Elegí un mod de la lista de la izquierda para ver sus detalles.",
     "mapMod": "MOD DE MAPA",
@@ -2385,6 +2389,11 @@
     "onlyThis": "Solo {{name}}"
   },
   "whatsNew": {
+    "localMod": "mod local",
+    "readInGame": "leído en el juego",
+    "readInGameTitle": "Los avisos de mods del juego ya te mostraron la entrada más nueva de este mod",
+    "markRead": "Marcar como leído",
+    "ownChangelog": "Del changelog del propio mod ({{file}})",
     "title": "Novedades",
     "blurb": "Tus mods del Workshop actualizados desde que jugaste por última vez, y los que tienen una actualización esperando en Steam, con las notas de cada actualización. \"Puede romper partidas\" es una estimación (un mod de mapa, o notas que hablan de partidas nuevas, borrados, cosas sacadas o renombradas): leé las notas antes de cargar una partida en curso. A una actualización que todavía espera en Steam se le puede ganar guardando antes la versión que tenés.",
     "refresh": "Actualizar",
