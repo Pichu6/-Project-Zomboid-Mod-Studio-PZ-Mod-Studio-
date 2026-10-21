@@ -258,13 +258,9 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     }
     thread::spawn(move || {
         let mut file_offset: Option<u64> = None;
-        let mut error_counter = 1;
         let mut announced_wait = false;
         let mut watching: Option<std::path::PathBuf> = None;
-        let mut blame = ModBlame::default();
-        // One card per mod and complaint: a mod that fails on every tick would otherwise bury
-        // everything else.
-        let mut already_reported: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut cards = CardMaker::new();
 
         loop {
             // The folder can be set or corrected while the Studio is open, so look again each time.
@@ -312,43 +308,32 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                         // mod's warning that survived a fix never came back as a card, and the
                         // Monitor said two warnings over a log that held six.
                         offset = 0;
-                        already_reported.clear();
-                        blame = ModBlame::default();
+                        cards.new_session();
                         let _ = app.emit("sandbox-session-started", ());
                     }
                 }
                 let mut reader = BufReader::new(file);
                 if reader.seek(SeekFrom::Start(offset)).is_ok() {
                     let mut line_buf: Vec<u8> = Vec::new();
+                    let mut read_any = false;
                     while reader.read_until(b'\n', &mut line_buf).unwrap_or(0) > 0 {
+                        read_any = true;
                         let trimmed = String::from_utf8_lossy(&line_buf).trim_end().to_string();
                         let is_error = trimmed.contains("ERROR")
                             || trimmed.contains("Exception")
                             || trimmed.contains("KahluaThreadException");
 
                         let _ = app.emit("sandbox-log", LogLinePayload { line: trimmed.clone(), is_error });
-
-                        blame.observe(&trimmed);
-                        let culprit = blame.of(&trimmed);
-
-                        if let Some(mut card) = translate_log_error(&trimmed, error_counter) {
-                            card.called_from = culprit.as_deref().map(|c| blame.callers(c)).unwrap_or_default();
-                            card.mod_name = culprit.clone();
+                        for card in cards.line(&trimmed) {
                             let _ = app.emit("sandbox-error-card", card);
-                            error_counter += 1;
-                        } else if let Some(name) = culprit {
-                            // Not a pattern the Studio knows, but the game named the mod, which is
-                            // the question a player actually has: which one of my mods did this?
-                            let complaining = is_error || trimmed.starts_with("WARN");
-                            let key = format!("{}|{}", name, trimmed.chars().take(80).collect::<String>());
-                            if complaining && already_reported.insert(key) {
-                                let mut card = blame_card(&trimmed, &name, error_counter);
-                                card.called_from = blame.callers(&name);
-                                let _ = app.emit("sandbox-error-card", card);
-                                error_counter += 1;
-                            }
                         }
                         line_buf.clear();
+                    }
+                    // Nothing more came: an error's card waiting for its exception line goes out.
+                    if !read_any {
+                        if let Some(card) = cards.flush() {
+                            let _ = app.emit("sandbox-error-card", card);
+                        }
                     }
                     file_offset = reader.stream_position().ok();
                 }
@@ -356,6 +341,127 @@ pub fn watch_console_log<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             thread::sleep(Duration::from_millis(250));
         }
     });
+}
+
+/// A line the game wrote at a level of its own (`ERROR: ...`, `LOG  : ...`); the lines in between
+/// (a Java exception, a stack) belong to the level line above them.
+fn is_level_line(line: &str) -> bool {
+    let t = line.trim_start();
+    ["LOG", "ERROR", "WARN", "DEBUG", "TRACE"].iter().any(|l| t.starts_with(l)) && !line.starts_with(char::is_whitespace)
+}
+
+/// Turns console lines into Monitor cards, one per error.
+///
+/// The game writes an error as an ERROR line and, under it, the Java exception that says what
+/// went wrong (`java.lang.RuntimeException: attempted index: ... of non-table: null`) and its
+/// stack. Both name the mod, and each used to become a card: two cards for one error. Now the
+/// ERROR's card waits until its block ends and takes the exception line as what it says, or
+/// gives way to the card of a pattern the Studio knows in that line.
+pub struct CardMaker {
+    blame: ModBlame,
+    /// One card per mod and complaint: a mod that fails on every tick would otherwise bury
+    /// everything else.
+    already_reported: std::collections::HashSet<String>,
+    counter: usize,
+    /// The card of the ERROR whose block is being read.
+    pending: Option<TranslatedErrorPayload>,
+    /// Whether that card already took an exception line.
+    pending_has_detail: bool,
+    /// The lines being read are under an ERROR (reported or not): its exception and stack.
+    in_error: bool,
+}
+
+impl CardMaker {
+    pub fn new() -> Self {
+        CardMaker { blame: ModBlame::default(), already_reported: Default::default(), counter: 1, pending: None, pending_has_detail: false, in_error: false }
+    }
+
+    /// A new game session (console.txt started over): what it blamed and reported is forgotten.
+    pub fn new_session(&mut self) {
+        self.blame = ModBlame::default();
+        self.already_reported.clear();
+        self.pending = None;
+        self.in_error = false;
+    }
+
+    /// The card that was waiting for the rest of its block.
+    pub fn flush(&mut self) -> Option<TranslatedErrorPayload> {
+        self.pending.take()
+    }
+
+    fn hold(&mut self, card: TranslatedErrorPayload) {
+        self.pending = Some(card);
+        self.pending_has_detail = false;
+    }
+
+    /// The cards this line completes (usually none, at most two).
+    pub fn line(&mut self, line: &str) -> Vec<TranslatedErrorPayload> {
+        let mut out = Vec::new();
+        self.blame.observe(line);
+        let level = is_level_line(line);
+        if level {
+            out.extend(self.pending.take());
+            self.in_error = false;
+        }
+        let trimmed = line.trim();
+        let is_error_level = level && trimmed.starts_with("ERROR");
+        let culprit = self.blame.of(line);
+        if let Some(mut card) = translate_log_error(line, self.counter) {
+            self.counter += 1;
+            card.called_from = culprit.as_deref().map(|c| self.blame.callers(c)).unwrap_or_default();
+            card.mod_name = culprit.clone();
+            if !level && self.pending.is_some() {
+                // A pattern the Studio knows, in the exception under an ERROR: that card for it.
+                let held = self.pending.take().unwrap();
+                card.mod_name = card.mod_name.or(held.mod_name);
+                if card.called_from.is_empty() {
+                    card.called_from = held.called_from;
+                }
+                self.hold(card);
+                self.pending_has_detail = true;
+            } else if is_error_level {
+                self.hold(card);
+            } else {
+                out.push(card);
+            }
+        } else if let Some(name) = culprit {
+            if !level && self.in_error {
+                // The exception line under the ERROR: what its card says.
+                let exception = trimmed.contains("Exception") || trimmed.contains("Error");
+                if let Some(held) = self.pending.as_mut() {
+                    if exception && !self.pending_has_detail && (held.code.starts_with("mod_named") || held.code == "package_copy") {
+                        held.explanation = trimmed.to_string();
+                        self.pending_has_detail = true;
+                    }
+                }
+            } else {
+                // Not a pattern the Studio knows, but the game named the mod, which is the
+                // question a player actually has: which one of my mods did this?
+                let complaining = line.contains("ERROR") || line.contains("Exception") || line.contains("KahluaThreadException") || trimmed.starts_with("WARN");
+                let key = format!("{}|{}", name, trimmed.chars().take(80).collect::<String>());
+                if complaining && self.already_reported.insert(key) {
+                    let mut card = blame_card(trimmed, &name, self.counter);
+                    self.counter += 1;
+                    card.called_from = self.blame.callers(&name);
+                    if is_error_level {
+                        self.hold(card);
+                    } else {
+                        out.push(card);
+                    }
+                }
+            }
+        }
+        if is_error_level {
+            self.in_error = true;
+        }
+        out
+    }
+}
+
+impl Default for CardMaker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Which mod a log line belongs to.
@@ -1535,6 +1641,71 @@ mod error_stats_tests {
         for s in stats.iter().take(8) {
             println!("{:>6} lines  {:>5} exc {:>5} warn  {}", s.lines, s.exceptions, s.warnings, s.mod_name);
         }
+    }
+}
+
+#[cfg(test)]
+mod one_card_tests {
+    use super::CardMaker;
+
+    const BLOCK: [&str; 8] = [
+        "STACK TRACE",
+        "-----------------------------------------",
+        "\tLua((MOD:Take A Bath And Shower [SP/MP])).isValid(TABAS_ISPlace3DItemCursor.lua:48)",
+        "\tLua(Vanilla).DoTileBuilding(ISBuildingObject.lua:144)",
+        "\tLua((MOD:Project Viewpoint: Visible Construction)).gameDoTileBuilding(VC_Construction.lua:308).",
+        "ERROR: General      f:29305> Lua((MOD:Take A Bath And Shower [SP/MP])).isValid> Exception thrown",
+        "\tjava.lang.RuntimeException: attempted index: getUnequippedWeight of non-table: null at KahluaThread.tableget(KahluaThread.java:1430).",
+        "\tStack trace:",
+    ];
+
+    fn run(maker: &mut CardMaker, lines: &[&str]) -> Vec<super::TranslatedErrorPayload> {
+        let mut cards = Vec::new();
+        for l in lines {
+            cards.extend(maker.line(l));
+        }
+        cards
+    }
+
+    #[test]
+    fn an_error_and_the_exception_under_it_are_one_card() {
+        let mut maker = CardMaker::new();
+        let mut lines = BLOCK.to_vec();
+        lines.push("\t\tse.krka.kahlua.vm.KahluaThread.tableget(KahluaThread.java:1430)");
+        let mut cards = run(&mut maker, &lines);
+        assert!(cards.is_empty(), "held until the block ends");
+        cards.extend(maker.line("LOG  : General      f:29306> done"));
+        assert_eq!(cards.len(), 1, "{:#?}", cards);
+        let card = &cards[0];
+        assert_eq!(card.mod_name.as_deref(), Some("Take A Bath And Shower [SP/MP]"));
+        assert_eq!(card.called_from, vec!["Project Viewpoint: Visible Construction"]);
+        assert!(card.explanation.starts_with("java.lang.RuntimeException: attempted index: getUnequippedWeight"), "{}", card.explanation);
+        assert!(card.raw_error.starts_with("ERROR:"));
+        assert!(maker.flush().is_none());
+
+        // The same error again (every tick): no new card, and no card for its exception either.
+        let again = run(&mut maker, &BLOCK);
+        let again_end = maker.line("LOG  : General      f:29307> done");
+        assert!(again.is_empty() && again_end.is_empty());
+    }
+
+    #[test]
+    fn a_held_card_goes_out_when_nothing_more_comes() {
+        let mut maker = CardMaker::new();
+        assert!(run(&mut maker, &BLOCK[..6]).is_empty());
+        let card = maker.flush().expect("the ERROR's card");
+        assert!(card.raw_error.starts_with("ERROR:"));
+    }
+
+    #[test]
+    fn an_exception_with_no_error_above_still_makes_a_card() {
+        let mut maker = CardMaker::new();
+        let cards = run(&mut maker, &[
+            "\tLua((MOD:Fancy Handwork B42.20)).FHhandleKeybinds(aFancyHandwork.lua:126)",
+            "\tjava.lang.NullPointerException: Cannot invoke \"zombie.input.KeybindId.getId()\"",
+        ]);
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].mod_name.as_deref(), Some("Fancy Handwork B42.20"));
     }
 }
 
