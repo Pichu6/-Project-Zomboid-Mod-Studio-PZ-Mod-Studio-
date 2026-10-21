@@ -2380,7 +2380,7 @@
     "passwordKept": "Password kept (type to change)",
     "remember": "Remember the password",
     "join": "Join",
-    "joinBlurb": "Starts the game connected to this server (close the game first). The game downloads the server's mods and uses them only there: your own mod list and profiles stay as they are. If the server asks for an account, the game asks for your user name and password.",
+    "joinBlurb": "Starts the game on this server's connect screen (close the game first), with the server password filled in. There you type the account user name and password for that server: a new name makes a new account, and the game remembers them for next time. The game downloads the server's mods and uses them only there: your own mod list and profiles stay as they are.",
     "started": "The game is starting and joining {{name}}. Back here after playing, the full list of its mods will be known.",
     "makeProfile": "Make a profile with these {{count}} mods",
     "profileAfterJoin": "Join it once from here and you can make a profile with every mod it uses.",

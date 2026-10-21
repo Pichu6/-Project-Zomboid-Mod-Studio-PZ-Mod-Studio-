@@ -484,7 +484,8 @@ pub fn fill_from_logs(user_zomboid_dir: &Path, list: &mut [SavedServer]) -> bool
         // The first log of that session with a join in it.
         for file in debug_logs_since(user_zomboid_dir, joined - 5) {
             let Ok(bytes) = std::fs::read(&file) else { continue };
-            if let Some((items, mods)) = parse_join_log(&String::from_utf8_lossy(&bytes)) {
+            // A join still connecting has no mods loaded yet: looked at again next time.
+            if let Some((items, mods)) = parse_join_log(&String::from_utf8_lossy(&bytes)).filter(|(_, m)| !m.is_empty()) {
                 s.items = items;
                 s.mods = mods;
                 s.mods_seen = Some(now_secs());
@@ -690,6 +691,32 @@ mod tests {
         assert_eq!(items, vec!["3508537032", "2812326159"]);
         assert_eq!(mods, vec!["NeatUI_Framework", "\\SPNCC"], "only what loaded after the join");
         assert!(parse_join_log("[x] LOG  : Mod          f:0> loading A.").is_none());
+    }
+
+    /// Live: `PZMS_JOIN=ip:port cargo test -- --ignored live_join_launch --nocapture`: notes the
+    /// join and starts the game with the arguments the Join button uses (no screen mode).
+    #[test]
+    #[ignore]
+    fn live_join_launch() {
+        let p = crate::vfs::studio_paths();
+        let z = std::path::PathBuf::from(&p.user_zomboid_dir);
+        let address = std::env::var("PZMS_JOIN").unwrap();
+        note_join(&z, &address, "studio_jointest").unwrap();
+        let mut args = crate::compat::launch_args(&p.user_zomboid_dir);
+        args.extend(join_args(&address, None).unwrap());
+        println!("args {:?}", args);
+        let child = std::process::Command::new(std::path::Path::new(&p.pz_install_dir).join("ProjectZomboid64.exe")).current_dir(&p.pz_install_dir).args(&args).spawn().unwrap();
+        println!("pid {}", child.id());
+    }
+
+    /// Live: what the kept servers know after a join (reads the logs).
+    #[test]
+    #[ignore]
+    fn live_saved_filled() {
+        let z = std::path::PathBuf::from(crate::vfs::studio_paths().user_zomboid_dir);
+        for s in read_saved_filled(&z) {
+            println!("{} {} joined={:?} seen={:?} items={:?} mods={:?}", s.name, s.address, s.last_joined, s.mods_seen, s.items, s.mods);
+        }
     }
 
     /// Live: `PZMS_LOG=<a DebugLog> cargo test -- --ignored live_join_log --nocapture`.

@@ -2380,7 +2380,7 @@
     "passwordKept": "Contraseña guardada (escribí para cambiarla)",
     "remember": "Recordar la contraseña",
     "join": "Entrar",
-    "joinBlurb": "Abre el juego conectado a este servidor (cerrá el juego antes). El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods y tus perfiles quedan como están. Si el servidor pide cuenta, el juego te pide usuario y contraseña.",
+    "joinBlurb": "Abre el juego en la pantalla de conexión de este servidor (cerrá el juego antes), con la contraseña del servidor ya puesta. Ahí escribís el usuario y la contraseña de tu cuenta en ese servidor: un nombre nuevo crea una cuenta nueva, y el juego los recuerda para la próxima. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods y tus perfiles quedan como están.",
     "started": "El juego está abriendo y entrando a {{name}}. Cuando vuelvas después de jugar, vas a ver la lista completa de sus mods.",
     "makeProfile": "Crear un perfil con estos {{count}} mods",
     "profileAfterJoin": "Entrá una vez desde acá y vas a poder crear un perfil con todos los mods que usa.",
