@@ -108,6 +108,15 @@ local TEXT = {
     screenBody = "PZ Mod Studio and {1} both draw the game's Mods screen, and only one can. Which one do you want? <LINE> <LINE> PZ Mod Studio's: {1} is turned off in this profile and the game reloads its mods (a few seconds). <LINE> The other one: PZ Mod Studio leaves the Mods screen to {1}; save backups and the check before a save loads stay with PZ Mod Studio. <LINE> <LINE> You can change it later in PZ Mod Studio, Settings.",
     screenStudio = "PZ Mod Studio's",
     screenOther = "The other one",
+    cardOpen = "open",
+    cardClosed = "closed",
+    cardProfile = "Profile: {1} ({2} mods)",
+    cardHealthOk = "Mod Health: no problems",
+    cardHealth = "Mod Health: {1} error(s), {2} warning(s)",
+    cardContinue = "Continue: {1}",
+    cardNoChanges = "same mods as its last session",
+    cardChanges = "since its last session: {1} updated, {2} added, {3} taken out",
+    cardNever = "PZ Mod Studio has not seen it played yet",
 }
 
 local translated = {}
@@ -331,6 +340,8 @@ end
 function Link.askScreen()
     local other = Link.otherManager()
     if not other or Link.screenAsked then return end
+    -- Without a profile from the Studio its screen has nothing to show: nothing to choose.
+    if not Link.read() then return end
     local choice = Link.readScreenChoice()
     if choice.screen == "other" and choice.other == other then return end
     Link.screenAsked = true
@@ -348,12 +359,109 @@ function Link.askScreen()
     })
 end
 
+--- What the main menu card shows, read again every few seconds (the files are small).
+function Link.cardData()
+    local t = now()
+    if Link.card and t - Link.card.at < 3 then return Link.card end
+    local card = { at = t }
+    pcall(function()
+        local link = Link.read()
+        if not link then return end
+        card.profile = link.name
+        card.size = #link.order
+        card.alive = Link.appAlive()
+        local errors, warnings = 0, 0
+        for _, entry in pairs(Link.readHealth()) do
+            if entry.severity == "error" then errors = errors + 1 elseif entry.severity == "warning" then warnings = warnings + 1 end
+        end
+        card.errors, card.warnings = errors, warnings
+        -- The save Continue loads, and what changed in its mods since it was last played.
+        local world, mode = MainScreen.latestSaveWorld, MainScreen.latestSaveGameMode
+        -- The game remembers the last save by name (latestSave.ini) even after it is deleted:
+        -- only one the Load screen would list counts. Looked up once per visit to the menu.
+        if world and mode and Link.latestExists == nil then
+            Link.latestExists = false
+            for _, k in ipairs(getFullSaveDirectoryTable()) do
+                local dir = string.gsub(tostring(k), "\\", "/")
+                if dir == tostring(mode) .. "/" .. tostring(world) then Link.latestExists = true end
+            end
+        end
+        if world and mode and Link.latestExists then
+            card.world = world
+            local saves = Link.readSaves() or {}
+            local save = saves[tostring(mode) .. "/" .. tostring(world)]
+            if not save or save.session == 0 then
+                card.never = true
+            else
+                card.changes = Link.sessionChanges(save, ActiveMods.getById("default"))
+            end
+        end
+    end)
+    Link.card = card
+    return card
+end
+
+--- The card in the main menu's top-right corner: the profile, whether the Studio is open, Mod
+--- Health, and the save Continue would load. Only with a profile from the Studio.
+function Link.drawCard(screen)
+    local card = Link.cardData()
+    if not card.profile then return end
+    local font = UIFont.Small
+    local lineH = getTextManager():getFontHeight(font) + 3
+    local lines = {}
+    table.insert(lines, { text("cardProfile", card.profile, card.size), 1, 1, 1 })
+    if card.errors > 0 or card.warnings > 0 then
+        table.insert(lines, { text("cardHealth", card.errors, card.warnings), 1, card.errors > 0 and 0.5 or 0.8, 0.35 })
+    else
+        table.insert(lines, { text("cardHealthOk"), 0.55, 0.9, 0.6 })
+    end
+    if card.world then
+        table.insert(lines, { text("cardContinue", card.world), 0.85, 0.85, 0.85 })
+        if card.never then
+            table.insert(lines, { "  " .. text("cardNever"), 0.6, 0.6, 0.6 })
+        elseif card.changes then
+            table.insert(lines, { "  " .. text("cardChanges", #card.changes.updated, #card.changes.added, #card.changes.removed), 1, 0.75, 0.35 })
+        else
+            table.insert(lines, { "  " .. text("cardNoChanges"), 0.6, 0.6, 0.6 })
+        end
+    end
+    local status = card.alive and text("cardOpen") or text("cardClosed")
+    local sw = getTextManager():MeasureStringX(font, status)
+    -- As wide as the longest line, and never narrower than the title with the status beside it.
+    local w = getTextManager():MeasureStringX(UIFont.Medium, "PZ Mod Studio") + sw + 24
+    for _, l in ipairs(lines) do w = math.max(w, getTextManager():MeasureStringX(font, l[1])) end
+    w = math.min(w + 24, screen.width - 40)
+    local h = 30 + #lines * lineH + 8
+    local x, y = screen.width - w - 20, 20
+    screen:drawRect(x, y, w, h, 0.82, 0.05, 0.06, 0.08)
+    screen:drawRectBorder(x, y, w, h, 0.8, 0.35, 0.75, 1.0)
+    screen:drawText("PZ Mod Studio", x + 12, y + 7, 0.6, 0.85, 1, 1, UIFont.Medium)
+    if card.alive then
+        screen:drawText(status, x + w - sw - 12, y + 9, 0.45, 0.9, 0.55, 1, font)
+    else
+        screen:drawText(status, x + w - sw - 12, y + 9, 0.6, 0.6, 0.6, 1, font)
+    end
+    local ly = y + 30
+    for _, l in ipairs(lines) do
+        screen:drawText(l[1], x + 12, ly, l[2], l[3], l[4], 1, font)
+        ly = ly + lineH
+    end
+end
+
 -- Asked from the main menu's own drawing (OnTick does not run in the menu), a moment after it
 -- shows, and only in the menu (the same screen is the pause menu in a game).
 local askFrames = -1
 local mainPrerender = MainScreen.prerender
 function MainScreen:prerender(...)
     mainPrerender(self, ...)
+    -- The card, in the main menu proper (its buttons showing), not in a game's pause menu.
+    if not Link.inGame and self.bottomPanel and self.bottomPanel:isVisible() then
+        local ok, err = pcall(Link.drawCard, self)
+        if not ok and not Link.cardFailed then
+            Link.cardFailed = true
+            print("[StudioLink] the main menu card failed: " .. tostring(err))
+        end
+    end
     if askFrames < 0 or Link.inGame then return end
     askFrames = askFrames + 1
     if askFrames < 30 then return end
@@ -392,6 +500,8 @@ end
 -- Named, so another mod (or a reload of this one) can take them out again.
 function Link.onMainMenuEnter()
     Link.inGame = false
+    Link.latestExists = nil
+    Link.card = nil
     Link.writeGameState("menu")
     askFrames = 0
 end

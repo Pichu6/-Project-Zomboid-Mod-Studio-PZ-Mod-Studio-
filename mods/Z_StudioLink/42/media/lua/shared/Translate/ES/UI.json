@@ -50,5 +50,14 @@
     "UI_StudioLink_screenTitle": "Dos administradores de mods",
     "UI_StudioLink_screenBody": "PZ Mod Studio y {1} dibujan los dos la pantalla de Mods del juego, y solo uno puede. ¿Cuál querés usar? <LINE> <LINE> La de PZ Mod Studio: {1} se desactiva en este perfil y el juego recarga sus mods (unos segundos). <LINE> La otra: PZ Mod Studio le deja la pantalla de Mods a {1}; las copias de partidas y el aviso antes de cargar siguen siendo de PZ Mod Studio. <LINE> <LINE> Lo podés cambiar después en PZ Mod Studio, Configuración.",
     "UI_StudioLink_screenStudio": "La de PZ Mod Studio",
-    "UI_StudioLink_screenOther": "La otra"
+    "UI_StudioLink_screenOther": "La otra",
+    "UI_StudioLink_cardOpen": "abierto",
+    "UI_StudioLink_cardClosed": "cerrado",
+    "UI_StudioLink_cardProfile": "Perfil: {1} ({2} mods)",
+    "UI_StudioLink_cardHealthOk": "Mod Health: sin problemas",
+    "UI_StudioLink_cardHealth": "Mod Health: {1} error(es), {2} aviso(s)",
+    "UI_StudioLink_cardContinue": "Continuar: {1}",
+    "UI_StudioLink_cardNoChanges": "mismos mods que en su última sesión",
+    "UI_StudioLink_cardChanges": "desde su última sesión: {1} actualizados, {2} agregados, {3} quitados",
+    "UI_StudioLink_cardNever": "PZ Mod Studio todavía no la vio jugar"
 }

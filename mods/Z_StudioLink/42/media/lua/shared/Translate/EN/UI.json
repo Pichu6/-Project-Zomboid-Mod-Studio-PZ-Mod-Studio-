@@ -50,5 +50,14 @@
     "UI_StudioLink_screenTitle": "Two mod managers",
     "UI_StudioLink_screenBody": "PZ Mod Studio and {1} both draw the game's Mods screen, and only one can. Which one do you want? <LINE> <LINE> PZ Mod Studio's: {1} is turned off in this profile and the game reloads its mods (a few seconds). <LINE> The other one: PZ Mod Studio leaves the Mods screen to {1}; save backups and the check before a save loads stay with PZ Mod Studio. <LINE> <LINE> You can change it later in PZ Mod Studio, Settings.",
     "UI_StudioLink_screenStudio": "PZ Mod Studio's",
-    "UI_StudioLink_screenOther": "The other one"
+    "UI_StudioLink_screenOther": "The other one",
+    "UI_StudioLink_cardOpen": "open",
+    "UI_StudioLink_cardClosed": "closed",
+    "UI_StudioLink_cardProfile": "Profile: {1} ({2} mods)",
+    "UI_StudioLink_cardHealthOk": "Mod Health: no problems",
+    "UI_StudioLink_cardHealth": "Mod Health: {1} error(s), {2} warning(s)",
+    "UI_StudioLink_cardContinue": "Continue: {1}",
+    "UI_StudioLink_cardNoChanges": "same mods as its last session",
+    "UI_StudioLink_cardChanges": "since its last session: {1} updated, {2} added, {3} taken out",
+    "UI_StudioLink_cardNever": "PZ Mod Studio has not seen it played yet"
 }
