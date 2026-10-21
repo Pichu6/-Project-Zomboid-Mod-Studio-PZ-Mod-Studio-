@@ -106,7 +106,7 @@ Studied on 2026-10-20 to make PZ Mod Studio the most reliable and safest manager
 3. ~~**Dependency planner with a preview.**~~ Done: switching a mod on brings what it requires (all the way down, requirements moved before it), switching one off names what needs it, and anything beyond the one mod is shown first (`utils/planner.ts`, `ChangePreview`). Subscribing in Browse follows the Workshop's "Required items" down the chain and offers them in the same subscription; what arrives goes on in the active profile, requirements first. Switching a profile on shows the launch-file change first (`java_agents_plan_cmd`), and says when it will wait for the game to close.
 4. ~~**Never write over what could not be read.**~~ Done: `guard_overwrite`, `try_parse_default_txt` (read twice, whole), `atomic_write` with `sync_all` and a wait for held files.
 5. **Shared Steam limiter.** One cooldown per host that follows Retry-After, one request in flight per id, and a cache kept on disk so a restart does not ask again. Today's Workshop outage (eresult 10) showed why.
-6. **What's new since you last played,** with "may break saves" flags.
+6. ~~**What's new since you last played,**~~ Done (What's new screen, `whats_new`): mods updated since the last session (or the last 7 / 30 days) and updates waiting in Steam, with their change notes (cached, read at most 12 pages at a time and stopping at Steam's first refusal), a "May break saves" mark (a map mod, or notes about new saves, wipes, removed items, changed ids) and a weaker "Read first" one, and "Keep the version I have" for an update still waiting.
 7. **Map cells grid and clashes.**
 8. **Release integrity.**
    - Sign the app updater and the checksums.

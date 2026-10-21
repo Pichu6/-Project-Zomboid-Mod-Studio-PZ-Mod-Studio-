@@ -5,6 +5,7 @@
     "saves": "Saves",
     "monitor": "Monitor Center",
     "modList": "Mod List",
+    "whatsNew": "What's new",
     "health": "Mod Health",
     "browse": "Browse Mods",
     "merger": "Mod Merger",
@@ -2237,5 +2238,39 @@
     "onAnyway": "Switch it on anyway",
     "offAll": "Switch off all {{count}}",
     "onlyThis": "Only {{name}}"
+  },
+  "whatsNew": {
+    "title": "What's new",
+    "blurb": "Your Workshop mods updated since you last played, and the ones whose update is waiting in Steam, with each update's change notes. \"May break saves\" is a guess (a map mod, or notes that talk about new saves, wipes, things removed or renamed): read the notes before you load a save in progress. An update still waiting in Steam can be headed off by keeping the version you have first.",
+    "refresh": "Refresh",
+    "sinceLast": "Since you last played ({{date}})",
+    "onlyActive": "Only mods on in my list",
+    "count": "{{count}} mod(s)",
+    "breakingCount": "{{count}} may break saves",
+    "readingNotes": "Reading the change notes...",
+    "readMore": "Read the notes of {{count}} more",
+    "empty": "Nothing new: none of your Workshop mods changed in this time, and no update is waiting.",
+    "pending": "Update waiting in Steam",
+    "updatedOn": "Updated {{date}}",
+    "inProfile": "On in your list",
+    "notInProfile": "Not on in your list",
+    "mayBreak": "May break saves",
+    "mapMod": "map mod",
+    "readFirst": "Read first",
+    "because": "The notes say: {{words}}",
+    "allNotes": "All notes on the Workshop",
+    "keep": "Keep the version I have",
+    "kept": "Version kept",
+    "keepTitle": "Copies the mod as it is now, so it can be put back if the update breaks your save (Mod List, kept versions). Do it before Steam downloads the update.",
+    "keptDone": "{{name}}: the version you have is kept.",
+    "noText": "(no text)",
+    "noNotes": "The author wrote no notes for these updates.",
+    "notesBusy": "Steam is limiting requests right now; try again in a few minutes.",
+    "notesLater": "Not read yet, to spare Steam: the button at the top reads more.",
+    "notesError": "The notes could not be read: {{error}}",
+    "period": {
+      "week": "Last 7 days",
+      "month": "Last 30 days"
+    }
   }
 }

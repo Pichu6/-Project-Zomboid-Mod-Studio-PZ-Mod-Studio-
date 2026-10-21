@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActiveTab } from '../../types';
 import { useTranslation } from 'react-i18next';
-import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2, Archive } from 'lucide-react';
+import { GitCompare, ListOrdered, Settings, Activity, Server, Layers, Lock, HeartPulse, Globe, Code2, Archive, Newspaper } from 'lucide-react';
 
 interface StudioSidebarProps {
   activeTab: ActiveTab;
@@ -11,6 +11,8 @@ interface StudioSidebarProps {
   errorCardCount: number;
   /** Errors found by the last Mod Health check. */
   healthErrorCount?: number;
+  /** Mods of the active list updated since the last session, or waiting in Steam. */
+  whatsNewCount?: number;
 }
 
 export const StudioSidebar: React.FC<StudioSidebarProps> = ({
@@ -20,6 +22,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   conflictCount: _conflictCount,
   errorCardCount,
   healthErrorCount = 0,
+  whatsNewCount = 0,
 }) => {
   const { t } = useTranslation();
   // The Developer screen shows with "Developer features" in Settings, the way the MCP tab does.
@@ -61,6 +64,14 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       badge: null,
       badgeColor: '',
       requiresProfile: true,
+    },
+    {
+      id: 'WHATS_NEW' as ActiveTab,
+      label: t('nav.whatsNew'),
+      icon: Newspaper,
+      badge: whatsNewCount > 0 ? whatsNewCount : null,
+      badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
+      requiresProfile: false,
     },
     {
       id: 'HEALTH' as ActiveTab,

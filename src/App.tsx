@@ -13,6 +13,7 @@ import { errorShape } from './utils/errorShape';
 import { ServerModule } from './components/server/ServerModule';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SavesModule } from './components/saves/SavesModule';
+import { WhatsNewModule } from './components/whatsnew/WhatsNewModule';
 import { ChangePreview } from './components/common/ChangePreview';
 import { TogglePlan, applyPlan, enableWithRequirements, planIsSimple, planToggle } from './utils/planner';
 import { SplashScreen } from './components/layout/SplashScreen';
@@ -75,6 +76,13 @@ export const App: React.FC = () => {
 
   // Game-exact health check of the active list, shared by Mod List, Mod Health and the sidebar.
   const health = useModHealth(paths, mods);
+
+  /** Mods on in the list updated since the last session or waiting in Steam (offline count). */
+  const [whatsNewCount, setWhatsNewCount] = useState(0);
+  useEffect(() => {
+    if (!paths.is_valid || !paths.user_zomboid_dir) return;
+    void TauriService.whatsNew(paths, false, null).then((w) => setWhatsNewCount(w ? w.items.filter((i) => i.active).length : 0));
+  }, [paths, mods]);
 
   /**
    * Mod Health's warnings go to the game too: the Studio Link mod marks those mods in the game's
@@ -808,6 +816,7 @@ export const App: React.FC = () => {
           conflictCount={conflicts.length}
           errorCardCount={errorCards.filter((c) => c.severity !== 'WARNING').length}
           healthErrorCount={health.report?.errors ?? 0}
+          whatsNewCount={whatsNewCount}
         />
 
         {/* Tab Modules */}
@@ -832,6 +841,7 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'SAVES' && <SavesModule paths={paths} />}
+          {activeTab === 'WHATS_NEW' && <WhatsNewModule paths={paths} />}
 
           {activeTab === 'MOD_LIST' && (
             <LoadOrderModule

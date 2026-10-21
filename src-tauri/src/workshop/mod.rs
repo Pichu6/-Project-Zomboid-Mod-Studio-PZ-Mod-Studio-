@@ -711,7 +711,7 @@ fn page_required_items(id: &str) -> Result<Vec<RequiredItem>, String> {
 /// An item's public Workshop page. Steam's edge sometimes refuses this client ("429") while
 /// answering others from the same machine (seen 2026-10-20 during its Workshop trouble): then
 /// the page is asked for once through the curl that ships with Windows.
-fn fetch_page(url: &str) -> Result<String, String> {
+pub(crate) fn fetch_page(url: &str) -> Result<String, String> {
     match agent().get(url).call() {
         Ok(r) => r.into_body().with_config().limit(8 * 1024 * 1024).read_to_string().map_err(|e| e.to_string()),
         Err(ureq::Error::StatusCode(429)) => page_through_system_curl(url).ok_or_else(|| "Steam is limiting requests (429).".to_string()),

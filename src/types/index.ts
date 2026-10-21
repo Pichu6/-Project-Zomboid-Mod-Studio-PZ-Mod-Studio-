@@ -365,7 +365,36 @@ export const profileBuildMajor = (p: AppInstance | null | undefined): string | n
 
 export type AppProfile = AppInstance;
 
-export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'SAVES' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+export type ActiveTab = 'MOD_LIST' | 'HEALTH' | 'BROWSE' | 'SERVERS' | 'PROFILES' | 'SAVES' | 'WHATS_NEW' | 'MERGER' | 'MONITOR' | 'DEVELOPER' | 'SETTINGS';
+
+/** One update of one Workshop item (whats_new::ChangeNote). */
+export interface ChangeNote {
+  at: number;
+  text: string;
+}
+
+export interface UpdatedItem {
+  workshop_id: string;
+  title: string;
+  mod_ids: string[];
+  active: boolean;
+  installed_time: number | null;
+  latest_time: number | null;
+  /** A newer version waits in Steam. */
+  pending: boolean;
+  since_last_play: boolean;
+  map_mod: boolean;
+  notes: ChangeNote[];
+  /** "later", "busy", or what went wrong reading the notes. */
+  notes_error: string | null;
+  risks: { code: string; level: 'breaks' | 'read'; detail: string }[];
+}
+
+export interface WhatsNew {
+  last_played: number | null;
+  since: number | null;
+  items: UpdatedItem[];
+}
 
 /** One item a subscription needs too (workshop::RequiredNode). */
 export interface RequiredNode {

@@ -28,6 +28,7 @@ pub mod snapshots;
 pub mod translations;
 pub mod vdf;
 pub mod vfs;
+pub mod whats_new;
 pub mod workshop;
 
 use diff_engine::lua::{three_way_merge_lua, validate_lua_syntax, LuaSyntaxCheckResult, MergeChunkResult};
@@ -421,6 +422,14 @@ fn java_agents_plan_cmd(paths: StudioPaths, active_mod_ids: Vec<String>) -> Resu
     }
     let plan = studio_link::plan_java_agents(std::path::Path::new(&install), &z, &active_mod_ids)?;
     Ok((plan, sandbox::find_running_pz_pid().is_some()))
+}
+
+/// What's new since the game was last played: Workshop mods updated since, or waiting in Steam.
+/// `with_notes` reads their change notes too (cached); without, nothing leaves the PC.
+#[tauri::command(async)]
+fn whats_new_cmd(paths: StudioPaths, with_notes: bool, since: Option<u64>) -> Result<whats_new::WhatsNew, String> {
+    let workshop = vfs::studio_paths().workshop_dir;
+    Ok(whats_new::whats_new(&zomboid_dir_of(&paths)?, &workshop, with_notes, since))
 }
 
 /// Every save, its backups, and the room on the disk that holds them.
@@ -1213,6 +1222,7 @@ pub fn run() {
             write_link_health_cmd,
             link_status_cmd,
             saves_overview_cmd,
+            whats_new_cmd,
             save_session_diffs_cmd,
             java_agents_plan_cmd,
             backup_save_cmd,

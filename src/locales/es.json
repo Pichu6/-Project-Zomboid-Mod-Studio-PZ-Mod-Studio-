@@ -5,6 +5,7 @@
     "saves": "Partidas",
     "monitor": "Centro de monitoreo",
     "modList": "Lista de mods",
+    "whatsNew": "Novedades",
     "health": "Salud de mods",
     "browse": "Explorar mods",
     "merger": "Fusionador de mods",
@@ -2237,5 +2238,39 @@
     "onAnyway": "Prenderlo igual",
     "offAll": "Apagar los {{count}}",
     "onlyThis": "Solo {{name}}"
+  },
+  "whatsNew": {
+    "title": "Novedades",
+    "blurb": "Tus mods del Workshop actualizados desde que jugaste por última vez, y los que tienen una actualización esperando en Steam, con las notas de cada actualización. \"Puede romper partidas\" es una estimación (un mod de mapa, o notas que hablan de partidas nuevas, borrados, cosas sacadas o renombradas): leé las notas antes de cargar una partida en curso. A una actualización que todavía espera en Steam se le puede ganar guardando antes la versión que tenés.",
+    "refresh": "Actualizar",
+    "sinceLast": "Desde que jugaste ({{date}})",
+    "onlyActive": "Solo mods prendidos en mi lista",
+    "count": "{{count}} mod(s)",
+    "breakingCount": "{{count}} pueden romper partidas",
+    "readingNotes": "Leyendo las notas de cambios...",
+    "readMore": "Leer las notas de {{count}} más",
+    "empty": "Nada nuevo: ninguno de tus mods del Workshop cambió en este tiempo, y no hay actualizaciones esperando.",
+    "pending": "Actualización esperando en Steam",
+    "updatedOn": "Actualizado el {{date}}",
+    "inProfile": "Prendido en tu lista",
+    "notInProfile": "No está prendido en tu lista",
+    "mayBreak": "Puede romper partidas",
+    "mapMod": "mod de mapa",
+    "readFirst": "Conviene leer",
+    "because": "Las notas dicen: {{words}}",
+    "allNotes": "Todas las notas en el Workshop",
+    "keep": "Guardar la versión que tengo",
+    "kept": "Versión guardada",
+    "keepTitle": "Copia el mod como está ahora, para poder volver a esta versión si la actualización rompe tu partida (Lista de mods, versiones guardadas). Hacelo antes de que Steam baje la actualización.",
+    "keptDone": "{{name}}: la versión que tenés quedó guardada.",
+    "noText": "(sin texto)",
+    "noNotes": "El autor no escribió notas para estas actualizaciones.",
+    "notesBusy": "Steam está limitando los pedidos ahora; probá en unos minutos.",
+    "notesLater": "Todavía sin leer, para no saturar a Steam: el botón de arriba lee más.",
+    "notesError": "No se pudieron leer las notas: {{error}}",
+    "period": {
+      "week": "Últimos 7 días",
+      "month": "Últimos 30 días"
+    }
   }
 }
