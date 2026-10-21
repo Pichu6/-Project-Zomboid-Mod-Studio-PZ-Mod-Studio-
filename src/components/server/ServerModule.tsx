@@ -20,6 +20,7 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  MessageSquare,
 } from 'lucide-react';
 import {
   ModInfo,
@@ -35,13 +36,14 @@ import { MpCheckPanel } from '../common/MpCheckPanel';
 import { issueText } from '../../i18n/backendText';
 import { MpModReport } from '../../types';
 import { tHtml } from '../../i18n/html';
+import { DiscordPanel } from './DiscordPanel';
 
 interface ServerModuleProps {
   paths: StudioPathsUI;
   mods: ModInfo[];
 }
 
-type ServerSubTab = 'HOST' | 'MODS' | 'PLAYERS' | 'SETTINGS';
+type ServerSubTab = 'HOST' | 'MODS' | 'PLAYERS' | 'SETTINGS' | 'DISCORD';
 
 export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
   const { t } = useTranslation();
@@ -551,6 +553,18 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                     <Sliders className="w-3.5 h-3.5" />
                     <span>{t('servers.tabs.settings')}</span>
                   </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('DISCORD')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      activeSubTab === 'DISCORD'
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>{t('servers.tabs.discord')}</span>
+                  </button>
                 </div>
 
                 <div className="text-[11px] font-mono text-purple-300 font-bold bg-purple-950/60 px-2.5 py-1 rounded-lg border border-purple-800/40">
@@ -871,6 +885,8 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
               )}
 
               {/* Sub-Tab 5: Quick Settings Editor */}
+              {activeSubTab === 'DISCORD' && <DiscordPanel paths={paths} server={selectedServer.name} />}
+
               {activeSubTab === 'SETTINGS' && quickSettings && (
                 <div className="space-y-4 flex-1 flex flex-col justify-between">
                   <div className="grid grid-cols-2 gap-3 text-xs">

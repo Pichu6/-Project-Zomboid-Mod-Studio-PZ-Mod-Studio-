@@ -676,6 +676,22 @@ export interface ReloadResult {
   results: string[];
 }
 
+/** A hosted server's Discord channel: which news go to its webhook. */
+export interface DiscordSettings {
+  enabled: boolean;
+  status: boolean;
+  players: boolean;
+  restarts: boolean;
+  updates: boolean;
+  language: string;
+}
+
+export interface DiscordView {
+  settings: DiscordSettings;
+  /** A webhook is stored (the address itself never comes back). */
+  has_webhook: boolean;
+}
+
 /** One stage of reloading a mod's Lua in the running game (the `dev-reload` event). */
 export interface DevReloadEvent {
   /** syntax (files not sent), sent, applied, no_answer, not_running */

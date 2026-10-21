@@ -5,6 +5,7 @@ pub mod compat;
 pub mod devtools;
 pub mod diagnostics;
 pub mod diff_engine;
+pub mod discord;
 pub mod error_report;
 pub mod images;
 pub mod instance_manager;
@@ -839,6 +840,24 @@ fn dev_reload_all_cmd(app: tauri::AppHandle, paths: StudioPaths, root_dir: Strin
     });
 }
 
+/// A server's Discord settings, and whether a webhook is stored for it.
+#[tauri::command(async)]
+fn discord_view_cmd(paths: StudioPaths, server: String) -> Result<discord::DiscordView, String> {
+    Ok(discord::view(&zomboid_dir_of(&paths)?, &server))
+}
+
+/// Saves them; `webhook` "" forgets the stored address, a new one replaces it, none keeps it.
+#[tauri::command(async)]
+fn discord_save_cmd(paths: StudioPaths, server: String, settings: discord::DiscordSettings, webhook: Option<String>) -> Result<discord::DiscordView, String> {
+    discord::save(&zomboid_dir_of(&paths)?, &server, settings, webhook)
+}
+
+/// Posts a test message to the server's channel.
+#[tauri::command(async)]
+fn discord_test_cmd(paths: StudioPaths, server: String) -> Result<(), String> {
+    discord::send_test(&zomboid_dir_of(&paths)?, &server)
+}
+
 /// Whether ProjectZomboid64.exe is running, and its pid.
 #[tauri::command(async)]
 fn game_status_cmd() -> Option<u32> {
@@ -1436,6 +1455,8 @@ pub fn run() {
             sandbox::watch_console_log(app.handle().clone());
             // What the game's Mods screen changes comes back to the active profile.
             studio_link::watch_mod_list(app.handle().clone());
+            // The hosted server's news to its Discord channel, when the player set one.
+            discord::watch();
             // The window opens where and how it was left (it starts hidden so it does not jump).
             if let Some(window) = app.get_webview_window("main") {
                 window_prefs::restore(&window);
@@ -1526,6 +1547,9 @@ pub fn run() {
             launch_map_tool_cmd,
             changed_lua_files_cmd,
             dev_watch_start_cmd,
+            discord_view_cmd,
+            discord_save_cmd,
+            discord_test_cmd,
             dev_watch_stop_cmd,
             dev_reload_all_cmd,
             create_mod_list_cmd,

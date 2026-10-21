@@ -1673,6 +1673,40 @@
     }
   },
   "servers": {
+    "discord": {
+      "title": "Discord: el servidor le avisa a tu canal",
+      "intro": "Un webhook publica en un canal de tu servidor de Discord: cuando este servidor arranca, se detiene, se cae o vuelve después de reiniciarse, quién entra y quién sale, y cuando sus mods del Workshop se actualizaron y necesita reiniciarse. No menciona a nadie.",
+      "whileOpen": "Publica mientras PZ Mod Studio está abierto y alojando el servidor.",
+      "webhook": "Dirección del webhook",
+      "webhookHow": "En Discord: configuración del canal > Integraciones > Webhooks > Nuevo webhook > Copiar URL del webhook, y pegala acá. Se guarda en el Administrador de credenciales de Windows y no se vuelve a mostrar.",
+      "webhookSaved": "Guardado (pegá uno nuevo para reemplazarlo)",
+      "saveWebhook": "Guardar",
+      "test": "Mandar una prueba",
+      "forget": "Olvidarlo",
+      "forgetTitle": "Quita la dirección de esta PC; no se publica nada más",
+      "saved": "Guardado.",
+      "forgotten": "Olvidado: no se publica nada más de este servidor.",
+      "testSent": "Enviado: mirá el canal.",
+      "enabled": "Publicar las novedades de este servidor en el canal",
+      "errors": {
+        "not_webhook": "Esa no es una dirección de webhook de Discord (https://discord.com/api/webhooks/...).",
+        "unreachable": "No se pudo llegar a Discord: ¿hay internet? ({{detail}})",
+        "unknown_webhook": "Discord ya no conoce este webhook (se borró, o la dirección está mal). Hacé uno nuevo y pegalo.",
+        "status": "Discord no lo aceptó: {{detail}}",
+        "rate_limited": "Discord pidió esperar; probá de nuevo en un minuto.",
+        "no_webhook": "Todavía no hay un webhook guardado para este servidor."
+      },
+      "events": {
+        "status": "Arranca, se detiene y se cae",
+        "statusExample": "🟢 Coop está en línea. · ⚠️ Coop se detuvo sin que se lo pidieran.",
+        "players": "Jugadores que entran y salen",
+        "playersExample": "➡️ Entró Ana, Beto y Carl (3 en línea).",
+        "restarts": "Reinicios",
+        "restartsExample": "🔄 Coop se reinició y está en línea de nuevo.",
+        "updates": "Mods del Workshop que esperan un reinicio",
+        "updatesExample": "📦 2 mod(s) del Workshop de Coop se actualizaron desde que arrancó."
+      }
+    },
     "header": {
       "title": "Servidores y dedicado",
       "online": "EN LÍNEA (PID: {{pid}})",
@@ -1723,7 +1757,8 @@
       "host": "Host y lanzador",
       "mods": "Mods y sincronización",
       "players": "Jugadores",
-      "settings": ".ini rápido"
+      "settings": ".ini rápido",
+      "discord": "Discord"
     },
     "host": {
       "memory": "Memoria (-Xmx)",

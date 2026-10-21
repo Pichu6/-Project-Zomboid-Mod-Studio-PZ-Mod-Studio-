@@ -549,6 +549,8 @@ fn read_server_state(state_file: &Path) -> Option<DedicatedServerStatus> {
 /// Returns Ok(false) when there is no tracked server to stop.
 #[tauri::command(async)]
 pub fn stop_dedicated_server(user_zomboid_dir: String, _pid: Option<u32>) -> Result<bool, String> {
+    // Asked for: the Discord channel says "stopped", not "crashed".
+    crate::discord::note_stop_asked();
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;

@@ -1673,6 +1673,40 @@
     }
   },
   "servers": {
+    "discord": {
+      "title": "Discord: the server tells your channel",
+      "intro": "A webhook posts to one channel of your Discord server: when this server is up, stopped, crashed or back after a restart, who joins and leaves, and when its Workshop mods were updated and it needs a restart. No one is pinged.",
+      "whileOpen": "It posts while PZ Mod Studio is open and hosting the server.",
+      "webhook": "Webhook address",
+      "webhookHow": "In Discord: the channel's settings > Integrations > Webhooks > New Webhook > Copy Webhook URL, and paste it here. It is kept in the Windows Credential Manager and never shown again.",
+      "webhookSaved": "Saved (paste a new one to replace it)",
+      "saveWebhook": "Save",
+      "test": "Send a test",
+      "forget": "Forget it",
+      "forgetTitle": "Removes the address from this PC; nothing more is posted",
+      "saved": "Saved.",
+      "forgotten": "Forgotten: nothing more is posted for this server.",
+      "testSent": "Sent: look at the channel.",
+      "enabled": "Post this server's news to the channel",
+      "errors": {
+        "not_webhook": "That is not a Discord webhook address (https://discord.com/api/webhooks/...).",
+        "unreachable": "Discord could not be reached: is the internet up? ({{detail}})",
+        "unknown_webhook": "Discord does not know this webhook any more (deleted, or the address is wrong). Make a new one and paste it.",
+        "status": "Discord did not take it: {{detail}}",
+        "rate_limited": "Discord asked to wait; try again in a minute.",
+        "no_webhook": "No webhook saved for this server yet."
+      },
+      "events": {
+        "status": "Up, stopped and crashed",
+        "statusExample": "🟢 Coop is up. · ⚠️ Coop stopped without being asked.",
+        "players": "Players joining and leaving",
+        "playersExample": "➡️ Ana, Beto and Carl joined (3 online).",
+        "restarts": "Restarts",
+        "restartsExample": "🔄 Coop restarted and is up again.",
+        "updates": "Workshop mods waiting for a restart",
+        "updatesExample": "📦 2 of Coop's Workshop mods were updated since it started."
+      }
+    },
     "header": {
       "title": "Server & Dedicated Suite",
       "online": "ONLINE (PID: {{pid}})",
@@ -1723,7 +1757,8 @@
       "host": "Host & Launcher",
       "mods": "Mods & Sync",
       "players": "Players",
-      "settings": "Quick .ini"
+      "settings": "Quick .ini",
+      "discord": "Discord"
     },
     "host": {
       "memory": "Memory (-Xmx)",

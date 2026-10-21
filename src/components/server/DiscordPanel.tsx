@@ -1,0 +1,145 @@
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
+import { Check, Loader2, Send, Trash2 } from 'lucide-react';
+import { DiscordSettings, StudioPathsUI } from '../../types';
+import { TauriService } from '../../services/tauri';
+
+/**
+ * A server's Discord channel, one way: the webhook the player made in Discord (kept in the
+ * Windows Credential Manager, never shown again), and which news are posted to it.
+ */
+export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string }> = ({ paths, server }) => {
+  const { t } = useTranslation();
+  const [settings, setSettings] = useState<DiscordSettings | null>(null);
+  const [hasWebhook, setHasWebhook] = useState(false);
+  const [webhook, setWebhook] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    setNote(null);
+    setWebhook('');
+    void TauriService.discordView(paths, server).then((v) => {
+      if (!v) return;
+      setSettings(v.settings);
+      setHasWebhook(v.has_webhook);
+    });
+  }, [paths, server]);
+
+  if (!settings) return null;
+
+  /** A backend error ("code: English text") in the player's language. */
+  const explain = (err: unknown) => {
+    const text = String(err);
+    const m = text.match(/^(not_webhook|unreachable|unknown_webhook|status|rate_limited|no_webhook): (.*)$/s);
+    return m ? t(`servers.discord.errors.${m[1]}`, { detail: m[2] }) : text;
+  };
+
+  const save = async (next: DiscordSettings, newWebhook?: string) => {
+    setBusy(true);
+    try {
+      const v = await TauriService.discordSave(paths, server, { ...next, language: i18next.language.startsWith('es') ? 'es' : 'en' }, newWebhook);
+      setSettings(v.settings);
+      setHasWebhook(v.has_webhook);
+      if (newWebhook !== undefined) setWebhook('');
+      setNote({ ok: true, text: newWebhook === '' ? t('servers.discord.forgotten') : t('servers.discord.saved') });
+    } catch (err) {
+      setNote({ ok: false, text: explain(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const test = async () => {
+    setBusy(true);
+    try {
+      await TauriService.discordTest(paths, server);
+      setNote({ ok: true, text: t('servers.discord.testSent') });
+    } catch (err) {
+      setNote({ ok: false, text: explain(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = (key: 'status' | 'players' | 'restarts' | 'updates') => void save({ ...settings, [key]: !settings[key] });
+  const events: Array<'status' | 'players' | 'restarts' | 'updates'> = ['status', 'players', 'restarts', 'updates'];
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="text-sm font-bold text-slate-100">{t('servers.discord.title')}</div>
+        <p className="text-[11px] text-slate-400">{t('servers.discord.intro')}</p>
+        <p className="text-[11px] text-amber-300/90">{t('servers.discord.whileOpen')}</p>
+      </div>
+
+      <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div className="text-xs font-bold text-slate-200">{t('servers.discord.webhook')}</div>
+        <p className="text-[11px] text-slate-400">{t('servers.discord.webhookHow')}</p>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            type="password"
+            autoComplete="off"
+            value={webhook}
+            onChange={(e) => setWebhook(e.target.value)}
+            placeholder={hasWebhook ? t('servers.discord.webhookSaved') : 'https://discord.com/api/webhooks/...'}
+            aria-label={t('servers.discord.webhook')}
+            className="flex-1 min-w-[260px] bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-purple-500"
+          />
+          <button
+            type="button"
+            disabled={busy || webhook.trim() === ''}
+            onClick={() => void save({ ...settings, enabled: true }, webhook)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white cursor-pointer disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+            {t('servers.discord.saveWebhook')}
+          </button>
+          {hasWebhook && (
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void test()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" aria-hidden="true" /> {t('servers.discord.test')}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void save({ ...settings, enabled: false }, '')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-red-900/60 text-slate-300 cursor-pointer disabled:opacity-50"
+                title={t('servers.discord.forgetTitle')}
+              >
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> {t('servers.discord.forget')}
+              </button>
+            </>
+          )}
+        </div>
+        {note && <div className={`text-[11px] ${note.ok ? 'text-emerald-300' : 'text-red-300'}`}>{note.text}</div>}
+      </div>
+
+      {hasWebhook && (
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <label className="flex items-center gap-2 text-xs font-bold text-slate-200 cursor-pointer">
+            <input type="checkbox" checked={settings.enabled} disabled={busy} onChange={() => void save({ ...settings, enabled: !settings.enabled })} />
+            {t('servers.discord.enabled')}
+          </label>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {events.map((key) => (
+              <label key={key} className={`flex items-start gap-2 p-2 rounded-lg border border-slate-800 cursor-pointer ${settings.enabled ? '' : 'opacity-50'}`}>
+                <input type="checkbox" className="mt-0.5" checked={settings[key]} disabled={busy || !settings.enabled} onChange={() => toggle(key)} />
+                <span>
+                  <span className="block text-xs text-slate-200">{t(`servers.discord.events.${key}`)}</span>
+                  <span className="block text-[10.5px] text-slate-500">{t(`servers.discord.events.${key}Example`)}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
