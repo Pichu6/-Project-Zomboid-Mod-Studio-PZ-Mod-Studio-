@@ -11,9 +11,10 @@ matters:
 | `03-requirements.gif` | turning on 3D Equipment Lockers brings 3D Gun Racks; turning Viewpoint off lists who needs it (Back, nothing applied) | list and dialogs, app closed |
 | `04-load-order.gif` | sort by load order, drag Blood FX Fixes up: it stops under Blood FX; Undo | list, app closed |
 | `05-many-mods.gif` | Ctrl+click five mods → Turn all on (with Gun Racks), Undo; Blood FX's options window | list and details, app closed |
-| `06-error-notice.png` | the notice for a Lua error in ModernStatus | crop of the main menu |
+| `06-error-notice.png` | the notice for a Lua error, from a throwaway example mod (not active, so the game calls it "Unnamed Mod"); no real mod is shown failing | crop of the main menu, app open |
 | `07-profiles.gif` | the app switches to a small profile, the game's MODS screen shows it, then all installed | app, then game |
 | `08-save-check.png` | what changed in a save since its last session (a mod taken out, the order) | crop of the main menu |
+| `09-profile-in-game.png` | the Mods screen with the app open: profile's mods, a player's note on a mod | crop of the screen, opened from Lua |
 
 "App closed" was the Link told in memory that PZ Mod Studio is not running, so the screen is
 what a subscriber without the app sees. Nothing was accepted on the Mods screen during the
