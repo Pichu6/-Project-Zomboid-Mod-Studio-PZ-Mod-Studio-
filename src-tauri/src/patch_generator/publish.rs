@@ -20,6 +20,30 @@ pub(crate) fn previously_written(patch_mod_dir: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The package's metadata after a publish: what this publish knows replaces its keys, the rest of
+/// the file stays (the description and visibility the package was given), and it records the
+/// profile it was built under.
+pub(crate) fn metadata_after_publish(previous: Option<&str>, meta: &MasterPatchMetadata, profile: Option<(&str, &str)>) -> String {
+    let mut value = previous
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(t.trim_start_matches('\u{feff}')).ok())
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if let (Some(obj), Ok(serde_json::Value::Object(new))) = (value.as_object_mut(), serde_json::to_value(meta)) {
+        obj.extend(new);
+        match profile {
+            Some((id, name)) => {
+                obj.insert("built_for_profile_id".into(), id.into());
+                obj.insert("built_for_profile_name".into(), name.into());
+            }
+            None => {
+                obj.remove("built_for_profile_id");
+                obj.remove("built_for_profile_name");
+            }
+        }
+    }
+    serde_json::to_string_pretty(&value).unwrap_or_default()
+}
+
 /// Generates a synthetic master patch mod under Zomboid/mods/<package_folder_name> and updates ModListData.ini.
 pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResult, String> {
     let pkg_name = req.package_folder_name
@@ -205,9 +229,10 @@ pub fn generate_master_patch(req: MasterPatchRequest) -> Result<MasterPatchResul
             packaged_mod_ids: mod_list.active_mods.clone(),
             merged_file_paths,
         };
-        if let Ok(meta_json) = serde_json::to_string_pretty(&meta) {
-            let _ = fs::write(stage.join("patch_metadata.json"), &meta_json);
-        }
+        let profile = crate::instance_manager::active_profile(&req.user_zomboid_dir);
+        let previous = fs::read_to_string(stage.join("patch_metadata.json")).ok();
+        let meta_json = metadata_after_publish(previous.as_deref(), &meta, profile.as_ref().map(|(id, name)| (id.as_str(), name.as_str())));
+        let _ = fs::write(stage.join("patch_metadata.json"), &meta_json);
 
         // Every merged file is kept as a resolved draft, so it stays resolved when the package is
         // unpacked or reopened.
@@ -788,3 +813,23 @@ mod publish_keeps_files {
     }
 }
 
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[test]
+    fn a_publish_keeps_what_the_package_was_given_and_records_the_profile() {
+        let before = r#"{"is_packaged": false, "is_visible_in_modlist": false, "description": "mine", "created_at": "1", "packaged_mod_ids": [], "merged_file_paths": []}"#;
+        let meta = MasterPatchMetadata { is_packaged: true, created_at: "Epoch-2".into(), packaged_mod_ids: vec!["A".into()], merged_file_paths: vec!["media/x.lua".into()] };
+        let after: serde_json::Value = serde_json::from_str(&metadata_after_publish(Some(before), &meta, Some(("coop", "Coop")))).unwrap();
+        assert_eq!(after["is_visible_in_modlist"], false, "visibility kept");
+        assert_eq!(after["description"], "mine", "description kept");
+        assert_eq!(after["is_packaged"], true);
+        assert_eq!(after["packaged_mod_ids"][0], "A");
+        assert_eq!(after["built_for_profile_name"], "Coop");
+        let again: serde_json::Value = serde_json::from_str(&metadata_after_publish(Some(&after.to_string()), &meta, None)).unwrap();
+        assert!(again.get("built_for_profile_id").is_none(), "no profile active: none recorded");
+        assert!(serde_json::from_value::<MasterPatchMetadata>(again).is_ok(), "the typed reader still reads it");
+    }
+}

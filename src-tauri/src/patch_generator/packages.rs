@@ -187,6 +187,10 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
 
                         let meta_path = path.join("patch_metadata.json");
                         
+                        let built_for_profile = fs::read_to_string(&meta_path)
+                            .ok()
+                            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                            .and_then(|v| v.get("built_for_profile_name").and_then(|n| n.as_str()).map(str::to_string));
                         let (is_packaged, created_at, packaged_mods, merged_files, meta_visible, meta_desc) = if meta_path.exists() {
                             if let Ok(content) = fs::read_to_string(&meta_path) {
                                 if let Ok(meta_json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -229,6 +233,7 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
                             packaged_mods,
                             merged_files,
                             version_check: None,
+                            built_for_profile,
                         });
                     }
                 }
@@ -254,6 +259,7 @@ pub fn list_merged_packages(user_zomboid_dir: &str, _mod_list_ini_path: &str) ->
                 packaged_mods: Vec::new(),
                 merged_files: Vec::new(),
                 version_check: None,
+                built_for_profile: None,
             });
         }
     }
@@ -334,6 +340,7 @@ pub fn create_merged_package(user_zomboid_dir: &str, mod_list_ini_path: &str, na
         packaged_mods: Vec::new(),
         merged_files: Vec::new(),
         version_check: None,
+        built_for_profile: None,
     })
 }
 
@@ -438,6 +445,7 @@ pub fn rename_merged_package(
         packaged_mods: Vec::new(),
         merged_files: Vec::new(),
         version_check: None,
+        built_for_profile: None,
     })
 }
 

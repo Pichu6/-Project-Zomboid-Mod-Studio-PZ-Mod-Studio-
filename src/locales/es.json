@@ -1043,6 +1043,31 @@
       "missingSection": "Faltan ({{count}})"
     },
     "lists": {
+      "mode": {
+        "mine": "Mis listas",
+        "community": "De la comunidad"
+      },
+      "community": {
+        "intro": "Listas que otros jugadores compartieron por el repositorio del Studio (cada una la lee una persona antes de publicarse). Copiar una la hace tuya; no se instala nada hasta que apretás Suscribirse a todo lo que falta.",
+        "filter": "Buscar listas o mods",
+        "refresh": "Traer las listas ahora",
+        "none": "Nadie compartió una lista todavía. Compartí una tuya desde Mis listas.",
+        "noMatch": "Ninguna lista coincide.",
+        "byline": "de {{author}} · {{count}} mod(s)",
+        "have": "Tenés {{have}} de sus {{count}} mod(s) del Workshop.",
+        "copy": "Copiar a mis listas",
+        "source": "Ver en GitHub"
+      },
+      "share": {
+        "button": "Compartir con la comunidad",
+        "title": "Propone esta lista para el repositorio comunitario; se publica cuando una persona la lee.",
+        "author": "Tu nombre como autor de la lista (se muestra con la lista):",
+        "description": "Una línea sobre \"{{name}}\": para qué es, con qué la jugaste (opcional).",
+        "prConfirm": "Esto abre un pull request público en GitHub con la lista \"{{name}}\":\n\n{{json}}\n\n¿Seguimos?",
+        "prOpened": "Pull request abierto: {{url}}",
+        "taken": "Otra persona ya compartió una lista con ese nombre: renombrá la tuya y compartila de nuevo.",
+        "githubOpened": "Se abrió la página de archivo nuevo de GitHub con la lista completa (también se copió): iniciá sesión y apretá \"Propose changes\"."
+      },
       "newPlaceholder": "Lista nueva…",
       "newLabel": "Nombre de la lista nueva",
       "newTitle": "Crea una lista tuya",
@@ -1159,6 +1184,11 @@
       "save": "✓ Guardar la fusión de este archivo"
     },
     "list": {
+      "forProfile": "Paquete para {{name}}",
+      "forProfileTitle": "Crea un paquete con el nombre del perfil {{name}}, guardado con él: sus merges resuelven la lista de este perfil.",
+      "forProfileDescription": "Merges del perfil {{name}}, hechos con PZ Mod Studio.",
+      "builtFor": "armado con {{name}}",
+      "builtForTitle": "Se publicó por última vez con el perfil {{name}} activo: sus merges resuelven la lista de ese perfil. Con otro perfil, publicalo de nuevo o creá un paquete para ese perfil.",
       "title": "Paquetes de fusión",
       "count": "{{count}} paquete(s)",
       "otherProfiles": "Paquetes de otros perfiles ({{count}})",

@@ -998,6 +998,15 @@ export const MergerModule: React.FC<MergerModuleProps> = ({
           onOpenFolder={handleOpenPhysicalFolder}
           onImport={handleImportPackage}
           onCreate={() => setIsCreateModalOpen(true)}
+          onCreateForProfile={
+            activeProfile
+              ? () => {
+                  // A folder name cannot hold these; the package's name is the profile's otherwise.
+                  const name = activeProfile.name.replace(/[<>:"/\\|?*]/g, '').trim().replace(/\.+$/, '');
+                  if (name) void handleCreatePackage(name, i18next.t('merger.list.forProfileDescription', { name: activeProfile.name }));
+                }
+              : undefined
+          }
         />
       ) : (
         /* LEVEL 2: Workspace of the Opened Package */

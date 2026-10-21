@@ -54,6 +54,16 @@ Tus propias listas de mods, guardadas en esta PC. **Favoritos** siempre está.
 - El lápiz renombra la lista y el tacho la borra. Los mods quedan instalados.
 - Clic derecho en una tarjeta y **Sacar de** la lista para quitarla solo de la lista.
 
+## Listas de la comunidad
+
+**De la comunidad** (al lado de **Mis listas**) muestra las listas que compartieron otros jugadores. Cada una la leyó una persona antes de publicarse en el repositorio del Studio; el Studio las trae una vez por día (las flechas las traen ahora).
+
+- Cada tarjeta dice quién la hizo, cuántos mods tiene y cuántos de sus mods del Workshop ya tenés.
+- **Copiar a mis listas** la hace una de tus listas, con el nombre de su autor. No se instala nada: desde ahí, **Suscribirse a todo lo que falta** y **Crear un perfil** funcionan como con cualquier lista.
+- **Ver en GitHub** abre el archivo.
+
+Para compartir una tuya, abrila en **Mis listas** y apretá **Compartir con la comunidad**. Se te pide tu nombre como autor y una línea sobre la lista. Con un token de GitHub (Ajustes) el Studio te muestra lo que sale y abre el pull request; sin token, se abre la página de archivo nuevo de GitHub con la lista completa, y ahí apretás **Propose changes**. Si alguien ya compartió una lista con el mismo nombre, renombrá la tuya antes.
+
 ## Instalar un mod que descargaste
 
 - **Instalar .zip / .7z**: elegí un archivo comprimido. El Studio encuentra el mod adentro y lo pone en `Zomboid/mods`.

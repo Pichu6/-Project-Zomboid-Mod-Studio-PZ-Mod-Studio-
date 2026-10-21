@@ -15,6 +15,8 @@ interface PackageListProps {
   onOpenFolder: (folderName: string) => void;
   onImport: () => void;
   onCreate: () => void;
+  /** Makes a package named after the active profile, when the profile has none of its own. */
+  onCreateForProfile?: () => void;
   /** The active profile, whose packages the list shows; null = no profile, every package. */
   activeProfileName?: string | null;
   /** Packages that belong to other profiles only, hidden until asked for. */
@@ -39,6 +41,7 @@ export const PackageList: React.FC<PackageListProps> = ({
   onOpenFolder,
   onImport,
   onCreate,
+  onCreateForProfile,
   activeProfileName = null,
   otherProfilesCount = 0,
   showOtherProfiles = false,
@@ -95,6 +98,16 @@ export const PackageList: React.FC<PackageListProps> = ({
           <span>{i18next.t('merger.list.import')}</span>
         </button>
 
+        {activeProfileName && onCreateForProfile && !packages.some((p) => !p.is_companion_bridge && isInActiveProfile(p)) && (
+          <button
+            onClick={onCreateForProfile}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-200 border border-emerald-700/60 text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
+            title={i18next.t('merger.list.forProfileTitle', { name: activeProfileName })}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{i18next.t('merger.list.forProfile', { name: activeProfileName })}</span>
+          </button>
+        )}
         <button
           onClick={onCreate}
           className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition shadow shrink-0 cursor-pointer"
@@ -189,6 +202,18 @@ export const PackageList: React.FC<PackageListProps> = ({
                                   {i18next.t('merger.list.profileChip', { name: owner })}
                                 </span>
                               ))
+                            )}
+                            {pkg.built_for_profile && (
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                  pkg.built_for_profile === activeProfileName
+                                    ? 'bg-slate-900 text-slate-400 border-slate-700'
+                                    : 'bg-amber-950/50 text-amber-300 border-amber-700/60'
+                                }`}
+                                title={i18next.t('merger.list.builtForTitle', { name: pkg.built_for_profile })}
+                              >
+                                {i18next.t('merger.list.builtFor', { name: pkg.built_for_profile })}
+                              </span>
                             )}
                           </div>
                         )}

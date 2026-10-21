@@ -8,6 +8,7 @@ El Fusionador de mods arregla archivos que cambian dos o más de tus mods activo
 - Cuando lo publicás, el Studio escribe tus archivos fusionados adentro (para Build 41 y en su carpeta `42` para Build 42), agrega un archivo chico de compatibilidad y pone el paquete **último** en la lista de mods del juego. El mod que carga último es aquel cuya copia de un archivo usa el juego, así que gana tu copia fusionada.
 - Un paquete tiene dos estados. **🟢 EMPAQUETADO / CERRADO** quiere decir que está publicado y el juego lo lee. **🟡 ABIERTO (borrador)** quiere decir que lo estás editando; mientras es borrador se saca de la lista de mods del juego, así que el juego no lo lee hasta que publiques de nuevo.
 - Cada paquete pertenece a los perfiles que lo tienen entre sus mods. Un paquete que creás con un perfil activo se agrega a ese perfil.
+- Un paquete recuerda qué perfil estaba activo la última vez que se publicó (**armado con** en su tarjeta, en ámbar si ahora hay otro perfil activo): sus merges resuelven la lista de ese perfil. Con un perfil que no tiene paquete propio, **Paquete para "nombre"** en la barra de arriba crea uno con su nombre.
 
 ## Qué ves
 

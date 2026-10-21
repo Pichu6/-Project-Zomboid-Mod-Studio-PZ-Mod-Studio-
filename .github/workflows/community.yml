@@ -7,7 +7,7 @@ on:
     paths: ['community/**', 'scripts/community-index.js']
   push:
     branches: [main]
-    paths: ['community/index/**', 'scripts/community-index.js']
+    paths: ['community/index/**', 'community/lists/**', 'scripts/community-index.js', 'scripts/community-lists.js']
 
 permissions:
   contents: read
@@ -28,6 +28,9 @@ jobs:
       - name: Registries are well formed
         run: node scripts/community-index.js check
 
+      - name: Players' lists are well formed
+        run: node scripts/community-lists.js check
+
       - name: Rules file is well formed
         run: node -e "const r=require('./community/rules.json'); for (const x of r.load_after) if (!x.mod_id||!x.after||x.mod_id===x.after) throw new Error('bad rule '+JSON.stringify(x)); for (const x of r.incompatible) if (!x.a||!x.b||x.a===x.b) throw new Error('bad pair '+JSON.stringify(x)); console.log('rules.json ok')"
 
@@ -45,14 +48,16 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build index.json
-        run: node scripts/community-index.js build
-
-      - name: Commit index.json when it changed
+      - name: Build index.json and lists.json
         run: |
-          if git diff --quiet -- community/index.json; then echo "index.json unchanged"; exit 0; fi
+          node scripts/community-index.js build
+          node scripts/community-lists.js build
+
+      - name: Commit them when they changed
+        run: |
+          if git diff --quiet -- community/index.json community/lists.json; then echo "index.json and lists.json unchanged"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add community/index.json
-          git commit -m "The community index, rebuilt from its registries"
+          git add community/index.json community/lists.json
+          git commit -m "The community index and lists, rebuilt from their files"
           git push

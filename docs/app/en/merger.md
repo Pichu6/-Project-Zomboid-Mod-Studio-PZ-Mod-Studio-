@@ -8,6 +8,7 @@ The Mod Merger fixes files that two or more of your active mods both change, and
 - When you publish it, the Studio writes your merged files into it (for Build 41 and in its `42` folder for Build 42), adds a small compatibility file, and puts the package **last** in the game's mod list. The mod that loads last is the one whose copy of a file the game uses, so your merged copy wins.
 - A package has two states. **🟢 PACKAGED / CLOSED** means it is published and the game reads it. **🟡 OPEN (Draft)** means you are editing it; while it is a draft it is taken out of the game's mod list, so the game does not read it until you publish again.
 - Each package belongs to the profiles that have it among their mods. A package you create while a profile is active is added to that profile.
+- A package remembers the profile that was active when it was last published (**built with** on its card, in amber when another profile is active now): its merges settle that profile's list. With a profile that has no package of its own, **Package for "name"** in the top bar makes one named after it.
 
 ## What you see
 

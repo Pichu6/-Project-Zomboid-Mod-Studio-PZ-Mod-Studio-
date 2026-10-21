@@ -1002,6 +1002,58 @@ fn community_index_cmd(paths: StudioPaths) -> Option<rules::index::CommunityInde
     rules::index::current(&paths.user_zomboid_dir)
 }
 
+/// Other players' lists (fetched once a day; `refresh` fetches now).
+#[tauri::command(async)]
+fn community_lists_cmd(paths: StudioPaths, refresh: bool) -> rules::shared_lists::CommunityLists {
+    rules::shared_lists::current(&paths.user_zomboid_dir, refresh)
+}
+
+/// Makes a community list one of the player's own.
+#[tauri::command(async)]
+fn copy_community_list_cmd(paths: StudioPaths, list_id: String) -> Result<lists::ModList, String> {
+    let all = rules::shared_lists::current(&paths.user_zomboid_dir, false);
+    let shared = all.lists.iter().find(|l| l.id == list_id).ok_or_else(|| format!("There is no community list {}.", list_id))?;
+    rules::shared_lists::copy_to_my_lists(&paths.user_zomboid_dir, shared)
+}
+
+/// One of the player's lists as it would go to the community repository (checked).
+#[tauri::command(async)]
+fn draft_shared_list_cmd(paths: StudioPaths, list_id: String, author: String, description: String, build: String) -> Result<rules::shared_lists::SharedList, String> {
+    let list = lists::load_lists(&paths.user_zomboid_dir).into_iter().find(|l| l.id == list_id).ok_or_else(|| format!("There is no list {}.", list_id))?;
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let shared = rules::shared_lists::from_list(&list, &author, &description, &build, &today);
+    let problems = rules::shared_lists::problems(&shared);
+    if !problems.is_empty() {
+        return Err(format!("The list cannot be shared yet: {}.", problems.join("; ")));
+    }
+    Ok(shared)
+}
+
+/// Opens the pull request that adds the list to `community/lists/` (GitHub token in Settings).
+#[tauri::command(async)]
+fn propose_shared_list_cmd(list: rules::shared_lists::SharedList) -> Result<rules::propose::ProposeResult, String> {
+    let problems = rules::shared_lists::problems(&list);
+    if !problems.is_empty() {
+        return Err(format!("The list cannot be shared yet: {}.", problems.join("; ")));
+    }
+    let path = format!("community/lists/{}.json", list.id);
+    let content = serde_json::to_string_pretty(&list).map_err(|e| e.to_string())? + "
+";
+    let title = format!("Community list: {}", list.name);
+    let body = format!("A list of {} mod(s) by {}, shared from PZ Mod Studio.
+
+{}", list.items.len(), list.author, list.description);
+    rules::propose::propose_file(&path, &title, &body, &|existing| {
+        // Someone else's list with the same name is not replaced: the author picks another name.
+        if let Some(old) = existing.and_then(|t| serde_json::from_str::<rules::shared_lists::SharedList>(t).ok()) {
+            if !old.author.eq_ignore_ascii_case(&list.author) {
+                return Err(format!("taken: {} already has a list called \"{}\"; rename yours first.", old.author, old.name));
+            }
+        }
+        Ok(content.clone())
+    })
+}
+
 /// Whether the Studio fetches the community rules and index (Settings).
 #[tauri::command(async)]
 fn community_downloads_cmd(user_zomboid_dir: String) -> bool {
@@ -1603,6 +1655,10 @@ pub fn run() {
             discord_save_cmd,
             discord_test_cmd,
             discord_commands_status_cmd,
+            community_lists_cmd,
+            copy_community_list_cmd,
+            draft_shared_list_cmd,
+            propose_shared_list_cmd,
             dev_watch_stop_cmd,
             dev_reload_all_cmd,
             create_mod_list_cmd,

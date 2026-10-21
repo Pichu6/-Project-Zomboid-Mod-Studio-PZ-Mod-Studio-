@@ -1043,6 +1043,31 @@
       "missingSection": "Missing ({{count}})"
     },
     "lists": {
+      "mode": {
+        "mine": "My lists",
+        "community": "From the community"
+      },
+      "community": {
+        "intro": "Lists other players shared through the Studio's repository (each one read by a person before it is published). Copying one makes it your own list; nothing is installed until you press Subscribe to all missing.",
+        "filter": "Search lists or mods",
+        "refresh": "Fetch the lists now",
+        "none": "No one has shared a list yet. Share one of yours from My lists.",
+        "noMatch": "No list matches.",
+        "byline": "by {{author}} · {{count}} mod(s)",
+        "have": "You have {{have}} of its {{count}} Workshop mod(s).",
+        "copy": "Copy to my lists",
+        "source": "See on GitHub"
+      },
+      "share": {
+        "button": "Share with the community",
+        "title": "Proposes this list for the community repository; it is published once a person reads it.",
+        "author": "Your name as the list's author (shown with the list):",
+        "description": "A line about \"{{name}}\": what it is for, what you played it with (optional).",
+        "prConfirm": "This opens a public pull request on GitHub with the list \"{{name}}\":\n\n{{json}}\n\nGo ahead?",
+        "prOpened": "Pull request opened: {{url}}",
+        "taken": "Someone else already shared a list with that name: rename yours and share it again.",
+        "githubOpened": "GitHub's new-file page is open with the list filled in (also copied): sign in and press \"Propose changes\"."
+      },
       "newPlaceholder": "New list…",
       "newLabel": "New list name",
       "newTitle": "Makes a list of yours",
@@ -1159,6 +1184,11 @@
       "save": "✓ Save Merge of this File"
     },
     "list": {
+      "forProfile": "Package for {{name}}",
+      "forProfileTitle": "Makes a package named after the profile {{name}}, kept with it: its merges settle this profile's list.",
+      "forProfileDescription": "Merges for the profile {{name}}, made by PZ Mod Studio.",
+      "builtFor": "built with {{name}}",
+      "builtForTitle": "Last published while the profile {{name}} was active: its merges settle that profile's list. With another profile, publish it again or make a package for that profile.",
       "title": "Merge Packages",
       "count": "{{count}} package(s)",
       "otherProfiles": "Other profiles' packages ({{count}})",

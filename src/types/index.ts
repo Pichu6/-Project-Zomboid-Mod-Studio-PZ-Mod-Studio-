@@ -886,6 +886,31 @@ export interface CommunityRegistry {
 }
 
 /** The pull request "Propose" opened with the saved GitHub token. */
+/** A list another player shared through the community repository (community/lists). */
+export interface SharedListItem {
+  workshop_id?: string;
+  mod_id?: string;
+  nexus_id?: number;
+  name: string;
+}
+
+export interface SharedList {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  build: string;
+  updated: string;
+  items: SharedListItem[];
+}
+
+export interface CommunityLists {
+  version: number;
+  updated: string | null;
+  lists: SharedList[];
+  fetched_at: number | null;
+}
+
 export interface ProposeResult {
   pr_url: string;
   fork: string;

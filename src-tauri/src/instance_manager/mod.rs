@@ -216,6 +216,11 @@ fn instance_file_path(dir: &std::path::Path, instance_id: &str) -> Result<std::p
     Ok(dir.join(format!("{}.json", instance_id)))
 }
 
+/// The active profile's id and name, if one is active.
+pub fn active_profile(user_zomboid_dir: &str) -> Option<(String, String)> {
+    find_active(&get_instances_dir(user_zomboid_dir)).map(|(_, i)| (i.id, i.name))
+}
+
 fn get_instances_dir(user_zomboid_dir: &str) -> std::path::PathBuf {
     let user_dirs = get_all_user_zomboid_dirs(user_zomboid_dir);
     user_dirs[0].join("PZModStudio_Instances")

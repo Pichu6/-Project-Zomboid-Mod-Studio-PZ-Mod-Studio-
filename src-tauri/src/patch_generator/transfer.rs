@@ -324,6 +324,7 @@ pub fn import_merged_package(
         packaged_mods: imported.packaged_mod_ids,
         merged_files: imported.merged_files.iter().map(|f| f.relative_path.clone()).collect(),
         version_check: Some(version_check),
+        built_for_profile: None,
     })
 }
 

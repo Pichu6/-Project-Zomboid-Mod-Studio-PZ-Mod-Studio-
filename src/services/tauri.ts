@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordCommandsStatus, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, CommunityLists, SharedList, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordCommandsStatus, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -67,6 +67,8 @@ export interface MergedPackageInfoUI {
   merged_files: string[];
   /** Only on an import: what is missing here and which copies differ from the sender's. */
   version_check?: MissingModsReport | null;
+  /** The profile that was active when it was last published. */
+  built_for_profile?: string | null;
 }
 
 const STORAGE_KEY_PATHS = 'pz_mod_studio_paths_profile';
@@ -904,6 +906,27 @@ export const TauriService = {
   },
 
   /** With the saved token: forks, writes the registry on a branch and opens the pull request. */
+  communityLists: async (paths: StudioPathsUI, refresh = false): Promise<CommunityLists | null> => {
+    try {
+      return await invoke<CommunityLists>('community_lists_cmd', { paths, refresh });
+    } catch (err) {
+      reportBackendError('Loading the community lists', err);
+      return null;
+    }
+  },
+
+  copyCommunityList: async (paths: StudioPathsUI, listId: string): Promise<ModList> => {
+    return await invoke<ModList>('copy_community_list_cmd', { paths, listId });
+  },
+
+  draftSharedList: async (paths: StudioPathsUI, listId: string, author: string, description: string, build: string): Promise<SharedList> => {
+    return await invoke<SharedList>('draft_shared_list_cmd', { paths, listId, author, description, build });
+  },
+
+  proposeSharedList: async (list: SharedList): Promise<ProposeResult> => {
+    return await invoke<ProposeResult>('propose_shared_list_cmd', { list });
+  },
+
   proposeRegistry: async (modId: string, content: string): Promise<ProposeResult> => {
     try {
       return await invoke<ProposeResult>('propose_registry_cmd', { modId, content });

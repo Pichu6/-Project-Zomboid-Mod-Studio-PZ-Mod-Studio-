@@ -94,6 +94,9 @@ pub struct MergedPackageInfo {
     /// whose copy here is not the copy it was made with.
     #[serde(default)]
     pub version_check: Option<crate::preset_manager::MissingModsReport>,
+    /// The profile that was active when it was last published (its merges settle that list).
+    #[serde(default)]
+    pub built_for_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
