@@ -3,6 +3,8 @@
 //! Searching the Workshop (`IPublishedFileService/QueryFiles`) needs a Steam Web API key and is
 //! not done here; users subscribe on the item's Workshop page in their browser.
 
+pub mod polite;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
@@ -111,30 +113,13 @@ pub fn page_url(id: &str) -> String {
 /// One client for every Workshop request: it keeps its connections to Steam open, so browsing
 /// does not pay a fresh TLS handshake per page, collection or detail (an Agent is a cheap handle
 /// to a shared pool, cloned out of here).
-fn agent() -> ureq::Agent {
-    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
-    AGENT
-        .get_or_init(|| {
-            let tls = ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build();
-            ureq::Agent::config_builder()
-                .tls_config(tls)
-                .timeout_global(Some(Duration::from_secs(20)))
-                .user_agent(format!("PZModStudio/{}", env!("CARGO_PKG_VERSION")))
-                .build()
-                .into()
-        })
-        .clone()
-}
+/// How long Steam's answers are kept on disk, by kind.
+const DETAILS_TTL: Duration = Duration::from_secs(10 * 60);
+const PAGE_TTL: Duration = Duration::from_secs(30 * 60);
+const SEARCH_TTL: Duration = Duration::from_secs(5 * 60);
 
-/// Whether a failed request is worth one more try: the connection dropped or timed out, or Steam
-/// answered with a passing server error. A bad request or a refusal is not.
-fn transient(e: &ureq::Error) -> bool {
-    match e {
-        ureq::Error::StatusCode(code) => *code >= 500,
-        ureq::Error::Io(_) | ureq::Error::Timeout(_) | ureq::Error::ConnectionFailed | ureq::Error::HostNotFound => true,
-        _ => false,
-    }
-}
+
+
 
 /// Workshop ids in free text: links (`...filedetails/?id=123`, `steam://url/CommunityFilePage/123`)
 /// or bare numbers, in order, without duplicates.
@@ -239,31 +224,16 @@ fn form(prefix: &str, count_key: &str, ids: &[String]) -> Vec<(String, String)> 
 /// A Steam Web API form post. A dropped connection or a passing server error is tried twice more
 /// (a pooled connection Steam closed while idle fails once, then works), so one hiccup does not
 /// read as "no internet".
-fn post_form(url: &str, pairs: Vec<(String, String)>) -> Result<Value, String> {
-    let mut last = None;
-    for attempt in 0..3u64 {
-        if attempt > 0 {
-            std::thread::sleep(Duration::from_millis(400 * attempt));
-        }
-        match agent().post(url).send_form(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str()))) {
-            Ok(response) => {
-                return response
-                    .into_body()
-                    .read_json()
-                    .map_err(|e| format!("Unexpected answer from Steam: {}", e));
-            }
-            Err(e) if transient(&e) => last = Some(e),
-            Err(e) => return Err(format!("Steam could not be reached: {}", e)),
-        }
-    }
-    Err(format!("Steam could not be reached: {}", last.map(|e| e.to_string()).unwrap_or_default()))
+fn post_form(url: &str, pairs: Vec<(String, String)>, ttl: Duration) -> Result<Value, String> {
+    let body = polite::fetch(polite::Request::PostForm { url, form: &pairs }, ttl, None).map_err(|r| r.say())?;
+    serde_json::from_str(&body).map_err(|e| format!("Unexpected answer from Steam: {}", e))
 }
 
 /// Details for Workshop ids, in the same order (100 per request).
 pub fn get_details(ids: &[String]) -> Result<Vec<WorkshopItem>, String> {
     let mut items = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(BATCH) {
-        let v = post_form(DETAILS_URL, form("publishedfileids", "itemcount", chunk))?;
+        let v = post_form(DETAILS_URL, form("publishedfileids", "itemcount", chunk), DETAILS_TTL)?;
         let list = v.pointer("/response/publishedfiledetails").and_then(|x| x.as_array()).cloned().unwrap_or_default();
         items.extend(list.iter().filter_map(parse_item));
     }
@@ -272,7 +242,7 @@ pub fn get_details(ids: &[String]) -> Result<Vec<WorkshopItem>, String> {
 
 /// Child item ids when `id` is a collection, None when it is not one.
 fn collection_children(id: &str) -> Result<Option<Vec<String>>, String> {
-    let v = post_form(COLLECTION_URL, form("publishedfileids", "collectioncount", &[id.to_string()]))?;
+    let v = post_form(COLLECTION_URL, form("publishedfileids", "collectioncount", &[id.to_string()]), PAGE_TTL)?;
     let details = v.pointer("/response/collectiondetails/0");
     if details.and_then(|d| d.get("result")).and_then(|r| r.as_u64()) != Some(1) {
         return Ok(None);
@@ -418,29 +388,11 @@ pub fn search_public(q: &BrowseQuery) -> Result<WorkshopSearchResult, String> {
     for tag in tag_filters(q.build.as_deref(), q.category.as_deref()) {
         url_query.push(("requiredtags[]".into(), tag));
     }
-    // A dropped connection or a passing server error gets two more tries, as in post_form.
-    let mut attempt = 0u64;
-    let response = loop {
-        let mut again = agent().get("https://steamcommunity.com/workshop/browse/");
-        for (k, v) in &url_query {
-            again = again.query(k, v);
-        }
-        match again.call() {
-            Ok(r) => break r,
-            Err(e) if transient(&e) && attempt < 2 => {
-                attempt += 1;
-                std::thread::sleep(Duration::from_millis(400 * attempt));
-            }
-            Err(ureq::Error::StatusCode(429)) => return Err("Steam is rate-limiting; try again in a minute.".to_string()),
-            Err(other) => return Err(format!("The Steam Workshop could not be reached: {}", other)),
-        }
-    };
-    let html = response
-        .into_body()
-        .with_config()
-        .limit(16 * 1024 * 1024)
-        .read_to_string()
-        .map_err(|e| format!("Unexpected answer from the Steam Workshop: {}", e))?;
+    // Through the shared limiter (retries, Steam's pace, the disk cache).
+    let html = polite::fetch(polite::Request::Get { url: "https://steamcommunity.com/workshop/browse/", query: &url_query }, SEARCH_TTL, None).map_err(|r| match r {
+        polite::Refusal::Network(e) => format!("The Steam Workshop could not be reached: {}", e),
+        other => other.say(),
+    })?;
     let results = page_state(&html)
         .as_ref()
         .and_then(|v| find_results(v, 0))
@@ -496,39 +448,37 @@ pub fn search(
         (false, s) => s,
     };
     let page = page.max(1);
-    let mut req = agent()
-        .get(QUERY_URL)
-        .query("key", key)
-        .query("appid", PZ_APP_ID.to_string())
-        .query("query_type", sort.query_type().to_string())
-        .query("page", page.to_string())
-        .query("numperpage", per_page.clamp(1, 100).to_string())
-        .query("filetype", "0")
-        .query("return_tags", "true")
-        .query("return_previews", "true")
-        .query("return_short_description", "true")
-        .query("return_vote_data", "false");
+    let mut q: Vec<(String, String)> = Vec::new();
+    let mut add = |k: String, v: String| q.push((k, v));
+    add("key".into(), key.to_string());
+    add("appid".into(), PZ_APP_ID.to_string());
+    add("query_type".into(), sort.query_type().to_string());
+    add("page".into(), page.to_string());
+    add("numperpage".into(), per_page.clamp(1, 100).to_string());
+    for (k, v) in [("filetype", "0"), ("return_tags", "true"), ("return_previews", "true"), ("return_short_description", "true"), ("return_vote_data", "false")] {
+        add(k.into(), v.into());
+    }
     if sort == WorkshopSort::Trending {
-        req = req.query("days", "7");
+        add("days".into(), "7".into());
     }
     if let Some(t) = text {
-        req = req.query("search_text", t);
+        add("search_text".into(), t.to_string());
     }
     let tags = tag_filters(build, category);
     for (i, t) in tags.iter().enumerate() {
-        req = req.query(format!("requiredtags[{}]", i), t);
+        add(format!("requiredtags[{}]", i), t.clone());
     }
     if !tags.is_empty() {
-        req = req.query("match_all_tags", "true");
+        add("match_all_tags".into(), "true".into());
     }
-    let response = req.call().map_err(|e| match e {
-        ureq::Error::StatusCode(401) | ureq::Error::StatusCode(403) => {
+    // Never kept on disk: the Web API key is part of the request.
+    let body = polite::fetch(polite::Request::Get { url: QUERY_URL, query: &q }, Duration::ZERO, None).map_err(|r| match r {
+        polite::Refusal::Status(401) | polite::Refusal::Status(403) => {
             "Steam rejected the Web API key. Check it in Browse Mods > Steam Workshop (or create a new one at steamcommunity.com/dev/apikey).".to_string()
         }
-        ureq::Error::StatusCode(429) => "Steam is rate-limiting searches; try again in a minute.".to_string(),
-        other => format!("Steam could not be reached: {}", other),
+        other => other.say(),
     })?;
-    let v: Value = response.into_body().read_json().map_err(|e| format!("Unexpected answer from Steam: {}", e))?;
+    let v: Value = serde_json::from_str(&body).map_err(|e| format!("Unexpected answer from Steam: {}", e))?;
     let r = v.get("response").ok_or("Unexpected answer from Steam (no response)")?;
     let total = r.get("total").and_then(|t| t.as_u64()).unwrap_or(0);
     Ok(WorkshopSearchResult {
@@ -637,7 +587,7 @@ fn parse_item_page(html: &str) -> PageExtras {
 /// Full details for one item: the Web API (description, stats, tags) plus its public page
 /// (screenshots, videos, required items). The page part is best effort.
 pub fn item_details(id: &str) -> Result<WorkshopItemDetails, String> {
-    let v = post_form(DETAILS_URL, form("publishedfileids", "itemcount", &[id.to_string()]))?;
+    let v = post_form(DETAILS_URL, form("publishedfileids", "itemcount", &[id.to_string()]), DETAILS_TTL)?;
     let raw = v.pointer("/response/publishedfiledetails/0").cloned().ok_or("Unexpected answer from Steam (no item)")?;
     let item = parse_item(&raw).ok_or("Unexpected answer from Steam (no item id)")?;
     if !item.found {
@@ -712,11 +662,8 @@ fn page_required_items(id: &str) -> Result<Vec<RequiredItem>, String> {
 /// answering others from the same machine (seen 2026-10-20 during its Workshop trouble): then
 /// the page is asked for once through the curl that ships with Windows.
 pub(crate) fn fetch_page(url: &str) -> Result<String, String> {
-    match agent().get(url).call() {
-        Ok(r) => r.into_body().with_config().limit(8 * 1024 * 1024).read_to_string().map_err(|e| e.to_string()),
-        Err(ureq::Error::StatusCode(429)) => page_through_system_curl(url).ok_or_else(|| "Steam is limiting requests (429).".to_string()),
-        Err(e) => Err(e.to_string()),
-    }
+    let curl = || page_through_system_curl(url);
+    polite::fetch(polite::Request::Get { url, query: &[] }, PAGE_TTL, Some(&curl)).map_err(|r| r.say())
 }
 
 /// A Workshop page through `%SystemRoot%\\System32\\curl.exe` (Windows 10 and later), no window.
@@ -799,18 +746,8 @@ pub fn required_chain_with(ids: &[String], mut pages: impl FnMut(&str) -> Result
 /// What subscribing to `ids` needs too, with each item's picture, size and whether Steam still
 /// has it. Pages are read gently (a short pause between them).
 pub fn required_chain(ids: &[String]) -> Result<RequiredChain, String> {
-    let mut first = true;
-    let (mut items, cut_short, unread) = required_chain_with(ids, |id| {
-        if !first {
-            std::thread::sleep(std::time::Duration::from_millis(250));
-        }
-        first = false;
-        // Steam says "slow down" (429) often: once more after a pause before giving up on it.
-        page_required_items(id).or_else(|_| {
-            std::thread::sleep(std::time::Duration::from_millis(1500));
-            page_required_items(id)
-        })
-    });
+    // Steam's pace, its slow-downs and the retries are the shared limiter's (polite).
+    let (mut items, cut_short, unread) = required_chain_with(ids, page_required_items);
     let mut asked: Vec<RequiredItem> = ids.iter().map(|id| RequiredItem { workshop_id: id.clone(), title: id.clone() }).collect();
     if !items.is_empty() {
         let wanted: Vec<String> = items.iter().map(|n| n.workshop_id.clone()).chain(ids.iter().cloned()).collect();

@@ -7,7 +7,8 @@
 //! - Versions come from Steam's own record (`appworkshop_108600.acf`): offline, no key.
 //! - Change notes come from the item's public change notes page, one `<p id="<unix time>">` per
 //!   update. They are cached in `<Zomboid>/PZModStudio_Changelogs.json` and read again only
-//!   when Steam knows a newer version than the cached one.
+//!   when Steam knows a newer version than the cached one; at most `PAGES_PER_READ` pages a
+//!   read, through the shared limiter, stopping at Steam's first "slow down".
 //! - "May break saves" is a guess, said as one: a map mod (its cells can change under a save),
 //!   or notes that talk about new saves, wipes, removed or renamed things, reworks.
 
@@ -69,7 +70,7 @@ pub struct WhatsNew {
 }
 
 const NOTES_KEPT: usize = 10;
-/// Pages read in one go, half a second apart: Steam starts refusing after a few dozen quick ones.
+/// Pages read in one go: Steam starts refusing after a few dozen quick ones.
 const PAGES_PER_READ: usize = 12;
 const CACHE_FILE: &str = "PZModStudio_Changelogs.json";
 
@@ -254,9 +255,7 @@ pub fn whats_new(user_zomboid_dir: &Path, workshop_dir: &str, with_notes: bool, 
                 None if refused => Err("busy".to_string()),
                 None if asked >= PAGES_PER_READ => Err("later".to_string()),
                 None => {
-                    if asked > 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                    }
+                    // Spaced out by the shared limiter (polite).
                     asked += 1;
                     let url = format!("https://steamcommunity.com/sharedfiles/filedetails/changelog/{}", item.workshop_id);
                     let read = crate::workshop::fetch_page(&url).map(|html| parse_changelog(&html)).inspect(|notes| {
