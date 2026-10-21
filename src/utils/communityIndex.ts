@@ -2,6 +2,8 @@ import { CatalogModSummary, CommunityIssue, CommunityRegistry, ModErrorStat, Mod
 
 /** The Studio's repository, where the index lives. */
 export const COMMUNITY_REPO = 'https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-';
+/** The index's web page (GitHub Pages, site/index.html): every mod's known issues and fixes, searchable. */
+export const COMMUNITY_SITE = 'https://pichu6.github.io/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/';
 
 /** A registry's file name: its id, with "/" written as "__" (dSAG's id has one). */
 export const registryFileName = (modId: string) => `${modId.replace(/\//g, '__')}.json`;

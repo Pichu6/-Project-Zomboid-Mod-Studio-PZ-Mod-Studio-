@@ -5,7 +5,7 @@ Salud de mods revisa tus mods activos como los lee el juego y lista cada problem
 ## Qué ves
 
 - Arriba: tu **Build del juego**, cuántos mods hay activos y cuántos errores y avisos hay.
-- El botón de la **comunidad** (por ejemplo **comunidad: 40 reglas, 120 mods ↻**): lo que suman a la revisión los archivos compartidos de la comunidad. Hacé clic para descargarlos ahora.
+- El botón de la **comunidad** (por ejemplo **comunidad: 40 reglas, 120 mods ↻**): lo que suman a la revisión los archivos compartidos de la comunidad. Hacé clic para descargarlos ahora. **Índice de la comunidad**, al lado, abre la página web del índice: los problemas conocidos de cada mod y sus arreglos.
 - **Revisar de nuevo** vuelve a hacer la revisión. También se hace sola cuando cambia tu lista.
 - Los problemas, agrupados en **Errores**, **Avisos** e **Información**. Cada fila muestra el mod, qué anda mal, un código corto (como `missing_dependency`) y sus botones de arreglo a la derecha.
 

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
+import { COMMUNITY_SITE } from '../../utils/communityIndex';
 import { applyFix } from '../../utils/healthFix';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
@@ -385,6 +386,14 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                   }
                 >
                   {report.community ? t('health.community', { rules: report.community.rules + report.community.pairs, mods: report.community.mods }) : t('health.communityNoneShort')} ↻
+                </button>
+                <button
+                  type="button"
+                  onClick={() => TauriService.openExternalUrl(COMMUNITY_SITE)}
+                  title={t('health.communitySiteTitle')}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                >
+                  <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('health.communitySite')}
                 </button>
               </div>
             )}

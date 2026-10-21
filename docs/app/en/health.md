@@ -5,7 +5,7 @@ Mod Health checks your active mods the way the game reads them, and lists every 
 ## What you see
 
 - At the top: your **Game build**, how many mods are active, and how many errors and warnings there are.
-- The **community** button (for example **community: 40 rules, 120 mods ↻**): what the shared community files add to the check. Click it to download them now.
+- The **community** button (for example **community: 40 rules, 120 mods ↻**): what the shared community files add to the check. Click it to download them now. **Community index** beside it opens the index's web page: every mod's known issues and their fixes.
 - **Check again** runs the check again. It also runs by itself when your list changes.
 - The problems, grouped as **Errors**, **Warnings** and **Info**. Each row shows the mod, what is wrong, a short code (like `missing_dependency`) and its fix buttons on the right.
 
