@@ -56,7 +56,7 @@ Your own lists of mods, kept on this PC. **Favorites** is always there.
 
 ## Lists from the community
 
-**From the community** (beside **My lists**) shows lists other players shared. Each one was read by a person before it was published in the Studio's repository; the Studio fetches them once a day (the arrows fetch them now).
+**From the community** (beside **My lists**) shows lists other players shared. Each one was read by a person before it was published in the Studio's repository; the Studio fetches them once a day (the arrows fetch them now). **All lists on GitHub** opens them all in your browser.
 
 - Each card says who made it, how many mods it has and how many of its Workshop mods you already have.
 - **Copy to my lists** makes it one of your lists, named with its author. Nothing is installed: from there, **Subscribe to all missing** and **Make a profile** work as with any list.

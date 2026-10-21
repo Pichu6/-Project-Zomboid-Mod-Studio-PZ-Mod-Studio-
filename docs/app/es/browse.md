@@ -56,7 +56,7 @@ Tus propias listas de mods, guardadas en esta PC. **Favoritos** siempre está.
 
 ## Listas de la comunidad
 
-**De la comunidad** (al lado de **Mis listas**) muestra las listas que compartieron otros jugadores. Cada una la leyó una persona antes de publicarse en el repositorio del Studio; el Studio las trae una vez por día (las flechas las traen ahora).
+**De la comunidad** (al lado de **Mis listas**) muestra las listas que compartieron otros jugadores. Cada una la leyó una persona antes de publicarse en el repositorio del Studio; el Studio las trae una vez por día (las flechas las traen ahora). **Todas las listas en GitHub** las abre todas en tu navegador.
 
 - Cada tarjeta dice quién la hizo, cuántos mods tiene y cuántos de sus mods del Workshop ya tenés.
 - **Copiar a mis listas** la hace una de tus listas, con el nombre de su autor. No se instala nada: desde ahí, **Suscribirse a todo lo que falta** y **Crear un perfil** funcionan como con cualquier lista.

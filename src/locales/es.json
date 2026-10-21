@@ -1069,7 +1069,9 @@
         "byline": "de {{author}} · {{count}} mod(s)",
         "have": "Tenés {{have}} de sus {{count}} mod(s) del Workshop.",
         "copy": "Copiar a mis listas",
-        "source": "Ver en GitHub"
+        "source": "Ver en GitHub",
+        "all": "Todas las listas en GitHub",
+        "allTitle": "Abre las listas de la comunidad en tu navegador: todas las compartidas, y cómo compartir la tuya."
       },
       "share": {
         "button": "Compartir con la comunidad",
