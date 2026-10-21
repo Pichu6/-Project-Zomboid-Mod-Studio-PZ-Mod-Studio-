@@ -1747,6 +1747,16 @@
         "rate_limited": "Discord asked to wait; try again in a minute.",
         "no_webhook": "No webhook saved for this server yet."
       },
+      "commands": {
+        "title": "Commands from Discord (while the Studio is open)",
+        "intro": "Members with the role you choose can write commands in one channel; the Studio reads it every 5 seconds with the same bot as the chat above and answers there. They only work while PZ Mod Studio is open, and they never run console commands typed by hand.",
+        "list": "!status · !players · !restart [minutes] · !restart cancel · !save · !msg <text> · !help",
+        "channel": "Commands channel (name)",
+        "role": "Role that may use them",
+        "enabled": "Turn the commands on",
+        "save": "Save",
+        "needs": "Needs the bot token saved above and the bot invited to your Discord. Use a channel only admins see: the chat channel also goes into the game. !restart warns players in the game at the time asked, 5 and 1 minute before."
+      },
       "events": {
         "status_message": "A status message that edits itself",
         "status_messageExample": "🟢 Coop up since 21/10 14:05 · 2 online: Ana and Beto",

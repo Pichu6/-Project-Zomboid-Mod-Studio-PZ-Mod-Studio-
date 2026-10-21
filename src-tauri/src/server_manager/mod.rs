@@ -357,6 +357,9 @@ pub fn launch_dedicated_server(
     let mem = memory_gb.unwrap_or(4).max(2).min(32);
     // Not rewritten: "My Server" launched as My_Server would start a fresh vanilla config.
     let clean_name = server_name.trim().to_string();
+    if let Ok(mut last) = LAST_LAUNCH.lock() {
+        *last = Some((clean_name.clone(), memory_gb, nosteam));
+    }
     let is_nosteam = nosteam.unwrap_or(false);
     let clean_admin_pass = admin_password.unwrap_or_default().trim().to_string();
 
@@ -525,6 +528,26 @@ fn is_tracked_server_alive(pid: u32) -> bool {
 
 /// Sends "quit" to the server over RCON when its .ini has a password for it. True when sent.
 #[cfg(target_os = "windows")]
+/// One RCON command to a server this Studio runs (its .ini's RCONPort and RCONPassword).
+pub fn rcon_command(zomboid_dir: &Path, server_name: &str, command: &str) -> Result<(), String> {
+    let ini = zomboid_dir.join("Server").join(format!("{}.ini", server_name));
+    let text = fs::read_to_string(&ini).map_err(|e| format!("Cannot read {}: {}", ini.display(), e))?;
+    let value = |key: &str| {
+        text.lines()
+            .find_map(|l| l.trim().strip_prefix(&format!("{}=", key)).map(|v| v.trim().to_string()))
+            .unwrap_or_default()
+    };
+    let password = value("RCONPassword");
+    if password.is_empty() {
+        return Err("The server has no RCONPassword.".to_string());
+    }
+    rcon::send(value("RCONPort").parse::<u16>().unwrap_or(27015), &password, command)
+}
+
+/// How the server was last started from the Studio (name, memory, without Steam): a restart
+/// asked from Discord starts it the same way.
+pub static LAST_LAUNCH: std::sync::Mutex<Option<(String, Option<u32>, Option<bool>)>> = std::sync::Mutex::new(None);
+
 fn quit_over_rcon(zomboid_dir: &Path, server_name: &str) -> bool {
     let ini = zomboid_dir.join("Server").join(format!("{}.ini", server_name));
     let Ok(text) = fs::read_to_string(ini) else { return false };

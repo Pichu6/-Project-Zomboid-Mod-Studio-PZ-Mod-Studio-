@@ -75,6 +75,17 @@ Desde ahí el chat general del juego va a ese canal, y lo que se escribe ahí en
 
 Un **mensaje de estado que se edita solo** (activado de entrada) deja un solo mensaje en el canal que dice si el servidor está en línea, desde cuándo y quién está, en vez de publicar uno nuevo cada vez.
 
+### Comandos desde Discord (con el Studio abierto)
+
+Apagados salvo que los actives. Con el bot de arriba configurado, escribí un **Canal de comandos** y el **Rol que puede usarlos** (los nombres como están en Discord) y marcá **Activar los comandos**. El Studio lee ese canal cada 5 segundos y contesta ahí; a quien no tiene el rol se le dice que no puede.
+
+- `!estado` y `!jugadores`: si el servidor está en línea y quién está.
+- `!reiniciar [minutos]` (de 1 a 60, 5 si no decís): los jugadores reciben el aviso en el juego en ese momento, y 5 y 1 minuto antes; después el servidor se detiene como siempre (guarda) y vuelve a arrancar. `!reiniciar cancelar` lo detiene.
+- `!guardar` guarda el mundo; `!mensaje <texto>` le dice algo a todos en el juego.
+- `!ayuda` los lista. También funcionan en inglés (`!status`, `!players`, `!restart`, `!save`, `!msg`).
+
+Solo funcionan mientras PZ Mod Studio está abierto, y nunca corren un comando de consola escrito a mano. Usá un canal que solo vean los admins: el canal del chat también entra al juego.
+
 ## Bueno saber
 
 - Discord solo recibe mensajes mientras PZ Mod Studio está abierto y alojando el servidor.

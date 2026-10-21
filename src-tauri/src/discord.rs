@@ -62,11 +62,19 @@ pub struct DiscordSettings {
     /// That message's id (the webhook's own message; empty until the first one).
     #[serde(default)]
     pub status_message_id: String,
+    /// `!` commands read from a Discord channel while the Studio runs (with the game's bot token).
+    #[serde(default)]
+    pub commands: bool,
+    /// That channel's name, and the role a member needs to use them.
+    #[serde(default)]
+    pub command_channel: String,
+    #[serde(default)]
+    pub command_role: String,
 }
 
 impl Default for DiscordSettings {
     fn default() -> Self {
-        DiscordSettings { enabled: false, status: true, players: true, restarts: true, updates: true, language: "en".into(), status_message: true, status_message_id: String::new() }
+        DiscordSettings { enabled: false, status: true, players: true, restarts: true, updates: true, language: "en".into(), status_message: true, status_message_id: String::new(), commands: false, command_channel: String::new(), command_role: String::new() }
     }
 }
 
@@ -380,6 +388,17 @@ pub fn save_game_bot(user_zomboid_dir: &Path, ini_path: &Path, enabled: bool, to
     let backups = user_zomboid_dir.join("PZModStudio_Backups");
     crate::load_order::ini_parser::write_file_with_backup(ini_path, &text, &backups)?;
     game_bot(ini_path)
+}
+
+/// The game's bot token for a server, from `Zomboid/Server/<server>.ini`.
+pub fn game_bot_token(user_zomboid_dir: &Path, server: &str) -> Option<String> {
+    let text = std::fs::read_to_string(user_zomboid_dir.join("Server").join(format!("{}.ini", server))).ok()?;
+    ini_value(&text, "DiscordToken").filter(|t| bot_id_from_token(t).is_some())
+}
+
+/// The server whose Discord commands are on (the first one, with a channel and a role).
+pub fn commands_server(user_zomboid_dir: &Path) -> Option<(String, DiscordSettings)> {
+    read_all(user_zomboid_dir).into_iter().find(|(_, s)| s.commands && !s.command_channel.trim().is_empty() && !s.command_role.trim().is_empty())
 }
 
 // ------------------------------------------------------------------ what the server does

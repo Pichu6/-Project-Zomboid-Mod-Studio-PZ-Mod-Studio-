@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
-import { Check, Loader2, Send, Trash2 } from 'lucide-react';
+import { Check, Loader2, Send, Terminal, Trash2 } from 'lucide-react';
 import { DiscordSettings, StudioPathsUI } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { GameBotPanel } from './GameBotPanel';
@@ -17,6 +17,8 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; file
   const [webhook, setWebhook] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [cmdChannel, setCmdChannel] = useState('');
+  const [cmdRole, setCmdRole] = useState('');
 
   useEffect(() => {
     setNote(null);
@@ -25,6 +27,8 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; file
       if (!v) return;
       setSettings(v.settings);
       setHasWebhook(v.has_webhook);
+      setCmdChannel(v.settings.command_channel ?? '');
+      setCmdRole(v.settings.command_role ?? '');
     });
   }, [paths, server]);
 
@@ -144,6 +148,45 @@ export const DiscordPanel: React.FC<{ paths: StudioPathsUI; server: string; file
       )}
 
       <GameBotPanel paths={paths} filePath={filePath} />
+
+      <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+          <Terminal className="w-4 h-4 text-purple-300" aria-hidden="true" /> {t('servers.discord.commands.title')}
+        </div>
+        <p className="text-[11px] text-slate-400">{t('servers.discord.commands.intro')}</p>
+        <p className="text-[11px] text-slate-400 font-mono">{t('servers.discord.commands.list')}</p>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <label className="space-y-1">
+            <span className="block text-[11px] text-slate-300">{t('servers.discord.commands.channel')}</span>
+            <input value={cmdChannel} onChange={(e) => setCmdChannel(e.target.value)} placeholder="server-admin" spellCheck={false}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-purple-500" />
+          </label>
+          <label className="space-y-1">
+            <span className="block text-[11px] text-slate-300">{t('servers.discord.commands.role')}</span>
+            <input value={cmdRole} onChange={(e) => setCmdRole(e.target.value)} placeholder="Admin" spellCheck={false}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-purple-500" />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.commands}
+              disabled={busy || (!settings.commands && (cmdChannel.trim() === '' || cmdRole.trim() === ''))}
+              onChange={() => void save({ ...settings, commands: !settings.commands, command_channel: cmdChannel.trim(), command_role: cmdRole.trim() })}
+            />
+            {t('servers.discord.commands.enabled')}
+          </label>
+          {settings.commands && (cmdChannel.trim() !== settings.command_channel || cmdRole.trim() !== settings.command_role) && (
+            <button type="button" disabled={busy || cmdChannel.trim() === '' || cmdRole.trim() === ''}
+              onClick={() => void save({ ...settings, command_channel: cmdChannel.trim(), command_role: cmdRole.trim() })}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white cursor-pointer disabled:opacity-50">
+              <Check className="w-3.5 h-3.5" aria-hidden="true" /> {t('servers.discord.commands.save')}
+            </button>
+          )}
+        </div>
+        <p className="text-[10.5px] text-amber-300/80">{t('servers.discord.commands.needs')}</p>
+      </div>
     </div>
   );
 };

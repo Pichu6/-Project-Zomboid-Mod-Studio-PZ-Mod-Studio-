@@ -713,6 +713,10 @@ export interface DiscordSettings {
   /** One message that says the server's state, edited as it changes. */
   status_message: boolean;
   status_message_id?: string;
+  /** `!` commands read from a Discord channel while the Studio runs (the game's bot token). */
+  commands: boolean;
+  command_channel: string;
+  command_role: string;
 }
 
 /** The game's own Discord bot, as the server's .ini has it (never the token itself). */

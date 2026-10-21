@@ -7,6 +7,7 @@ pub mod devtools;
 pub mod diagnostics;
 pub mod diff_engine;
 pub mod discord;
+pub mod discord_commands;
 pub mod error_report;
 pub mod images;
 pub mod instance_manager;
@@ -1497,6 +1498,7 @@ pub fn run() {
             studio_link::watch_mod_list(app.handle().clone());
             // The hosted server's news to its Discord channel, when the player set one.
             discord::watch();
+            discord_commands::watch();
             // The window opens where and how it was left (it starts hidden so it does not jump).
             if let Some(window) = app.get_webview_window("main") {
                 window_prefs::restore(&window);

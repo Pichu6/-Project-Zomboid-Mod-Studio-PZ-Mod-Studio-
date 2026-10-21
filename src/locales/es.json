@@ -1747,6 +1747,16 @@
         "rate_limited": "Discord pidió esperar; probá de nuevo en un minuto.",
         "no_webhook": "Todavía no hay un webhook guardado para este servidor."
       },
+      "commands": {
+        "title": "Comandos desde Discord (con el Studio abierto)",
+        "intro": "Los miembros con el rol que elijas pueden escribir comandos en un canal; el Studio lo lee cada 5 segundos con el mismo bot del chat de arriba y contesta ahí. Solo funcionan mientras PZ Mod Studio está abierto, y nunca corren comandos de consola escritos a mano.",
+        "list": "!estado · !jugadores · !reiniciar [minutos] · !reiniciar cancelar · !guardar · !mensaje <texto> · !ayuda (también en inglés)",
+        "channel": "Canal de comandos (nombre)",
+        "role": "Rol que puede usarlos",
+        "enabled": "Activar los comandos",
+        "save": "Guardar",
+        "needs": "Necesita el token del bot guardado arriba y el bot invitado a tu Discord. Usá un canal que solo vean los admins: el canal del chat también entra al juego. !reiniciar avisa a los jugadores en el juego al pedirlo, y 5 y 1 minuto antes."
+      },
       "events": {
         "status_message": "Un mensaje de estado que se edita solo",
         "status_messageExample": "🟢 Coop en línea desde 21/10 14:05 · 2 en línea: Ana y Beto",

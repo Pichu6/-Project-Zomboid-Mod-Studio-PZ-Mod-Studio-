@@ -75,6 +75,17 @@ The in-game general chat then goes to that channel, and what is written there go
 
 A **status message that edits itself** (on by default) keeps one message in the channel saying whether the server is up, since when, and who is in, instead of posting a new one each time.
 
+### Commands from Discord (while the Studio is open)
+
+Off unless you turn them on. With the bot above set up, write a **Commands channel** and the **Role that may use them** (names as they are in Discord) and tick **Turn the commands on**. The Studio reads that channel every 5 seconds and answers there; members without the role are told they cannot.
+
+- `!status` and `!players`: whether the server is up and who is in.
+- `!restart [minutes]` (1 to 60, 5 if not said): players are warned in the game then, 5 and 1 minute before; then the server is stopped the usual way (it saves) and started again. `!restart cancel` stops it.
+- `!save` saves the world; `!msg <text>` says something to everyone in the game.
+- `!help` lists them. They also work in Spanish (`!estado`, `!jugadores`, `!reiniciar`, `!guardar`, `!mensaje`).
+
+They work only while PZ Mod Studio is open, and they never run a console command typed by hand. Use a channel only admins see: the chat channel also goes into the game.
+
 ## Good to know
 
 - Posting to Discord only happens while PZ Mod Studio is open and hosting the server.
