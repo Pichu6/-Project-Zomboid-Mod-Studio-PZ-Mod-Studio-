@@ -427,7 +427,10 @@
       "removedFromProfile": "{{mod}} salió de \"{{name}}\" y quedó apagado.",
       "switchOn": "Activar",
       "switchOff": "Desactivar",
-      "prConfirm": "Esto abre un pull request público en GitHub, desde tu cuenta, con lo que el Studio vio de {{name}}:\n\n{{json}}\n\n¿Lo mandamos?"
+      "prConfirm": "Esto abre un pull request público en GitHub, desde tu cuenta, con lo que el Studio vio de {{name}}:\n\n{{json}}\n\n¿Lo mandamos?",
+      "addNote": "Agregar una nota…",
+      "editNote": "Editar la nota…",
+      "groups": "Grupos…"
     },
     "row": {
       "draftLocked": "Este paquete está abierto en modo borrador y desactivado. No se puede activar hasta empaquetarlo o publicarlo en el Fusionador.",
@@ -567,7 +570,16 @@
     },
     "understood": "Entendido",
     "enableAllConfirm": "¿Activar los {{count}} mod(s) que se ven acá y están apagados?",
-    "disableAllConfirm": "¿Desactivar los {{count}} mod(s) que se ven acá y están prendidos?"
+    "disableAllConfirm": "¿Desactivar los {{count}} mod(s) que se ven acá y están prendidos?",
+    "groups": {
+      "filterLabel": "Grupo",
+      "filterTitle": "Tus grupos de mods (clic derecho en un mod: Grupos…)",
+      "all": "Todos los grupos",
+      "turnOn": "Activar el grupo",
+      "turnOff": "Desactivar el grupo",
+      "turnedOn": "{{name}}: sus mods quedaron activos (con lo que necesitan).",
+      "turnedOff": "{{name}}: sus mods quedaron desactivados."
+    }
   },
   "health": {
     "title": "Salud de mods",
@@ -737,6 +749,22 @@
       "starOff": "Favorito: guardalo en una lista tuya (Explorar mods > Mis listas)",
       "nothingToPick": "Todavía no hay nada para elegir.",
       "close": "Cerrar"
+    },
+    "meta": {
+      "blurb": "Solo tuyos. El juego también los muestra (PZ Mod Studio Link), y ahí se puede activar o desactivar un grupo.",
+      "close": "Cerrar",
+      "tab_note": "Nota",
+      "tab_groups": "Grupos",
+      "notePlaceholder": "Rompe con X, probarlo en la próxima partida, hay que configurar sus opciones…",
+      "saveNote": "Guardar",
+      "deleteNote": "Borrar la nota",
+      "noGroups": "Todavía no hay grupos: escribí uno abajo.",
+      "rename": "Renombrar",
+      "deleteGroup": "Borrar el grupo",
+      "deleteGroupConfirm": "¿Borrar el grupo \"{{name}}\"? Sus mods quedan como están.",
+      "newGroupPlaceholder": "Grupo nuevo (Armas, Interfaz…)",
+      "addGroup": "Agregar",
+      "groupsBlurb": "Un grupo que queda vacío desaparece. Los grupos no cambian el orden de carga."
     }
   },
   "browse": {

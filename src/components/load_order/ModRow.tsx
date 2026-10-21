@@ -6,7 +6,7 @@ import { SourceBadge, sourceOf } from '../common/SourceBadge';
 import { Tip, TipBody } from '../common/Tip';
 import { RichText } from '../common/RichText';
 import { RowHealthChips } from './RowHealth';
-import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered, MapPin, Package, Star } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered, MapPin, Package, Star, StickyNote } from 'lucide-react';
 
 /** Below this a mod's loading time is a few milliseconds of mod.info and translations: not worth a tag. */
 export const SLOW_LOAD_MS = 250;
@@ -25,6 +25,9 @@ export interface ModRowBodyProps {
   loadTimes?: Map<string, number>;
   /** In the player's Favorites list. */
   isFavorite?: boolean;
+  /** The player's note on it, and the groups they put it in. */
+  note?: string;
+  groups?: string[];
   /** Showing everything: say which profiles each mod belongs to. */
   showEveryMod: boolean;
   activeProfile: AppInstance | null;
@@ -67,6 +70,8 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   errorStats,
   loadTimes,
   isFavorite = false,
+  note,
+  groups = [],
   showEveryMod,
   activeProfile,
   profilesByMod,
@@ -155,6 +160,11 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
           {mod.name}
         </span>
         {isFavorite && <Star className="w-3 h-3 shrink-0 text-amber-400 fill-amber-400" aria-label="In Favorites" />}
+        {note && <span title={note} className="shrink-0 inline-flex"><StickyNote className="w-3 h-3 text-sky-300" aria-label={note} /></span>}
+        {groups.slice(0, 2).map((g) => (
+          <span key={g} className="shrink-0 text-[9px] px-1.5 py-px rounded bg-violet-900/50 text-violet-200 border border-violet-700/50">{g}</span>
+        ))}
+        {groups.length > 2 && <span className="shrink-0 text-[9px] text-violet-300" title={groups.join(', ')}>+{groups.length - 2}</span>}
       </div>
 
       <div className="flex items-start gap-2 min-w-0">

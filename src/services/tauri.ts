@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, PublicServer, ServerRules, SavedServer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -815,6 +815,27 @@ export const TauriService = {
     } catch (err) {
       reportBackendError('Saving the Mods screen choice', err);
     }
+  },
+
+  /** The player's notes on mods and groups of mods (the game's Link shows them too). */
+  modMeta: async (paths: StudioPathsUI): Promise<ModMeta> => {
+    try {
+      return await invoke<ModMeta>('mod_meta_cmd', { paths });
+    } catch {
+      return { notes: {}, groups: [] };
+    }
+  },
+  setModNote: async (paths: StudioPathsUI, modId: string, note: string): Promise<ModMeta> => {
+    return await invoke<ModMeta>('set_mod_note_cmd', { paths, modId, note });
+  },
+  setInModGroup: async (paths: StudioPathsUI, group: string, modIds: string[], inside: boolean): Promise<ModMeta> => {
+    return await invoke<ModMeta>('set_in_mod_group_cmd', { paths, group, modIds, inside });
+  },
+  renameModGroup: async (paths: StudioPathsUI, from: string, to: string): Promise<ModMeta> => {
+    return await invoke<ModMeta>('rename_mod_group_cmd', { paths, from, to });
+  },
+  deleteModGroup: async (paths: StudioPathsUI, name: string): Promise<ModMeta> => {
+    return await invoke<ModMeta>('delete_mod_group_cmd', { paths, name });
   },
 
   /** How the Studio's window opens and what its close button does. */

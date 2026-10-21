@@ -427,7 +427,10 @@
       "removedFromProfile": "{{mod}} is out of \"{{name}}\" and switched off.",
       "switchOn": "Switch on",
       "switchOff": "Switch off",
-      "prConfirm": "This opens a public pull request on GitHub, from your account, with what the Studio saw of {{name}}:\n\n{{json}}\n\nSend it?"
+      "prConfirm": "This opens a public pull request on GitHub, from your account, with what the Studio saw of {{name}}:\n\n{{json}}\n\nSend it?",
+      "addNote": "Add a note…",
+      "editNote": "Edit the note…",
+      "groups": "Groups…"
     },
     "row": {
       "draftLocked": "This package is open in draft mode and deactivated. It cannot be enabled until it is packaged/published in Mod Merger.",
@@ -567,7 +570,16 @@
     },
     "understood": "Understood",
     "enableAllConfirm": "Switch on the {{count}} mod(s) shown here that are off?",
-    "disableAllConfirm": "Switch off the {{count}} mod(s) shown here that are on?"
+    "disableAllConfirm": "Switch off the {{count}} mod(s) shown here that are on?",
+    "groups": {
+      "filterLabel": "Group",
+      "filterTitle": "Your own groups of mods (right-click a mod: Groups…)",
+      "all": "All groups",
+      "turnOn": "Turn the group on",
+      "turnOff": "Turn the group off",
+      "turnedOn": "{{name}}: its mods are on (with what they require).",
+      "turnedOff": "{{name}}: its mods are off."
+    }
   },
   "health": {
     "title": "Mod Health",
@@ -737,6 +749,22 @@
       "starOff": "Favorite: keep it in a list of yours (Browse Mods > My lists)",
       "nothingToPick": "Nothing to pick from yet.",
       "close": "Close"
+    },
+    "meta": {
+      "blurb": "Yours only. The game shows them too (PZ Mod Studio Link), where a group can be turned on or off.",
+      "close": "Close",
+      "tab_note": "Note",
+      "tab_groups": "Groups",
+      "notePlaceholder": "Breaks with X, try it in the next save, needs its options set to…",
+      "saveNote": "Save",
+      "deleteNote": "Delete the note",
+      "noGroups": "No groups yet: name one below.",
+      "rename": "Rename",
+      "deleteGroup": "Delete the group",
+      "deleteGroupConfirm": "Delete the group \"{{name}}\"? Its mods stay as they are.",
+      "newGroupPlaceholder": "New group (Weapons, Interface…)",
+      "addGroup": "Add to it",
+      "groupsBlurb": "A group left empty goes away. Groups do not change the load order."
     }
   },
   "browse": {

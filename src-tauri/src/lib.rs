@@ -11,6 +11,7 @@ pub mod instance_manager;
 pub mod lists;
 pub mod load_order;
 pub mod map_cells;
+pub mod mod_meta;
 pub mod mcp;
 pub mod mod_install;
 pub mod mplint;
@@ -587,6 +588,36 @@ fn set_link_screen_choice_cmd(paths: StudioPaths, screen: String) -> Result<(), 
     let z = zomboid_dir_of(&paths)?;
     let (_, other) = studio_link::screen_choice(&z);
     studio_link::set_screen_choice(&z, &screen, &other)
+}
+
+/// The player's notes on mods and groups of mods.
+#[tauri::command(async)]
+fn mod_meta_cmd(paths: StudioPaths) -> Result<mod_meta::ModMeta, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let meta = mod_meta::read(&z);
+    // The Link's copy, in case the game's folder came after the note.
+    mod_meta::write_link_copy(&z, &meta);
+    Ok(meta)
+}
+
+#[tauri::command(async)]
+fn set_mod_note_cmd(paths: StudioPaths, mod_id: String, note: String) -> Result<mod_meta::ModMeta, String> {
+    mod_meta::set_note(&zomboid_dir_of(&paths)?, &mod_id, &note)
+}
+
+#[tauri::command(async)]
+fn set_in_mod_group_cmd(paths: StudioPaths, group: String, mod_ids: Vec<String>, inside: bool) -> Result<mod_meta::ModMeta, String> {
+    mod_meta::set_in_group(&zomboid_dir_of(&paths)?, &group, &mod_ids, inside)
+}
+
+#[tauri::command(async)]
+fn rename_mod_group_cmd(paths: StudioPaths, from: String, to: String) -> Result<mod_meta::ModMeta, String> {
+    mod_meta::rename_group(&zomboid_dir_of(&paths)?, &from, &to)
+}
+
+#[tauri::command(async)]
+fn delete_mod_group_cmd(paths: StudioPaths, name: String) -> Result<mod_meta::ModMeta, String> {
+    mod_meta::delete_group(&zomboid_dir_of(&paths)?, &name)
 }
 
 /// How the Studio's window opens and what its close button does.
@@ -1438,6 +1469,11 @@ pub fn run() {
             link_status_cmd,
             saves_overview_cmd,
             map_cells_cmd,
+            mod_meta_cmd,
+            set_mod_note_cmd,
+            set_in_mod_group_cmd,
+            rename_mod_group_cmd,
+            delete_mod_group_cmd,
             link_screen_choice_cmd,
             set_link_screen_choice_cmd,
             window_prefs_cmd,

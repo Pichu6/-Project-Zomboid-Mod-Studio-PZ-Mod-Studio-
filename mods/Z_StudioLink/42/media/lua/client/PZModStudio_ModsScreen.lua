@@ -7,8 +7,12 @@
 -- grouping by author or category, each mod's options page (Mod Options), a summary on top that
 -- filters, and Accept / Back like the game's screen. What it
 -- changes goes to mods/default.txt exactly as the game's screen writes it.
+-- Also on its own: the map order (the game's own Map Order screen, on the list being edited),
+-- undo / redo (Ctrl+Z, Ctrl+Y), and the list / details split dragged wider or narrower.
 -- With PZ Mod Studio: the profile's mods first, Mod Health's warnings on each mod, the mods
--- updated since the last session, and the mods installed but in no profile, added in one click.
+-- updated since the last session, the mods installed but in no profile (added in one click),
+-- and the player's own notes and groups (made in the app; here they are shown, and a group's
+-- heading selects its mods to turn them on or off together).
 -- The game's own screen is one button away ("The game's screen"), and another mod manager that
 -- owns the Mods screen (see PZModStudio_Link.lua) keeps it: then this screen never opens.
 
@@ -19,6 +23,7 @@ require "ISUI/ISTextEntryBox"
 require "ISUI/ISScrollingListBox"
 require "ISUI/ISRichTextPanel"
 require "OptionScreens/MainScreen"
+require "OptionScreens/ModSelector/MapOrderUI"
 
 local Link = PZModStudioLink
 local text = Link.text
@@ -30,6 +35,8 @@ local WORKSHOP_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id="
 local FAVOURITES_FILE = "pz_modlist_settings.cfg"
 local UPDATED_FILE = "PZModStudio_LinkUpdated.txt"
 local FILTERS = { "all", "on", "off", "favourites", "updated", "problems", "maps" }
+local META_FILE = "PZModStudio_LinkMeta.txt"
+local VIEW_FILE = "PZModStudio_LinkView.txt"
 
 -- The app's colours (Tailwind slate and emerald), as 0..1.
 local C = {
@@ -146,6 +153,54 @@ local function readUpdated()
     return updated
 end
 
+--- The player's notes and groups, as the app wrote them: notes[id] = text, groups = { {name, ids} }.
+local function readMeta()
+    local notes, groups = {}, {}
+    local file = getFileReader(META_FILE, false)
+    if not file then return notes, groups end
+    local line = file:readLine()
+    while line ~= nil do
+        local key, rest = string.match(line, "^(%a+)=(.*)$")
+        if key == "note" then
+            local id, note = string.match(rest, "^([^\t]+)\t(.*)$")
+            if id then notes[plainId(id)] = note end
+        elseif key == "group" then
+            local name, ids = string.match(rest, "^([^\t]+)\t(.*)$")
+            if name then
+                local g = { name = name, ids = {} }
+                for id in string.gmatch(ids, "[^;]+") do table.insert(g.ids, plainId(id)) end
+                table.insert(groups, g)
+            end
+        end
+        line = file:readLine()
+    end
+    file:close()
+    return notes, groups
+end
+
+--- How wide the list is (a share of the screen), as the player last left it.
+local function readRatio()
+    local ratio = 0.52
+    local file = getFileReader(VIEW_FILE, false)
+    if file then
+        local line = file:readLine()
+        while line ~= nil do
+            local v = string.match(line, "^ratio=([%d%.]+)")
+            if v then ratio = tonumber(v) or ratio end
+            line = file:readLine()
+        end
+        file:close()
+    end
+    return math.max(0.3, math.min(0.75, ratio))
+end
+
+local function writeRatio(ratio)
+    local file = getFileWriter(VIEW_FILE, true, false)
+    if not file then return end
+    file:write("ratio=" .. string.format("%.3f", ratio) .. "\n")
+    file:close()
+end
+
 -- ------------------------------------------------------------------ the list
 
 local ModList = ISScrollingListBox:derive("StudioLinkModList")
@@ -224,6 +279,7 @@ function ModList:doDrawItem(y, item, alt)
     if on and screen.position[mod.id] then tag("#" .. tostring(screen.position[mod.id]), C.muted) end
     if screen.changed[mod.id] then tag("*", C.accent) end
     if mod.map then tag(text("modsMap"), C.map) end
+    if screen.notes[mod.id] then tag(text("modsNoteTag"), C.info) end
     if screen.updated[mod.id] == "updated" then tag(text("modsUpdated"), C.info) end
     if screen.updated[mod.id] == "waiting" then tag(text("modsWaiting"), C.warn) end
     if not mod.available then tag(text("modsNotForBuild"), C.muted) end
@@ -239,9 +295,21 @@ function ModList:onMouseDown(x, y)
     local row = self:rowAt(x, y)
     if row < 1 or row > #self.items then return end
     local mod = self.items[row].item
-    if mod.header then return end
-    getSoundManager():playUISound("UISelectListItem")
     local screen = self.screen
+    if mod.header then
+        -- A heading selects every mod under it: then they are turned on or off together.
+        getSoundManager():playUISound("UISelectListItem")
+        screen.multi = {}
+        for i = row + 1, #self.items do
+            local m = self.items[i].item
+            if m.header then break end
+            screen.multi[m.id] = true
+        end
+        self.selected = row
+        screen:select(nil, mod.header)
+        return
+    end
+    getSoundManager():playUISound("UISelectListItem")
     -- Ctrl adds or takes one mod, Shift takes the rows from the last one clicked: several mods.
     if isCtrlKeyDown() or isShiftKeyDown() then
         if isShiftKeyDown() and self.anchor then
@@ -304,6 +372,29 @@ function ModList:onMouseDoubleClick(x, y)
     if row >= 1 and row <= #self.items and x >= TICK_RIGHT and not self.items[row].item.header then self.screen:toggle(self.items[row].item) end
 end
 
+-- The handle between the list and the details: dragged, the list gets wider or narrower.
+local Divider = ISPanel:derive("StudioLinkModsDivider")
+
+function Divider:new(x, y, h, screen)
+    local o = ISPanel.new(self, x, y, 14, h)
+    o.screen = screen
+    o.background = false
+    return o
+end
+
+function Divider:prerender()
+    local c = (self.dragging or self:isMouseOver()) and C.accent or C.border
+    self:drawRect(6, 0, 2, self.height, 1, c[1], c[2], c[3])
+end
+
+-- Pressed, the screen follows the pointer every frame while the button is down (the pointer
+-- soon leaves this narrow strip, and its own mouse events with it).
+function Divider:onMouseDown(x, y)
+    self.dragging = true
+    self.screen.resizing = true
+    return true
+end
+
 -- ------------------------------------------------------------------ the screen
 
 function Screen:new(x, y, w, h)
@@ -314,6 +405,9 @@ function Screen:new(x, y, w, h)
     o.sort = "name"
     o.group = "none"
     o.multi = {}
+    o.notes, o.groups = {}, {}
+    o.history, o.future = {}, {}
+    o.ratio = readRatio()
     o.search = ""
     o.on, o.changed, o.position, o.missingReq, o.health, o.updated, o.favs = {}, {}, {}, {}, {}, {}, {}
     -- Big screens get bigger rows and text.
@@ -338,6 +432,7 @@ function Screen:readState()
     self.link = Link.appInstalled() and Link.read() or nil
     self.health = self.link and Link.readHealth() or {}
     self.updated = Link.appInstalled() and readUpdated() or {}
+    if Link.appInstalled() then self.notes, self.groups = readMeta() end
     self.onlyProfile = self.link ~= nil
     self:recount()
 end
@@ -372,6 +467,7 @@ function Screen:recount()
         if kept[i] ~= now[i] then self.orderChanged = true end
     end
     if self.orderChanged then self.changes = self.changes + 1 end
+    if self.mapOrderChanged then self.changes = self.changes + 1 end
     -- The summary on top.
     self.counts = { problems = 0, updated = 0, favourites = 0 }
     for _, mod in ipairs(self.mods) do
@@ -416,6 +512,16 @@ end
 
 --- A mod's group: its author(s), or its category (a map mod with none set is a map).
 function Screen:groupOf(mod)
+    if self.group == "mine" then
+        local out = {}
+        for _, g in ipairs(self.groups) do
+            for _, id in ipairs(g.ids) do
+                if id == mod.id then table.insert(out, g.name) end
+            end
+        end
+        if #out == 0 then return text("modsNoGroup") end
+        return out
+    end
     if self.group == "author" then
         return mod.author ~= "" and mod.author or text("modsNoAuthor")
     end
@@ -437,14 +543,23 @@ function Screen:refreshList()
         -- Groups by name, the mods of each in the order chosen, a heading above each.
         local groups, keys = {}, {}
         for _, mod in ipairs(mods) do
-            local g = self:groupOf(mod)
-            if not groups[g] then
-                groups[g] = {}
-                table.insert(keys, g)
+            local gs = self:groupOf(mod)
+            if type(gs) ~= "table" then gs = { gs } end
+            -- A mod in several of the player's groups is under each of them.
+            for _, g in ipairs(gs) do
+                if not groups[g] then
+                    groups[g] = {}
+                    table.insert(keys, g)
+                end
+                table.insert(groups[g], mod)
             end
-            table.insert(groups[g], mod)
         end
-        table.sort(keys, function(a, b) return string.lower(a) < string.lower(b) end)
+        -- By name; "(no author)", "(in none of your groups)"... last.
+        local last = { [text("modsNoAuthor")] = true, [text("modsNoCategory")] = true, [text("modsNoGroup")] = true }
+        table.sort(keys, function(a, b)
+            if last[a] ~= last[b] then return not last[a] end
+            return string.lower(a) < string.lower(b)
+        end)
         for _, g in ipairs(keys) do
             table.insert(rows, { header = g, count = #groups[g], id = "\0" .. g })
             for _, mod in ipairs(groups[g]) do table.insert(rows, mod) end
@@ -477,6 +592,40 @@ end
 function Screen:say(message)
     self.note = message
     self.noteAt = Link.now()
+end
+
+-- ------------------------------------------------------------------ undo / redo
+
+local function snapshot(self)
+    local order, on = {}, {}
+    for i, id in ipairs(self.order) do order[i] = id end
+    for id, v in pairs(self.on) do on[id] = v end
+    return { order = order, on = on }
+end
+
+--- Called before every change to the list: what Undo goes back to.
+function Screen:checkpoint()
+    table.insert(self.history, snapshot(self))
+    if #self.history > 50 then table.remove(self.history, 1) end
+    self.future = {}
+end
+
+function Screen:restore(state)
+    self.order, self.on = state.order, state.on
+    self:recount()
+    self:refreshList()
+end
+
+function Screen:undo()
+    if #self.history == 0 then return end
+    table.insert(self.future, snapshot(self))
+    self:restore(table.remove(self.history))
+end
+
+function Screen:redo()
+    if #self.future == 0 then return end
+    table.insert(self.history, snapshot(self))
+    self:restore(table.remove(self.future))
 end
 
 -- ------------------------------------------------------------------ favourites
@@ -559,6 +708,7 @@ function Screen:toggle(mod)
         local extra, missing = {}, {}
         self:needed(mod, extra, missing)
         local function apply()
+            self:checkpoint()
             for _, r in ipairs(extra) do self:setOn(r, true) end
             self:setOn(mod, true)
             self:recount()
@@ -577,6 +727,7 @@ function Screen:toggle(mod)
         local deps = {}
         self:dependents(mod, deps)
         local function apply()
+            self:checkpoint()
             for _, d in ipairs(deps) do self:setOn(d, false) end
             self:setOn(mod, false)
             self:recount()
@@ -631,6 +782,7 @@ function Screen:toggleMany(mods)
             end
         end
         local function apply()
+            self:checkpoint()
             for _, r in ipairs(extra) do self:setOn(r, true) end
             for _, mod in ipairs(mods) do
                 if mod.available then self:setOn(mod, true) end
@@ -659,6 +811,7 @@ function Screen:toggleMany(mods)
             end
         end
         local function apply()
+            self:checkpoint()
             for _, d in ipairs(deps) do self:setOn(d, false) end
             for _, mod in ipairs(mods) do self:setOn(mod, false) end
             self:recount()
@@ -681,6 +834,52 @@ function Screen:favouriteMany(mods)
     pcall(writeFavourites, self.favs)
     self:recount()
     if self.filter == "favourites" then self:refreshList() else self:updateButtons() end
+end
+
+-- ------------------------------------------------------------------ map order
+
+--- The game's own Map Order screen, on the list as it is here (not yet accepted): its model is
+--- the game's, pointed at "currentGame" filled with this list. Its order comes back here and is
+--- written with the rest on Accept.
+function Screen:openMapOrder()
+    local temp = ActiveMods.getById("currentGame")
+    temp:copyFrom(ActiveMods.getById("default"))
+    local list = temp:getMods()
+    list:clear()
+    for _, id in ipairs(self.order) do list:add(id) end
+    if self.mapOrder then
+        temp:getMapOrder():clear()
+        for _, m in ipairs(self.mapOrder) do temp:getMapOrder():add(m) end
+    end
+    local model = setmetatable({ isNewGame = true, mapGroups = MapGroups.new() }, { __index = ModSelector.Model })
+    if not model:checkMapConflicts() then return self:say(text("modsMapOrderNone")) end
+    local ui = MapOrderUI:new(self.x + self.width * 0.15, self.y + self.height * 0.1, self.width * 0.7, self.height * 0.8, model)
+    ui:initialise()
+    ui:instantiate()
+    local screen = self
+    local function back()
+        ui:setVisible(false)
+        ui:removeFromUIManager()
+        screen:setVisible(true)
+    end
+    ui.onOptionMouseDown = function(panel, button)
+        if button.internal == "ACCEPT" then
+            panel:onAccept()
+            screen:checkpoint()
+            screen.mapOrder = {}
+            local order = temp:getMapOrder()
+            for i = 0, order:size() - 1 do table.insert(screen.mapOrder, order:get(i)) end
+            screen.mapOrderChanged = true
+            screen:recount()
+            screen:updateButtons()
+            back()
+        elseif button.internal == "BACK" then
+            back()
+        end
+    end
+    self:setVisible(false)
+    ui:addToUIManager()
+    ui:bringToTop()
 end
 
 -- ------------------------------------------------------------------ Mod Options
@@ -737,6 +936,7 @@ function Screen:move(mod, step)
             end
         end
     end
+    self:checkpoint()
     self.order[at], self.order[to] = self.order[to], self.order[at]
     self.note = nil
     self:recount()
@@ -753,6 +953,7 @@ function Screen:dropAt(mod, target)
     if not mod or not target or target.header or mod.id == target.id then return end
     if self.sort ~= "order" or self.group ~= "none" then return self:say(text("modsDragNeedsOrder")) end
     if not self.on[mod.id] or not self.on[target.id] then return self:say(text("modsDragOnlyOn")) end
+    self:checkpoint()
     local from
     for i, id in ipairs(self.order) do
         if plainId(id) == mod.id then from = i end
@@ -787,9 +988,10 @@ end
 
 -- ------------------------------------------------------------------ details
 
-function Screen:select(mod)
+function Screen:select(mod, groupName)
     if mod and mod.header then mod = nil end
     self.selectedMod = mod
+    self.selectedGroup = groupName
     if not self.desc then return end
     local many = self:multiMods()
     if #many > 1 then
@@ -821,6 +1023,8 @@ function Screen:select(mod)
     local info = mod.info
     local parts = {}
     local function line(s) table.insert(parts, s) end
+    -- The player's own note (with the app).
+    if self.notes[mod.id] then line(" <RGB:0.55,0.8,1> " .. text("modsYourNote") .. " " .. self.notes[mod.id] .. " <RGB:1,1,1> <LINE> <LINE> ") end
     -- What Mod Health says (with the app).
     local health = self.health[mod.id]
     if health then
@@ -921,6 +1125,8 @@ function Screen:updateButtons()
         self.favButton:setTitle(self.favs[mod.id] and text("modsUnfavourite") or text("modsFavourite"))
     end
     self.acceptButton:setTitle(self.changes > 0 and text("modsAcceptN", self.changes) or text("modsAccept"))
+    self.undoButton:setEnable(#self.history > 0)
+    self.redoButton:setEnable(#self.future > 0)
     for key, button in pairs(self.filterButtons) do
         styleButton(button, key == self.filter)
     end
@@ -981,9 +1187,15 @@ function Screen:createChildren()
     end)
     fx = self.sortButton:getRight() + 6
     local gw = 0
-    for _, g in ipairs({ "none", "author", "category" }) do gw = math.max(gw, measure(UIFont.Small, text("modsGroup_" .. g))) end
+    for _, g in ipairs({ "none", "author", "category", "mine" }) do gw = math.max(gw, measure(UIFont.Small, text("modsGroup_" .. g))) end
     self.groupButton = button(self, fx, top, gw + 22, bh, text("modsGroup_none"), function(screen)
-        screen.group = (screen.group == "none" and "author") or (screen.group == "author" and "category") or "none"
+        local cycle = { "none", "author", "category" }
+        if #screen.groups > 0 then table.insert(cycle, "mine") end
+        local nextGroup = cycle[1]
+        for i, g in ipairs(cycle) do
+            if g == screen.group then nextGroup = cycle[(i % #cycle) + 1] end
+        end
+        screen.group = nextGroup
         screen:refreshList()
     end)
     fx = self.groupButton:getRight() + 6
@@ -1032,7 +1244,8 @@ function Screen:createChildren()
 
     local listTop = top + bh + 12
     local bottom = self.height - pad - bh - 14
-    local listW = math.floor((self.width - pad * 3) * 0.52)
+    local listW = math.floor((self.width - pad * 3) * self.ratio)
+    self.layoutTop, self.layoutBottom, self.bh = listTop, bottom, bh
     self.list = ModList:new(pad, listTop, listW, bottom - listTop, self)
     self.list:initialise()
     self.list:instantiate()
@@ -1076,17 +1289,84 @@ function Screen:createChildren()
     self:addChild(self.desc)
     self.noteY = bottom - 18
 
-    -- The bottom bar: the game's own screen on the left, Back and Accept on the right.
+    self.divider = Divider:new(dx - pad + 3, listTop, bottom - listTop, self)
+    self.divider:initialise()
+    self:addChild(self.divider)
+
+    -- The bottom bar: the game's own screen, undo / redo and the map order on the left, Back
+    -- and Accept on the right.
     local fy = self.height - pad - bh
-    button(self, pad, fy, measure(UIFont.Small, text("modsGameScreen")) + 26, bh, text("modsGameScreen"), function(screen) screen:openGameScreen() end)
+    local gs = button(self, pad, fy, measure(UIFont.Small, text("modsGameScreen")) + 26, bh, text("modsGameScreen"), function(screen) screen:openGameScreen() end)
+    self.undoButton = button(self, gs:getRight() + 16, fy, measure(UIFont.Small, text("modsUndo")) + 26, bh, text("modsUndo"), function(screen) screen:undo() end)
+    self.redoButton = button(self, self.undoButton:getRight() + 6, fy, measure(UIFont.Small, text("modsRedo")) + 26, bh, text("modsRedo"), function(screen) screen:redo() end)
+    self.mapOrderButton = button(self, self.redoButton:getRight() + 16, fy, measure(UIFont.Small, text("modsMapOrder")) + 26, bh, text("modsMapOrder"), function(screen) screen:openMapOrder() end)
     self.acceptButton = button(self, self.width - pad - 200, fy, 200, bh, text("modsAccept"), function(screen) screen:accept() end, true)
     self.backButton = button(self, self.acceptButton.x - 140, fy, 130, bh, text("back"), function(screen) screen:back() end)
 
     self:refreshList()
 end
 
+--- The list and the details, re-placed for a new split (the divider dragged).
+function Screen:setRatio(ratio)
+    ratio = math.max(0.3, math.min(0.75, ratio))
+    if math.abs(ratio - self.ratio) < 0.005 then
+        self.divider:setX(self.detailX - 17)
+        return
+    end
+    self.ratio = ratio
+    local pad = 20
+    local listW = math.floor((self.width - pad * 3) * ratio)
+    -- A new list at the new width (the game's list does not take a new width well).
+    local old = self.list
+    self.list = ModList:new(pad, old.y, listW, old.height, self)
+    self.list:initialise()
+    self.list:instantiate()
+    self:removeChild(old)
+    self:addChild(self.list)
+    self:refreshList()
+    local dx = pad * 2 + listW
+    local dw = self.width - dx - pad
+    self.detailX, self.detailW = dx, dw
+    self.divider:setX(dx - 17)
+    self.posterSize = math.min(self.big and 256 or 190, math.floor(dw * 0.42))
+    local bx = dx + self.posterSize + 16
+    local bw = math.min(200, dw - self.posterSize - 16)
+    local half = math.floor((bw - 6) / 2)
+    for _, b in ipairs({ self.toggleButton, self.favButton, self.workshopButton, self.optionsButton }) do
+        b:setX(bx)
+        b:setWidth(bw)
+    end
+    self.upButton:setX(bx)
+    self.upButton:setWidth(half)
+    self.downButton:setX(bx + half + 6)
+    self.downButton:setWidth(bw - half - 6)
+    local descTop = math.max(self.detailY + self.posterSize, self.optionsButton:getBottom()) + 14
+    self.desc:setX(dx)
+    self.desc:setY(descTop)
+    self.desc:setWidth(dw)
+    self.desc:setHeight(self.layoutBottom - descTop - 24)
+    if self.desc.vscroll then
+        self.desc.vscroll:setX(dw - self.desc.vscroll.width)
+        self.desc.vscroll:setHeight(self.desc.height)
+    end
+    self.desc:paginate()
+end
+
 function Screen:prerender()
     ISPanelJoypad.prerender(self)
+    -- While the divider is held only its line follows the pointer; let go, the list and the
+    -- details are laid out again for the new split.
+    if self.resizing then
+        local ratio = math.max(0.3, math.min(0.75, (self:getMouseX() - 40) / (self.width - 60)))
+        if isMouseButtonDown(0) then
+            self.divider:setX(40 + math.floor((self.width - 60) * ratio) - 17)
+        else
+            self.resizing = false
+            self.divider.dragging = false
+            self:setRatio(ratio)
+            pcall(writeRatio, self.ratio)
+        end
+    end
     local pad = 20
     self:drawText(text("modsTitle"), pad, self.top, C.text[1], C.text[2], C.text[3], 1, UIFont.Large)
     -- Under the title: the profile (with the app) or what is installed (without it).
@@ -1120,7 +1400,8 @@ function Screen:prerender()
     local mod = self.selectedMod
     local many = #self:multiMods()
     if many > 1 then
-        self:drawText(text("modsSelected", many), self.detailX + self.posterSize + 16, self.detailY, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
+        local title = self.selectedGroup and text("modsGroupSelected", self.selectedGroup, many) or text("modsSelected", many)
+        self:drawText(title, self.detailX + self.posterSize + 16, self.detailY, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
     elseif mod then
         -- Beside the poster: the name (up to two lines), then id, Workshop, version, author.
         local nx = self.detailX + self.posterSize + 16
@@ -1188,6 +1469,10 @@ function Screen:accept()
             mods:add(id)
         end
         for _, id in ipairs(self.order) do place(id) end
+        if self.mapOrder then
+            active:getMapOrder():clear()
+            for _, m in ipairs(self.mapOrder) do active:getMapOrder():add(m) end
+        end
         active:checkMissingMods()
         active:checkMissingMaps()
         saveModsFile()
@@ -1269,7 +1554,13 @@ function Screen:onJoypadDirDown()
 end
 
 function Screen:onKeyRelease(key)
-    if key == Keyboard.KEY_ESCAPE then self:back() end
+    if key == Keyboard.KEY_ESCAPE then
+        self:back()
+    elseif key == Keyboard.KEY_Z and isCtrlKeyDown() then
+        self:undo()
+    elseif key == Keyboard.KEY_Y and isCtrlKeyDown() then
+        self:redo()
+    end
 end
 
 -- ------------------------------------------------------------------ opening it

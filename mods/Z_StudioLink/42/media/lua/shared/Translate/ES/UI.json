@@ -136,5 +136,14 @@
     "UI_StudioLink_modsCategory_modpack": "Paquetes",
     "UI_StudioLink_modsSumProblems": "{1} con problemas",
     "UI_StudioLink_modsSumUpdated": "{1} actualizados",
-    "UI_StudioLink_modsSumFavourites": "{1} favoritos"
+    "UI_StudioLink_modsSumFavourites": "{1} favoritos",
+    "UI_StudioLink_modsUndo": "Deshacer",
+    "UI_StudioLink_modsRedo": "Rehacer",
+    "UI_StudioLink_modsMapOrder": "Orden de mapas",
+    "UI_StudioLink_modsMapOrderNone": "Ningún par de mods de mapas activos comparte lugar: no hay orden de mapas que elegir.",
+    "UI_StudioLink_modsNoteTag": "nota",
+    "UI_StudioLink_modsYourNote": "Tu nota:",
+    "UI_StudioLink_modsGroup_mine": "Grupos: míos",
+    "UI_StudioLink_modsNoGroup": "(en ninguno de tus grupos)",
+    "UI_StudioLink_modsGroupSelected": "{1}: {2} mods"
 }

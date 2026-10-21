@@ -1,6 +1,8 @@
 import { freshProfile } from '../../utils/profiles';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat, profileMembers, STUDIO_LINK_MOD_ID } from '../../types';
+import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat, profileMembers, STUDIO_LINK_MOD_ID, ModMeta } from '../../types';
+import { ModMetaDialog } from './ModMetaDialog';
+import { enableWithRequirements } from '../../utils/planner';
 import { sourceOf } from '../common/SourceBadge';
 import { MenuItem, useContextMenu } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
@@ -40,6 +42,8 @@ import {
   Search,
   ShieldCheck,
   Square,
+  StickyNote,
+  Tags,
   Wand2,
   X,
 } from 'lucide-react';
@@ -518,6 +522,29 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
    * chips), so the list can be narrowed to one of them. A tag is the same word as the chip.
    */
   const [tagFilter, setTagFilter] = useState<string>('all');
+  // The player's notes and groups (kept by the app; the game's Link shows them).
+  const [meta, setMeta] = useState<ModMeta>({ notes: {}, groups: [] });
+  const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [metaOf, setMetaOf] = useState<{ mod: ModInfo; tab: 'note' | 'groups' } | null>(null);
+  useEffect(() => {
+    if (!paths.user_zomboid_dir) return;
+    void TauriService.modMeta(paths).then(setMeta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paths.user_zomboid_dir]);
+  const groupsByMod = useMemo(() => {
+    const out = new Map<string, string[]>();
+    for (const g of meta.groups) for (const id of g.mods) out.set(id, [...(out.get(id) ?? []), g.name]);
+    return out;
+  }, [meta]);
+  /** Turns every mod of a group on (with what they require) or off. */
+  const setGroupOn = (name: string, on: boolean) => {
+    const group = meta.groups.find((g) => g.name === name);
+    if (!group) return;
+    const ids = new Set(group.mods);
+    const next = on ? enableWithRequirements(mods, group.mods) : mods.map((m) => (ids.has(m.mod_id) && m.mod_id !== STUDIO_LINK_MOD_ID ? { ...m, enabled: false } : m));
+    onReorder(next);
+    showToast(on ? t('modList.groups.turnedOn', { name }) : t('modList.groups.turnedOff', { name }));
+  };
   const modTags = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const m of mods) {
@@ -548,14 +575,19 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
       if (!matchesFilter(m, stateFilter)) return false;
       if (tagFilter !== 'all' && !(modTags.get(m.mod_id) ?? []).includes(tagFilter)) return false;
+      if (groupFilter !== 'all' && !(groupsByMod.get(m.mod_id) ?? []).includes(groupFilter)) return false;
       if (!query) return true;
       return (
         m.name.toLowerCase().includes(query) ||
         m.mod_id.toLowerCase().includes(query) ||
-        (m.workshop_id && m.workshop_id.toLowerCase().includes(query))
+        (m.workshop_id && m.workshop_id.toLowerCase().includes(query)) ||
+        (meta.notes[m.mod_id] ?? '').toLowerCase().includes(query)
       );
     });
   }, [
+    groupFilter,
+    groupsByMod,
+    meta,
     scopeMods,
     searchQuery,
     sourceFilter,
@@ -686,6 +718,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       onSelect: () => TauriService.openModFolder(paths, catalogById?.get(mod.mod_id)?.root_dir ?? ''),
       disabled: !catalogById?.get(mod.mod_id)?.root_dir,
       disabledReason: t('modList.menu.noFolder'),
+    },
+    {
+      label: meta.notes[mod.mod_id] ? t('modList.menu.editNote') : t('modList.menu.addNote'),
+      icon: StickyNote,
+      separatorBefore: true,
+      onSelect: () => setMetaOf({ mod, tab: 'note' }),
+    },
+    {
+      label: t('modList.menu.groups'),
+      icon: Tags,
+      onSelect: () => setMetaOf({ mod, tab: 'groups' }),
     },
     {
       label: t('modList.menu.rules'),
@@ -958,11 +1001,12 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     );
   }
 
-  const anyFilter = stateFilter !== 'all' || sourceFilter !== 'all' || tagFilter !== 'all' || searchQuery !== '';
+  const anyFilter = stateFilter !== 'all' || sourceFilter !== 'all' || tagFilter !== 'all' || groupFilter !== 'all' || searchQuery !== '';
   const clearFilters = () => {
     setStateFilter('all');
     setSourceFilter('all');
     setTagFilter('all');
+    setGroupFilter('all');
     setSearchQuery('');
   };
   /** One of the problem counters of the toolbar: click to walk through those mods. */
@@ -1063,6 +1107,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           <KeptVersions paths={paths} mod={keptVersionsOf} onClose={() => setKeptVersionsOf(null)} onModsChanged={onRefreshMods} toast={showToast} />
           {keep.node}
           <LoadRules paths={paths} mod={rulesOf} mods={mods} installedBuild={installedBuild} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
+          <ModMetaDialog paths={paths} open={metaOf} meta={meta} onChange={setMeta} onClose={() => setMetaOf(null)} />
         </div>
       </div>
 
@@ -1128,6 +1173,26 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </option>
           ))}
         </select>
+        {meta.groups.length > 0 && (
+          <select
+            value={groupFilter}
+            onChange={(e) => setGroupFilter(e.target.value)}
+            aria-label={t('modList.groups.filterLabel')}
+            title={t('modList.groups.filterTitle')}
+            className={selectClass(groupFilter !== 'all')}
+          >
+            <option value="all">{t('modList.groups.all')}</option>
+            {meta.groups.map((g) => (
+              <option key={g.name} value={g.name}>{g.name} ({g.mods.length})</option>
+            ))}
+          </select>
+        )}
+        {groupFilter !== 'all' && (
+          <>
+            <button onClick={() => setGroupOn(groupFilter, true)} className="text-[11px] px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-300 hover:bg-emerald-950/50 cursor-pointer">{t('modList.groups.turnOn')}</button>
+            <button onClick={() => setGroupOn(groupFilter, false)} className="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">{t('modList.groups.turnOff')}</button>
+          </>
+        )}
         {anyFilter && (
           <button onClick={clearFilters} className="text-[11px] text-cyan-400 hover:text-cyan-300 underline cursor-pointer" title={t('modList.clearFiltersTitle')}>
             {t('modList.clearFilters')}
@@ -1360,6 +1425,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       errorStats={errorStats}
                       loadTimes={loadTimes}
                       isFavorite={keep.isFavorite({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })}
+                      note={meta.notes[mod.mod_id]}
+                      groups={groupsByMod.get(mod.mod_id)}
                       showEveryMod={showEveryMod}
                       activeProfile={activeProfile}
                       profilesByMod={profilesByMod}

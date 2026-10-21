@@ -416,6 +416,16 @@ export interface MapCells {
   tiledef_clashes: TiledefClash[];
 }
 
+/** The player's notes on mods and groups of mods (mod_meta::ModMeta). */
+export interface ModGroup {
+  name: string;
+  mods: string[];
+}
+export interface ModMeta {
+  notes: Record<string, string>;
+  groups: ModGroup[];
+}
+
 /** The Studio's window (window_prefs::WindowPrefs). */
 export interface WindowPrefs {
   remember_window: boolean;

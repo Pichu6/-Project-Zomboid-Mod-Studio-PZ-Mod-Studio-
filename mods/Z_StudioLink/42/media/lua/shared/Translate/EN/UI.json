@@ -136,5 +136,14 @@
     "UI_StudioLink_modsCategory_modpack": "Modpacks",
     "UI_StudioLink_modsSumProblems": "{1} with problems",
     "UI_StudioLink_modsSumUpdated": "{1} updated",
-    "UI_StudioLink_modsSumFavourites": "{1} favourites"
+    "UI_StudioLink_modsSumFavourites": "{1} favourites",
+    "UI_StudioLink_modsUndo": "Undo",
+    "UI_StudioLink_modsRedo": "Redo",
+    "UI_StudioLink_modsMapOrder": "Map order",
+    "UI_StudioLink_modsMapOrderNone": "No two map mods that are on share a place: there is no map order to choose.",
+    "UI_StudioLink_modsNoteTag": "note",
+    "UI_StudioLink_modsYourNote": "Your note:",
+    "UI_StudioLink_modsGroup_mine": "Groups: mine",
+    "UI_StudioLink_modsNoGroup": "(in none of your groups)",
+    "UI_StudioLink_modsGroupSelected": "{1}: {2} mods"
 }
