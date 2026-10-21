@@ -1,5 +1,5 @@
 import { freshProfile } from '../../utils/profiles';
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat, profileMembers, STUDIO_LINK_MOD_ID } from '../../types';
 import { sourceOf } from '../common/SourceBadge';
 import { MenuItem, useContextMenu } from '../common/ContextMenu';
@@ -78,6 +78,9 @@ interface LoadOrderModuleProps {
   activeProfileId?: string | null;
   /** After "Add to a profile…": the profiles are read again. */
   onProfilesChanged?: () => void;
+  /** Another screen asked to see this mod: it is selected, scrolled to and highlighted. */
+  focusModId?: string | null;
+  onFocusHandled?: () => void;
 }
 
 const PACKAGE_COLOR_PALETTES = [
@@ -162,6 +165,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   profiles = [],
   activeProfileId = null,
   onProfilesChanged,
+  focusModId = null,
+  onFocusHandled,
 }) => {
   const showContextMenu = useContextMenu();
   const [selectedModId, setSelectedModId] = useState<string | null>(mods.length > 0 ? mods[0].mod_id : null);
@@ -875,6 +880,15 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       setHighlightedModId(null);
     }, 3000);
   };
+
+  // A mod another screen sent here (Maps): every filter off so its row is there, then the jump.
+  useEffect(() => {
+    if (!focusModId || mods.length === 0) return;
+    setStateFilter('all');
+    handleJumpToMod(focusModId);
+    onFocusHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusModId, mods.length]);
 
   const handleJumpToDependency = (depModIdRaw: string) => {
     const targetMod = findInstalledDependency(depModIdRaw);

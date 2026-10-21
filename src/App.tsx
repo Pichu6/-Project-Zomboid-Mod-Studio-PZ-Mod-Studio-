@@ -11,6 +11,7 @@ import { startLiveConsole } from './services/liveConsole';
 import { errorShape } from './utils/errorShape';
 
 import { ServerModule } from './components/server/ServerModule';
+import { JoinServers } from './components/server/JoinServers';
 import { InstanceModule } from './components/instances/InstanceModule';
 import { SavesModule } from './components/saves/SavesModule';
 import { WhatsNewModule } from './components/whatsnew/WhatsNewModule';
@@ -368,6 +369,24 @@ export const App: React.FC = () => {
    * are not subscribed to cannot go in — there is nothing on disk to switch on — so they are
    * counted and named instead, and the collection's own Subscribe button is the way to get them.
    */
+  /** Which half of the Servers screen is shown: joining someone's server, or hosting one. */
+  const [serversView, setServersView] = useState<'JOIN' | 'HOST'>('JOIN');
+
+  /** A profile with the mods a server loaded, in its order. */
+  const handleMakeProfileFromServer = async (name: string, modIds: string[]) => {
+    const installed = new Set(mods.map((m) => m.mod_id));
+    const missing = modIds.filter((id) => !installed.has(id));
+    const ok = confirm(i18next.t('join.profileConfirm', { name, count: modIds.length, missing: missing.length > 0 ? i18next.t('join.profileMissing', { count: missing.length }) : '' }));
+    if (!ok) return;
+    try {
+      await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('join.profileDescription'), modIds, modIds);
+      await refreshActiveProfile();
+      setActiveTab('PROFILES');
+    } catch (err) {
+      reportBackendError('Making the profile', err);
+    }
+  };
+
   const handleMakeProfileFromCollection = async (name: string, workshopIds: string[]) => {
     const wanted = new Set(workshopIds);
     const included = mods.filter((m) => m.workshop_id && wanted.has(m.workshop_id));
@@ -612,6 +631,8 @@ export const App: React.FC = () => {
 
   /** A switch that brings other mods with it, waiting for the player to see it. */
   const [pendingPlan, setPendingPlan] = useState<TogglePlan | null>(null);
+  /** A mod another screen wants shown in the Mod List. */
+  const [modListFocus, setModListFocus] = useState<string | null>(null);
   const applyTogglePlan = (plan: TogglePlan, withExtras: boolean) => {
     const updated = applyPlan(mods, plan, withExtras);
     setPendingPlan(null);
@@ -849,7 +870,22 @@ export const App: React.FC = () => {
 
           {activeTab === 'SAVES' && <SavesModule paths={paths} />}
           {activeTab === 'WHATS_NEW' && <WhatsNewModule paths={paths} />}
-          {activeTab === 'MAPS' && <MapsModule paths={paths} />}
+          {activeTab === 'MAPS' && (
+            <MapsModule
+              paths={paths}
+              activeKey={mods.filter((m) => m.enabled).map((m) => m.mod_id).join('|')}
+              onShowMod={(modId) => {
+                setModListFocus(modId);
+                setActiveTab('MOD_LIST');
+              }}
+              onTurnOff={(modId) => {
+                const target = mods.find((m) => m.mod_id === modId);
+                if (!target || !target.enabled) return;
+                if (!confirm(i18next.t('app.switchOff.confirm', { name: target.name }))) return;
+                handleToggleMod(target.mod_id);
+              }}
+            />
+          )}
 
           {activeTab === 'MOD_LIST' && (
             <LoadOrderModule
@@ -883,15 +919,28 @@ export const App: React.FC = () => {
                 setBrowseFocusWorkshopId(workshopId);
                 setActiveTab('BROWSE');
               }}
+              focusModId={modListFocus}
+              onFocusHandled={() => setModListFocus(null)}
             />
           )}
 
           {activeTab === 'SERVERS' && (
             <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 font-sans">
-              <ServerModule
-                paths={paths}
-                mods={mods}
-              />
+              <div className="flex items-center gap-1 p-1 mb-4 rounded-lg bg-slate-900 border border-slate-800 w-fit">
+                {(['JOIN', 'HOST'] as const).map((k) => (
+                  <button key={k} onClick={() => setServersView(k)} className={`px-4 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${serversView === k ? 'bg-emerald-700/40 text-emerald-100' : 'text-slate-400 hover:text-slate-200'}`}>
+                    {k === 'JOIN' ? i18next.t('join.tabJoin') : i18next.t('join.tabHost')}
+                  </button>
+                ))}
+              </div>
+              {serversView === 'JOIN' ? (
+                <JoinServers paths={paths} mods={mods} installedBuild={health.report?.game_version ?? null} onMakeProfile={handleMakeProfileFromServer} />
+              ) : (
+                <ServerModule
+                  paths={paths}
+                  mods={mods}
+                />
+              )}
             </div>
           )}
 

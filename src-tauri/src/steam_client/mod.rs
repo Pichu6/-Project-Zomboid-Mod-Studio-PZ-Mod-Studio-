@@ -258,6 +258,155 @@ pub fn set_subscriptions(pz_install_dir: &str, ids: &[String], subscribe: bool) 
     Ok(outcome)
 }
 
+/// `servernetadr_t` + `gameserveritem_t` of the Steamworks SDK (matchmakingtypes.h), x64 MSVC
+/// layout: 376 bytes. Only read, never written.
+#[repr(C)]
+struct GameServerItem {
+    connection_port: u16,
+    query_port: u16,
+    ip: u32,
+    ping: i32,
+    had_successful_response: bool,
+    do_not_refresh: bool,
+    game_dir: [u8; 32],
+    map: [u8; 32],
+    game_description: [u8; 64],
+    app_id: u32,
+    players: i32,
+    max_players: i32,
+    bot_players: i32,
+    password: bool,
+    secure: bool,
+    time_last_played: u32,
+    server_version: i32,
+    server_name: [u8; 64],
+    game_tags: [u8; 128],
+    steam_id: u64,
+}
+
+fn c_text(bytes: &[u8]) -> String {
+    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..end]).trim().to_string()
+}
+
+/// One server Steam's list returned, as the browser shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListedServer {
+    pub name: String,
+    pub ip: String,
+    pub game_port: u16,
+    pub query_port: u16,
+    pub ping: i32,
+    pub players: i32,
+    pub max_players: i32,
+    pub map: String,
+    pub tags: String,
+    pub password: bool,
+    pub secure: bool,
+}
+
+/// The do-nothing listener Steam's server list calls back into (ISteamMatchmakingServerListResponse:
+/// ServerResponded, ServerFailedToRespond, RefreshComplete). The list is read by polling instead.
+#[repr(C)]
+struct ListListener {
+    vtable: *const [unsafe extern "C" fn(*mut c_void, *mut c_void, i32); 3],
+}
+unsafe extern "C" fn ignore(_this: *mut c_void, _request: *mut c_void, _value: i32) {}
+static LISTENER_VTABLE: [unsafe extern "C" fn(*mut c_void, *mut c_void, i32); 3] = [ignore, ignore, ignore];
+
+/// Steam's internet list of Project Zomboid servers, through the running Steam client: no key.
+/// Steam lists every address at once (up to 10 000) and the servers answer over the next
+/// minute or so, as in the game's own browser; each second the ones that answered since are
+/// handed to `batch`. Ends when Steam is done, when nothing new came for 6 s, or after 90 s.
+pub fn internet_servers(pz_install_dir: &str, mut batch: impl FnMut(Vec<ListedServer>)) -> Result<usize, String> {
+    assert_eq!(std::mem::size_of::<GameServerItem>(), 376);
+    let _only_one = STEAM_LOCK.lock().map_err(|_| "Another Steam request is still running.".to_string())?;
+    let session = SteamSession::open(pz_install_dir)?;
+    let get = |name: &str| ffi::symbol(session.module, name);
+    let accessor: Accessor = unsafe { std::mem::transmute(get("SteamAPI_SteamMatchmakingServers_v002")?) };
+    let servers = unsafe { accessor() };
+    if servers.is_null() {
+        return Err("Steam did not hand over its server list.".to_string());
+    }
+    type Request = unsafe extern "C" fn(*mut c_void, u32, *mut *mut c_void, u32, *mut c_void) -> *mut c_void;
+    type Count = unsafe extern "C" fn(*mut c_void, *mut c_void) -> i32;
+    type Details = unsafe extern "C" fn(*mut c_void, *mut c_void, i32) -> *const GameServerItem;
+    type Refreshing = unsafe extern "C" fn(*mut c_void, *mut c_void) -> bool;
+    type Release = unsafe extern "C" fn(*mut c_void, *mut c_void);
+    let request: Request = unsafe { std::mem::transmute(get("SteamAPI_ISteamMatchmakingServers_RequestInternetServerList")?) };
+    let count: Count = unsafe { std::mem::transmute(get("SteamAPI_ISteamMatchmakingServers_GetServerCount")?) };
+    let details: Details = unsafe { std::mem::transmute(get("SteamAPI_ISteamMatchmakingServers_GetServerDetails")?) };
+    let refreshing: Refreshing = unsafe { std::mem::transmute(get("SteamAPI_ISteamMatchmakingServers_IsRefreshing")?) };
+    let release: Release = unsafe { std::mem::transmute(get("SteamAPI_ISteamMatchmakingServers_ReleaseRequest")?) };
+
+    let mut listener = Box::new(ListListener { vtable: &LISTENER_VTABLE });
+    let app: u32 = PZ_APP_ID.parse().unwrap_or(108600);
+    let handle = unsafe { request(servers, app, std::ptr::null_mut(), 0, &mut *listener as *mut ListListener as *mut c_void) };
+    if handle.is_null() {
+        return Err("Steam would not start the server list.".to_string());
+    }
+    let mut sent = vec![false; 0];
+    let mut total = 0usize;
+    let started = Instant::now();
+    let mut last_new = Instant::now();
+    let mut next_look = Instant::now();
+    loop {
+        unsafe { (session.run_callbacks)() };
+        let still = unsafe { refreshing(servers, handle) };
+        if Instant::now() >= next_look || !still {
+            next_look = Instant::now() + Duration::from_secs(1);
+            let n = unsafe { count(servers, handle) }.max(0) as usize;
+            if sent.len() < n {
+                sent.resize(n, false);
+            }
+            let mut fresh = Vec::new();
+            for i in 0..n {
+                if sent[i] {
+                    continue;
+                }
+                let item = unsafe { details(servers, handle, i as i32) };
+                if item.is_null() {
+                    continue;
+                }
+                let s = unsafe { &*item };
+                if !s.had_successful_response {
+                    continue;
+                }
+                sent[i] = true;
+                if s.app_id != 0 && s.app_id != app {
+                    continue;
+                }
+                fresh.push(ListedServer {
+                    name: c_text(&s.server_name),
+                    ip: std::net::Ipv4Addr::from(s.ip).to_string(),
+                    game_port: s.connection_port,
+                    query_port: s.query_port,
+                    ping: s.ping,
+                    players: s.players,
+                    max_players: s.max_players,
+                    map: c_text(&s.map),
+                    tags: c_text(&s.game_tags),
+                    password: s.password,
+                    secure: s.secure,
+                });
+            }
+            if !fresh.is_empty() {
+                total += fresh.len();
+                last_new = Instant::now();
+                batch(fresh);
+            }
+            let quiet = total > 0 && last_new.elapsed() > Duration::from_secs(6);
+            if !still || quiet || started.elapsed() > Duration::from_secs(90) {
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    unsafe { release(servers, handle) };
+    drop(listener);
+    Ok(total)
+}
+
 /// Whether the Steam client can be reached right now, and how many items it has subscribed.
 /// Starts Steam's API, so it belongs in a process that does nothing else afterwards.
 pub fn check(pz_install_dir: &str) -> Result<u32, String> {

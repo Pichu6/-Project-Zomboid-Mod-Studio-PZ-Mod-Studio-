@@ -30,6 +30,13 @@ fn steam_cli(args: &[String]) -> i32 {
     let ids: Vec<String> = args[2.min(args.len())..].to_vec();
     let answer = match args[0].as_str() {
         "--steam-check" => steam_client::check(&folder).map(|n| n.to_string()),
+        // Each batch on its own line as it comes, so the window can show servers while more answer.
+        "--steam-servers" => steam_client::internet_servers(&folder, |batch| {
+            use std::io::Write;
+            println!("{}{}", pz_mod_studio_lib::STEAM_PART_PREFIX, serde_json::to_string(&batch).unwrap_or_default());
+            let _ = std::io::stdout().flush();
+        })
+        .map(|n| n.to_string()),
         "--steam-subscribe" => steam_client::set_subscriptions(&folder, &ids, true).map(|o| serde_json::to_string(&o).unwrap_or_default()),
         "--steam-unsubscribe" => steam_client::set_subscriptions(&folder, &ids, false).map(|o| serde_json::to_string(&o).unwrap_or_default()),
         other => Err(format!("{} is not a Steam command.", other)),

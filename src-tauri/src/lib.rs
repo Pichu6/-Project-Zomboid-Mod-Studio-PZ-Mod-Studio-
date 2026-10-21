@@ -25,6 +25,7 @@ pub mod scripts;
 pub mod secrets;
 pub mod steam_client;
 pub mod studio_link;
+pub mod server_browser;
 pub mod server_manager;
 pub mod snapshots;
 pub mod translations;
@@ -141,6 +142,116 @@ fn workshop_item_details_cmd(id: String) -> Result<workshop::WorkshopItemDetails
 #[tauri::command(async)]
 fn workshop_requirements_cmd(ids: Vec<String>) -> Result<workshop::RequiredChain, String> {
     workshop::required_chain(&ids)
+}
+
+/// Steam's list of Project Zomboid servers, sent as `public-servers` events while servers answer:
+/// through the running Steam client (no key), or the Web API when a key is saved and the client
+/// cannot be asked. Returns how many were found.
+#[tauri::command(async)]
+fn public_servers_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>) -> Result<usize, String> {
+    use std::io::BufRead;
+    use tauri::Emitter;
+    stop_server_search_cmd();
+    let exe = std::env::current_exe().map_err(|e| format!("Could not find the Studio's own program: {}", e))?;
+    let mut command = std::process::Command::new(exe);
+    command.arg("--steam-servers").arg(vfs::trusted_install_dir());
+    command.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).stdin(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command.spawn().map_err(|e| format!("The Steam helper could not be started: {}", e))?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    if let Ok(mut slot) = SERVER_SEARCH.lock() {
+        *slot = Some(child);
+    }
+    let mut found = 0usize;
+    if let Some(out) = stdout {
+        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+            if let Some(json) = line.trim().strip_prefix(STEAM_PART_PREFIX) {
+                if let Ok(batch) = serde_json::from_str::<Vec<steam_client::ListedServer>>(json) {
+                    let list = server_browser::from_client_list(batch, "");
+                    found += list.len();
+                    let _ = app_handle.emit("public-servers", &list);
+                }
+            }
+        }
+    }
+    let status = SERVER_SEARCH.lock().ok().and_then(|mut s| s.take()).and_then(|mut c| c.wait().ok());
+    if found > 0 {
+        return Ok(found);
+    }
+    let reason = stderr
+        .and_then(|mut e| {
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut e, &mut text).ok()?;
+            steam_answer(&text)
+        })
+        .unwrap_or_else(|| if status.map(|s| s.success()).unwrap_or(false) { "Steam listed no servers.".to_string() } else { "The search was stopped.".to_string() });
+    // The Steam client could not be asked: the Web API, when there is a key.
+    match secrets::get(secrets::STEAM_WEB_API_KEY)? {
+        Some(key) => {
+            let list = server_browser::public_servers(&key, "", 10000)?;
+            let _ = app_handle.emit("public-servers", &list);
+            Ok(list.len())
+        }
+        None => Err(reason),
+    }
+}
+
+/// Ends the server search running now, keeping what was found.
+#[tauri::command]
+fn stop_server_search_cmd() {
+    if let Ok(mut slot) = SERVER_SEARCH.lock() {
+        if let Some(mut child) = slot.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+/// What one server says about itself: description, version, mods, how fast it answers.
+#[tauri::command(async)]
+fn server_rules_cmd(address: String) -> Result<server_browser::ServerRules, String> {
+    server_browser::server_rules(&address)
+}
+
+#[tauri::command(async)]
+fn saved_servers_cmd(paths: StudioPaths) -> Result<Vec<server_browser::SavedServer>, String> {
+    Ok(server_browser::read_saved_filled(&zomboid_dir_of(&paths)?))
+}
+
+/// Keeps a server in the player's list; `password` Some("") forgets it, None leaves it.
+#[tauri::command(async)]
+fn save_server_cmd(paths: StudioPaths, server: server_browser::SavedServer, password: Option<String>) -> Result<Vec<server_browser::SavedServer>, String> {
+    server_browser::save_server(&zomboid_dir_of(&paths)?, server, password.as_deref())
+}
+
+#[tauri::command(async)]
+fn forget_server_cmd(paths: StudioPaths, address: String) -> Result<Vec<server_browser::SavedServer>, String> {
+    server_browser::forget_server(&zomboid_dir_of(&paths)?, &address)
+}
+
+/// Starts the game joining `address` (the kept password unless one is given). The game must be
+/// closed: a running one cannot be told to join.
+#[tauri::command(async)]
+fn join_server_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: StudioPaths, address: String, name: String, password: Option<String>) -> Result<u32, String> {
+    if sandbox::find_running_pz_pid().is_some() {
+        return Err("The game is already running. Close it first, then join from here (or use its Join screen).".to_string());
+    }
+    let extra_args = server_browser::join_args(&address, password.as_deref())?;
+    if let Ok(z) = zomboid_dir_of(&paths) {
+        let _ = server_browser::note_join(&z, &address, &name);
+    }
+    let config = SandboxLaunchConfig {
+        pz_install_dir: vfs::trusted_install_dir(),
+        user_zomboid_dir: paths.user_zomboid_dir.clone(),
+        test_mode: "NORMAL".to_string(),
+        extra_args,
+    };
+    launch_sandbox_and_watch(app_handle, config)
 }
 
 /// Whether a Steam Web API key is saved (the key itself never goes back to the UI).
@@ -288,6 +399,11 @@ fn workshop_subscribe_cmd(
 
 /// Marks the Steam helper's own line, among whatever Steam's library prints.
 pub const STEAM_ANSWER_PREFIX: &str = "PZMS-STEAM:";
+/// Marks one part of a longer answer (a batch of servers), printed as it comes.
+pub const STEAM_PART_PREFIX: &str = "PZMS-STEAM-PART:";
+
+/// The server search running now, so Stop can end it.
+static SERVER_SEARCH: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
 
 /// The helper's answer out of its output, ignoring Steam's chatter.
 fn steam_answer(output: &str) -> Option<String> {
@@ -1279,6 +1395,13 @@ pub fn run() {
             link_status_cmd,
             saves_overview_cmd,
             map_cells_cmd,
+            public_servers_cmd,
+            stop_server_search_cmd,
+            server_rules_cmd,
+            saved_servers_cmd,
+            save_server_cmd,
+            forget_server_cmd,
+            join_server_cmd,
             map_images_cmd,
             map_image_bytes_cmd,
             diagnostics_report_cmd,

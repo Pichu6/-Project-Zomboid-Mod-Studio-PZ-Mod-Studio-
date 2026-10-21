@@ -1,17 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Map as MapIcon, Maximize, RefreshCw, TriangleAlert } from 'lucide-react';
+import { ListOrdered, Map as MapIcon, Maximize, Power, RefreshCw, TriangleAlert } from 'lucide-react';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
 import { MapCells, MapImage } from '../../types';
 
 interface MapsModuleProps {
   paths: StudioPathsUI;
+  /** The mods on now, joined: when it changes the maps are read again. */
+  activeKey: string;
+  /** Opens the Mod List on this mod, highlighted. */
+  onShowMod: (modId: string) => void;
+  /** Turns this mod off in the list (asks first). */
+  onTurnOff: (modId: string) => void;
 }
 
 const key = (c: [number, number]) => `${c[0]},${c[1]}`;
-/** A colour per map, far apart on the wheel. */
-const colour = (i: number, alpha = 0.85) => `hsla(${(i * 137.5) % 360}, 70%, 55%, ${alpha})`;
+/** A colour per map, far apart on the wheel, never red (red is for cells two maps share). */
+const colour = (i: number, alpha = 0.85) => `hsla(${45 + ((i * 137.5) % 255)}, 70%, 55%, ${alpha})`;
 const VANILLA = 'rgba(71, 85, 105, 0.9)';
 const CLASH = 'rgba(239, 68, 68, 1)';
 const SQUARES_PER_CELL = 256;
@@ -19,6 +25,8 @@ const SQUARES_PER_CELL = 256;
 const MIN_SCALE = 2;
 const MAX_SCALE = 64;
 const VIEW_HEIGHT = 560;
+/** How much of the view the maps always cover while panning (or all of them, when smaller). */
+const KEEP_IN_VIEW = 0.5;
 
 /** Where the grid is on the canvas: a cell (x, y) is drawn at ((x - x0) * scale + ox, (y - y0) * scale + oy). */
 interface View {
@@ -33,7 +41,7 @@ interface View {
  * cells. The wheel zooms where the pointer is, dragging pans. Below, the mods about maps with no
  * cells of their own (spawn points, tiles).
  */
-export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
+export const MapsModule: React.FC<MapsModuleProps> = ({ paths, activeKey, onShowMod, onTurnOff }) => {
   const { t } = useTranslation();
   const [data, setData] = useState<MapCells | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +66,7 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paths]);
+  }, [paths, activeKey]);
 
   const maps = useMemo(() => (data?.maps ?? []).map((m, i) => ({ ...m, idx: i })).filter((m) => !onlyActive || m.active), [data, onlyActive]);
   const shown = useMemo(() => maps.filter((m) => !hidden.has(`${m.mod_id}/${m.folder}`)), [maps, hidden]);
@@ -94,6 +102,19 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
   useEffect(() => {
     if (!view) setView(fit());
   }, [fit, view]);
+
+  /** The view moved or zoomed, kept so some of the maps is always on screen. */
+  const clamp = useCallback(
+    (v: View): View => {
+      if (!bounds) return v;
+      const w = (bounds.x1 - bounds.x0 + 1) * v.scale;
+      const h = (bounds.y1 - bounds.y0 + 1) * v.scale;
+      const keepX = Math.min(width * KEEP_IN_VIEW, w);
+      const keepY = Math.min(VIEW_HEIGHT * KEEP_IN_VIEW, h);
+      return { ...v, ox: Math.max(keepX - w, Math.min(width - keepX, v.ox)), oy: Math.max(keepY - h, Math.min(VIEW_HEIGHT - keepY, v.oy)) };
+    },
+    [bounds, width],
+  );
 
   // The canvas is as wide as its box.
   useEffect(() => {
@@ -204,12 +225,12 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
         if (!v) return v;
         const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * Math.pow(1.0015, -e.deltaY)));
         const k = next / v.scale;
-        return { scale: next, ox: px - (px - v.ox) * k, oy: py - (py - v.oy) * k };
+        return clamp({ scale: next, ox: px - (px - v.ox) * k, oy: py - (py - v.oy) * k });
       });
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [data]);
+  }, [data, clamp]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0 || !view) return;
@@ -226,7 +247,7 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
     if (!bounds || !view) return;
     const d = drag.current;
     if (d) {
-      setView({ ...view, ox: d.ox + e.clientX - d.x, oy: d.oy + e.clientY - d.y });
+      setView(clamp({ ...view, ox: d.ox + e.clientX - d.x, oy: d.oy + e.clientY - d.y }));
       setHover(null);
       return;
     }
@@ -264,17 +285,23 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
       {(clashes.length > 0 || tiledefClashes.length > 0) && (
         <div className="space-y-1.5">
           {clashes.map((c) => (
-            <div key={`${c.a}|${c.b}`} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${c.both_active ? 'border-red-700/70 bg-red-950/40 text-red-200' : 'border-amber-700/60 bg-amber-950/30 text-amber-200'}`}>
-              <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{c.both_active ? t('maps.clashNow', { a: c.a, b: c.b, count: c.cells.length }) : t('maps.clashIf', { a: c.a, b: c.b, count: c.cells.length })}</span>
+            <div key={`${c.a}|${c.b}`} className={`rounded-md border px-3 py-2 text-xs ${c.both_active ? 'border-red-700/70 bg-red-950/40 text-red-200' : 'border-amber-700/60 bg-amber-950/30 text-amber-200'}`}>
+              <div className="flex items-start gap-2">
+                <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{c.both_active ? t('maps.clashNow', { a: c.a, b: c.b, count: c.cells.length }) : t('maps.clashIf', { a: c.a, b: c.b, count: c.cells.length })}</span>
+              </div>
+              <ModButtons mods={[[c.mod_a, c.a, (data?.maps ?? []).some((m) => m.mod_id === c.mod_a && m.active)], [c.mod_b, c.b, (data?.maps ?? []).some((m) => m.mod_id === c.mod_b && m.active)]]} offer={c.both_active} onShowMod={onShowMod} onTurnOff={onTurnOff} />
             </div>
           ))}
           {tiledefClashes.map((c) => {
             const names = c.mods.map((m) => `${m[1]}${m[3] ? '' : ` (${t('maps.off')})`}`).join(', ');
             return (
-              <div key={`tiledef-${c.number}`} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${c.both_active ? 'border-red-700/70 bg-red-950/40 text-red-200' : 'border-amber-700/60 bg-amber-950/30 text-amber-200'}`}>
-                <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{c.both_active ? t('maps.tiledefNow', { number: c.number, mods: names }) : t('maps.tiledefIf', { number: c.number, mods: names })}</span>
+              <div key={`tiledef-${c.number}`} className={`rounded-md border px-3 py-2 text-xs ${c.both_active ? 'border-red-700/70 bg-red-950/40 text-red-200' : 'border-amber-700/60 bg-amber-950/30 text-amber-200'}`}>
+                <div className="flex items-start gap-2">
+                  <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{c.both_active ? t('maps.tiledefNow', { number: c.number, mods: names }) : t('maps.tiledefIf', { number: c.number, mods: names })}</span>
+                </div>
+                <ModButtons mods={c.mods.map((m) => [m[0], m[1], m[3]] as [string, string, boolean])} offer={c.both_active} onShowMod={onShowMod} onTurnOff={onTurnOff} />
               </div>
             );
           })}
@@ -335,6 +362,9 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
                       {!m.active ? ` · ${t('maps.off')}` : ''}
                     </span>
                   </span>
+                  <button onClick={(e) => { e.preventDefault(); onShowMod(m.mod_id); }} title={t('maps.showInList')} aria-label={t('maps.showInList')} className="ml-auto shrink-0 p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 cursor-pointer">
+                    <ListOrdered className="w-3.5 h-3.5" />
+                  </button>
                 </label>
               );
             })}
@@ -351,7 +381,7 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-1.5">
               {related.map((r) => (
-                <div key={r.mod_id} className={`rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 ${r.active ? '' : 'opacity-60'}`}>
+                <button key={r.mod_id} onClick={() => onShowMod(r.mod_id)} title={t('maps.showInList')} className={`text-left rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 hover:border-emerald-700/70 hover:bg-slate-900 cursor-pointer ${r.active ? '' : 'opacity-60'}`}>
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-xs text-slate-100 truncate">{r.mod_name}</span>
                     {r.kinds.map((k) => (
@@ -360,12 +390,35 @@ export const MapsModule: React.FC<MapsModuleProps> = ({ paths }) => {
                     {!r.active && <span className="shrink-0 text-[10px] text-slate-500">{t('maps.off')}</span>}
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono truncate" title={r.detail.join('\n')}>{r.mod_id} · {r.detail.join(' · ')}</div>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+/** Under a clash: each mod, to see it in the Mod List, and to turn it off when both are on. */
+const ModButtons: React.FC<{ mods: [string, string, boolean][]; offer: boolean; onShowMod: (id: string) => void; onTurnOff: (id: string) => void }> = ({ mods, offer, onShowMod, onTurnOff }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2 ml-6">
+      {mods.map(([id, name, on]) => (
+        <span key={id} className="inline-flex rounded-md border border-slate-700/80 bg-slate-950/60 overflow-hidden">
+          <button onClick={() => onShowMod(id)} title={t('maps.showInList')} className="flex items-center gap-1 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer">
+            <ListOrdered className="w-3 h-3" />
+            {name}
+          </button>
+          {offer && on && (
+            <button onClick={() => onTurnOff(id)} className="flex items-center gap-1 px-2 py-1 text-[11px] text-red-200 border-l border-slate-700/80 hover:bg-red-900/50 cursor-pointer">
+              <Power className="w-3 h-3" />
+              {t('maps.turnOff')}
+            </button>
+          )}
+        </span>
+      ))}
     </div>
   );
 };

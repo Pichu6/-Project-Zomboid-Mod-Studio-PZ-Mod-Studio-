@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, ReloadResult, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, PublicServer, ServerRules, SavedServer } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -754,6 +754,48 @@ export const TauriService = {
       reportBackendError('Deleting the kept version', err);
       throw err;
     }
+  },
+
+  /** Asks Steam for its server list; servers arrive through listenPublicServers while they
+   * answer. Resolves with how many were found. */
+  publicServers: async (): Promise<number> => {
+    return await invoke<number>('public_servers_cmd');
+  },
+
+  listenPublicServers: async (callback: (batch: PublicServer[]) => void): Promise<UnlistenFn> => {
+    return await listen<PublicServer[]>('public-servers', (e) => callback(e.payload));
+  },
+
+  stopServerSearch: async (): Promise<void> => {
+    await invoke('stop_server_search_cmd');
+  },
+
+  /** Asks one server about itself. Throws with the reason when it does not answer. */
+  serverRules: async (address: string): Promise<ServerRules> => {
+    return await invoke<ServerRules>('server_rules_cmd', { address });
+  },
+
+  savedServers: async (paths: StudioPathsUI): Promise<SavedServer[]> => {
+    try {
+      return await invoke<SavedServer[]>('saved_servers_cmd', { paths });
+    } catch (err) {
+      reportBackendError('Reading your servers', err);
+      return [];
+    }
+  },
+
+  /** `password`: null leaves the kept one, '' forgets it. */
+  saveServer: async (paths: StudioPathsUI, server: SavedServer, password: string | null): Promise<SavedServer[]> => {
+    return await invoke<SavedServer[]>('save_server_cmd', { paths, server, password });
+  },
+
+  forgetServer: async (paths: StudioPathsUI, address: string): Promise<SavedServer[]> => {
+    return await invoke<SavedServer[]>('forget_server_cmd', { paths, address });
+  },
+
+  /** Starts the game joining this server. Throws when the game is already running. */
+  joinServer: async (paths: StudioPathsUI, address: string, name: string, password: string | null): Promise<number> => {
+    return await invoke<number>('join_server_cmd', { paths, address, name, password });
   },
 
   /** Whether a Steam Web API key is saved (the key is never returned). */

@@ -416,6 +416,53 @@ export interface MapCells {
   tiledef_clashes: TiledefClash[];
 }
 
+/** One server in Steam's list (server_browser::PublicServer). */
+export interface PublicServer {
+  name: string;
+  address: string;
+  query_address: string;
+  players: number;
+  max_players: number;
+  map: string;
+  version: string;
+  dedicated: boolean;
+  secure: boolean;
+  tags: string;
+  /** Whether it asks for a password (known from the Steam client's list). */
+  password: boolean | null;
+  ping_ms: number | null;
+}
+
+/** What one server says about itself (server_browser::ServerRules). */
+export interface ServerRules {
+  description: string;
+  version: string;
+  open: boolean;
+  mods: string[];
+  /** How many mods the server has: `mods` holds only the first few. */
+  mod_count: number | null;
+  pvp: boolean | null;
+  last_wipe: number | null;
+  ping_ms: number;
+  raw: [string, string][];
+  query_address: string;
+}
+
+/** A server the player keeps (server_browser::SavedServer); its password stays in Windows. */
+export interface SavedServer {
+  name: string;
+  address: string;
+  note: string;
+  profile_id: string | null;
+  has_password: boolean;
+  starred: boolean;
+  last_joined: number | null;
+  /** The mods the game loaded on it last time, from that session's log. */
+  mods: string[];
+  items: string[];
+  mods_seen: number | null;
+}
+
 /** One real map image, placed in squares (map_cells::images::MapImage). */
 export interface MapImage {
   id: string;

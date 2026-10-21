@@ -17,6 +17,9 @@ pub struct SandboxLaunchConfig {
     pub pz_install_dir: String,
     pub user_zomboid_dir: String,
     pub test_mode: String, // "BACKGROUND_QUICK" or "WINDOWED_DEEP"
+    /// Passed to the game as they are (joining a server: `+connect ip:port`).
+    #[serde(default)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,13 +194,15 @@ pub fn launch_sandbox_and_watch<R: tauri::Runtime>(
             cmd.arg("-debug");
         }
 
+        // A launch that names no screen mode keeps the player's own.
         if is_windowed {
             cmd.arg("-windowed");
-        } else {
+        } else if config.test_mode.contains("FULLSCREEN") {
             cmd.arg("-fullscreen");
         }
         // Compatible copies in Zomboid/mods must win over their Workshop originals.
         cmd.args(crate::compat::launch_args(&config.user_zomboid_dir));
+        cmd.args(&config.extra_args);
 
         cmd.stdin(std::process::Stdio::null());
         cmd.stdout(std::process::Stdio::null());
