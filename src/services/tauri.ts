@@ -834,6 +834,9 @@ export const TauriService = {
   renameModGroup: async (paths: StudioPathsUI, from: string, to: string): Promise<ModMeta> => {
     return await invoke<ModMeta>('rename_mod_group_cmd', { paths, from, to });
   },
+  setModGroupNote: async (paths: StudioPathsUI, name: string, note: string): Promise<ModMeta> => {
+    return await invoke<ModMeta>('set_mod_group_note_cmd', { paths, name, note });
+  },
   deleteModGroup: async (paths: StudioPathsUI, name: string): Promise<ModMeta> => {
     return await invoke<ModMeta>('delete_mod_group_cmd', { paths, name });
   },

@@ -616,6 +616,11 @@ fn rename_mod_group_cmd(paths: StudioPaths, from: String, to: String) -> Result<
 }
 
 #[tauri::command(async)]
+fn set_mod_group_note_cmd(paths: StudioPaths, name: String, note: String) -> Result<mod_meta::ModMeta, String> {
+    mod_meta::set_group_note(&zomboid_dir_of(&paths)?, &name, &note)
+}
+
+#[tauri::command(async)]
 fn delete_mod_group_cmd(paths: StudioPaths, name: String) -> Result<mod_meta::ModMeta, String> {
     mod_meta::delete_group(&zomboid_dir_of(&paths)?, &name)
 }
@@ -1474,6 +1479,7 @@ pub fn run() {
             set_in_mod_group_cmd,
             rename_mod_group_cmd,
             delete_mod_group_cmd,
+            set_mod_group_note_cmd,
             link_screen_choice_cmd,
             set_link_screen_choice_cmd,
             window_prefs_cmd,

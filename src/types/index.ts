@@ -155,6 +155,8 @@ export interface ModInfo {
   enabled: boolean;
   is_library?: boolean;
   is_map_mod?: boolean;
+  /** `category=` of its mod.info (map, vehicle, features, modpack). */
+  category?: string | null;
   is_packaged?: boolean;
   /** false: the installed game build cannot load this mod (B41-only or only newer folders). */
   loadable_on_installed_build?: boolean | null;
@@ -420,6 +422,7 @@ export interface MapCells {
 export interface ModGroup {
   name: string;
   mods: string[];
+  note?: string;
 }
 export interface ModMeta {
   notes: Record<string, string>;

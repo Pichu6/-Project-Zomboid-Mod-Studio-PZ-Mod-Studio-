@@ -579,6 +579,26 @@
       "turnOff": "Desactivar el grupo",
       "turnedOn": "{{name}}: sus mods quedaron activos (con lo que necesitan).",
       "turnedOff": "{{name}}: sus mods quedaron desactivados."
+    },
+    "groupBy": {
+      "label": "Grupos",
+      "title": "Agrupar la lista como la pantalla de Mods del juego",
+      "none": "Grupos: ninguno",
+      "author": "Grupos: autor",
+      "category": "Grupos: categoría",
+      "mine": "Grupos: míos",
+      "noAuthor": "(sin autor)",
+      "noCategory": "(sin categoría)",
+      "noGroup": "(en ninguno de tus grupos)",
+      "count": "{{on}} activos de {{count}}",
+      "allOn": "Activar todos",
+      "allOff": "Desactivar todos",
+      "editNote": "Nota del grupo",
+      "noteTitle": "Nota del grupo \"{{name}}\"",
+      "category_map": "Mapas",
+      "category_vehicle": "Vehículos",
+      "category_features": "Funciones",
+      "category_modpack": "Paquetes"
     }
   },
   "health": {

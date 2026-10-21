@@ -24,6 +24,9 @@ require "ISUI/ISScrollingListBox"
 require "ISUI/ISRichTextPanel"
 require "OptionScreens/MainScreen"
 require "OptionScreens/ModSelector/MapOrderUI"
+require "ISUI/ISTickBox"
+require "ISUI/ISComboBox"
+require "RadioCom/ISUIRadio/ISSliderPanel"
 
 local Link = PZModStudioLink
 local text = Link.text
@@ -155,15 +158,18 @@ end
 
 --- The player's notes and groups, as the app wrote them: notes[id] = text, groups = { {name, ids} }.
 local function readMeta()
-    local notes, groups = {}, {}
+    local notes, groups, groupNotes = {}, {}, {}
     local file = getFileReader(META_FILE, false)
-    if not file then return notes, groups end
+    if not file then return notes, groups, groupNotes end
     local line = file:readLine()
     while line ~= nil do
         local key, rest = string.match(line, "^(%a+)=(.*)$")
         if key == "note" then
             local id, note = string.match(rest, "^([^\t]+)\t(.*)$")
             if id then notes[plainId(id)] = note end
+        elseif key == "groupnote" then
+            local name, note = string.match(rest, "^([^\t]+)\t(.*)$")
+            if name then groupNotes[name] = note end
         elseif key == "group" then
             local name, ids = string.match(rest, "^([^\t]+)\t(.*)$")
             if name then
@@ -175,7 +181,7 @@ local function readMeta()
         line = file:readLine()
     end
     file:close()
-    return notes, groups
+    return notes, groups, groupNotes
 end
 
 --- How wide the list is (a share of the screen), as the player last left it.
@@ -228,11 +234,22 @@ function ModList:doDrawItem(y, item, alt)
     if y + self:getYScroll() + h < 0 or y + self:getYScroll() >= self.height then return y + h end
     local mod = item.item
     local screen = self.screen
-    -- A group's heading (grouped by author or category).
+    -- A group's heading: the fold arrow, its name and count, "Select all" on the right.
     if mod.header then
-        self:drawRect(0, y, self.width, h, 0.9, C.bg[1], C.bg[2], C.bg[3])
+        local shown = screen.groupView and screen.groupView.name == mod.header
+        self:drawRect(0, y, self.width, h, 0.95, shown and C.accentDark[1] or C.bg[1], shown and C.accentDark[2] or C.bg[2], shown and C.accentDark[3] or C.bg[3])
         local ty = y + (h - fontH(UIFont.Small)) / 2
-        self:drawText(mod.header .. "  (" .. tostring(mod.count) .. ")", 12, ty, C.accent[1], C.accent[2], C.accent[3], 1, UIFont.Small)
+        self:drawText(screen.collapsed[mod.header] and ">" or "v", 10, ty, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small)
+        local label = mod.header .. "  (" .. tostring(mod.onCount) .. "/" .. tostring(mod.count) .. ")"
+        self:drawText(label, 28, ty, C.accent[1], C.accent[2], C.accent[3], 1, UIFont.Small)
+        if screen.groupNotes[mod.header] then
+            local nx = 28 + measure(UIFont.Small, label) + 12
+            self:drawText(screen.groupNotes[mod.header], nx, ty, 0.55, 0.8, 1, 1, UIFont.Small)
+        end
+        local sel = text("modsSelectAll")
+        local sw = measure(UIFont.Small, sel) + 16
+        self:drawRectBorder(self.width - sw - 18, y + 4, sw, h - 8, 1, C.border[1], C.border[2], C.border[3])
+        self:drawText(sel, self.width - sw - 10, ty, C.text[1], C.text[2], C.text[3], 1, UIFont.Small)
         self:drawRect(0, y + h - 1, self.width, 1, 0.8, C.border[1], C.border[2], C.border[3])
         return y + h
     end
@@ -297,16 +314,25 @@ function ModList:onMouseDown(x, y)
     local mod = self.items[row].item
     local screen = self.screen
     if mod.header then
-        -- A heading selects every mod under it: then they are turned on or off together.
         getSoundManager():playUISound("UISelectListItem")
-        screen.multi = {}
-        for i = row + 1, #self.items do
-            local m = self.items[i].item
-            if m.header then break end
-            screen.multi[m.id] = true
-        end
         self.selected = row
-        screen:select(nil, mod.header)
+        local sel = measure(UIFont.Small, text("modsSelectAll")) + 16
+        if x < 26 then
+            -- The arrow folds or unfolds the group.
+            screen.collapsed[mod.header] = not screen.collapsed[mod.header] or nil
+            screen:refreshList()
+        elseif x > self.width - sel - 22 then
+            -- "Select all": every mod of the group, to turn them on or off together.
+            screen.multi = {}
+            for _, m in ipairs(mod.mods) do screen.multi[m.id] = true end
+            screen.groupView = nil
+            screen:select(nil, mod.header)
+        else
+            -- The title: the group itself on the right (its note, its mods, what to do with them).
+            screen.multi = {}
+            screen.groupView = { name = mod.header, mods = mod.mods }
+            screen:select(nil)
+        end
         return
     end
     getSoundManager():playUISound("UISelectListItem")
@@ -329,6 +355,7 @@ function ModList:onMouseDown(x, y)
         return
     end
     screen.multi = {}
+    screen.groupView = nil
     self.anchor = row
     self.selected = row
     -- Shown first (the list keeps the shown mod selected when it is redrawn).
@@ -405,7 +432,8 @@ function Screen:new(x, y, w, h)
     o.sort = "name"
     o.group = "none"
     o.multi = {}
-    o.notes, o.groups = {}, {}
+    o.notes, o.groups, o.groupNotes = {}, {}, {}
+    o.collapsed = {}
     o.history, o.future = {}, {}
     o.ratio = readRatio()
     o.search = ""
@@ -432,7 +460,7 @@ function Screen:readState()
     self.link = Link.appInstalled() and Link.read() or nil
     self.health = self.link and Link.readHealth() or {}
     self.updated = Link.appInstalled() and readUpdated() or {}
-    if Link.appInstalled() then self.notes, self.groups = readMeta() end
+    if Link.appInstalled() then self.notes, self.groups, self.groupNotes = readMeta() end
     self.onlyProfile = self.link ~= nil
     self:recount()
 end
@@ -561,8 +589,14 @@ function Screen:refreshList()
             return string.lower(a) < string.lower(b)
         end)
         for _, g in ipairs(keys) do
-            table.insert(rows, { header = g, count = #groups[g], id = "\0" .. g })
-            for _, mod in ipairs(groups[g]) do table.insert(rows, mod) end
+            local onCount = 0
+            for _, mod in ipairs(groups[g]) do
+                if self.on[mod.id] then onCount = onCount + 1 end
+            end
+            table.insert(rows, { header = g, count = #groups[g], onCount = onCount, mods = groups[g], id = "\0" .. g })
+            if not self.collapsed[g] then
+                for _, mod in ipairs(groups[g]) do table.insert(rows, mod) end
+            end
         end
     end
     local pick
@@ -744,6 +778,13 @@ end
 
 -- ------------------------------------------------------------------ several mods at once
 
+--- The mods the buttons act on when there is no single mod: the selection, or the group shown.
+function Screen:actingMods()
+    local many = self:multiMods()
+    if #many == 0 and self.groupView then return self.groupView.mods end
+    return many
+end
+
 function Screen:multiMods()
     local out = {}
     for _, mod in ipairs(self.mods) do
@@ -888,28 +929,259 @@ end
 --- are on run their code, so only those can have it.
 function Screen:hasOptions(mod)
     if not mod or not self.startOn[mod.id] then return false end
-    local found = false
+    return #self:optionsOf(mod) > 0
+end
+
+--- The Mod Options objects of a mod (the game's PZAPI.ModOptions; usually one).
+function Screen:optionsOf(mod)
+    local out = {}
     pcall(function()
         local api = PZAPI and PZAPI.ModOptions
         if not api then return end
-        if api.Dict and api.Dict[mod.id] then found = true return end
         for _, o in ipairs(api.Data or {}) do
-            if o.modOptionsID == mod.id or o.modOptionsID == mod.gameId or getText(o.name or "") == mod.name then found = true end
+            if o.modOptionsID == mod.id or o.modOptionsID == mod.gameId or getText(o.name or "") == mod.name then table.insert(out, o) end
         end
     end)
-    return found
+    return out
 end
 
---- Opens the game's Options on its Mods page (the options of every mod that has some).
-function Screen:openOptions()
-    if self.changes > 0 then return self:say(text("modsOptionsAcceptFirst")) end
+--- A window over this screen with the mod's own options, saved as the game's Options screen
+--- saves them (ModOptions.ini). This screen stays where it was.
+local OptionsWindow = ISPanelJoypad:derive("StudioLinkModOptions")
+
+function OptionsWindow:new(screen, mod, list)
+    local w = math.min(760, screen.width - 80)
+    local h = math.min(screen.height - 120, 640)
+    local o = ISPanelJoypad.new(self, (screen.width - w) / 2, (screen.height - h) / 2, w, h)
+    o.screen, o.mod, o.list = screen, mod, list
+    o.backgroundColor = { r = C.panel[1], g = C.panel[2], b = C.panel[3], a = 0.99 }
+    o.borderColor = { r = C.accent[1], g = C.accent[2], b = C.accent[3], a = 0.8 }
+    o.controls = {}
+    return o
+end
+
+function OptionsWindow:createChildren()
+    local pad, bh = 16, math.max(24, fontH(UIFont.Small) + 8)
+    local body = ISPanelJoypad:new(pad, 44, self.width - pad * 2, self.height - 44 - bh - 30)
+    body:initialise()
+    body:instantiate()
+    body.background = false
+    body:setScrollChildren(true)
+    body:addScrollBars()
+    body.onMouseWheel = function(panel, del)
+        local maxScroll = math.max(0, panel:getScrollHeight() - panel.height)
+        panel:setYScroll(math.max(-maxScroll, math.min(0, panel:getYScroll() - del * 40)))
+        return true
+    end
+    -- What does not fit is cut at the window's edge and scrolled into view.
+    body.prerender = function(panel)
+        ISPanelJoypad.prerender(panel)
+        panel:setStencilRect(0, 0, panel.width, panel.height)
+    end
+    local controls = self.controls
+    body.render = function(panel)
+        for _, c in ipairs(controls) do
+            if c.kind == "slider" and c.valueLabel then c.valueLabel:setName(tostring(c.control:getCurrentValue())) end
+        end
+        ISPanelJoypad.render(panel)
+        panel:clearStencilRect()
+    end
+    self:addChild(body)
+    self.body = body
+    local labelW = math.floor(body.width * 0.45)
+    local cx, cw = labelW + 12, body.width - labelW - 30
+    local y = 4
+    local function label(t, yy)
+        local l = ISLabel:new(0, yy, bh, t, C.text[1], C.text[2], C.text[3], 1, UIFont.Small, true)
+        l:initialise()
+        body:addChild(l)
+    end
+    for _, options in ipairs(self.list) do
+        if #self.list > 1 then
+            label(getText(options.name or ""), y)
+            y = y + bh + 4
+        end
+        for _, option in ipairs(options.data) do
+            local t = option.type
+            local name = option.name and getText(option.name) or ""
+            if t == "title" then
+                local l = ISLabel:new(0, y + 6, bh, name, C.accent[1], C.accent[2], C.accent[3], 1, UIFont.Medium, true)
+                l:initialise()
+                body:addChild(l)
+                y = y + bh + 10
+            elseif t == "separator" then
+                local sep = ISPanel:new(0, y + 6, body.width - 20, 1)
+                sep:initialise()
+                sep.backgroundColor = { r = C.border[1], g = C.border[2], b = C.border[3], a = 1 }
+                body:addChild(sep)
+                y = y + 14
+            elseif t == "description" then
+                local rich = ISRichTextPanel:new(0, y, body.width - 24, 20)
+                rich:initialise()
+                rich.background = false
+                rich.autosetheight = true
+                rich.marginLeft, rich.marginRight = 0, 0
+                rich:setText(" <RGB:0.58,0.64,0.72> " .. tostring(option.text or ""))
+                rich:paginate()
+                body:addChild(rich)
+                y = y + rich.height + 6
+            elseif t == "tickbox" then
+                label(name, y)
+                local box = ISTickBox:new(cx, y, bh, bh, "", nil, function(_, index, selected)
+                    if option.onChange then pcall(option.onChange, option, selected) end
+                end)
+                box:initialise()
+                body:addChild(box)
+                box:addOption("")
+                box:setSelected(1, option.value == true)
+                if option.isEnabled == false then box:disableOption("", true) end
+                table.insert(self.controls, { option = option, kind = t, control = box })
+                y = y + bh + 6
+            elseif t == "multipletickbox" then
+                label(name, y)
+                local box = ISTickBox:new(cx, y, cw, bh, "", nil, function(_, index, selected)
+                    if option.onChange then pcall(option.onChange, option, index, selected) end
+                end)
+                box:initialise()
+                body:addChild(box)
+                for i, v in ipairs(option.values) do
+                    box:addOption(getText(v.name))
+                    box:setSelected(i, v.value == true)
+                end
+                table.insert(self.controls, { option = option, kind = t, control = box })
+                y = y + math.max(bh, box.height) + 6
+            elseif t == "combobox" then
+                label(name, y)
+                local combo = ISComboBox:new(cx, y, math.min(cw, 300), bh, nil, function(_, c)
+                    if option.onChange then pcall(option.onChange, option, c.selected) end
+                end)
+                combo:initialise()
+                body:addChild(combo)
+                for _, v in ipairs(option.values) do combo:addOption(v) end
+                combo.selected = option.selected or 1
+                if option.isEnabled == false then combo.disabled = true end
+                table.insert(self.controls, { option = option, kind = t, control = combo })
+                y = y + bh + 6
+            elseif t == "textentry" then
+                label(name, y)
+                local entry = ISTextEntryBox:new(tostring(option.value or ""), cx, y, math.min(cw, 300), bh)
+                entry:initialise()
+                entry:instantiate()
+                body:addChild(entry)
+                table.insert(self.controls, { option = option, kind = t, control = entry })
+                y = y + bh + 6
+            elseif t == "slider" then
+                label(name, y)
+                local slider = ISSliderPanel:new(cx + 50, y, math.min(cw, 320) - 50, bh)
+                slider:initialise()
+                body:addChild(slider)
+                slider:setValues(option.min, option.max, option.step, option.step * 10)
+                slider:setCurrentValue(option.value, true)
+                local valueLabel = ISLabel:new(cx, y, bh, tostring(option.value), C.text[1], C.text[2], C.text[3], 1, UIFont.Small, true)
+                valueLabel:initialise()
+                body:addChild(valueLabel)
+                table.insert(self.controls, { option = option, kind = t, control = slider, valueLabel = valueLabel })
+                y = y + bh + 6
+            elseif t == "button" then
+                local b = ISButton:new(cx, y, math.min(cw, 240), bh, name, nil, function()
+                    if option.onclick then pcall(option.onclick, option.target, option.args[1], option.args[2], option.args[3], option.args[4]) end
+                end)
+                b:initialise()
+                b:instantiate()
+                styleButton(b, false)
+                body:addChild(b)
+                y = y + bh + 6
+            elseif t == "keybind" or t == "colorpicker" then
+                -- Shown, changed in the game's Options (a key or a colour picker of its own).
+                label(name, y)
+                local value = t == "keybind" and getKeyName(tonumber(option.key) or 0) or text("modsOptionColour")
+                local l = ISLabel:new(cx, y, bh, value .. "   (" .. text("modsOptionInOptions") .. ")", C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small, true)
+                l:initialise()
+                body:addChild(l)
+                y = y + bh + 6
+            end
+        end
+        y = y + 8
+    end
+    body:setScrollHeight(y + 10)
+    local by = self.height - bh - 14
+    local save = ISButton:new(self.width - pad - 140, by, 140, bh, text("modsOptionsSave"), self, OptionsWindow.save)
+    save:initialise()
+    save:instantiate()
+    styleButton(save, true)
+    self:addChild(save)
+    local cancel = ISButton:new(save.x - 130, by, 120, bh, text("back"), self, OptionsWindow.close)
+    cancel:initialise()
+    cancel:instantiate()
+    styleButton(cancel, false)
+    self:addChild(cancel)
+end
+
+function OptionsWindow:prerender()
+    ISPanelJoypad.prerender(self)
+    self:drawText(text("modsOptionsTitle", self.mod.name), 16, 12, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
+end
+
+--- Written into the options as the game's Options screen does, then saved.
+function OptionsWindow:save()
+    for _, c in ipairs(self.controls) do
+        local o, k = c.option, c.kind
+        local ok, err = pcall(function()
+            if k == "tickbox" then
+                local v = c.control:isSelected(1)
+                if o.onChangeApply and o.value ~= v then o:onChangeApply(v) end
+                o.value = v
+            elseif k == "multipletickbox" then
+                for i, val in ipairs(o.values) do
+                    local v = c.control:isSelected(i)
+                    if o.onChangeApply and val.value ~= v then o:onChangeApply(i, v) end
+                    val.value = v
+                end
+            elseif k == "combobox" then
+                local v = c.control.selected
+                if o.onChangeApply and o.selected ~= v then o:onChangeApply(v) end
+                o.selected = v
+            elseif k == "textentry" then
+                local v = c.control:getText()
+                if o.onChangeApply and o.value ~= v then o:onChangeApply(v) end
+                o.value = v
+            elseif k == "slider" then
+                local v = c.control:getCurrentValue()
+                if o.onChangeApply and o.value ~= v then o:onChangeApply(v) end
+                o.value = v
+            end
+        end)
+        if not ok then print("[StudioLink] a mod option could not be set: " .. tostring(err)) end
+    end
+    for _, options in ipairs(self.list) do pcall(function() options:apply() end) end
+    pcall(function() PZAPI.ModOptions:save() end)
+    self.screen:say(text("modsOptionsSaved", self.mod.name))
     self:close()
-    local ms = MainScreen.instance
-    if not ms or not ms.mainOptions then return end
-    ms.bottomPanel:setVisible(false)
-    ms.mainOptions:toUI()
-    ms.mainOptions:setVisible(true, JoypadState.getMainMenuJoypad())
-    pcall(function() ms.mainOptions.tabs:activateView(getText("UI_mainscreen_mods")) end)
+end
+
+function OptionsWindow:close()
+    self:setVisible(false)
+    self:removeFromUIManager()
+    self.screen.optionsWindow = nil
+end
+
+function OptionsWindow:onKeyRelease(key)
+    if key == Keyboard.KEY_ESCAPE then self:close() end
+end
+
+--- The mod's options in a window over this screen; nothing else changes.
+function Screen:openOptions()
+    local mod = self.selectedMod
+    if not mod then return end
+    local list = self:optionsOf(mod)
+    if #list == 0 then return end
+    if self.optionsWindow then self.optionsWindow:close() end
+    local win = OptionsWindow:new(self, mod, list)
+    win:initialise()
+    win:instantiate()
+    win:addToUIManager()
+    win:setAlwaysOnTop(true)
+    self.optionsWindow = win
 end
 
 -- ------------------------------------------------------------------ load order
@@ -994,6 +1266,27 @@ function Screen:select(mod, groupName)
     self.selectedGroup = groupName
     if not self.desc then return end
     local many = self:multiMods()
+    local view = self.groupView
+    if view and #many == 0 then
+        local list = {}
+        for i, m in ipairs(view.mods) do
+            if i > 40 then
+                table.insert(list, text("andMore", #view.mods - 40))
+                break
+            end
+            local state = self.on[m.id] and " <RGB:0.45,0.9,0.65> " .. text("modsOnShort") or " <RGB:0.58,0.64,0.72> " .. text("modsOff")
+            table.insert(list, " <RGB:1,1,1> - " .. m.name .. "," .. state .. " <RGB:1,1,1> ")
+        end
+        local head = ""
+        if self.groupNotes[view.name] then head = " <RGB:0.55,0.8,1> " .. text("modsGroupNote") .. " " .. self.groupNotes[view.name] .. " <RGB:1,1,1> <LINE> <LINE> " end
+        self.desc:setText(head .. " <RGB:0.58,0.64,0.72> " .. text("modsGroupHelp") .. " <RGB:1,1,1> <LINE> <LINE> " .. table.concat(list, " <LINE> "))
+        self.desc:paginate()
+        self.desc:setYScroll(0)
+        self.poster = nil
+        self.posterPath = nil
+        self:updateButtons()
+        return
+    end
     if #many > 1 then
         local list = {}
         for i, m in ipairs(many) do
@@ -1085,12 +1378,12 @@ end
 function Screen:updateButtons()
     if not self.toggleButton then return end
     local mod = self.selectedMod
-    local many = self:multiMods()
+    local many = self:actingMods()
     self.groupButton:setTitle(text("modsGroup_" .. self.group))
     self.summary.problems:setTitle(text("modsSumProblems", self.counts.problems))
     self.summary.favourites:setTitle(text("modsSumFavourites", self.counts.favourites))
     if self.summary.updated then self.summary.updated:setTitle(text("modsSumUpdated", self.counts.updated)) end
-    if #many > 1 then
+    if #many > 1 or (self.groupView and #self:multiMods() == 0) then
         local anyOff = false
         for _, m in ipairs(many) do
             if not self.on[m.id] and m.available then anyOff = true end
@@ -1261,12 +1554,12 @@ function Screen:createChildren()
     local nameH = fontH(UIFont.Medium) * 2 + fontH(UIFont.Small) * 2 + 18
     local by = listTop + nameH
     self.toggleButton = button(self, bx, by, bw, bh, text("modsTurnOn"), function(screen)
-        local many = screen:multiMods()
-        if #many > 1 then screen:toggleMany(many) else screen:toggle(screen.selectedMod) end
+        local many = screen:actingMods()
+        if #many > 1 or screen.groupView then screen:toggleMany(many) else screen:toggle(screen.selectedMod) end
     end, true)
     self.favButton = button(self, bx, by + bh + 6, bw, bh, text("modsFavourite"), function(screen)
-        local many = screen:multiMods()
-        if #many > 1 then screen:favouriteMany(many) else screen:toggleFavourite(screen.selectedMod) end
+        local many = screen:actingMods()
+        if #many > 1 or screen.groupView then screen:favouriteMany(many) else screen:toggleFavourite(screen.selectedMod) end
     end)
     local half = math.floor((bw - 6) / 2)
     self.upButton = button(self, bx, by + (bh + 6) * 2, half, bh, text("modsUp"), function(screen) screen:move(screen.selectedMod, -1) end)
@@ -1399,7 +1692,14 @@ function Screen:prerender()
     end
     local mod = self.selectedMod
     local many = #self:multiMods()
-    if many > 1 then
+    if self.groupView and many == 0 then
+        local onCount = 0
+        for _, m in ipairs(self.groupView.mods) do
+            if self.on[m.id] then onCount = onCount + 1 end
+        end
+        self:drawText(self.groupView.name, self.detailX + self.posterSize + 16, self.detailY, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
+        self:drawText(text("modsGroupCounts", onCount, #self.groupView.mods), self.detailX + self.posterSize + 16, self.detailY + fontH(UIFont.Medium) + 4, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small)
+    elseif many > 1 then
         local title = self.selectedGroup and text("modsGroupSelected", self.selectedGroup, many) or text("modsSelected", many)
         self:drawText(title, self.detailX + self.posterSize + 16, self.detailY, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
     elseif mod then

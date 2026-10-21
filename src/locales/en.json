@@ -579,6 +579,26 @@
       "turnOff": "Turn the group off",
       "turnedOn": "{{name}}: its mods are on (with what they require).",
       "turnedOff": "{{name}}: its mods are off."
+    },
+    "groupBy": {
+      "label": "Groups",
+      "title": "Group the list as the game's Mods screen can",
+      "none": "Groups: none",
+      "author": "Groups: author",
+      "category": "Groups: category",
+      "mine": "Groups: mine",
+      "noAuthor": "(no author)",
+      "noCategory": "(no category)",
+      "noGroup": "(in none of your groups)",
+      "count": "{{on}} on of {{count}}",
+      "allOn": "All on",
+      "allOff": "All off",
+      "editNote": "The group's note",
+      "noteTitle": "Note on the group \"{{name}}\"",
+      "category_map": "Maps",
+      "category_vehicle": "Vehicles",
+      "category_features": "Features",
+      "category_modpack": "Modpacks"
     }
   },
   "health": {

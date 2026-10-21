@@ -23,6 +23,9 @@ pub struct ModManifest {
     pub poster_url: Option<String>,
     pub is_library: bool,
     pub is_map_mod: bool,
+    /// `category=` of its mod.info (map, vehicle, features, modpack), as the game's screen groups.
+    #[serde(default)]
+    pub category: Option<String>,
     pub enabled: bool,
     pub is_packaged: Option<bool>,
     /// Whether the installed game build can load this mod (None: build unknown).
@@ -52,6 +55,7 @@ fn not_installed_row(id: &str) -> ModManifest {
         poster_url: None,
         is_library: false,
         is_map_mod: false,
+        category: None,
         enabled: true,
         is_packaged: None,
         loadable_on_installed_build: None,
@@ -123,6 +127,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
     let mut name = String::new();
     let mut description = None;
     let mut author = None;
+    let mut category = None;
     let mut version = None;
     let mut pzversion = None;
     let mut url = None;
@@ -151,6 +156,11 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
             let auth = clean_text_encoding(trimmed[7..].trim());
             if !auth.is_empty() {
                 author = Some(auth);
+            }
+        } else if let Some(c) = trimmed.strip_prefix("category=") {
+            let c = c.trim().to_lowercase();
+            if !c.is_empty() {
+                category = Some(c);
             }
         } else if trimmed.starts_with("modversion=") {
             let v = trimmed[11..].trim().to_string();
@@ -339,6 +349,7 @@ pub fn parse_mod_info(path: &Path) -> Option<ModManifest> {
         poster_url,
         is_library,
         is_map_mod,
+        category,
         enabled: false,
         is_packaged: None,
         loadable_on_installed_build: None,

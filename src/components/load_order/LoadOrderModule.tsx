@@ -42,6 +42,8 @@ import {
   Search,
   ShieldCheck,
   Square,
+  ChevronDown,
+  ChevronRight,
   StickyNote,
   Tags,
   Wand2,
@@ -525,6 +527,28 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   // The player's notes and groups (kept by the app; the game's Link shows them).
   const [meta, setMeta] = useState<ModMeta>({ notes: {}, groups: [] });
   const [groupFilter, setGroupFilter] = useState<string>('all');
+  // Grouped like the game's Mods screen: none, author, category, the player's own groups.
+  const [groupBy, setGroupByState] = useState<'none' | 'author' | 'category' | 'mine'>(() => {
+    try {
+      const v = localStorage.getItem('pzms_group_by');
+      return v === 'author' || v === 'category' || v === 'mine' ? v : 'none';
+    } catch {
+      return 'none';
+    }
+  });
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      setCollapsed(new Set(JSON.parse(localStorage.getItem(`pzms_group_collapsed_${groupBy}`) ?? '[]') as string[]));
+    } catch {
+      setCollapsed(new Set());
+    }
+  }, [groupBy]);
+  const setGroupBy = (v: 'none' | 'author' | 'category' | 'mine') => {
+    setGroupByState(v);
+    try { localStorage.setItem('pzms_group_by', v); } catch { /* per-viewer convenience */ }
+  };
+  const [groupNoteOf, setGroupNoteOf] = useState<{ name: string; note: string } | null>(null);
   const [metaOf, setMetaOf] = useState<{ mod: ModInfo; tab: 'note' | 'groups' } | null>(null);
   useEffect(() => {
     if (!paths.user_zomboid_dir) return;
@@ -1033,6 +1057,181 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       active ? 'border-cyan-600/70 text-cyan-200' : 'border-slate-800 text-slate-300'
     }`;
 
+  /** One row of the list (the same in the flat list and inside a group). */
+  const renderRow = (mod: ModInfo) => {
+                // The row's colour follows the worst thing the health check found for it.
+                const rowIssues = issuesByMod.get(mod.mod_id) ?? [];
+                const worstIssue = rowIssues.some((i) => i.severity === 'error') ? 'error' : rowIssues.some((i) => i.severity === 'warning') ? 'warning' : null;
+                const originalIndex = modIndexById.get(mod.mod_id) ?? -1;
+                const isSelected = mod.mod_id === selectedModId;
+                const isHighlighted = mod.mod_id === highlightedModId;
+                const isAssigningThis = assigningModId === mod.mod_id;
+
+                const isMultiPackage = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? multiModPackageMap[mod.workshop_id] : false;
+                const packageColor = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? workshopColorMap[mod.workshop_id] : null;
+
+
+                const isConflictPartner =
+                  selectedMod &&
+                  activeConflictsMap[selectedMod.mod_id] &&
+                  activeConflictsMap[selectedMod.mod_id].some((c) => c.conflictingModId === mod.mod_id);
+
+                const isSyntheticFusion = mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier");
+                const isBridge = mod.mod_id === "Z_PZModStudio_Bridge";
+                const isOpenedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === false);
+                const isClosedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === true);
+
+                const isDragging = dragModId === mod.mod_id;
+                const dropEdge = dropTarget?.modId === mod.mod_id ? dropTarget.after : null;
+
+                return (
+                  <div
+                    key={mod.mod_id}
+                    ref={(el) => {
+                      modRowRefs.current[mod.mod_id] = el;
+                    }}
+                    draggable={!isAssigningThis}
+                    onDragStart={(e) => {
+                      setDragModId(mod.mod_id);
+                      e.dataTransfer.effectAllowed = 'move';
+                      // Firefox refuses to start a drag without data on it.
+                      e.dataTransfer.setData('text/plain', mod.mod_id);
+                    }}
+                    onDragEnd={() => {
+                      setDragModId(null);
+                      setDropTarget(null);
+                    }}
+                    onDragOver={(e) => {
+                      if (!dragModId || dragModId === mod.mod_id) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      const box = e.currentTarget.getBoundingClientRect();
+                      const after = e.clientY > box.top + box.height / 2;
+                      if (dropTarget?.modId !== mod.mod_id || dropTarget.after !== after) {
+                        setDropTarget({ modId: mod.mod_id, after });
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const box = e.currentTarget.getBoundingClientRect();
+                      handleDropOnMod(mod.mod_id, e.clientY > box.top + box.height / 2);
+                    }}
+                    onClick={() => setSelectedModId(mod.mod_id)}
+                    onContextMenu={(e) => {
+                      setSelectedModId(mod.mod_id);
+                      showContextMenu(e, modRowMenu(mod, originalIndex));
+                    }}
+                    className={`flex gap-2 px-2 py-1.5 items-center rounded-lg text-xs cursor-pointer transition border border-l-4 ${rowFrame({
+                      isHighlighted,
+                      isSelected,
+                      isConflictPartner: Boolean(isConflictPartner),
+                      isOpenedPackage,
+                      worstIssue,
+                      packageColor: isMultiPackage ? packageColor : null,
+                      enabled: mod.enabled,
+                    })} ${isDragging ? 'opacity-40' : ''} ${
+                      dropEdge === false
+                        ? 'shadow-[inset_0_2px_0_0_#34d399]'
+                        : dropEdge === true
+                        ? 'shadow-[inset_0_-2px_0_0_#34d399]'
+                        : ''
+                    }`}
+                  >
+                    <ModRowBody
+                      paths={paths}
+                      mod={mod}
+                      originalIndex={originalIndex}
+                      mods={mods}
+                      isOpenedPackage={isOpenedPackage}
+                      isClosedPackage={isClosedPackage}
+                      isBridge={isBridge}
+                      catalogById={catalogById}
+                      errorStats={errorStats}
+                      loadTimes={loadTimes}
+                      isFavorite={keep.isFavorite({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })}
+                      note={meta.notes[mod.mod_id]}
+                      groups={groupsByMod.get(mod.mod_id)}
+                      showEveryMod={showEveryMod}
+                      activeProfile={activeProfile}
+                      profilesByMod={profilesByMod}
+                      inActiveProfile={inActiveProfile}
+                      rowIssues={rowIssues}
+                      isAssigningThis={isAssigningThis}
+                      targetPosInput={targetPosInput}
+                      setTargetPosInput={setTargetPosInput}
+                      setAssigningModId={setAssigningModId}
+                      handleToggleSingleMod={handleToggleSingleMod}
+                      showToast={showToast}
+                      triggerReorder={triggerReorder}
+                      handleJumpToMod={handleJumpToMod}
+                      onOpenMerger={onOpenMerger}
+                      onGoToHealth={onGoToHealth}
+                      moveToTop={moveToTop}
+                      moveUp={moveUp}
+                      moveDown={moveDown}
+                      moveToBottom={moveToBottom}
+                      handleAssignPosition={handleAssignPosition}
+                    />
+                  </div>
+                );
+  };
+
+  /** The list in groups (as in the game's Mods screen): each heading folds its group. */
+  const groupKeys = (mod: ModInfo): string[] => {
+    if (groupBy === 'author') return [mod.author?.trim() || t('modList.groupBy.noAuthor')];
+    if (groupBy === 'category') {
+      const c = mod.category || (mod.is_map_mod ? 'map' : '');
+      return [c ? t(`modList.groupBy.category_${c}`, { defaultValue: c }) : t('modList.groupBy.noCategory')];
+    }
+    const mine = groupsByMod.get(mod.mod_id) ?? [];
+    return mine.length > 0 ? mine : [t('modList.groupBy.noGroup')];
+  };
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try { localStorage.setItem(`pzms_group_collapsed_${groupBy}`, JSON.stringify([...next])); } catch { /* per-viewer convenience */ }
+      return next;
+    });
+  const setManyOn = (list: ModInfo[], on: boolean) => {
+    const ids = new Set(list.map((m) => m.mod_id));
+    const next = on ? enableWithRequirements(mods, [...ids]) : mods.map((m) => (ids.has(m.mod_id) && m.mod_id !== STUDIO_LINK_MOD_ID ? { ...m, enabled: false } : m));
+    onReorder(next);
+  };
+  const renderGrouped = () => {
+    const groups = new Map<string, ModInfo[]>();
+    for (const mod of filteredMods) for (const key of groupKeys(mod)) groups.set(key, [...(groups.get(key) ?? []), mod]);
+    const last = new Set([t('modList.groupBy.noAuthor'), t('modList.groupBy.noCategory'), t('modList.groupBy.noGroup')]);
+    const keys = [...groups.keys()].sort((a, b) => (last.has(a) === last.has(b) ? a.localeCompare(b, undefined, { sensitivity: 'base' }) : last.has(a) ? 1 : -1));
+    return keys.map((key) => {
+      const list = groups.get(key) ?? [];
+      const open = !collapsed.has(key);
+      const onCount = list.filter((m) => m.enabled).length;
+      const mine = groupBy === 'mine' ? meta.groups.find((g) => g.name === key) : undefined;
+      return (
+        <div key={key} className="space-y-1">
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 sticky top-0 z-10">
+            <button onClick={() => toggleCollapsed(key)} aria-expanded={open} className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer">
+              {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+              <span className="text-xs font-semibold text-emerald-300 truncate">{key}</span>
+              <span className="text-[10px] text-slate-500 shrink-0">{t('modList.groupBy.count', { on: onCount, count: list.length })}</span>
+              {mine?.note && <span className="text-[10px] text-sky-300 truncate" title={mine.note}>· {mine.note}</span>}
+            </button>
+            {mine && (
+              <button onClick={() => setGroupNoteOf({ name: mine.name, note: mine.note ?? '' })} title={t('modList.groupBy.editNote')} className="p-1 rounded text-slate-400 hover:text-sky-300 hover:bg-slate-800 cursor-pointer">
+                <StickyNote className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button onClick={() => setManyOn(list, true)} className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-800/70 text-emerald-300 hover:bg-emerald-950/50 cursor-pointer">{t('modList.groupBy.allOn')}</button>
+            <button onClick={() => setManyOn(list, false)} className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">{t('modList.groupBy.allOff')}</button>
+          </div>
+          {open && list.map(renderRow)}
+        </div>
+      );
+    });
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden p-6 font-sans">
       {/* Module Header: what the list is and its numbers on the left, what you do with the whole list on the right. */}
@@ -1108,6 +1307,18 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           {keep.node}
           <LoadRules paths={paths} mod={rulesOf} mods={mods} installedBuild={installedBuild} onClose={() => setRulesOf(null)} onRulesChanged={() => onRulesChanged?.()} toast={showToast} />
           <ModMetaDialog paths={paths} open={metaOf} meta={meta} onChange={setMeta} onClose={() => setMetaOf(null)} />
+          {groupNoteOf && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setGroupNoteOf(null)}>
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-sm font-bold text-slate-100">{t('modList.groupBy.noteTitle', { name: groupNoteOf.name })}</h3>
+                <textarea autoFocus value={groupNoteOf.note} onChange={(e) => setGroupNoteOf({ ...groupNoteOf, note: e.target.value })} rows={4} maxLength={500} className="w-full px-2.5 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 resize-none" />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setGroupNoteOf(null)} className="px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-300 hover:bg-slate-800 cursor-pointer">{t('dialogs.meta.close')}</button>
+                  <button onClick={() => void TauriService.setModGroupNote(paths, groupNoteOf.name, groupNoteOf.note).then((m) => { setMeta(m); setGroupNoteOf(null); })} className="px-3 py-1.5 rounded-md bg-emerald-700 text-xs text-white hover:bg-emerald-600 cursor-pointer">{t('dialogs.meta.saveNote')}</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1172,6 +1383,18 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
               {tag.label} ({tag.count})
             </option>
           ))}
+        </select>
+        <select
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value as 'none' | 'author' | 'category' | 'mine')}
+          aria-label={t('modList.groupBy.label')}
+          title={t('modList.groupBy.title')}
+          className={selectClass(groupBy !== 'none')}
+        >
+          <option value="none">{t('modList.groupBy.none')}</option>
+          <option value="author">{t('modList.groupBy.author')}</option>
+          <option value="category">{t('modList.groupBy.category')}</option>
+          <option value="mine">{t('modList.groupBy.mine')}</option>
         </select>
         {meta.groups.length > 0 && (
           <select
@@ -1334,123 +1557,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                 )}
               </div>
             ) : (
-              filteredMods.map((mod) => {
-                // The row's colour follows the worst thing the health check found for it.
-                const rowIssues = issuesByMod.get(mod.mod_id) ?? [];
-                const worstIssue = rowIssues.some((i) => i.severity === 'error') ? 'error' : rowIssues.some((i) => i.severity === 'warning') ? 'warning' : null;
-                const originalIndex = modIndexById.get(mod.mod_id) ?? -1;
-                const isSelected = mod.mod_id === selectedModId;
-                const isHighlighted = mod.mod_id === highlightedModId;
-                const isAssigningThis = assigningModId === mod.mod_id;
-
-                const isMultiPackage = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? multiModPackageMap[mod.workshop_id] : false;
-                const packageColor = (!mod.mod_id.startsWith("Z_PZModStudio_") && mod.workshop_id) ? workshopColorMap[mod.workshop_id] : null;
-
-
-                const isConflictPartner =
-                  selectedMod &&
-                  activeConflictsMap[selectedMod.mod_id] &&
-                  activeConflictsMap[selectedMod.mod_id].some((c) => c.conflictingModId === mod.mod_id);
-
-                const isSyntheticFusion = mod.mod_id.startsWith("Z_PZModStudio_") && !mod.mod_id.includes("Carrier");
-                const isBridge = mod.mod_id === "Z_PZModStudio_Bridge";
-                const isOpenedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === false);
-                const isClosedPackage = Boolean(isSyntheticFusion && !isBridge && mod.is_packaged === true);
-
-                const isDragging = dragModId === mod.mod_id;
-                const dropEdge = dropTarget?.modId === mod.mod_id ? dropTarget.after : null;
-
-                return (
-                  <div
-                    key={mod.mod_id}
-                    ref={(el) => {
-                      modRowRefs.current[mod.mod_id] = el;
-                    }}
-                    draggable={!isAssigningThis}
-                    onDragStart={(e) => {
-                      setDragModId(mod.mod_id);
-                      e.dataTransfer.effectAllowed = 'move';
-                      // Firefox refuses to start a drag without data on it.
-                      e.dataTransfer.setData('text/plain', mod.mod_id);
-                    }}
-                    onDragEnd={() => {
-                      setDragModId(null);
-                      setDropTarget(null);
-                    }}
-                    onDragOver={(e) => {
-                      if (!dragModId || dragModId === mod.mod_id) return;
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = 'move';
-                      const box = e.currentTarget.getBoundingClientRect();
-                      const after = e.clientY > box.top + box.height / 2;
-                      if (dropTarget?.modId !== mod.mod_id || dropTarget.after !== after) {
-                        setDropTarget({ modId: mod.mod_id, after });
-                      }
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const box = e.currentTarget.getBoundingClientRect();
-                      handleDropOnMod(mod.mod_id, e.clientY > box.top + box.height / 2);
-                    }}
-                    onClick={() => setSelectedModId(mod.mod_id)}
-                    onContextMenu={(e) => {
-                      setSelectedModId(mod.mod_id);
-                      showContextMenu(e, modRowMenu(mod, originalIndex));
-                    }}
-                    className={`flex gap-2 px-2 py-1.5 items-center rounded-lg text-xs cursor-pointer transition border border-l-4 ${rowFrame({
-                      isHighlighted,
-                      isSelected,
-                      isConflictPartner: Boolean(isConflictPartner),
-                      isOpenedPackage,
-                      worstIssue,
-                      packageColor: isMultiPackage ? packageColor : null,
-                      enabled: mod.enabled,
-                    })} ${isDragging ? 'opacity-40' : ''} ${
-                      dropEdge === false
-                        ? 'shadow-[inset_0_2px_0_0_#34d399]'
-                        : dropEdge === true
-                        ? 'shadow-[inset_0_-2px_0_0_#34d399]'
-                        : ''
-                    }`}
-                  >
-                    <ModRowBody
-                      paths={paths}
-                      mod={mod}
-                      originalIndex={originalIndex}
-                      mods={mods}
-                      isOpenedPackage={isOpenedPackage}
-                      isClosedPackage={isClosedPackage}
-                      isBridge={isBridge}
-                      catalogById={catalogById}
-                      errorStats={errorStats}
-                      loadTimes={loadTimes}
-                      isFavorite={keep.isFavorite({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })}
-                      note={meta.notes[mod.mod_id]}
-                      groups={groupsByMod.get(mod.mod_id)}
-                      showEveryMod={showEveryMod}
-                      activeProfile={activeProfile}
-                      profilesByMod={profilesByMod}
-                      inActiveProfile={inActiveProfile}
-                      rowIssues={rowIssues}
-                      isAssigningThis={isAssigningThis}
-                      targetPosInput={targetPosInput}
-                      setTargetPosInput={setTargetPosInput}
-                      setAssigningModId={setAssigningModId}
-                      handleToggleSingleMod={handleToggleSingleMod}
-                      showToast={showToast}
-                      triggerReorder={triggerReorder}
-                      handleJumpToMod={handleJumpToMod}
-                      onOpenMerger={onOpenMerger}
-                      onGoToHealth={onGoToHealth}
-                      moveToTop={moveToTop}
-                      moveUp={moveUp}
-                      moveDown={moveDown}
-                      moveToBottom={moveToBottom}
-                      handleAssignPosition={handleAssignPosition}
-                    />
-                  </div>
-                );
-              })
+              groupBy === 'none' ? filteredMods.map(renderRow) : renderGrouped()
             )}
           </div>
 

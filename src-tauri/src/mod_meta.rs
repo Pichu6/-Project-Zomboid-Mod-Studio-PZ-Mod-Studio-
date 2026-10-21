@@ -15,6 +15,9 @@ pub const LINK_META_FILE: &str = "PZModStudio_LinkMeta.txt";
 pub struct ModGroup {
     pub name: String,
     pub mods: Vec<String>,
+    /// The player's note on the group.
+    #[serde(default)]
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -45,6 +48,9 @@ pub fn link_text(meta: &ModMeta) -> String {
     }
     for g in &meta.groups {
         out.push_str(&format!("group={}\t{}\n", clean(&g.name), g.mods.join(";")));
+        if !g.note.trim().is_empty() {
+            out.push_str(&format!("groupnote={}\t{}\n", clean(&g.name), clean(&g.note)));
+        }
     }
     out
 }
@@ -92,7 +98,7 @@ pub fn set_in_group(user_zomboid_dir: &Path, group: &str, mod_ids: &[String], in
     let at = match meta.groups.iter().position(|g| g.name.eq_ignore_ascii_case(name)) {
         Some(i) => i,
         None => {
-            meta.groups.push(ModGroup { name: name.to_string(), mods: Vec::new() });
+            meta.groups.push(ModGroup { name: name.to_string(), mods: Vec::new(), note: String::new() });
             meta.groups.len() - 1
         }
     };
@@ -126,6 +132,14 @@ pub fn rename_group(user_zomboid_dir: &Path, from: &str, to: &str) -> Result<Mod
             g.name = to.to_string();
         }
     }
+    write(user_zomboid_dir, &meta)?;
+    Ok(meta)
+}
+
+pub fn set_group_note(user_zomboid_dir: &Path, name: &str, note: &str) -> Result<ModMeta, String> {
+    let mut meta = read(user_zomboid_dir);
+    let Some(g) = meta.groups.iter_mut().find(|g| g.name == name) else { return Err(format!("There is no group called {}.", name)) };
+    g.note = note.trim().to_string();
     write(user_zomboid_dir, &meta)?;
     Ok(meta)
 }
@@ -165,6 +179,9 @@ mod tests {
         assert!(meta.notes.is_empty(), "an empty note is taken away");
         assert!(rename_group(&d, "Weapons", "").is_err());
         assert_eq!(rename_group(&d, "Weapons", "Guns").unwrap().groups[0].name, "Guns");
+        set_group_note(&d, "Guns", "load\tlast").unwrap();
+        assert!(std::fs::read_to_string(d.join("Lua").join(LINK_META_FILE)).unwrap().contains("groupnote=Guns\tload last\n"));
+        assert!(set_group_note(&d, "Nope", "x").is_err());
         assert!(delete_group(&d, "Guns").unwrap().groups.is_empty());
         let _ = std::fs::remove_dir_all(d);
     }

@@ -124,7 +124,6 @@
     "UI_StudioLink_modsMissingReqMany": "También necesitan estos, que no están instalados:",
     "UI_StudioLink_modsAlsoOffMany": "Estos los necesitan y están activos: se desactivan con ellos.",
     "UI_StudioLink_modsOptions": "Opciones del mod",
-    "UI_StudioLink_modsOptionsAcceptFirst": "Aceptá o descartá los cambios primero: la pantalla de opciones no recarga nada.",
     "UI_StudioLink_modsGroup_none": "Grupos: ninguno",
     "UI_StudioLink_modsGroup_author": "Grupos: autor",
     "UI_StudioLink_modsGroup_category": "Grupos: categoría",
@@ -145,5 +144,14 @@
     "UI_StudioLink_modsYourNote": "Tu nota:",
     "UI_StudioLink_modsGroup_mine": "Grupos: míos",
     "UI_StudioLink_modsNoGroup": "(en ninguno de tus grupos)",
-    "UI_StudioLink_modsGroupSelected": "{1}: {2} mods"
+    "UI_StudioLink_modsGroupSelected": "{1}: {2} mods",
+    "UI_StudioLink_modsSelectAll": "Seleccionar todo",
+    "UI_StudioLink_modsGroupHelp": "Los botones actúan sobre todos los mods del grupo. \"Seleccionar todo\" en su título los marca en la lista.",
+    "UI_StudioLink_modsGroupNote": "Nota:",
+    "UI_StudioLink_modsGroupCounts": "{1} activos de {2}",
+    "UI_StudioLink_modsOptionsTitle": "Opciones de {1}",
+    "UI_StudioLink_modsOptionsSave": "Guardar",
+    "UI_StudioLink_modsOptionsSaved": "Opciones de {1} guardadas.",
+    "UI_StudioLink_modsOptionInOptions": "se cambia en Opciones del juego",
+    "UI_StudioLink_modsOptionColour": "color"
 }
