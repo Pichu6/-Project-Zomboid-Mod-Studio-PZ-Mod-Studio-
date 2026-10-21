@@ -142,6 +142,12 @@ pub fn install_link_mod(user_zomboid_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// A local Link that is not the one this Studio carries (none installed: nothing to update).
+pub fn link_needs_update(user_zomboid_dir: &Path) -> bool {
+    let info = user_zomboid_dir.join("mods").join(LINK_MOD_ID).join("42").join("mod.info");
+    info.is_file() && link_files(user_zomboid_dir).iter().any(|(path, content)| std::fs::read_to_string(path).map_or(true, |now| now != *content))
+}
+
 /// The text of `PZModStudio_Link.txt` for a profile: its name, its mods in load order, and the
 /// mods other profiles hold (so the game can tell a mod that is in no profile at all, a new one).
 pub fn link_file_text(profile_name: &str, members: &[String], others: &[String]) -> String {
@@ -678,6 +684,9 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         let mut playing: Option<String> = None;
         let mut saves_written = 0u64;
         let mut ticks = 0u64;
+        // A Link installed by an older Studio is brought up to this one's version at once, not
+        // only when a profile is next applied.
+        let mut link_checked = false;
         loop {
             ticks += 1;
             thread::sleep(Duration::from_secs(2));
@@ -686,6 +695,14 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                 continue;
             };
             let lua_dir = z_dir.join("Lua");
+            if !link_checked {
+                link_checked = true;
+                if link_needs_update(&z_dir) {
+                    if let Err(e) = install_link_mod(&z_dir) {
+                        crate::diagnostics::error(format!("[StudioLink] {}", e));
+                    }
+                }
+            }
 
             // The app is here: the game counts it gone when this is some seconds old.
             let now = now_secs();
@@ -1113,6 +1130,22 @@ waiting=C
         std::fs::write(z.join("mods").join("default.txt"), whole).unwrap();
         assert!(mirror_active_list(&z));
         assert_eq!(std::fs::read_to_string(&copy).unwrap(), whole);
+        let _ = std::fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn an_older_installed_link_is_brought_up_to_date() {
+        let z = temp("older");
+        assert!(!link_needs_update(&z), "not installed: nothing to update");
+        let info = z.join("mods").join(LINK_MOD_ID).join("42");
+        std::fs::create_dir_all(&info).unwrap();
+        std::fs::write(info.join("mod.info"), "id=Z_StudioLink\nmodversion=1.0.0\n").unwrap();
+        assert!(link_needs_update(&z));
+        install_link_mod(&z).unwrap();
+        assert!(!link_needs_update(&z));
+        let screen = z.join("mods").join(LINK_MOD_ID).join("42").join("media").join("lua").join("client").join("PZModStudio_ModsScreen.lua");
+        std::fs::write(&screen, "-- changed").unwrap();
+        assert!(link_needs_update(&z), "a file that differs, same version");
         let _ = std::fs::remove_dir_all(&z);
     }
 

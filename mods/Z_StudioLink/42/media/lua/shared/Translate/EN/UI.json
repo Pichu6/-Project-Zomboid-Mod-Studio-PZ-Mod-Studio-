@@ -183,8 +183,7 @@
     "UI_StudioLink_modsSyncTake": "PZ Mod Studio's",
     "UI_StudioLink_modsSyncSend": "Mine (Accept)",
     "UI_StudioLink_modsOpenApp": "Open PZ Mod Studio",
-    "UI_StudioLink_modsAppNoOpen": "PZ Mod Studio could not be opened from the game. Open it from Windows.",
+    "UI_StudioLink_modsAppNoOpen": "PZ Mod Studio is closed: open it from Windows. With its Settings, \"The close button (X)\", set to keep it in the tray, it stays running, and this button brings it up.",
     "UI_StudioLink_modsAppShown": "PZ Mod Studio is in front of the game.",
-    "UI_StudioLink_modsAppOpening": "Opening PZ Mod Studio...",
     "UI_StudioLink_modsFromApp": "PZ Mod Studio changed the mods: this is its list now."
 }

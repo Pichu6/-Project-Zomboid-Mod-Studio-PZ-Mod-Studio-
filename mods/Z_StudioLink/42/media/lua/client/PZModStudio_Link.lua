@@ -249,9 +249,8 @@ local TEXT = {
     modsSyncTake = "PZ Mod Studio's",
     modsSyncSend = "Mine (Accept)",
     modsOpenApp = "Open PZ Mod Studio",
-    modsAppNoOpen = "PZ Mod Studio could not be opened from the game. Open it from Windows.",
+    modsAppNoOpen = "PZ Mod Studio is closed: open it from Windows. With its Settings, \"The close button (X)\", set to keep it in the tray, it stays running, and this button brings it up.",
     modsAppShown = "PZ Mod Studio is in front of the game.",
-    modsAppOpening = "Opening PZ Mod Studio...",
     modsFromApp = "PZ Mod Studio changed the mods: this is its list now.",
 }
 
@@ -360,14 +359,12 @@ function Link.requestShow()
     writer:close()
 end
 
---- PZ Mod Studio in front: asked through its file when it runs, opened through Windows
---- (pzmodstudio://, which the app registers) when it is closed.
+--- PZ Mod Studio in front, asked through its file. False when it is closed: the game's Lua cannot
+--- start a program (openUrl goes to the Steam overlay), so the player opens it from Windows.
 function Link.openApp()
-    if Link.appAlive() then
-        Link.requestShow()
-        return true
-    end
-    return pcall(openUrl, "pzmodstudio://open")
+    if not Link.appAlive() then return false end
+    Link.requestShow()
+    return true
 end
 
 --- mods/default.txt as PZ Mod Studio last saw it (its copy in Zomboid/Lua): the mods and maps in
@@ -1318,12 +1315,19 @@ local function openPanel(title, body, height, choices, waiting)
     panel:instantiate()
     panel:addToUIManager()
     panel:setAlwaysOnTop(true)
+    -- While it is up nothing else changes the screens under it (see Link.dialogUp).
+    Link.dialog = panel
     -- A controller drives it, as it does the game's own dialogs.
     if panel.joypad then
         panel.joypad.focus = panel
         updateJoypadFocus(panel.joypad)
     end
     return panel
+end
+
+--- Whether one of these panels is on screen (a question waits for the player).
+function Link.dialogUp()
+    return Link.dialog ~= nil and Link.dialog:isVisible()
 end
 
 --- A panel that waits for the app, with Cancel.
@@ -1395,6 +1399,7 @@ end
 function WaitPanel:close()
     self:setVisible(false)
     self:removeFromUIManager()
+    if Link.dialog == self then Link.dialog = nil end
     if self.joypad and self.joypad.focus == self then
         self.joypad.focus = MainScreen.instance
         updateJoypadFocus(self.joypad)

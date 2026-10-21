@@ -14,7 +14,7 @@
 -- and the player's own notes and groups (made in the app; here they are shown, and a group's
 -- heading selects its mods to turn them on or off together). While the app runs, what it changes
 -- reaches the game on the main menu (a profile switched, mods turned on or off, a fix package:
--- see Link.readAppList), "Sync" takes it on demand, and "Open PZ Mod Studio" brings it up. With
+-- see Link.readAppList), "Sync" takes it on demand, and "Open PZ Mod Studio" brings it to the front. With
 -- the app closed the list is everything installed, as without it.
 -- The game's own screen is one button away ("The game's screen"), and another mod manager that
 -- owns the Mods screen (see PZModStudio_Link.lua) keeps it: then this screen never opens.
@@ -1335,7 +1335,8 @@ function Screen:select(mod, groupName)
     local function line(s) table.insert(parts, s) end
     -- Where it stands and where it comes from, as the app's inspector shows it.
     local function fact(label, value, color)
-        line(" <RGB:0.58,0.64,0.72> " .. label .. " <RGB:" .. (color or "0.9,0.92,0.95") .. "> " .. value .. " <RGB:1,1,1> <LINE> ")
+        -- (<SPACE>: the rich text drops a plain space that stands before a colour)
+        line(" <RGB:0.58,0.64,0.72> " .. label .. " <SPACE> <RGB:" .. (color or "0.9,0.92,0.95") .. "> " .. value .. " <RGB:1,1,1> <LINE> ")
     end
     local function nameOf(id)
         local m = self.byId[id]
@@ -1715,6 +1716,25 @@ function Screen:setRatio(ratio)
     self.desc:paginate()
 end
 
+--- A note at the foot of the details, wrapped to their width (its last line on the foot).
+function Screen:drawNote(note)
+    local lines, lineText = {}, ""
+    for word in string.gmatch(note, "%S+") do
+        local try = lineText == "" and word or lineText .. " " .. word
+        if lineText ~= "" and measure(UIFont.Small, try) > self.detailW then
+            table.insert(lines, lineText)
+            lineText = word
+        else
+            lineText = try
+        end
+    end
+    if lineText ~= "" then table.insert(lines, lineText) end
+    local fh = fontH(UIFont.Small)
+    for i, l in ipairs(lines) do
+        self:drawText(l, self.detailX, self.noteY - (#lines - i) * fh, C.warn[1], C.warn[2], C.warn[3], 1, UIFont.Small)
+    end
+end
+
 --- The bars above and below the list: #1 loads first, the last # loads last (the # beside each
 --- mod is its place in that order, whatever order the list is sorted in).
 function Screen:drawBars()
@@ -1828,11 +1848,11 @@ function Screen:prerender()
         if mod.author ~= "" then self:drawText(text("modsBy", mod.author), nx, ny, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small) end
     end
     -- A short note (why a move was refused...), for a few seconds.
-    if self.note and self.noteAt and Link.now() - self.noteAt < 6 then
-        self:drawText(self.note, self.detailX, self.noteY, C.warn[1], C.warn[2], C.warn[3], 1, UIFont.Small)
+    if self.note and self.noteAt and Link.now() - self.noteAt < 8 then
+        self:drawNote(self.note)
     elseif self.appChanged then
         -- PZ Mod Studio changed the mods while changes made here wait: Sync says which stay.
-        self:drawText(text("modsAppChanged"), self.detailX, self.noteY, C.warn[1], C.warn[2], C.warn[3], 1, UIFont.Small)
+        self:drawNote(text("modsAppChanged"))
     end
 end
 
@@ -1909,7 +1929,7 @@ function Screen:sync()
         end
     end
     if self.changes == 0 then return pull() end
-    self.dialog = Link.WaitPanel.choose(text("modsSync"), text("modsSyncWhich", self.changes), 170, {
+    Link.WaitPanel.choose(text("modsSync"), text("modsSyncWhich", self.changes), 170, {
         { label = text("back") },
         { label = text("modsSyncTake"), onClick = pull },
         { label = text("modsSyncSend"), accept = true, onClick = function() self:accept() end },
@@ -1917,9 +1937,7 @@ function Screen:sync()
 end
 
 function Screen:openApp()
-    local alive = Link.appAlive()
-    local ok = Link.openApp()
-    self:say(not ok and text("modsAppNoOpen") or alive and text("modsAppShown") or text("modsAppOpening"))
+    self:say(Link.openApp() and text("modsAppShown") or text("modsAppNoOpen"))
 end
 
 --- Every few seconds on the main menu: what PZ Mod Studio changed while the game runs reaches
@@ -1932,7 +1950,7 @@ local function watchApp(ms)
     Link.watchedAt = t
     local screen = Screen.instance
     -- Not under a window of its own (a mod's options, a question): the screen may be made again.
-    if screen and (screen.optionsWindow or (screen.dialog and screen.dialog:isVisible())) then return end
+    if Link.dialogUp() or (screen and screen.optionsWindow) then return end
     local list = Link.readAppList()
     if list and Link.appListSig == nil then
         Link.appListSig = list.sig
@@ -2025,7 +2043,7 @@ end
 
 function Screen:back()
     if self.changes == 0 then return self:close() end
-    self.dialog = Link.WaitPanel.choose(text("modsTitle"), text("modsDiscard", self.changes), 150, {
+    Link.WaitPanel.choose(text("modsTitle"), text("modsDiscard", self.changes), 150, {
         { label = text("back") },
         { label = text("modsDiscardYes"), onClick = function() self:close() end },
         { label = text("modsAccept"), accept = true, onClick = function() self:accept() end },
