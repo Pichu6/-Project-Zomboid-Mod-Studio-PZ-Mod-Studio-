@@ -50,3 +50,13 @@ __pycache__/
 # Release signing: only the public half belongs in the repository.
 *.pem
 !keys/*.pub.pem
+
+# Reference media from another project (PZMM), kept locally only
+/[1-8].jpg
+/9.gif
+/autosort.gif
+/join.gif
+/maps.gif
+/updates.gif
+/viewpoint.gif
+/workshop.gif
