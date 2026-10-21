@@ -59,5 +59,10 @@
     "UI_StudioLink_cardContinue": "Continue: {1}",
     "UI_StudioLink_cardNoChanges": "same mods as its last session",
     "UI_StudioLink_cardChanges": "since its last session: {1} updated, {2} added, {3} taken out",
-    "UI_StudioLink_cardNever": "PZ Mod Studio has not seen it played yet"
+    "UI_StudioLink_cardNever": "PZ Mod Studio has not seen it played yet",
+    "UI_StudioLink_cardProfileClosed": "Profile: {1} ({2} mods), as PZ Mod Studio left it",
+    "UI_StudioLink_inviteLine1": "Mod profiles, a backup of each save before it loads,",
+    "UI_StudioLink_inviteLine2": "Mod Health, maps and servers. Free, for Windows.",
+    "UI_StudioLink_inviteDownload": "Download",
+    "UI_StudioLink_inviteHide": "Hide"
 }

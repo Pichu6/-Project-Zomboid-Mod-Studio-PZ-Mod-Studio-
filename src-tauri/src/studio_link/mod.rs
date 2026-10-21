@@ -81,13 +81,41 @@ fn workshop_copy() -> Option<PathBuf> {
     })
 }
 
+/// `modversion=` of a mod.info text, as numbers ("1.7.0" -> [1, 7, 0]).
+pub fn mod_version(info: &str) -> Vec<u32> {
+    info.lines()
+        .find_map(|l| l.trim().strip_prefix("modversion="))
+        .map(|v| v.trim().split('.').map(|n| n.trim().parse().unwrap_or(0)).collect())
+        .unwrap_or_default()
+}
+
+/// The Link this Studio carries.
+pub fn bundled_version() -> Vec<u32> {
+    mod_version(MOD_INFO_42)
+}
+
+/// The Workshop copy, when there is one at least as new as the Studio's own: that one runs and
+/// the local copy goes. An older one (Steam not updated yet, or this Studio newer than the
+/// published mod) loses to the local copy the Studio keeps.
+fn usable_workshop_copy() -> Option<PathBuf> {
+    let dir = workshop_copy()?;
+    let info = std::fs::read_to_string(dir.join("42").join("mod.info")).or_else(|_| std::fs::read_to_string(dir.join("mod.info"))).ok()?;
+    (mod_version(&info) >= bundled_version()).then_some(dir)
+}
+
+/// The local copy must win over an older Workshop one (the Studio starts the game reading
+/// Zomboid/mods first, as for compatible copies).
+pub fn local_link_must_win(user_zomboid_dir: &Path) -> bool {
+    !cfg!(test) && workshop_copy().is_some() && usable_workshop_copy().is_none() && user_zomboid_dir.join("mods").join(LINK_MOD_ID).join("mod.info").is_file()
+}
+
 /// Installs `Z_StudioLink` into `<Zomboid>/mods`, or brings it up to this build's version.
 /// Files that are already right are not touched. With the mod subscribed on the Workshop the
 /// local copy goes instead: two copies with one id would leave the game picking one (the
 /// Workshop's, by its folder order), and which version runs would depend on that.
 pub fn install_link_mod(user_zomboid_dir: &Path) -> Result<(), String> {
     let local = user_zomboid_dir.join("mods").join(LINK_MOD_ID);
-    if !cfg!(test) && workshop_copy().is_some() {
+    if !cfg!(test) && usable_workshop_copy().is_some() {
         // Only ever the Studio's own files: anything else the player put there stays.
         for (path, _) in link_files(user_zomboid_dir) {
             let _ = std::fs::remove_file(path);
@@ -900,13 +928,42 @@ mod tests {
     }
 
     #[test]
+    fn versions_compare_as_numbers() {
+        assert_eq!(mod_version("name=x\nmodversion=1.10.2\n"), vec![1, 10, 2]);
+        assert!(mod_version("modversion=1.10.0") > mod_version("modversion=1.9.9"));
+        assert!(mod_version("modversion=1.7") < mod_version("modversion=1.7.0"));
+        assert!(!bundled_version().is_empty(), "the bundled mod.info has a version");
+    }
+
+    #[test]
     fn the_link_lua_uses_only_what_the_games_lua_has() {
         // Kahlua has no `next` (seen live: "Object tried to call nil"), and no goto or integer
         // division.
+        // Code only: comments and the text inside "quotes" (a URL has "//") left out.
+        let code = |line: &str| -> String {
+            let mut out = String::new();
+            let mut quoted = false;
+            let mut chars = line.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '"' {
+                    quoted = !quoted;
+                } else if c == '\\' && quoted {
+                    chars.next();
+                } else if !quoted {
+                    if c == '-' && chars.peek() == Some(&'-') {
+                        break;
+                    }
+                    out.push(c);
+                }
+            }
+            out
+        };
         for missing in ["next(", "goto ", "//"] {
-            let used = CLIENT_LUA.lines().filter(|l| !l.trim_start().starts_with("--")).any(|l| l.split("--").next().unwrap().contains(missing));
+            let used = CLIENT_LUA.lines().any(|l| code(l).contains(missing));
             assert!(!used, "PZModStudio_Link.lua uses {}", missing);
         }
+        assert!(code(r#"x = "a//b" -- c // d"#).trim() == "x =", "quotes and comments are not code");
+        assert!(code("y = 7 // 2").contains("//"), "integer division in code is found");
     }
 
     #[test]

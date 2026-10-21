@@ -59,5 +59,10 @@
     "UI_StudioLink_cardContinue": "Continuar: {1}",
     "UI_StudioLink_cardNoChanges": "mismos mods que en su última sesión",
     "UI_StudioLink_cardChanges": "desde su última sesión: {1} actualizados, {2} agregados, {3} quitados",
-    "UI_StudioLink_cardNever": "PZ Mod Studio todavía no la vio jugar"
+    "UI_StudioLink_cardNever": "PZ Mod Studio todavía no la vio jugar",
+    "UI_StudioLink_cardProfileClosed": "Perfil: {1} ({2} mods), como lo dejó PZ Mod Studio",
+    "UI_StudioLink_inviteLine1": "Perfiles de mods, copia de cada partida antes de cargarla,",
+    "UI_StudioLink_inviteLine2": "Mod Health, mapas y servidores. Gratis, para Windows.",
+    "UI_StudioLink_inviteDownload": "Descargar",
+    "UI_StudioLink_inviteHide": "Ocultar"
 }

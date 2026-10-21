@@ -39,6 +39,9 @@ local REQUESTS_FILE = "PZModStudio_LinkRequests.txt"
 local STUDIO_PACKAGE = "^Z_PZModStudio_"
 
 local APP_FILE = "PZModStudio_LinkApp.txt"
+-- hidden=1 once the player hid the invitation to get the app.
+local INVITE_FILE = "PZModStudio_LinkInvite.txt"
+local DOWNLOAD_URL = "https://github.com/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest"
 local ACKS_FILE = "PZModStudio_LinkAcks.txt"
 local GAME_FILE = "PZModStudio_LinkGame.txt"
 local PROTOCOL = 2
@@ -108,6 +111,11 @@ local TEXT = {
     screenBody = "PZ Mod Studio and {1} both draw the game's Mods screen, and only one can. Which one do you want? <LINE> <LINE> PZ Mod Studio's: {1} is turned off in this profile and the game reloads its mods (a few seconds). <LINE> The other one: PZ Mod Studio leaves the Mods screen to {1}; save backups and the check before a save loads stay with PZ Mod Studio. <LINE> <LINE> You can change it later in PZ Mod Studio, Settings.",
     screenStudio = "PZ Mod Studio's",
     screenOther = "The other one",
+    cardProfileClosed = "Profile: {1} ({2} mods), as PZ Mod Studio left it",
+    inviteLine1 = "Mod profiles, a backup of each save before it loads,",
+    inviteLine2 = "Mod Health, maps and servers. Free, for Windows.",
+    inviteDownload = "Download",
+    inviteHide = "Hide",
     cardOpen = "open",
     cardClosed = "closed",
     cardProfile = "Profile: {1} ({2} mods)",
@@ -409,7 +417,11 @@ function Link.drawCard(screen)
     local font = UIFont.Small
     local lineH = getTextManager():getFontHeight(font) + 3
     local lines = {}
-    table.insert(lines, { text("cardProfile", card.profile, card.size), 1, 1, 1 })
+    if card.alive then
+        table.insert(lines, { text("cardProfile", card.profile, card.size), 1, 1, 1 })
+    else
+        table.insert(lines, { text("cardProfileClosed", card.profile, card.size), 0.85, 0.85, 0.85 })
+    end
     if card.errors > 0 or card.warnings > 0 then
         table.insert(lines, { text("cardHealth", card.errors, card.warnings), 1, card.errors > 0 and 0.5 or 0.8, 0.35 })
     else
@@ -448,6 +460,95 @@ function Link.drawCard(screen)
     end
 end
 
+--- Whether PZ Mod Studio has ever run on this PC (it writes its heartbeat file when it does).
+--- Without it the Link shows nothing of the app: only the invitation to get it.
+function Link.appInstalled()
+    if Link.installed ~= nil then return Link.installed end
+    local file = getFileReader(APP_FILE, false)
+    Link.installed = file ~= nil
+    if file then file:close() end
+    return Link.installed
+end
+
+function Link.inviteHidden()
+    local hidden = false
+    local file = getFileReader(INVITE_FILE, false)
+    if file then
+        local line = file:readLine()
+        while line ~= nil do
+            if string.match(line, "^%s*hidden%s*=%s*1") then hidden = true end
+            line = file:readLine()
+        end
+        file:close()
+    end
+    return hidden
+end
+
+--- The invitation, for players who have the mod but not the app: what the app does, a button
+--- to its download page (in the browser) and one to hide it for good.
+local InvitePanel = ISPanel:derive("StudioLinkInvitePanel")
+
+function InvitePanel:new(x, y, w, h)
+    local o = ISPanel.new(self, x, y, w, h)
+    o.backgroundColor = { r = 0.05, g = 0.06, b = 0.08, a = 0.82 }
+    o.borderColor = { r = 0.35, g = 0.75, b = 1.0, a = 0.8 }
+    return o
+end
+
+function InvitePanel:createChildren()
+    local bh = 22
+    local download = ISButton:new(12, self.height - bh - 10, 110, bh, text("inviteDownload"), self, function()
+        pcall(function() openUrl(DOWNLOAD_URL) end)
+    end)
+    download:initialise()
+    download:instantiate()
+    download.borderColor = { r = 0.35, g = 0.85, b = 0.5, a = 0.9 }
+    self:addChild(download)
+    local hide = ISButton:new(130, self.height - bh - 10, 80, bh, text("inviteHide"), self, function(panel)
+        pcall(function()
+            local file = getFileWriter(INVITE_FILE, true, false)
+            file:write("hidden=1\n")
+            file:close()
+        end)
+        panel:setVisible(false)
+        panel:removeFromUIManager()
+        Link.invitePanel = nil
+    end)
+    hide:initialise()
+    hide:instantiate()
+    self:addChild(hide)
+end
+
+function InvitePanel:prerender()
+    ISPanel.prerender(self)
+    self:drawText("PZ Mod Studio", 12, 7, 0.6, 0.85, 1, 1, UIFont.Medium)
+    local lineH = getTextManager():getFontHeight(UIFont.Small) + 3
+    self:drawText(text("inviteLine1"), 12, 32, 0.85, 0.85, 0.85, 1, UIFont.Small)
+    self:drawText(text("inviteLine2"), 12, 32 + lineH, 0.85, 0.85, 0.85, 1, UIFont.Small)
+end
+
+--- Shows the invitation in the menu's top-right corner (made once per visit to the menu).
+function Link.showInvite(screen)
+    if Link.inviteHidden() then return end
+    if Link.invitePanel then
+        Link.invitePanel:setVisible(true)
+        return
+    end
+    local font = UIFont.Small
+    local w = math.max(getTextManager():MeasureStringX(font, text("inviteLine1")), getTextManager():MeasureStringX(font, text("inviteLine2"))) + 24
+    w = math.max(w, 240)
+    local h = 32 + 2 * (getTextManager():getFontHeight(font) + 3) + 40
+    local panel = InvitePanel:new(screen.width - w - 20, 20, w, h)
+    panel:initialise()
+    panel:instantiate()
+    panel:addToUIManager()
+    Link.invitePanel = panel
+end
+
+function Link.hideInvite()
+    if Link.invitePanel then Link.invitePanel:setVisible(false) end
+end
+
 -- Asked from the main menu's own drawing (OnTick does not run in the menu), a moment after it
 -- shows, and only in the menu (the same screen is the pause menu in a game).
 local askFrames = -1
@@ -456,11 +557,16 @@ function MainScreen:prerender(...)
     mainPrerender(self, ...)
     -- The card, in the main menu proper (its buttons showing), not in a game's pause menu.
     if not Link.inGame and self.bottomPanel and self.bottomPanel:isVisible() then
-        local ok, err = pcall(Link.drawCard, self)
+        -- With the app on this PC: what it knows. Without it: only the invitation to get it.
+        local ok, err = pcall(function()
+            if Link.appInstalled() then Link.drawCard(self) else Link.showInvite(self) end
+        end)
         if not ok and not Link.cardFailed then
             Link.cardFailed = true
             print("[StudioLink] the main menu card failed: " .. tostring(err))
         end
+    else
+        pcall(Link.hideInvite)
     end
     if askFrames < 0 or Link.inGame then return end
     askFrames = askFrames + 1
@@ -502,11 +608,19 @@ function Link.onMainMenuEnter()
     Link.inGame = false
     Link.latestExists = nil
     Link.card = nil
+    Link.installed = nil
     Link.writeGameState("menu")
     askFrames = 0
 end
 function Link.onGameStart()
     Link.inGame = true
+    pcall(function()
+        if Link.invitePanel then
+            Link.invitePanel:setVisible(false)
+            Link.invitePanel:removeFromUIManager()
+            Link.invitePanel = nil
+        end
+    end)
     Link.writeGameState("ingame")
 end
 Events.OnMainMenuEnter.Add(Link.onMainMenuEnter)

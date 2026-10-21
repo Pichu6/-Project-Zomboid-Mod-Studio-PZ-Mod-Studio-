@@ -39,7 +39,7 @@ pub fn local_first(zomboid_dir: &Path) -> bool {
 /// Launch arguments to add for this Zomboid folder.
 pub fn launch_args(user_zomboid_dir: &str) -> Vec<String> {
     match get_existing_user_zomboid_dirs(user_zomboid_dir).first() {
-        Some(dir) if local_first(dir) => LOCAL_FIRST_ARG.iter().map(|s| s.to_string()).collect(),
+        Some(dir) if local_first(dir) || crate::studio_link::local_link_must_win(dir) => LOCAL_FIRST_ARG.iter().map(|s| s.to_string()).collect(),
         _ => Vec::new(),
     }
 }
