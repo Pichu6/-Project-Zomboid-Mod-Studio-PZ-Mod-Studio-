@@ -47,7 +47,13 @@ El registro debajo de los botones muestra cada paso:
 - Los tiempos: detectado, enviado, aplicado en el juego y de vuelta en el Studio, en milisegundos.
 - **El juego no está corriendo** o **Sin respuesta del juego en 6 s** cuando no había dónde recargar (fijate que el mod puente esté activo).
 
-Cuando se recarga un archivo, su código de nivel superior corre de nuevo. Sus manejadores de eventos pasan a las funciones nuevas, no se agregan dos veces. Un manejador que el archivo agrega por primera vez recién se registra después de un Reset Lua completo.
+Cuando se recarga un archivo, su código de nivel superior corre de nuevo, y el puente cuida lo que eso rompería:
+
+- **Manejadores de eventos**: cada uno que el archivo agrega corre una sola vez, uno que agregás por primera vez empieza a funcionar, y uno que sacás del archivo deja de correr.
+- **Tablas**: cuando el archivo vuelve a crear una tabla global (`MiMod = {}`, `MiPanel = ISPanel:derive(...)`), se queda la tabla vieja con las funciones nuevas, así que las ventanas abiertas y las referencias guardadas corren el código nuevo con su estado. Un valor que la tabla vieja ya tenía conserva el valor viejo (el puente no puede distinguir tu estado de una constante que cambiaste): para una constante cambiada, usá un Reset Lua completo.
+- **Tu propia preparación**: `if PZStudio then PZStudio.onReload(function(file) ... end) end` corre después de cada recarga de ese archivo, para lo que hacía `OnGameStart` y no se vuelve a hacer.
+
+El log dice qué se conservó, por ejemplo "1 handler(s), 1 table(s) kept".
 
 ## Revisión multijugador
 
@@ -60,5 +66,5 @@ TileZed dibuja los tiles de cada celda (edificios, habitaciones, muebles, suelo)
 ## Bueno saber
 
 - Recargar necesita el juego abierto con el mod puente activo; las otras herramientas no necesitan el juego.
-- Recargar en el juego anda sin reiniciar, pero los manejadores de eventos nuevos necesitan un Reset Lua completo.
+- Recargar en el juego anda sin reiniciar; una constante que cambiaste en una tabla conserva el valor viejo hasta un Reset Lua completo, y una tabla `local` que otros archivos obtuvieron con `require` se queda con las funciones viejas.
 - La revisión, la recarga y la revisión multijugador necesitan un mod elegido cuya carpeta conozca el Studio.

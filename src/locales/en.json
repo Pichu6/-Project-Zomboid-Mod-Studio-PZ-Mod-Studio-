@@ -1893,7 +1893,7 @@
     },
     "reload": {
       "title": "Reload in the game while it runs",
-      "intro": "Save a Lua file of this mod and the game reloads it without restarting. The Studio sees the file the moment it is saved, checks it with the parser (one that does not parse is not sent: its line and column show here), and its bridge hands the game <code class=\"mx-1\">reloadLuaFile</code> for it, on the main menu, in game or paused. The bridge mod must be on. A file's top-level code runs again; its event handlers are pointed at the new functions (not added twice), but a handler the file adds for the first time only registers after a full Reset Lua.",
+      "intro": "Save a Lua file of this mod and the game reloads it without restarting. The Studio sees the file the moment it is saved, checks it with the parser (one that does not parse is not sent: its line and column show here), and its bridge hands the game <code class=\"mx-1\">reloadLuaFile</code> for it, on the main menu, in game or paused. The bridge mod must be on. The file's event handlers run once each (new ones start, removed ones stop), and the global tables it makes again keep their identity and state with the new functions; <code class=\"mx-1\">PZStudio.onReload(fn)</code> runs your own set-up again. A changed constant needs a full Reset Lua.",
       "watchAria": "Watch this mod's Lua files and reload them in the game when they change",
       "allTitle": "Every .lua of this mod, now",
       "all": "Reload every Lua of this mod now",

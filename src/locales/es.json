@@ -1893,7 +1893,7 @@
     },
     "reload": {
       "title": "Recargar en el juego mientras corre",
-      "intro": "Guardá un archivo Lua de este mod y el juego lo recarga sin reiniciar. El Studio ve el archivo en cuanto se guarda, lo revisa con el parser (uno que no parsea no se manda: su línea y columna se muestran acá), y su puente le pasa al juego <code class=\"mx-1\">reloadLuaFile</code>, en el menú principal, en la partida o en pausa. El mod puente tiene que estar activo. El código de nivel superior del archivo corre de nuevo; sus manejadores de eventos pasan a las funciones nuevas (no se agregan dos veces), pero uno que el archivo agrega por primera vez recién se registra después de un Reset Lua completo.",
+      "intro": "Guardá un archivo Lua de este mod y el juego lo recarga sin reiniciar. El Studio ve el archivo en cuanto se guarda, lo revisa con el parser (uno que no parsea no se manda: su línea y columna se muestran acá), y su puente le pasa al juego <code class=\"mx-1\">reloadLuaFile</code>, en el menú principal, en la partida o en pausa. El mod puente tiene que estar activo. Los manejadores de eventos del archivo corren una vez cada uno (los nuevos arrancan, los sacados se detienen), y las tablas globales que vuelve a crear conservan su identidad y su estado con las funciones nuevas; <code class=\"mx-1\">PZStudio.onReload(fn)</code> vuelve a correr tu preparación. Una constante cambiada necesita un Reset Lua completo.",
       "watchAria": "Vigilar los archivos Lua de este mod y recargarlos en el juego cuando cambien",
       "allTitle": "Todos los .lua de este mod, ahora",
       "all": "Recargar todos los Lua de este mod ahora",

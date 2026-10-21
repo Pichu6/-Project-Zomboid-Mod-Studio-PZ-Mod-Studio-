@@ -47,7 +47,13 @@ The log below the buttons shows each step:
 - The times: detected, sent, applied in the game, and back in the Studio, in milliseconds.
 - **The game is not running** or **No answer from the game in 6 s** when there was nobody to reload into (check that the bridge mod is on).
 
-When a file is reloaded, its top-level code runs again. Its event handlers are pointed at the new functions, not added twice. A handler the file adds for the first time only registers after a full Reset Lua.
+When a file is reloaded, its top-level code runs again, and the bridge keeps what that would break:
+
+- **Event handlers**: each one the file adds runs once, a handler you add for the first time starts working, and one you take out of the file stops.
+- **Tables**: when the file makes a global table again (`MyMod = {}`, `MyPanel = ISPanel:derive(...)`), the old table is kept and gets the new functions, so open windows and saved references run the new code with their state. A value the old table already had keeps its old value (the bridge cannot tell your state from a constant you changed): for a changed constant, use a full Reset Lua.
+- **Your own set-up**: `if PZStudio then PZStudio.onReload(function(file) ... end) end` runs after each reload of that file, for what `OnGameStart` did and does not do again.
+
+The log says what was kept, for example "1 handler(s), 1 table(s) kept".
 
 ## Multiplayer check
 
@@ -60,5 +66,5 @@ TileZed draws the tiles of each cell (buildings, rooms, furniture, ground); Worl
 ## Good to know
 
 - Reloading needs the game running with the bridge mod on; the other tools do not need the game.
-- Reloading in the game works without restarting, but new event handlers need a full Reset Lua.
+- Reloading in the game works without restarting; a constant you changed in a table keeps its old value until a full Reset Lua, and a `local` table that other files got through `require` keeps the old functions.
 - The check, the reload and the multiplayer check need a mod picked whose folder the Studio knows.

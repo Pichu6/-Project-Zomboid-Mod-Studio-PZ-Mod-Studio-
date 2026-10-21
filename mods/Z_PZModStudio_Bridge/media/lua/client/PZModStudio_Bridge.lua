@@ -431,6 +431,111 @@ local function jsonString(s)
     return '"' .. s .. '"'
 end
 
+-- What a reload keeps, beyond what reloadLuaFile does itself:
+-- - Event handlers. During reloadLuaFile an Events.X.Add does nothing; the game points the
+--   file's handlers that were already registered at the new functions. So a handler the file
+--   adds for the first time never registers, and one taken out of the file keeps running. Here
+--   the file's Add calls are noted while it reloads, then registered for real once it is done
+--   (removed first: never twice), and the ones of its last reload it no longer adds go.
+-- - Tables. A file that makes its tables again (`MyPanel = ISPanel:derive(...)`,
+--   `MyMod = {}`) leaves open windows and saved references on the old ones, with the old code.
+--   For each global table the file replaced, the new functions (and any field the old one
+--   lacks) go into the old table, and the old table stays: same identity, same state, new code.
+-- - PZStudio.onReload(fn): called after each reload of the file that registered it.
+Bridge.devHandlers = Bridge.devHandlers or {}
+
+-- For the mod being developed: `if PZStudio then PZStudio.onReload(function(file) ... end) end`
+-- (the bridge may load after the mod the first time; on a reload it is always there). Called
+-- after the file that registered it is reloaded, to set up again what OnGameStart did.
+PZStudio = PZStudio or {}
+PZStudio.reloadHooks = PZStudio.reloadHooks or {}
+function PZStudio.onReload(fn)
+    if type(fn) ~= "function" then return end
+    local file = getFilenameOfClosure and getFilenameOfClosure(fn) or "?"
+    local line = getFirstLineOfClosure and getFirstLineOfClosure(fn) or 0
+    PZStudio.reloadHooks[tostring(file) .. ":" .. tostring(line)] = fn
+end
+
+local function eventNames()
+    local names = {}
+    if type(Events) ~= "table" then return names end
+    for name, ev in pairs(Events) do
+        if type(ev) == "table" and ev.Add and ev.Remove then table.insert(names, name) end
+    end
+    return names
+end
+
+function Bridge.ReloadKeepingState(f)
+    -- The global tables before.
+    local before = {}
+    for k, v in pairs(_G) do
+        if type(v) == "table" then before[k] = v end
+    end
+    -- Hooks of this file are registered again by it.
+    local base = string.match(f, "([^/\\]+)$") or f
+    for key, _ in pairs(PZStudio.reloadHooks) do
+        if string.find(key, base, 1, true) then PZStudio.reloadHooks[key] = nil end
+    end
+    -- Its Add calls, noted.
+    local added, originals = {}, {}
+    for _, name in ipairs(eventNames()) do
+        local ev = Events[name]
+        local add = ev.Add
+        originals[name] = add
+        ev.Add = function(fn, ...)
+            table.insert(added, { event = name, fn = fn })
+            return add(fn, ...)
+        end
+    end
+    local ok, err = pcall(reloadLuaFile, f)
+    for name, add in pairs(originals) do Events[name].Add = add end
+    if not ok then return false, err, "" end
+
+    -- Handlers: the last reload's out, this one's in, once each.
+    local handlers = 0
+    for _, h in ipairs(Bridge.devHandlers[f] or {}) do
+        pcall(Events[h.event].Remove, h.fn)
+    end
+    for _, h in ipairs(added) do
+        pcall(Events[h.event].Remove, h.fn)
+        if pcall(Events[h.event].Add, h.fn) then handlers = handlers + 1 end
+    end
+    Bridge.devHandlers[f] = added
+
+    -- Tables: the old ones kept, with the new code.
+    local tables = 0
+    for k, old in pairs(before) do
+        local new = rawget(_G, k)
+        if type(new) == "table" and new ~= old and k ~= "_G" then
+            for field, v in pairs(new) do
+                if type(v) == "function" or old[field] == nil then old[field] = v end
+            end
+            -- The new table's metatable (a derived class's parent) wins: the code is new.
+            local mt = getmetatable(new)
+            if mt and mt ~= old then setmetatable(old, mt) end
+            rawset(_G, k, old)
+            tables = tables + 1
+        end
+    end
+    local kept = {}
+    if handlers > 0 then table.insert(kept, tostring(handlers) .. " handler(s)") end
+    if tables > 0 then table.insert(kept, tostring(tables) .. " table(s) kept") end
+    return true, nil, table.concat(kept, ", ")
+end
+
+function Bridge.RunReloadHooks(files)
+    for key, fn in pairs(PZStudio.reloadHooks) do
+        for _, f in ipairs(files) do
+            local base = string.match(f, "([^/\\]+)$") or f
+            if string.find(key, base, 1, true) then
+                local ok, err = pcall(fn, f)
+                if not ok then print("[PZModStudio] onReload hook failed: " .. tostring(err)) end
+                break
+            end
+        end
+    end
+end
+
 function Bridge.DevReload(lines)
     local id, files = "", {}
     for _, l in ipairs(lines) do
@@ -448,12 +553,14 @@ function Bridge.DevReload(lines)
     local quiet = isDebugEnabled() and UIManager and UIManager.isShowLuaDebuggerOnError and UIManager.isShowLuaDebuggerOnError()
     if quiet then pcall(UIManager.setShowLuaDebuggerOnError, false) end
     for _, f in ipairs(files) do
-        local ok, err = pcall(reloadLuaFile, f)
+        local ok, err, kept = Bridge.ReloadKeepingState(f)
         local line = (ok and "ok " or "failed ") .. f .. (ok and "" or (": " .. tostring(err)))
+        if ok and kept ~= "" then line = line .. " (" .. kept .. ")" end
         table.insert(results, jsonString(line))
         print("[PZModStudio] reload " .. line)
     end
     if quiet then pcall(UIManager.setShowLuaDebuggerOnError, true) end
+    Bridge.RunReloadHooks(files)
     local writer = getFileWriter(Bridge.DEV_RESULT, true, false)
     if writer then
         writer:write('{"id":' .. jsonString(id) .. ',"applied_ms":' .. string.format("%.0f", getTimestampMs()) .. ',"results":[' .. table.concat(results, ",") .. ']}')
