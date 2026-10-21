@@ -1663,6 +1663,12 @@ function Screen:createChildren()
         self.syncButton = button(self, self.mapOrderButton:getRight() + 16, fy, measure(UIFont.Small, text("modsSync")) + 26, bh, text("modsSync"), function(screen) screen:sync() end)
         self.syncButton.tooltip = text("modsSyncTip")
         self.openAppButton = button(self, self.syncButton:getRight() + 6, fy, measure(UIFont.Small, text("modsOpenApp")) + 26, bh, text("modsOpenApp"), function(screen) screen:openApp() end)
+    elseif not Link.inviteHidden() then
+        -- Without the app (and its invitation not hidden): where to get it.
+        self.getAppButton = button(self, self.mapOrderButton:getRight() + 16, fy, measure(UIFont.Small, text("modsGetApp")) + 26, bh, text("modsGetApp"), function(screen)
+            screen:say(Link.copyDownloadLink() and text("modsGetAppCopied", Link.DOWNLOAD_URL) or text("modsGetAppFailed", Link.DOWNLOAD_URL))
+        end)
+        self.getAppButton.tooltip = text("modsGetAppTip")
     end
     self.acceptButton = button(self, self.width - pad - 200, fy, 200, bh, text("modsAccept"), function(screen) screen:accept() end, true)
     self.backButton = button(self, self.acceptButton.x - 140, fy, 130, bh, text("back"), function(screen) screen:back() end)

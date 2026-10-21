@@ -220,6 +220,11 @@ local TEXT = {
     cardNoChanges = "same mods as its last session",
     cardChanges = "since its last session: {1} updated, {2} added, {3} taken out",
     cardNever = "PZ Mod Studio has not seen it played yet",
+    inviteCopied = "Link copied: paste it in your browser.",
+    modsGetApp = "Get PZ Mod Studio",
+    modsGetAppTip = "Mod profiles, a backup of each save before it loads, Mod Health, maps and servers. Free, for Windows. Copies the download page's address.",
+    modsGetAppCopied = "Download link copied: paste it in your browser (Ctrl+V). {1}",
+    modsGetAppFailed = "The link could not be copied. Open it in your browser: {1}",
     modsState = "State:",
     modsStateOn = "On, #{1} of {2} in the load order",
     modsStateOff = "Off (no place in the load order)",
@@ -695,6 +700,12 @@ function Link.appInstalled()
     return Link.installed
 end
 
+--- The download page's address on the clipboard, to paste in the browser (the game's openUrl
+--- goes to the Steam overlay, which is no place to download a program). True when copied.
+function Link.copyDownloadLink()
+    return pcall(function() Clipboard.setClipboard(DOWNLOAD_URL) end)
+end
+
 function Link.inviteHidden()
     local hidden = false
     local file = getFileReader(INVITE_FILE, false)
@@ -710,7 +721,7 @@ function Link.inviteHidden()
 end
 
 --- The invitation, for players who have the mod but not the app: what the app does, a button
---- to its download page (in the browser) and one to hide it for good.
+--- that copies its download page's address (for the browser) and one to hide it for good.
 local InvitePanel = ISPanel:derive("StudioLinkInvitePanel")
 
 function InvitePanel:new(x, y, w, h)
@@ -722,9 +733,10 @@ end
 
 function InvitePanel:createChildren()
     local bh = 22
-    local download = ISButton:new(12, self.height - bh - 10, 110, bh, text("inviteDownload"), self, function()
-        pcall(function() openUrl(DOWNLOAD_URL) end)
+    local download = ISButton:new(12, self.height - bh - 10, 110, bh, text("inviteDownload"), self, function(panel)
+        if Link.copyDownloadLink() then panel.copiedAt = now() end
     end)
+    download.tooltip = DOWNLOAD_URL
     download:initialise()
     download:instantiate()
     download.borderColor = { r = 0.35, g = 0.85, b = 0.5, a = 0.9 }
@@ -749,7 +761,11 @@ function InvitePanel:prerender()
     self:drawText("PZ Mod Studio", 12, 7, 0.6, 0.85, 1, 1, UIFont.Medium)
     local lineH = getTextManager():getFontHeight(UIFont.Small) + 3
     self:drawText(text("inviteLine1"), 12, 32, 0.85, 0.85, 0.85, 1, UIFont.Small)
-    self:drawText(text("inviteLine2"), 12, 32 + lineH, 0.85, 0.85, 0.85, 1, UIFont.Small)
+    if self.copiedAt and now() - self.copiedAt < 8 then
+        self:drawText(text("inviteCopied"), 12, 32 + lineH, 0.45, 0.9, 0.65, 1, UIFont.Small)
+    else
+        self:drawText(text("inviteLine2"), 12, 32 + lineH, 0.85, 0.85, 0.85, 1, UIFont.Small)
+    end
 end
 
 --- Shows the invitation in the menu's top-right corner (made once per visit to the menu).
@@ -1700,4 +1716,5 @@ Link.plainId = plainId
 Link.isMapMod = isMapMod
 Link.now = now
 Link.SELF_ID = SELF_ID
+Link.DOWNLOAD_URL = DOWNLOAD_URL
 Link.STUDIO_PACKAGE = STUDIO_PACKAGE

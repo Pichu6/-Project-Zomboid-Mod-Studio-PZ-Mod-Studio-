@@ -185,5 +185,10 @@
     "UI_StudioLink_modsOpenApp": "Open PZ Mod Studio",
     "UI_StudioLink_modsAppNoOpen": "PZ Mod Studio is closed: open it from Windows. With its Settings, \"The close button (X)\", set to keep it in the tray, it stays running, and this button brings it up.",
     "UI_StudioLink_modsAppShown": "PZ Mod Studio is in front of the game.",
-    "UI_StudioLink_modsFromApp": "PZ Mod Studio changed the mods: this is its list now."
+    "UI_StudioLink_modsFromApp": "PZ Mod Studio changed the mods: this is its list now.",
+    "UI_StudioLink_inviteCopied": "Link copied: paste it in your browser.",
+    "UI_StudioLink_modsGetApp": "Get PZ Mod Studio",
+    "UI_StudioLink_modsGetAppTip": "Mod profiles, a backup of each save before it loads, Mod Health, maps and servers. Free, for Windows. Copies the download page's address.",
+    "UI_StudioLink_modsGetAppCopied": "Download link copied: paste it in your browser (Ctrl+V). {1}",
+    "UI_StudioLink_modsGetAppFailed": "The link could not be copied. Open it in your browser: {1}"
 }

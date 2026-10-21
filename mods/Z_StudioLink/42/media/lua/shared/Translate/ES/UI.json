@@ -185,5 +185,10 @@
     "UI_StudioLink_modsOpenApp": "Abrir PZ Mod Studio",
     "UI_StudioLink_modsAppNoOpen": "PZ Mod Studio está cerrado: abrilo desde Windows. Si en su Configuración, \"El botón de cerrar (X)\", elegís dejarlo en la bandeja, sigue abierto, y este botón lo trae al frente.",
     "UI_StudioLink_modsAppShown": "PZ Mod Studio está delante del juego.",
-    "UI_StudioLink_modsFromApp": "PZ Mod Studio cambió los mods: esta es su lista ahora."
+    "UI_StudioLink_modsFromApp": "PZ Mod Studio cambió los mods: esta es su lista ahora.",
+    "UI_StudioLink_inviteCopied": "Link copiado: pegalo en tu navegador.",
+    "UI_StudioLink_modsGetApp": "Conseguir PZ Mod Studio",
+    "UI_StudioLink_modsGetAppTip": "Perfiles de mods, una copia de cada partida antes de cargarla, Mod Health, mapas y servidores. Gratis, para Windows. Copia la dirección de la página de descarga.",
+    "UI_StudioLink_modsGetAppCopied": "Link de descarga copiado: pegalo en tu navegador (Ctrl+V). {1}",
+    "UI_StudioLink_modsGetAppFailed": "No se pudo copiar el link. Abrilo en tu navegador: {1}"
 }
