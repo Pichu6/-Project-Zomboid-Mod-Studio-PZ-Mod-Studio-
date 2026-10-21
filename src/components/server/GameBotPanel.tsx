@@ -33,6 +33,9 @@ export const GameBotPanel: React.FC<{ paths: StudioPathsUI; filePath: string }> 
 
   if (!bot) return null;
 
+  // These fields are written to the .ini only with the button, unlike the switches below.
+  const dirty = token.trim() !== '' || chat.trim() !== bot.chat_channel || log.trim() !== bot.log_channel || enabled !== bot.enabled;
+
   const save = async (clearCommand = false) => {
     setBusy(true);
     try {
@@ -97,6 +100,7 @@ export const GameBotPanel: React.FC<{ paths: StudioPathsUI; filePath: string }> 
           <span className="block text-[11px] text-slate-300">{t('servers.gameBot.logChannel')}</span>
           <input value={log} onChange={(e) => setLog(e.target.value)} placeholder={t('servers.gameBot.optional')} spellCheck={false}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-purple-500" />
+          <span className="block text-[10.5px] text-slate-500">{t('servers.gameBot.logHint')}</span>
         </label>
         <label className="flex items-center gap-2 text-xs text-slate-200 self-end pb-1.5 cursor-pointer">
           <input type="checkbox" checked={enabled} onChange={() => setEnabled(!enabled)} />
@@ -106,7 +110,7 @@ export const GameBotPanel: React.FC<{ paths: StudioPathsUI; filePath: string }> 
       <p className="text-[10.5px] text-amber-300/80">{t('servers.gameBot.tokenInIni')}</p>
       <div className="flex flex-wrap gap-2 items-center">
         <button type="button" disabled={busy} onClick={() => void save()}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white cursor-pointer disabled:opacity-50">
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white cursor-pointer disabled:opacity-50 ${dirty ? 'ring-2 ring-amber-400' : ''}`}>
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Check className="w-3.5 h-3.5" aria-hidden="true" />}
           {t('servers.gameBot.save')}
         </button>
@@ -116,7 +120,11 @@ export const GameBotPanel: React.FC<{ paths: StudioPathsUI; filePath: string }> 
             <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> {t('servers.gameBot.invite')}
           </button>
         )}
-        <span className="text-[11px] text-slate-500">{t('servers.gameBot.restartNote')}</span>
+        {dirty ? (
+          <span className="text-[11px] font-bold text-amber-300">{t('servers.gameBot.unsaved')}</span>
+        ) : (
+          <span className="text-[11px] text-slate-500">{t('servers.gameBot.restartNote')}</span>
+        )}
       </div>
       {note && <div className={`text-[11px] ${note.ok ? 'text-emerald-300' : 'text-red-300'}`}>{note.text}</div>}
     </div>

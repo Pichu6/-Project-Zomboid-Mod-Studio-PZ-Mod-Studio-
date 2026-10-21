@@ -1703,6 +1703,8 @@
   },
   "servers": {
     "gameBot": {
+      "unsaved": "Sin guardar: apretá \"Guardar en el .ini\" (estos campos no se guardan solos).",
+      "logHint": "Solo el juego publica acá (entradas, salidas, anti-cheat). Puede ser el canal de comandos, no el del chat.",
       "title": "Chat con el juego: el bot propio del servidor",
       "intro": "El servidor dedicado de Project Zomboid tiene un bot de Discord propio: el chat general del juego va a un canal, y lo que se escribe en ese canal entra al juego. Vive dentro del servidor, así que funciona siempre que el servidor corre, aunque el Studio esté cerrado.",
       "step1": "En el Developer Portal de Discord: New Application, después Bot: Reset Token y copialo, y activá \"Message Content Intent\".",
