@@ -36,6 +36,9 @@ pub enum Command {
 pub fn parse(text: &str) -> Option<Command> {
     let rest = text.trim().strip_prefix('!')?;
     let (word, args) = rest.split_once(char::is_whitespace).map(|(w, a)| (w, a.trim())).unwrap_or((rest, ""));
+    // "!restart10" / "!reiniciar2": the minutes written without a space.
+    let digits = word.trim_start_matches(|c: char| !c.is_ascii_digit());
+    let (word, args) = if args.is_empty() && !digits.is_empty() && digits.len() < word.len() { (&word[..word.len() - digits.len()], digits) } else { (word, args) };
     Some(match word.to_ascii_lowercase().as_str() {
         "help" | "ayuda" => Command::Help,
         "status" | "estado" => Command::Status,
@@ -120,6 +123,8 @@ fn say(language: &str, key: &str, args: &[&str]) -> String {
         ("noRestart", true) => "No hay ningún reinicio esperando.",
         ("restartNow", false) => "🔄 Restarting **{0}** now.",
         ("restartNow", true) => "🔄 Reiniciando **{0}** ahora.",
+        ("restartStarted", false) => "🟢 **{0}** saved, stopped and is starting again (players can join once it has loaded).",
+        ("restartStarted", true) => "🟢 **{0}** guardó, se detuvo y está arrancando de nuevo (se puede entrar cuando termine de cargar).",
         ("restartFailed", false) => "⚠️ **{0}** could not be started again: {1}",
         ("restartFailed", true) => "⚠️ **{0}** no se pudo volver a iniciar: {1}",
         ("saved", false) => "💾 **{0}** saved the world.",
@@ -354,11 +359,16 @@ fn round(st: &mut State) -> Result<(), String> {
                 let token = crate::discord::game_bot_token(&z, &server).unwrap_or_default();
                 let lang2 = lang.clone();
                 std::thread::spawn(move || {
-                    if let Err(e) = restart_now(&z2, &target) {
-                        if let Some(p) = place {
-                            let body = json!({ "content": say(&lang2, "restartFailed", &[&target, &e]), "allowed_mentions": { "parse": [] } });
+                    let post = |text: String| {
+                        if let Some(p) = &place {
+                            let body = json!({ "content": text, "allowed_mentions": { "parse": [] } });
                             let _ = call(&token, &format!("/channels/{}/messages", p.channel), Some(&body));
                         }
+                    };
+                    post(say(&lang2, "restartNow", &[&target]));
+                    match restart_now(&z2, &target) {
+                        Ok(()) => post(say(&lang2, "restartStarted", &[&target])),
+                        Err(e) => post(say(&lang2, "restartFailed", &[&target, &e])),
                     }
                 });
             }
@@ -482,6 +492,8 @@ mod tests {
         assert_eq!(parse("!restart 0"), Some(Command::Help), "1 to 60 minutes");
         assert_eq!(parse("!restart 90"), Some(Command::Help));
         assert_eq!(parse("!restart cancel"), Some(Command::RestartCancel));
+        assert_eq!(parse("!reiniciar2"), Some(Command::Restart(2)), "the minutes without a space");
+        assert_eq!(parse("!mp3"), None);
         assert_eq!(parse("!msg hola a \"todos\"\n"), Some(Command::Msg("hola a todos".into())), "no quotes: it would break out of servermsg");
         assert_eq!(parse("!msg"), Some(Command::Help));
         assert_eq!(parse("hello"), None);
