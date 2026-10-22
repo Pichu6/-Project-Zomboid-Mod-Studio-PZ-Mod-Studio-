@@ -562,6 +562,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     showToast(on ? t('modList.groups.turnedOn', { name }) : t('modList.groups.turnedOff', { name }));
   };
   const modTags = useMemo(() => modTagsOf(mods, errorStats, loadTimes, catalogById, issuesByMod), [mods, errorStats, loadTimes, catalogById, issuesByMod]);
+  /** The origins and groups the list's mods have, with how many (as the game's pickers count). */
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of scopeMods) {
+      if (m.not_installed) continue;
+      const kind = sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind;
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+    return counts;
+  }, [scopeMods, catalogById]);
+  const groupCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of scopeMods) for (const g of groupsByMod.get(m.mod_id) ?? []) counts.set(g, (counts.get(g) ?? 0) + 1);
+    return counts;
+  }, [scopeMods, groupsByMod]);
   const tagOptions = useMemo(() => {
     const counts = new Map<string, number>();
     for (const m of scopeMods) for (const tag of modTags.get(m.mod_id) ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
@@ -1400,15 +1415,17 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <select
           value={groupFilter}
           onChange={(e) => setGroupFilter(e.target.value)}
-          disabled={meta.groups.length === 0}
+          disabled={groupCounts.size === 0 && groupFilter === 'all'}
           aria-label={t('modList.groups.filterLabel')}
           title={t('modList.groups.filterTitle')}
           className={`${selectClass(groupFilter !== 'all')} disabled:opacity-50`}
         >
           <option value="all">{t('modList.groups.all')}</option>
-          {meta.groups.map((g) => (
-            <option key={g.name} value={g.name}>{g.name} ({g.mods.length})</option>
-          ))}
+          {meta.groups
+            .filter((g) => (groupCounts.get(g.name) ?? 0) > 0 || g.name === groupFilter)
+            .map((g) => (
+              <option key={g.name} value={g.name}>{g.name} ({groupCounts.get(g.name) ?? 0})</option>
+            ))}
         </select>
         {groupFilter !== 'all' && (
           <>
@@ -1423,8 +1440,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           title={t('modList.sourceTitle')}
           className={selectClass(sourceFilter !== 'all')}
         >
-          {(['all', ...MOD_SOURCES] as const).map((id) => (
-            <option key={id} value={id}>{t(`modList.sources.${id}`)}</option>
+          <option value="all">{t('modList.sources.all')}</option>
+          {MOD_SOURCES.filter((id) => (sourceCounts.get(id) ?? 0) > 0 || id === sourceFilter).map((id) => (
+            <option key={id} value={id}>{t(`modList.sources.${id}`)} ({sourceCounts.get(id) ?? 0})</option>
           ))}
         </select>
         <select

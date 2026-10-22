@@ -572,8 +572,7 @@ function Screen:visibleMods()
     -- What was typed, as plain text (a "-" or "(" would mean something to Lua's find).
     local q = string.gsub(string.lower(self.search or ""), "%p", "%%%0")
     for _, mod in ipairs(self.mods) do
-        local show = true
-        if self.onlyProfile and self.link and not self.link.members[mod.id] and not self.on[mod.id] then show = false end
+        local show = self:inScope(mod)
         local f = self.filter
         if show and f == "on" and not self.on[mod.id] then show = false end
         if show and f == "off" and self.on[mod.id] then show = false end
@@ -604,6 +603,15 @@ function Screen:visibleMods()
     return out
 end
 
+--- Whether the list is about this mod at all: with a profile, its mods and whatever is on (all
+--- installed with "All installed"), never the Studio Link itself (on in every profile, as the app
+--- leaves it out too).
+function Screen:inScope(mod)
+    if not self.link then return true end
+    if mod.id == Link.SELF_ID then return false end
+    return not self.onlyProfile or self.link.members[mod.id] or self.on[mod.id] == true
+end
+
 function Screen:inGroup(mod, name)
     for _, g in ipairs(self.groups) do
         if g.name == name then
@@ -615,8 +623,8 @@ function Screen:inGroup(mod, name)
     return false
 end
 
---- The group, origin and tag pickers, from what the app wrote: each lists only what some mod
---- has, with how many; a pick that is gone goes back to "all".
+--- The group, origin and tag pickers, from what the app wrote: each lists only what some mod the
+--- list is about has, with how many (as the app counts); a pick that is gone goes back to "all".
 function Screen:fillPicks()
     local function fill(combo, allLabel, items, current)
         if not combo then return nil end
@@ -635,14 +643,15 @@ function Screen:fillPicks()
         for _, item in ipairs(list) do
             local n = 0
             for _, mod in ipairs(self.mods) do
-                if has(mod, item.id) then n = n + 1 end
+                if self:inScope(mod) and has(mod, item.id) then n = n + 1 end
             end
             if n > 0 then table.insert(out, { id = item.id, label = item.label .. " (" .. n .. ")" }) end
         end
         return out
     end
     local groups = {}
-    for _, g in ipairs(self.groups) do table.insert(groups, { id = g.name, label = g.name .. " (" .. #g.ids .. ")" }) end
+    for _, g in ipairs(self.groups) do table.insert(groups, { id = g.name, label = g.name }) end
+    groups = counted(groups, function(mod, name) return self:inGroup(mod, name) end)
     self.groupPick = fill(self.groupCombo, text("modsAllGroups"), groups, self.groupPick)
     self.originPick = fill(self.originCombo, text("modsAllOrigins"), counted(self.facts.origins, function(mod, id) return self.facts.origin[mod.id] == id end), self.originPick)
     self.tagPick = fill(self.tagCombo, text("modsAllTags"), counted(self.facts.tagNames, function(mod, id) return (self.facts.tags[mod.id] or {})[id] end), self.tagPick)
@@ -1703,6 +1712,7 @@ function Screen:createChildren()
         local w = math.max(measure(UIFont.Small, text("modsOnlyProfileOn")), measure(UIFont.Small, text("modsOnlyProfileOff"))) + 22
         self.profileTick = button(self, fx + 6, top2, w, bh, text("modsOnlyProfileOn"), function(screen)
             screen.onlyProfile = not screen.onlyProfile
+            screen:fillPicks()
             screen:refreshList()
         end)
         fx = self.profileTick:getRight() + 6
