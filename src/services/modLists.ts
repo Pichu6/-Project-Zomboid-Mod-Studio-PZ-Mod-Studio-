@@ -33,6 +33,24 @@ function apply(updated: ModList) {
   announce();
 }
 
+/** The installed mods the last sync saw, so a star changed here reaches the game at once. */
+let installedForSync: { mod_id: string; workshop_id: string | null; name: string }[] | null = null;
+
+/**
+ * Favorites and the game's stars (its Mods screen and the Studio Link's) made one: run when the
+ * mods are scanned, when the app comes back to the front, every few seconds, and after a star.
+ */
+export async function syncFavouritesWithGame(userZomboidDir: string, installed: { mod_id: string; workshop_id: string | null; name: string }[]) {
+  installedForSync = installed;
+  const lists = await TauriService.syncGameFavourites(userZomboidDir, installed);
+  if (!lists) return;
+  const same = cache && cacheDir === userZomboidDir && JSON.stringify(cache) === JSON.stringify(lists);
+  if (same) return;
+  cache = lists;
+  cacheDir = userZomboidDir;
+  announce();
+}
+
 export function useModLists(userZomboidDir: string) {
   const [lists, setLists] = useState<ModList[]>(cache ?? []);
   useEffect(() => {
@@ -62,6 +80,7 @@ export function useModLists(userZomboidDir: string) {
     async (item: ModListItem) => {
       if (favoriteKeys.has(itemKey(item))) await removeFrom(FAVORITES, itemKey(item));
       else await addTo(FAVORITES, item);
+      if (installedForSync) await syncFavouritesWithGame(userZomboidDir, installedForSync);
     },
     [favoriteKeys, addTo, removeFrom]
   );

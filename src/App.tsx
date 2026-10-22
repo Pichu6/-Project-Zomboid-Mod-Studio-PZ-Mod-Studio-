@@ -26,6 +26,7 @@ import { HealthModule } from './components/health/HealthModule';
 import { useModHealth } from './hooks/useModHealth';
 import { BrowseModule } from './components/browse/BrowseModule';
 import { issuesByModOf, linkModsText, modTagsOf } from './components/load_order/modFacets';
+import { syncFavouritesWithGame } from './services/modLists';
 import { ContextMenuProvider } from './components/common/ContextMenu';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
@@ -112,6 +113,26 @@ export const App: React.FC = () => {
   const [errorStats, setErrorStats] = useState<Map<string, ModErrorStat>>(new Map());
   /** Mod id -> how long its files took to load last session, read with the error stats. */
   const [loadTimes, setLoadTimes] = useState<Map<string, number>>(new Map());
+
+  /**
+   * One list of favourites: the app's stars and the game's (its Mods screen keeps its own). Synced
+   * when the mods are scanned, when the window comes back to the front and every 10 seconds, so a
+   * star put in the game shows here soon after.
+   */
+  useEffect(() => {
+    if (!paths.is_valid || !paths.user_zomboid_dir || mods.length === 0) return;
+    const installed = mods
+      .filter((m) => !m.not_installed)
+      .map((m) => ({ mod_id: m.mod_id, workshop_id: m.workshop_id ?? null, name: m.name }));
+    const run = () => void syncFavouritesWithGame(paths.user_zomboid_dir, installed);
+    run();
+    const timer = window.setInterval(run, 10000);
+    window.addEventListener('focus', run);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', run);
+    };
+  }, [paths, mods]);
 
   /**
    * The game's Mods screen has the app's filters while the app is used: each mod's origin, whether

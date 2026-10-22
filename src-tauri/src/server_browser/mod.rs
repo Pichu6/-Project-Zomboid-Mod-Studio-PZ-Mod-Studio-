@@ -412,6 +412,10 @@ pub struct SavedServer {
     /// When `mods` / `items` were read (Unix seconds).
     #[serde(default)]
     pub mods_seen: Option<i64>,
+    /// The player's account on it. The game's connect window asks for it every time unless the
+    /// game's own server list holds it; the Studio Link fills it in from here.
+    #[serde(default)]
+    pub username: String,
 }
 
 /// The last join in a DebugLog: the Workshop items the server named
@@ -507,7 +511,7 @@ pub fn read_saved_filled(user_zomboid_dir: &Path) -> Vec<SavedServer> {
 }
 
 /// The Studio is starting the game joining `address`: it goes to the top of the recent list.
-pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str) -> Result<(), String> {
+pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str, username: &str) -> Result<(), String> {
     let mut list = read_saved(user_zomboid_dir);
     let at = list.iter().position(|s| s.address.eq_ignore_ascii_case(address.trim()));
     let mut entry = match at {
@@ -523,9 +527,13 @@ pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str) -> Result<(
             mods: Vec::new(),
             items: Vec::new(),
             mods_seen: None,
+            username: String::new(),
         },
     };
     entry.last_joined = Some(now_secs());
+    if !username.trim().is_empty() {
+        entry.username = username.trim().to_string();
+    }
     list.insert(0, entry);
     // Recent ones that were never starred: the newest 30.
     let mut recent = 0;
@@ -607,6 +615,21 @@ pub fn forget_server(user_zomboid_dir: &Path, address: &str) -> Result<Vec<Saved
 
 /// The arguments that make the game join `address` (the password from the credential store when
 /// none is given).
+/// app -> game: the server being joined and the account to fill in the game's connect window
+/// (`address=<ip:port>`, `username=<name>`). The game fills it only from its own server list,
+/// so without this it waits on an empty username. Never a password.
+pub const JOIN_FILE: &str = "PZModStudio_LinkJoin.txt";
+
+pub fn write_join_file(user_zomboid_dir: &Path, address: &str, username: &str) -> Result<(), String> {
+    let lua = user_zomboid_dir.join("Lua");
+    if !lua.is_dir() {
+        return Ok(());
+    }
+    let clean = |s: &str| s.replace(['\r', '\n'], " ").trim().to_string();
+    let text = format!("address={}\nusername={}\n", clean(address), clean(username));
+    crate::load_order::ini_parser::atomic_write(lua.join(JOIN_FILE), text).map_err(|e| e.to_string())
+}
+
 pub fn join_args(address: &str, password: Option<&str>) -> Result<Vec<String>, String> {
     let address = address.trim();
     let bad = |v: &str| v.is_empty() || v.starts_with('-') || v.starts_with('+') || v.chars().any(|c| c.is_whitespace() || c.is_control());
@@ -701,7 +724,7 @@ mod tests {
         let p = crate::vfs::studio_paths();
         let z = std::path::PathBuf::from(&p.user_zomboid_dir);
         let address = std::env::var("PZMS_JOIN").unwrap();
-        note_join(&z, &address, "studio_jointest").unwrap();
+        note_join(&z, &address, "studio_jointest", "").unwrap();
         let mut args = crate::compat::launch_args(&p.user_zomboid_dir);
         args.extend(join_args(&address, None).unwrap());
         println!("args {:?}", args);

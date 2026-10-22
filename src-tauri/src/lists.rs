@@ -4,6 +4,7 @@
 //! mod id. A list is for keeping, subscribing all at once, or making a profile from.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -183,6 +184,107 @@ pub fn remove_from_list(user_zomboid_dir: &str, list_id: &str, key: &str) -> Res
     Ok(out)
 }
 
+// ------------------------------------------------------------------ the game's favourites
+
+/// The game's own Mods screen (and the Studio Link's) keeps its stars in `Zomboid/Lua/` in this
+/// file, first line `!fav!:id;id;`.
+const GAME_FAVOURITES_FILE: &str = "pz_modlist_settings.cfg";
+/// What the game's stars were the last time they were synced, so a star taken off on either side
+/// is told apart from one never put there.
+const GAME_FAVOURITES_SEEN: &str = "PZModStudio_GameFavourites.json";
+
+/// An installed mod as the sync needs it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InstalledMod {
+    pub mod_id: String,
+    #[serde(default)]
+    pub workshop_id: Option<String>,
+    pub name: String,
+}
+
+fn plain(id: &str) -> String {
+    id.trim().trim_start_matches('\\').to_string()
+}
+
+/// A real Workshop id (local mods carry none, or the placeholder 9999999999).
+fn workshop_of(m: &InstalledMod) -> Option<&str> {
+    m.workshop_id.as_deref().filter(|w| !w.is_empty() && *w != "0" && *w != "9999999999")
+}
+
+/// The game's stars and the rest of its file, kept as they are when the stars are written back.
+fn read_game_favourites(lua: &std::path::Path) -> (BTreeSet<String>, Vec<String>) {
+    let mut stars = BTreeSet::new();
+    let mut others = Vec::new();
+    let Ok(text) = fs::read_to_string(lua.join(GAME_FAVOURITES_FILE)) else { return (stars, others) };
+    for (i, line) in text.lines().enumerate() {
+        match line.strip_prefix("!fav!:") {
+            Some(ids) if i == 0 => stars.extend(ids.split(';').map(plain).filter(|s| !s.is_empty())),
+            _ if !line.is_empty() => others.push(line.to_string()),
+            _ => {}
+        }
+    }
+    (stars, others)
+}
+
+/// Favorites and the game's stars made one: a star put or taken off in the game since the last
+/// sync is put or taken off here, and the game then gets every favourite that is installed (a
+/// Workshop item stands for all its mods), plus what it had that is not installed here.
+/// Nothing is written while the game's Lua folder is not there yet.
+pub fn sync_game_favourites(user_zomboid_dir: &str, installed: &[InstalledMod]) -> Result<Vec<ModList>, String> {
+    let mut lists = load_lists(user_zomboid_dir);
+    let Some(z) = get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next() else { return Ok(lists) };
+    let lua = z.join("Lua");
+    if !lua.is_dir() {
+        return Ok(lists);
+    }
+    let (game, others) = read_game_favourites(&lua);
+    let seen_path = z.join(GAME_FAVOURITES_SEEN);
+    let seen: BTreeSet<String> = fs::read_to_string(&seen_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let added: Vec<&String> = game.difference(&seen).collect();
+    let removed: BTreeSet<&String> = seen.difference(&game).collect();
+    let by_id: std::collections::HashMap<&str, &InstalledMod> = installed.iter().map(|m| (m.mod_id.as_str(), m)).collect();
+    let ids_of = |item: &ListItem| -> Vec<String> {
+        match (&item.workshop_id, &item.mod_id) {
+            (Some(w), _) => installed.iter().filter(|m| workshop_of(m) == Some(w.as_str())).map(|m| m.mod_id.clone()).collect(),
+            (None, Some(id)) if by_id.contains_key(id.as_str()) => vec![id.clone()],
+            _ => Vec::new(),
+        }
+    };
+
+    let fav = &mut lists[0];
+    let before = fav.items.clone();
+    fav.items.retain(|item| !ids_of(item).iter().any(|id| removed.contains(id)));
+    for id in added {
+        if fav.items.iter().any(|item| ids_of(item).contains(id)) {
+            continue;
+        }
+        if let Some(m) = by_id.get(id.as_str()) {
+            let workshop = workshop_of(m).map(str::to_string);
+            fav.items.push(ListItem { mod_id: if workshop.is_some() { None } else { Some(id.clone()) }, workshop_id: workshop, nexus_id: None, name: m.name.clone(), added_at: now() });
+        }
+    }
+    let mut stars: BTreeSet<String> = fav.items.iter().flat_map(&ids_of).collect();
+    stars.extend(game.iter().filter(|id| !by_id.contains_key(id.as_str()) && !removed.contains(id)).cloned());
+    let changed = fav.items != before;
+
+    if stars != game {
+        let mut text = format!("!fav!:{}\n", stars.iter().map(|id| format!("{};", id)).collect::<String>());
+        for line in &others {
+            text.push_str(line);
+            text.push('\n');
+        }
+        crate::load_order::ini_parser::atomic_write(lua.join(GAME_FAVOURITES_FILE), text).map_err(|e| e.to_string())?;
+    }
+    if stars != seen {
+        let json = serde_json::to_string(&stars).map_err(|e| e.to_string())?;
+        crate::load_order::ini_parser::atomic_write(&seen_path, json).map_err(|e| e.to_string())?;
+    }
+    if changed {
+        save(user_zomboid_dir, &lists)?;
+    }
+    Ok(lists)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +338,29 @@ mod tests {
         let left = delete_list(&z, &b.id).unwrap();
         assert_eq!(left.iter().map(|l| l.id.as_str()).collect::<Vec<_>>(), vec![FAVORITES, "zombie-overhauls"]);
         assert!(remove_from_list(&z, &a.id, "nope").is_err());
+    }
+
+    #[test]
+    fn favourites_and_the_games_stars_are_one_list() {
+        let (_t, z) = zomboid("favs");
+        let lua = PathBuf::from(&z).join("Lua");
+        fs::create_dir_all(&lua).unwrap();
+        fs::write(lua.join(GAME_FAVOURITES_FILE), "!fav!:\\B;Gone;\nother=1\n").unwrap();
+        let mods = |list: &[(&str, &str)]| list.iter().map(|(id, w)| InstalledMod { mod_id: id.to_string(), workshop_id: Some(w.to_string()), name: id.to_string() }).collect::<Vec<_>>();
+        let installed = mods(&[("A", "111"), ("A2", "111"), ("B", ""), ("C", "333")]);
+        add_to_list(&z, FAVORITES, item(Some("111"), None)).unwrap();
+        // First sync: both sides put together.
+        let lists = sync_game_favourites(&z, &installed).unwrap();
+        assert_eq!(lists[0].items.iter().map(|i| i.key()).collect::<Vec<_>>(), vec!["w:111", "m:B"]);
+        let file = fs::read_to_string(lua.join(GAME_FAVOURITES_FILE)).unwrap();
+        assert_eq!(file, "!fav!:A;A2;B;Gone;\nother=1\n", "a Workshop item is all its mods; what is not installed here stays");
+        // Taken off in the game, starred in the game: the same here.
+        fs::write(lua.join(GAME_FAVOURITES_FILE), "!fav!:B;C;Gone;\nother=1\n").unwrap();
+        let lists = sync_game_favourites(&z, &installed).unwrap();
+        assert_eq!(lists[0].items.iter().map(|i| i.key()).collect::<Vec<_>>(), vec!["m:B", "w:333"]);
+        // Taken off here: off in the game.
+        remove_from_list(&z, FAVORITES, "m:B").unwrap();
+        sync_game_favourites(&z, &installed).unwrap();
+        assert!(fs::read_to_string(lua.join(GAME_FAVOURITES_FILE)).unwrap().starts_with("!fav!:C;Gone;\n"));
     }
 }

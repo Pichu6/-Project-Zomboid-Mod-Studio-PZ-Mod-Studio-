@@ -2047,6 +2047,8 @@ function Screen:refreshAppData()
     self.updated = readUpdated()
     self.notes, self.groups, self.groupNotes = readMeta()
     self.facts = readLinkMods()
+    -- The stars are the app's too: a mod starred there is starred here.
+    self.favs = readFavourites()
     self:fillPicks()
     self:recount()
     self:refreshList()

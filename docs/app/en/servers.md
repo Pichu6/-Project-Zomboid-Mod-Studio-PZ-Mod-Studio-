@@ -17,7 +17,7 @@ Narrow the list with the box (**Name or map**) and the filters: **Only my build*
 3. Type the server password if it has one, and tick **Remember the password** to keep it.
 4. Close the game if it is open, and press **Join**.
 
-The game starts on this server's connect screen with the server password filled in. There you type your account user name and password for that server (a new name makes a new account). The game downloads the server's mods and uses them only there: your own mod list and profiles stay as they are.
+The game starts on this server's connect window with the server password filled in, and your username too when you typed it in **Your username on this server** (the Studio keeps it; the Studio Link mod fills it in). There you type your account password and press **Connect**, which stays off without a username. A new username makes a new account on that server. The game downloads the server's mods and uses them only there: your own mod list and profiles stay as they are.
 
 ## Making a profile for a server
 

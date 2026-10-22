@@ -244,13 +244,17 @@ fn forget_server_cmd(paths: StudioPaths, address: String) -> Result<Vec<server_b
 /// Starts the game joining `address` (the kept password unless one is given). The game must be
 /// closed: a running one cannot be told to join.
 #[tauri::command(async)]
-fn join_server_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: StudioPaths, address: String, name: String, password: Option<String>) -> Result<u32, String> {
+fn join_server_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: StudioPaths, address: String, name: String, password: Option<String>, username: Option<String>) -> Result<u32, String> {
     if sandbox::find_running_pz_pid().is_some() {
         return Err("The game is already running. Close it first, then join from here (or use its Join screen).".to_string());
     }
     let extra_args = server_browser::join_args(&address, password.as_deref())?;
     if let Ok(z) = zomboid_dir_of(&paths) {
-        let _ = server_browser::note_join(&z, &address, &name);
+        let username = username.unwrap_or_default();
+        let _ = server_browser::note_join(&z, &address, &name, &username);
+        // The account the game's connect window asks for: the one typed now, else the one kept.
+        let kept = server_browser::read_saved(&z).into_iter().find(|s| s.address.eq_ignore_ascii_case(address.trim())).map(|s| s.username).unwrap_or_default();
+        let _ = server_browser::write_join_file(&z, &address, if username.trim().is_empty() { &kept } else { &username });
     }
     let config = SandboxLaunchConfig {
         pz_install_dir: vfs::trusted_install_dir(),
@@ -984,6 +988,12 @@ fn add_to_mod_list_cmd(user_zomboid_dir: String, list_id: String, item: lists::L
 #[tauri::command(async)]
 fn remove_from_mod_list_cmd(user_zomboid_dir: String, list_id: String, key: String) -> Result<lists::ModList, String> {
     lists::remove_from_list(&user_zomboid_dir, &list_id, &key)
+}
+
+/// Favorites and the game's own stars made one list (see `lists::sync_game_favourites`).
+#[tauri::command(async)]
+fn sync_game_favourites_cmd(user_zomboid_dir: String, installed: Vec<lists::InstalledMod>) -> Result<Vec<lists::ModList>, String> {
+    lists::sync_game_favourites(&user_zomboid_dir, &installed)
 }
 
 /// How long each mod's files took to load in the last session, from the game's DebugLog.
@@ -1733,6 +1743,7 @@ pub fn run() {
             delete_mod_list_cmd,
             add_to_mod_list_cmd,
             remove_from_mod_list_cmd,
+            sync_game_favourites_cmd,
             restore_kept_version_cmd,
             delete_kept_version_cmd,
             nexus_search_cmd,

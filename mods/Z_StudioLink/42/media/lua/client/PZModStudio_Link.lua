@@ -458,7 +458,7 @@ end
 --- What the app's files say now, as one text: when it changes, the screens read them again.
 function Link.appSignature()
     local parts = { Link.appAlive() and "alive" or "closed" }
-    for _, name in ipairs({ FILE, HEALTH_FILE, "PZModStudio_LinkMeta.txt", "PZModStudio_LinkUpdated.txt" }) do
+    for _, name in ipairs({ FILE, HEALTH_FILE, "PZModStudio_LinkMeta.txt", "PZModStudio_LinkUpdated.txt", "PZModStudio_LinkMods.txt" }) do
         local file = getFileReader(name, false)
         if file then
             local line = file:readLine()
@@ -1647,6 +1647,32 @@ function Link.loadGate(world, saveInfo)
         backupThenLoad()
     end
     return false
+end
+
+-- Joining from PZ Mod Studio: the game's connect window fills the account only from the game's
+-- own server list, so it waited on an empty username. The app writes the server and the account
+-- it keeps for it (never a password); filled in here when the window is for that server.
+local JOIN_FILE = "PZModStudio_LinkJoin.txt"
+local setServer = ServerConnectPopup.setServer
+function ServerConnectPopup:setServer(ip, port, passwordStr)
+    setServer(self, ip, port, passwordStr)
+    pcall(function()
+        local file = getFileReader(JOIN_FILE, false)
+        if not file then return end
+        local address, username
+        local line = file:readLine()
+        while line ~= nil do
+            local key, value = string.match(line, "^(%a+)=(.*)$")
+            if key == "address" then address = value elseif key == "username" then username = value end
+            line = file:readLine()
+        end
+        file:close()
+        if not address or not username or username == "" then return end
+        local wantedPort = string.match(address, ":(%d+)$") or "16261"
+        if wantedPort ~= tostring(port) then return end
+        if (self.usernameEntry:getText() or "") == "" then self.usernameEntry:setText(username) end
+        if self.checkFields then self:checkFields() end
+    end)
 end
 
 -- The save check: the game's own one first, then the profile, with the game's own dialog, then

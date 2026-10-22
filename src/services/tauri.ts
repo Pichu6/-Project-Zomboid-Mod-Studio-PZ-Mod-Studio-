@@ -742,6 +742,19 @@ export const TauriService = {
     }
   },
 
+  /**
+   * Favorites and the game's own stars made one list: a star put or taken off on either side is
+   * the same on the other. Returns every list, as mod_lists_cmd.
+   */
+  syncGameFavourites: async (userZomboidDir: string, installed: { mod_id: string; workshop_id: string | null; name: string }[]): Promise<ModList[] | null> => {
+    try {
+      return await invoke<ModList[]>('sync_game_favourites_cmd', { userZomboidDir, installed });
+    } catch {
+      // Tried again on the next round; the app's own stars are untouched.
+      return null;
+    }
+  },
+
   /** How long each mod's files took to load in the last session (the game's DebugLog); empty when there is none. */
   modLoadTimes: async (paths: StudioPathsUI): Promise<LoadTimes> => {
     try {
@@ -853,8 +866,8 @@ export const TauriService = {
   },
 
   /** Starts the game joining this server. Throws when the game is already running. */
-  joinServer: async (paths: StudioPathsUI, address: string, name: string, password: string | null): Promise<number> => {
-    return await invoke<number>('join_server_cmd', { paths, address, name, password });
+  joinServer: async (paths: StudioPathsUI, address: string, name: string, password: string | null, username: string | null): Promise<number> => {
+    return await invoke<number>('join_server_cmd', { paths, address, name, password, username });
   },
 
   /** Which Mods screen the game uses when another mod manager is on: [choice, that manager]. */

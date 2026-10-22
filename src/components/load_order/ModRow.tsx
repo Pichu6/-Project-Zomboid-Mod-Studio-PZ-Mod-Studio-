@@ -231,7 +231,8 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             </Tip>
           )}
 
-          <SourceBadge modId={mod.mod_id} entry={entry} />
+          {/* A mod that is not installed came from nowhere yet: no origin to show ("Local" said it was on disk). */}
+          {!mod.not_installed && <SourceBadge modId={mod.mod_id} entry={entry} />}
 
           {/* What the game laid at this mod's door last session, counted from console.txt. */}
           {(() => {

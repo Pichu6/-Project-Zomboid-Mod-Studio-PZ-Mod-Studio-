@@ -582,7 +582,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const filteredMods = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const shown = scopeMods.filter((m) => {
-      if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
+      if (sourceFilter !== 'all' && (m.not_installed || sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter)) return false;
       if (!matchesFilter(m, stateFilter)) return false;
       if (tagFilter !== 'all' && !(modTags.get(m.mod_id) ?? []).includes(tagFilter)) return false;
       if (groupFilter !== 'all' && !(groupsByMod.get(m.mod_id) ?? []).includes(groupFilter)) return false;

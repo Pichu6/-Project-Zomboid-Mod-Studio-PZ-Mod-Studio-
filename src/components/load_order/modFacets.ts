@@ -74,7 +74,7 @@ export function linkModsText(
   for (const list of tags.values()) for (const tag of list) seen.add(tag);
   for (const tag of [...seen].sort()) lines.push(`tag=${tag}\t${clean(tagLabel(tag))}`);
   for (const m of mods) {
-    const kind = sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind;
+    const kind = m.not_installed ? '' : sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind;
     lines.push(`mod=${m.mod_id}\t${kind}\t${m.is_library ? 1 : 0}\t${(tags.get(m.mod_id) ?? []).join(';')}`);
   }
   return lines.join('\n') + '\n';

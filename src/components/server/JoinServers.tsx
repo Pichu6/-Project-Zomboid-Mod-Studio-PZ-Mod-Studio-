@@ -53,6 +53,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [remember, setRemember] = useState(false);
   const [joining, setJoining] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -116,6 +117,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
     setRulesError(null);
     setNotice(null);
     setPassword('');
+    setUsername(savedOf(p.address)?.username ?? '');
     setRemember(false);
     const ticket = ++asked.current;
     setAsking(true);
@@ -143,6 +145,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
       mods: old?.mods ?? [],
       items: old?.items ?? [],
       mods_seen: old?.mods_seen ?? null,
+      username: old?.username ?? '',
     };
     try {
       setSaved(await TauriService.saveServer(paths, server, pw));
@@ -155,9 +158,10 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
     setJoining(true);
     setNotice(null);
     const typed = picked?.address === target.address ? password : '';
+    const account = picked?.address === target.address ? username.trim() : '';
     try {
       if (remember && typed) await keep(target, savedOf(target.address)?.starred ?? true, typed);
-      await TauriService.joinServer(paths, target.address, target.name, typed || null);
+      await TauriService.joinServer(paths, target.address, target.name, typed || null, account || null);
       setNotice(t('join.started', { name: target.name }));
       void loadSaved();
     } catch (err) {
@@ -407,6 +411,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
             )}
 
             <div className="space-y-2 pt-1 border-t border-slate-800">
+              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t('join.usernamePlaceholder')} title={t('join.usernameTitle')} autoComplete="off" className="w-full px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100" />
               <div className="flex flex-wrap items-center gap-2">
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pickedSaved?.has_password ? t('join.passwordKept') : t('join.passwordPlaceholder')} autoComplete="off" className="px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 w-48" />
                 <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-emerald-500" />{t('join.remember')}</label>

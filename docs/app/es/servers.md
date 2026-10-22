@@ -17,7 +17,7 @@ Achicá la lista con el cuadro (**Nombre o mapa**) y los filtros: **Solo mi vers
 3. Escribí la contraseña del servidor si tiene, y marcá **Recordar la contraseña** para guardarla.
 4. Cerrá el juego si está abierto y apretá **Entrar**.
 
-El juego abre en la pantalla de conexión de este servidor con la contraseña del servidor ya puesta. Ahí escribís el usuario y la contraseña de tu cuenta en ese servidor (un nombre nuevo crea una cuenta nueva). El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods y tus perfiles quedan como están.
+El juego abre en la ventana de conexión de este servidor con la contraseña del servidor ya puesta, y tu usuario también si lo escribiste en **Tu usuario en este servidor** (el Studio lo guarda; el mod Studio Link lo completa). Ahí escribís la contraseña de tu cuenta y tocás **Conectar**, que no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods y tus perfiles quedan como están.
 
 ## Crear un perfil para un servidor
 
