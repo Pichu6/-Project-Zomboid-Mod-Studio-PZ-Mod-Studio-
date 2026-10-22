@@ -178,6 +178,49 @@ pub fn add_members_to_active(z_dir: &std::path::Path, ids: &[String]) -> Result<
     Ok(Some(inst))
 }
 
+/// A server's profile takes what the server loaded on the last join: those mods on, in the
+/// server's order and first in the load order; any other mod it held stays in it, off (a server
+/// loads only its own). None when it already was so.
+pub fn take_server_mods(user_zomboid_dir: &str, instance_id: &str, server_mods: &[String]) -> Result<Option<AppInstance>, String> {
+    let dir = get_instances_dir(user_zomboid_dir);
+    let path = instance_file_path(&dir, instance_id)?;
+    let Some(mut inst) = read_instance(&path) else { return Ok(None) };
+    let mut active: Vec<String> = Vec::new();
+    for id in server_mods.iter().map(|id| id.trim().trim_start_matches('\\').to_string()).filter(|id| !id.is_empty()) {
+        if !active.contains(&id) {
+            active.push(id);
+        }
+    }
+    let mut members = inst.members.clone().unwrap_or_else(|| inst.active_mod_ids.clone());
+    for id in &active {
+        if !members.contains(id) {
+            members.push(id.clone());
+        }
+    }
+    let mut order = active.clone();
+    for id in &inst.load_order {
+        if !order.contains(id) {
+            order.push(id.clone());
+        }
+    }
+    let before = (inst.active_mod_ids.clone(), inst.members.clone(), inst.load_order.clone());
+    inst.active_mod_ids = active;
+    inst.members = Some(members);
+    inst.load_order = order;
+    inst.with_link();
+    if (inst.active_mod_ids.clone(), inst.members.clone(), inst.load_order.clone()) == before {
+        return Ok(None);
+    }
+    write_instance(&path, &inst)?;
+    if inst.is_active {
+        if let Some(z_dir) = crate::load_order::mod_info::get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next() {
+            crate::load_order::ini_parser::write_mod_list_ini(&z_dir.join("ModListData.ini").to_string_lossy(), &inst.active_mod_ids)?;
+            apply_link(&z_dir, &inst);
+        }
+    }
+    Ok(Some(inst))
+}
+
 /// Sets which mods belong to a profile. A mod taken out of it is switched off too.
 #[tauri::command(async)]
 pub fn set_profile_members(user_zomboid_dir: String, instance_id: String, members: Vec<String>) -> Result<AppInstance, String> {
@@ -590,6 +633,22 @@ mod build_tests {
         assert_eq!(p.active_mod_ids, ids(&["C", "A"]));
         let link = fs::read_to_string(z.join("Lua").join(crate::studio_link::LINK_FILE)).unwrap();
         assert_eq!(link, "profile=A\nmember=C\nmember=B\nmember=A\n");
+        let _ = fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn a_servers_profile_takes_what_the_server_loaded() {
+        let z = std::env::temp_dir().join(format!("pzms-serverprofile-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&z);
+        fs::create_dir_all(z.join("mods")).unwrap();
+        let user = z.to_string_lossy().to_string();
+        let made = create_instance(user.clone(), "Online: X".into(), None, ids(&["A", "Mine"]), ids(&["A", "Mine"])).unwrap();
+        let p = take_server_mods(&user, &made.id, &ids(&["A", "B", "C"])).unwrap().expect("changed");
+        assert_eq!(p.active_mod_ids, ids(&["A", "B", "C", crate::studio_link::LINK_MOD_ID]), "the server's mods on, in its order");
+        assert!(p.member_ids().contains(&"Mine".to_string()), "a mod of its own stays in it");
+        assert!(!p.active_mod_ids.contains(&"Mine".to_string()), "off: the server does not load it");
+        assert_eq!(&p.load_order[..3], &ids(&["A", "B", "C"])[..]);
+        assert!(take_server_mods(&user, &made.id, &ids(&["A", "B", "C"])).unwrap().is_none(), "nothing new, nothing written");
         let _ = fs::remove_dir_all(&z);
     }
 }

@@ -461,14 +461,16 @@ export const App: React.FC = () => {
     setActiveTab('BROWSE');
   };
 
-  const handleMakeProfileFromServer = async (name: string, modIds: string[], announcedOf?: number) => {
+  const handleMakeProfileFromServer = async (name: string, modIds: string[], announcedOf?: number, server?: { address: string; name: string }) => {
     const installed = new Set(mods.map((m) => m.mod_id));
     const missing = modIds.filter((id) => !installed.has(id));
     const partial = announcedOf ? i18next.t('join.profilePartial', { count: modIds.length, total: announcedOf }) : '';
     const ok = confirm(i18next.t(announcedOf ? 'join.profileConfirmAnnounced' : 'join.profileConfirm', { name, count: modIds.length, missing: (missing.length > 0 ? i18next.t('join.profileMissing', { count: missing.length }) : '') + partial }));
     if (!ok) return;
     try {
-      await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('join.profileDescription'), modIds, modIds);
+      const made = await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('join.profileDescription'), modIds, modIds);
+      // Kept with the server: each join then brings it up to the mods the server loads.
+      if (server && made?.id) await TauriService.setServerProfile(paths, server.address, server.name, made.id);
       await refreshActiveProfile();
       setActiveTab('PROFILES');
     } catch (err) {
@@ -1041,7 +1043,7 @@ export const App: React.FC = () => {
                 ))}
               </div>
               {serversView === 'JOIN' ? (
-                <JoinServers paths={paths} mods={mods} installedBuild={health.report?.game_version ?? null} onMakeProfile={handleMakeProfileFromServer} />
+                <JoinServers paths={paths} mods={mods} profiles={profiles} installedBuild={health.report?.game_version ?? null} onMakeProfile={handleMakeProfileFromServer} />
               ) : (
                 <ServerModule
                   paths={paths}

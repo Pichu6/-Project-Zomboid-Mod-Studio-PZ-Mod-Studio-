@@ -17,11 +17,13 @@ Achicá la lista con el cuadro (**Nombre o mapa**) y los filtros: **Solo mi vers
 3. Escribí la contraseña del servidor si tiene, y marcá **Recordar la contraseña** para guardarla.
 4. Cerrá el juego si está abierto y apretá **Entrar**.
 
-El juego abre en la ventana de conexión de este servidor con la contraseña del servidor ya puesta, y tu usuario también si lo escribiste en **Tu usuario en este servidor** (el Studio lo guarda; el mod Studio Link lo completa). Ahí escribís la contraseña de tu cuenta y tocás **Conectar**, que no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods y tus perfiles quedan como están.
+El juego abre en la ventana de conexión de este servidor con la contraseña del servidor ya puesta, y tu usuario también si lo escribiste en **Tu usuario en este servidor** (el Studio lo guarda; el mod Studio Link lo completa). Ahí escribís la contraseña de tu cuenta y tocás **Conectar**, que no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods queda como está, y tus perfiles también, salvo el del servidor (abajo).
 
 ## Crear un perfil para un servidor
 
 Un servidor solo anuncia sus primeros mods (Steam corta la lista). Después de entrar una vez desde acá, el Studio conoce la lista completa y el botón pasa a ser **Crear un perfil con estos N mods**. Antes de eso, **Crear un perfil con los N mods que anuncia** usa la lista parcial. El perfil se llama "Servidor: (nombre)" y respeta el orden del servidor. Antes de crearlo te avisa qué mods no están instalados ahora.
+
+Ese perfil queda como el del servidor (**Perfil del servidor**, en el panel del servidor, elige otro o ninguno). Cada vez que entrás desde acá, cuando el juego ya cargó los mods del servidor, el perfil los toma: activos, en el orden del servidor, con los que el juego te hizo descargar. Los mods tuyos que tenga quedan en él, apagados.
 
 ## Alojar un servidor: la lista de servidores
 

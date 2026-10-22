@@ -2696,6 +2696,10 @@
     "profileConfirmAnnounced": "Make the profile \"{{name}}\" with the {{count}} mods this server announces?{{missing}}",
     "profilePartial": "\n\nThe server only announces {{count}} of its {{total}} mods. Join it once from here and make the profile again to get all of them.",
     "usernamePlaceholder": "Your username on this server",
-    "usernameTitle": "Your account name on this server. The Studio keeps it and the game's connect window comes with it typed in; you type the account password there."
+    "usernameTitle": "Your account name on this server. The Studio keeps it and the game's connect window comes with it typed in; you type the account password there.",
+    "linkedProfile": "Each time you join from here, {{name}} takes the mods the server loads (the ones the game has you download too), on and in its order.",
+    "serverProfile": "Server's profile:",
+    "serverProfileNone": "(none)",
+    "serverProfileBlurb": "Pick the profile you use for this server: each time you join from here it takes the mods the server loads, the ones the game has you download too."
   }
 }

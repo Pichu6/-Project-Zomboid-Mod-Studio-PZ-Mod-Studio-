@@ -501,13 +501,56 @@ pub fn fill_from_logs(user_zomboid_dir: &Path, list: &mut [SavedServer]) -> bool
     changed
 }
 
-/// Read the kept servers, with what the last joins loaded filled in from the logs.
-pub fn read_saved_filled(user_zomboid_dir: &Path) -> Vec<SavedServer> {
+/// What the last joins loaded, from the logs; a server's profile (one made from it) is brought
+/// up to what the server loaded, so the mods the game downloaded for it are in it. Returns the
+/// kept servers and the profiles that changed.
+pub fn refresh_joins(user_zomboid_dir: &Path) -> (Vec<SavedServer>, Vec<crate::instance_manager::AppInstance>) {
     let mut list = read_saved(user_zomboid_dir);
+    let before: Vec<Option<i64>> = list.iter().map(|s| s.mods_seen).collect();
+    let mut changed = Vec::new();
     if fill_from_logs(user_zomboid_dir, &mut list) {
         let _ = write_saved(user_zomboid_dir, &list);
+        for (s, seen) in list.iter().zip(before) {
+            if s.mods_seen == seen || s.mods.is_empty() {
+                continue;
+            }
+            if let Some(profile) = s.profile_id.as_deref() {
+                if let Ok(Some(p)) = crate::instance_manager::take_server_mods(&user_zomboid_dir.to_string_lossy(), profile, &s.mods) {
+                    changed.push(p);
+                }
+            }
+        }
     }
-    list
+    (list, changed)
+}
+
+/// Read the kept servers, with what the last joins loaded filled in from the logs.
+pub fn read_saved_filled(user_zomboid_dir: &Path) -> Vec<SavedServer> {
+    refresh_joins(user_zomboid_dir).0
+}
+
+/// The profile made from a server, kept with it (the server is kept too, as a recent one, when
+/// it was not yet). None takes the link away.
+pub fn set_server_profile(user_zomboid_dir: &Path, address: &str, name: &str, profile_id: Option<&str>) -> Result<Vec<SavedServer>, String> {
+    let mut list = read_saved(user_zomboid_dir);
+    match list.iter_mut().find(|s| s.address.eq_ignore_ascii_case(address.trim())) {
+        Some(s) => s.profile_id = profile_id.map(str::to_string),
+        None => list.push(SavedServer {
+            name: if name.trim().is_empty() { address.trim().to_string() } else { name.trim().to_string() },
+            address: address.trim().to_string(),
+            note: String::new(),
+            profile_id: profile_id.map(str::to_string),
+            has_password: crate::secrets::get(&password_key(address)).ok().flatten().is_some(),
+            starred: false,
+            last_joined: None,
+            mods: Vec::new(),
+            items: Vec::new(),
+            mods_seen: None,
+            username: String::new(),
+        }),
+    }
+    write_saved(user_zomboid_dir, &list)?;
+    Ok(list)
 }
 
 /// The Studio is starting the game joining `address`: it goes to the top of the recent list.

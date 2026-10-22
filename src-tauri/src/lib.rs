@@ -226,8 +226,28 @@ fn server_rules_cmd(address: String) -> Result<server_browser::ServerRules, Stri
 }
 
 #[tauri::command(async)]
-fn saved_servers_cmd(paths: StudioPaths) -> Result<Vec<server_browser::SavedServer>, String> {
-    Ok(server_browser::read_saved_filled(&zomboid_dir_of(&paths)?))
+fn saved_servers_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: StudioPaths) -> Result<Vec<server_browser::SavedServer>, String> {
+    let (list, changed) = server_browser::refresh_joins(&zomboid_dir_of(&paths)?);
+    for profile in changed {
+        let _ = tauri::Emitter::emit(&app_handle, studio_link::PROFILE_CHANGED_EVENT, profile);
+    }
+    Ok(list)
+}
+
+/// Keeps the profile made from a server with it, so later joins bring it up to what it loads.
+/// A server already joined gives the profile what it loaded at once.
+#[tauri::command(async)]
+fn set_server_profile_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: StudioPaths, address: String, name: String, profile_id: Option<String>) -> Result<Vec<server_browser::SavedServer>, String> {
+    let z = zomboid_dir_of(&paths)?;
+    let list = server_browser::set_server_profile(&z, &address, &name, profile_id.as_deref())?;
+    if let (Some(id), Some(server)) = (profile_id.as_deref(), list.iter().find(|s| s.address.eq_ignore_ascii_case(address.trim()))) {
+        if !server.mods.is_empty() {
+            if let Ok(Some(profile)) = instance_manager::take_server_mods(&z.to_string_lossy(), id, &server.mods) {
+                let _ = tauri::Emitter::emit(&app_handle, studio_link::PROFILE_CHANGED_EVENT, profile);
+            }
+        }
+    }
+    Ok(list)
 }
 
 /// Keeps a server in the player's list; `password` Some("") forgets it, None leaves it.
@@ -262,7 +282,28 @@ fn join_server_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: St
         test_mode: "NORMAL".to_string(),
         extra_args,
     };
-    launch_sandbox_and_watch(app_handle, config)
+    let watcher = app_handle.clone();
+    let pid = launch_sandbox_and_watch(app_handle, config)?;
+    // While the game is on the server (and once when it closes): what the server loaded, read
+    // from the log as soon as it is there, goes into the server's profile, and the app is told.
+    if let Ok(z) = zomboid_dir_of(&paths) {
+        std::thread::spawn(move || {
+            let mut seen_running = false;
+            for round in 0..(12 * 60 * 2) {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                let running = sandbox::find_running_pz_pid().is_some();
+                for profile in server_browser::refresh_joins(&z).1 {
+                    let _ = tauri::Emitter::emit(&watcher, studio_link::PROFILE_CHANGED_EVENT, profile);
+                }
+                if running {
+                    seen_running = true;
+                } else if seen_running || round > 10 {
+                    break;
+                }
+            }
+        });
+    }
+    Ok(pid)
 }
 
 /// Whether a Steam Web API key is saved (the key itself never goes back to the UI).
@@ -1698,6 +1739,7 @@ pub fn run() {
             saved_servers_cmd,
             save_server_cmd,
             forget_server_cmd,
+            set_server_profile_cmd,
             join_server_cmd,
             map_images_cmd,
             map_image_bytes_cmd,

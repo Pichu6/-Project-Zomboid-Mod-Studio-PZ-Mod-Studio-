@@ -2696,6 +2696,10 @@
     "profileConfirmAnnounced": "¿Crear el perfil \"{{name}}\" con los {{count}} mods que anuncia este servidor?{{missing}}",
     "profilePartial": "\n\nEl servidor anuncia solo {{count}} de sus {{total}} mods. Entrá una vez desde acá y creá el perfil de nuevo para tenerlos todos.",
     "usernamePlaceholder": "Tu usuario en este servidor",
-    "usernameTitle": "El nombre de tu cuenta en este servidor. El Studio lo guarda y el juego lo trae escrito en su ventana de conexión; la contraseña de la cuenta la escribís ahí."
+    "usernameTitle": "El nombre de tu cuenta en este servidor. El Studio lo guarda y el juego lo trae escrito en su ventana de conexión; la contraseña de la cuenta la escribís ahí.",
+    "linkedProfile": "Cada vez que entrás desde acá, {{name}} se actualiza con los mods que carga el servidor (también los que el juego te hace descargar), activos y en su orden.",
+    "serverProfile": "Perfil del servidor:",
+    "serverProfileNone": "(ninguno)",
+    "serverProfileBlurb": "Elegí el perfil que usás para este servidor: cada vez que entres desde acá se actualiza con los mods que carga el servidor, también los que el juego te hace descargar."
   }
 }

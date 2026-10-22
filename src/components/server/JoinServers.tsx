@@ -4,16 +4,17 @@ import { ChevronLeft, ChevronRight, Copy, Globe, Info, Lock, Play, RefreshCw, Se
 import { useContextMenu, MenuItem } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
-import { ModInfo, PublicServer, SavedServer, ServerRules } from '../../types';
+import { AppInstance, ModInfo, PublicServer, SavedServer, ServerRules } from '../../types';
 
 interface JoinServersProps {
   paths: StudioPathsUI;
   mods: ModInfo[];
+  profiles: AppInstance[];
   /** "42.21" when known. */
   installedBuild: string | null;
   /** Makes a profile with these mods, in this order; `announcedOf` when they are only the first
    * ones the server announces out of that many. */
-  onMakeProfile: (name: string, modIds: string[], announcedOf?: number) => Promise<void>;
+  onMakeProfile: (name: string, modIds: string[], announcedOf?: number, server?: { address: string; name: string }) => Promise<void>;
 }
 
 /** What is selected: a server from the public list, or one of the player's own. */
@@ -34,7 +35,7 @@ const majorMinor = (v: string) => v.split('.').slice(0, 2).join('.');
  * game's own browser does), the player's own servers (private ones by address), what a server
  * says about itself, and a profile with the mods it really loaded the last time it was joined.
  */
-export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installedBuild, onMakeProfile }) => {
+export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles, installedBuild, onMakeProfile }) => {
   const { t } = useTranslation();
   const [source, setSource] = useState<'public' | 'mine'>('public');
   const [list, setList] = useState<PublicServer[]>([]);
@@ -175,7 +176,8 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
   const makeProfileFor = async (p: Picked) => {
     const kept = savedOf(p.address);
     if (kept && kept.mods.length > 0) {
-      await onMakeProfile(t('join.profileName', { name: p.name }), kept.mods.map(bare));
+      await onMakeProfile(t('join.profileName', { name: p.name }), kept.mods.map(bare), undefined, p);
+      void loadSaved();
       return;
     }
     let r = picked?.address === p.address ? rules : null;
@@ -192,7 +194,8 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
       return;
     }
     const total = r.mod_count ?? r.mods.length;
-    await onMakeProfile(t('join.profileName', { name: p.name }), r.mods.map(bare), total > r.mods.length ? total : undefined);
+    await onMakeProfile(t('join.profileName', { name: p.name }), r.mods.map(bare), total > r.mods.length ? total : undefined, p);
+    void loadSaved();
   };
 
   const copyAddress = (address: string) => {
@@ -213,6 +216,19 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
     if (kept) items.push({ label: t('join.forget'), icon: Trash2, danger: true, separatorBefore: true, onSelect: () => void TauriService.forgetServer(paths, p.address).then(setSaved) });
     return items;
   };
+
+  /**
+   * The profile made from a server. One made before servers kept it is found by the name the
+   * Studio gives it, and kept from then on.
+   */
+  const serverProfile = (s: SavedServer | undefined) =>
+    !s ? undefined : s.profile_id ? profiles.find((p) => p.id === s.profile_id) : profiles.find((p) => p.name === t('join.profileName', { name: s.name }));
+  useEffect(() => {
+    const kept = picked ? savedOf(picked.address) : undefined;
+    const found = serverProfile(kept);
+    if (kept && found && kept.profile_id == null) void TauriService.setServerProfile(paths, kept.address, kept.name, found.id).then(setSaved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked?.address, saved, profiles]);
 
   const byId = useMemo(() => new Map(mods.map((m) => [bare(m.mod_id), m])), [mods]);
   const pickedSaved = picked ? savedOf(picked.address) : undefined;
@@ -420,8 +436,24 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
                 <Play className="w-4 h-4" />{t('join.join')}
               </button>
               <p className="text-[10px] text-slate-500">{t('join.joinBlurb')}</p>
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                  <span className="shrink-0">{t('join.serverProfile')}</span>
+                  <select
+                    value={serverProfile(pickedSaved)?.id ?? ''}
+                    onChange={(e) => void TauriService.setServerProfile(paths, picked.address, picked.name, e.target.value || null).then(setSaved)}
+                    className="flex-1 min-w-0 px-1.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100"
+                  >
+                    <option value="">{t('join.serverProfileNone')}</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-[10px] text-slate-500">{serverProfile(pickedSaved) ? t('join.linkedProfile', { name: serverProfile(pickedSaved)!.name }) : t('join.serverProfileBlurb')}</p>
+              </div>
               {fullMods && (
-                <button onClick={() => void onMakeProfile(t('join.profileName', { name: picked.name }), fullMods.map(bare))} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 cursor-pointer">
+                <button onClick={() => void onMakeProfile(t('join.profileName', { name: picked.name }), fullMods.map(bare), undefined, picked).then(loadSaved)} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 cursor-pointer">
                   <UserPlus className="w-3.5 h-3.5" />{t('join.makeProfile', { count: fullMods.length })}
                 </button>
               )}
