@@ -1,6 +1,6 @@
 import { HelpButton } from './components/common/HelpPanel';
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor, profileMembers, STUDIO_LINK_MOD_ID } from './types';
+import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, AuthorLink, profileBuildMajor, profileMembers, STUDIO_LINK_MOD_ID } from './types';
 import { DeveloperModule } from './components/dev/DeveloperModule';
 import { StudioHeader } from './components/layout/StudioHeader';
 import { UpdateNotice } from './components/layout/UpdateNotice';
@@ -27,6 +27,7 @@ import { useModHealth } from './hooks/useModHealth';
 import { BrowseModule } from './components/browse/BrowseModule';
 import { issuesByModOf, linkModsText, modTagsOf } from './components/load_order/modFacets';
 import { syncFavouritesWithGame } from './services/modLists';
+import { mergeLinks } from './components/common/SupportLinks';
 import { ContextMenuProvider } from './components/common/ContextMenu';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
@@ -135,14 +136,48 @@ export const App: React.FC = () => {
   }, [paths, mods]);
 
   /**
+   * Where to support each installed mod's author, as the Mod List's inspector shows it: the links
+   * in its changelog, then those in its Workshop description. Read again when the installed mods
+   * change; the game's Mods screen shows them too.
+   */
+  const [supportByMod, setSupportByMod] = useState<Map<string, AuthorLink[]>>(new Map());
+  const installedKey = mods.filter((m) => !m.not_installed).map((m) => m.mod_id).join('|');
+  useEffect(() => {
+    if (!paths.is_valid || !paths.user_zomboid_dir || !installedKey) return;
+    let cancelled = false;
+    const installed = mods.filter((m) => !m.not_installed);
+    // The same ids, in the same order, as the inspector asks for: Steam's answer is shared.
+    const ids = [...new Set(mods.map((m) => m.workshop_id).filter((id): id is string => !!id))].sort();
+    void (async () => {
+      const fromWorkshop = new Map<string, AuthorLink[]>();
+      try {
+        for (const item of await TauriService.workshopDetails(ids)) if (item.support?.length) fromWorkshop.set(item.workshop_id, item.support);
+      } catch {
+        // Offline: the changelogs' links still go.
+      }
+      const logs = await Promise.all(installed.map((m) => TauriService.modChangelog(paths, m.mod_id)));
+      const out = new Map<string, AuthorLink[]>();
+      installed.forEach((m, i) => {
+        const links = mergeLinks(logs[i]?.links ?? [], m.workshop_id ? fromWorkshop.get(m.workshop_id) : undefined);
+        if (links.length > 0) out.set(m.mod_id, links);
+      });
+      if (!cancelled) setSupportByMod(out);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paths, installedKey]);
+
+  /**
    * The game's Mods screen has the app's filters while the app is used: each mod's origin, whether
    * it is a library and its tags, in the language the Studio speaks.
    */
   useEffect(() => {
     if (!paths.is_valid || !paths.user_zomboid_dir || mods.length === 0) return;
     const tags = modTagsOf(mods, errorStats, loadTimes, health.catalogById, issuesByModOf(healthIssues));
-    void TauriService.writeLinkMods(paths, linkModsText(mods, health.catalogById, tags));
-  }, [paths, mods, healthIssues, health.catalogById, errorStats, loadTimes, i18next.language]);
+    void TauriService.writeLinkMods(paths, linkModsText(mods, health.catalogById, tags, supportByMod));
+  }, [paths, mods, healthIssues, health.catalogById, errorStats, loadTimes, supportByMod, i18next.language]);
   const loadErrorStats = useCallback(async () => {
     if (!paths.is_valid) return;
     const list = await TauriService.modErrorStats(paths);

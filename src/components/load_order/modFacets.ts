@@ -1,5 +1,5 @@
 import i18next from 'i18next';
-import { CatalogModSummary, HealthIssue, ModErrorStat, ModInfo } from '../../types';
+import { AuthorLink, CatalogModSummary, HealthIssue, ModErrorStat, ModInfo } from '../../types';
 import { sourceOf } from '../common/SourceBadge';
 import { SLOW_LOAD_MS } from './ModRow';
 import { labelFor, rowIssueCodes } from './RowHealth';
@@ -62,11 +62,13 @@ export const tagLabel = (tag: string): string =>
  *   origin=<kind>\t<label>
  *   tag=<id>\t<label>
  *   mod=<id>\t<origin>\t<1 if a library>\t<tag;tag>
+ *   support=<id>\t<name>\t<url>   (where to support its author, as the inspector shows)
  */
 export function linkModsText(
   mods: ModInfo[],
   catalogById: Map<string, CatalogModSummary> | undefined,
-  tags: Map<string, string[]>
+  tags: Map<string, string[]>,
+  support: Map<string, AuthorLink[]> = new Map()
 ): string {
   const clean = (s: string) => s.replace(/[\t\r\n]/g, ' ');
   const lines: string[] = MOD_SOURCES.map((kind) => `origin=${kind}\t${clean(i18next.t(`modList.sources.${kind}`))}`);
@@ -76,6 +78,9 @@ export function linkModsText(
   for (const m of mods) {
     const kind = m.not_installed ? '' : sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind;
     lines.push(`mod=${m.mod_id}\t${kind}\t${m.is_library ? 1 : 0}\t${(tags.get(m.mod_id) ?? []).join(';')}`);
+    for (const link of support.get(m.mod_id) ?? []) {
+      if (link.url.startsWith('https://')) lines.push(`support=${m.mod_id}\t${clean(link.name)}\t${clean(link.url)}`);
+    }
   }
   return lines.join('\n') + '\n';
 }

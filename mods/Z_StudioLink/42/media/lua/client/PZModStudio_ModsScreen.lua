@@ -180,11 +180,12 @@ local function readUpdated()
 end
 
 local function noFacts()
-    return { origin = {}, library = {}, tags = {}, origins = {}, tagNames = {} }
+    return { origin = {}, library = {}, tags = {}, origins = {}, tagNames = {}, support = {} }
 end
 
 --- What the app knows of each mod for the filters (origin, library, tags) and its words for them:
---- origin=<kind>\t<label>, tag=<id>\t<label>, mod=<id>\t<origin>\t<1 for a library>\t<tag;tag>.
+--- origin=<kind>\t<label>, tag=<id>\t<label>, mod=<id>\t<origin>\t<1 for a library>\t<tag;tag>,
+--- support=<id>\t<name>\t<url> (where to support its author).
 local function readLinkMods()
     local facts = noFacts()
     local file = getFileReader(MODS_FILE, false)
@@ -195,6 +196,13 @@ local function readLinkMods()
         if key == "origin" or key == "tag" then
             local id, label = string.match(rest, "^([^\t]+)\t(.*)$")
             if id then table.insert(key == "origin" and facts.origins or facts.tagNames, { id = id, label = label }) end
+        elseif key == "support" then
+            local id, name, url = string.match(rest, "^([^\t]+)\t([^\t]*)\t(https://%S+)$")
+            if id then
+                id = plainId(id)
+                facts.support[id] = facts.support[id] or {}
+                table.insert(facts.support[id], { name = name ~= "" and name or url, url = url })
+            end
         elseif key == "mod" then
             local id, origin, lib, tags = string.match(rest, "^([^\t]+)\t([^\t]*)\t([^\t]*)\t?(.*)$")
             if id then
@@ -1463,6 +1471,12 @@ function Screen:select(mod, groupName)
     else
         fact(text("modsFrom"), text("modsFromLocal"))
     end
+    local support = self.facts.support[mod.id]
+    if support then
+        local names = {}
+        for _, link in ipairs(support) do table.insert(names, link.name) end
+        fact(text("modsSupport"), table.concat(names, ", "), "0.96,0.6,0.78")
+    end
     local okMin, vMin = pcall(function() return info:getVersionMin() end)
     local okMax, vMax = pcall(function() return info:getVersionMax() end)
     vMin = okMin and vMin and tostring(vMin) or nil
@@ -1548,6 +1562,25 @@ function Screen:select(mod, groupName)
     self:updateButtons()
 end
 
+--- The support buttons for these links: one wide button for one link, side by side for more; the
+--- options button goes under them, or takes their row when there are none.
+function Screen:layoutSupport(links)
+    local n = math.min(#links, #self.supportButtons)
+    local w = n > 0 and math.floor((self.buttonW - 6 * (n - 1)) / n) or 0
+    for i, b in ipairs(self.supportButtons) do
+        local link = links[i]
+        b:setVisible(i <= n)
+        if i <= n then
+            b.url = link.url
+            b:setX(self.buttonX + (w + 6) * (i - 1))
+            b:setWidth(i == n and self.buttonW - (w + 6) * (n - 1) or w)
+            b:setTitle(n == 1 and text("modsSupportOne", link.name) or link.name)
+            b.tooltip = text("modsSupportTip") .. " " .. link.url
+        end
+    end
+    self.optionsButton:setY(self.buttonY + self.buttonStep * (n > 0 and 5 or 4))
+end
+
 function Screen:updateButtons()
     if not self.toggleButton then return end
     local mod = self.selectedMod
@@ -1573,12 +1606,14 @@ function Screen:updateButtons()
         self.downButton:setVisible(false)
         self.workshopButton:setVisible(false)
         self.optionsButton:setVisible(false)
+        for _, b in ipairs(self.supportButtons) do b:setVisible(false) end
         self.acceptButton:setTitle(self.changes > 0 and text("modsAcceptN", self.changes) or text("modsAccept"))
         for key, button in pairs(self.filterButtons) do styleButton(button, key == self.filter) end
         self.sortButton:setTitle(self.sort == "order" and text("modsSortOrder") or text("modsSortName"))
         return
     end
     self.optionsButton:setVisible(self:hasOptions(mod))
+    self:layoutSupport(mod and self.facts.support[mod.id] or {})
     local has = mod ~= nil
     self.toggleButton:setVisible(has)
     self.workshopButton:setVisible(has)
@@ -1769,7 +1804,18 @@ function Screen:createChildren()
         local mod = screen.selectedMod
         if mod then pcall(function() openUrl(WORKSHOP_URL .. mod.workshop) end) end
     end)
-    self.optionsButton = button(self, bx, by + (bh + 6) * 4, bw, bh, text("modsOptions"), function(screen) screen:openOptions() end)
+    -- Where to support its author (up to three links, side by side); the mod's options below.
+    self.buttonX, self.buttonW, self.buttonY, self.buttonStep = bx, bw, by, bh + 6
+    self.supportButtons = {}
+    for i = 1, 3 do
+        local b = button(self, bx, by + (bh + 6) * 4, bw, bh, "", function(screen, clicked)
+            if clicked.url then pcall(function() openUrl(clicked.url) end) end
+        end)
+        b.tooltip = text("modsSupportTip")
+        b:setVisible(false)
+        self.supportButtons[i] = b
+    end
+    self.optionsButton = button(self, bx, by + (bh + 6) * 5, bw, bh, text("modsOptions"), function(screen) screen:openOptions() end)
     local descTop = math.max(listTop + self.posterSize, self.optionsButton:getBottom()) + 14
     self.desc = ISRichTextPanel:new(dx, descTop, dw, bottom - descTop - 24)
     self.desc.background = false
@@ -1842,11 +1888,12 @@ function Screen:setRatio(ratio)
         b:setX(bx)
         b:setWidth(bw)
     end
+    self.buttonX, self.buttonW = bx, bw
     self.upButton:setX(bx)
     self.upButton:setWidth(half)
     self.downButton:setX(bx + half + 6)
     self.downButton:setWidth(bw - half - 6)
-    local descTop = math.max(self.detailY + self.posterSize, self.optionsButton:getBottom()) + 14
+    local descTop = math.max(self.detailY + self.posterSize, self.buttonY + self.buttonStep * 5 + self.bh) + 14
     self.desc:setX(dx)
     self.desc:setY(descTop)
     self.desc:setWidth(dw)
