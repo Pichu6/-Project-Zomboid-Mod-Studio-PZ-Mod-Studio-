@@ -155,6 +155,14 @@
     "communityBlurb": "Una vez al día, del repositorio del Studio en GitHub: reglas de orden de carga, pares incompatibles, y un registro por mod con las builds en que corre, con qué choca y sus problemas conocidos con el arreglo que el Studio aplica. Los usan Ordenar, Salud de mods, la Lista de mods y Explorar. Apagado: se conserva la última copia y no se descarga nada. Nunca se envía nada.",
     "communitySite": "El índice de la comunidad en la web",
     "communityLists": "Listas de la comunidad en la web",
+    "updateCheck": "Buscar versiones nuevas de PZ Mod Studio",
+    "updateCheckBlurb": "Una vez al día, el Studio le pregunta a GitHub cuál es la última versión publicada de PZ Mod Studio. Si hay una más nueva, un aviso arriba ofrece descargarla (la página de la versión se abre en el navegador). No se descarga ni se instala nada solo, y no se envía nada.",
+    "updateCheckNow": "Buscar ahora",
+    "updateChecking": "Buscando…",
+    "updateUpToDate": "Tenés la última versión ({{current}}).",
+    "updateAvailable": "Salió PZ Mod Studio {{latest}}; tenés la {{current}}.",
+    "updateFailed": "No se pudo consultar GitHub: {{error}}",
+    "updateDownload": "Descargar",
     "github": "GitHub, para \"Compartir\" en un clic",
     "githubBlurb": "Opcional. Con un token personal guardado, \"Compartir con la comunidad\" (una regla de orden, el registro de un mod) hace un fork del repositorio del Studio en tu cuenta una sola vez, escribe el archivo en una rama y abre el pull request solo. Sin token, los mismos botones abren la página de GitHub con el JSON ya completo y apretás \"Propose changes\" ahí. Recibir los archivos de la comunidad no necesita ninguna cuenta. El token se verifica con GitHub y se guarda en el Administrador de credenciales de Windows, solo en esta PC; no se envía nada más.",
     "githubHow": "Conectar con GitHub muestra un código; escribilo en la página que se abre y aprobá \"PZ Mod Studio\" (puede abrir pull requests en repositorios públicos, y se usa solo para estas propuestas). O creá vos un token de grano fino (Settings → Developer settings → Personal access tokens) con \"Contents\" y \"Pull requests\" en lectura y escritura, y pegalo.",
@@ -2452,6 +2460,13 @@
       "removedList": "Sacados",
       "updatedList": "Actualizados en el Workshop"
     }
+  },
+  "update": {
+    "available": "Salió PZ Mod Studio {{latest}}",
+    "current": "tenés la {{current}}",
+    "download": "Descargar",
+    "notNow": "Ahora no",
+    "notNowTitle": "Sin aviso para esta versión; la próxima vuelve a avisar"
   },
   "notices": {
     "javaAgentsLater": "Project Zomboid estaba abierto cuando cambió el perfil, así que su archivo de inicio (agentes Java como ZombieBuddy) esperó. Ahora que el juego se cerró, ya está hecho. Prendidos: {{on}}. Apagados: {{off}}."

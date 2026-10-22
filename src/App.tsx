@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 
 import { ActiveTab, VfsConflict, ModInfo, TranslatedErrorCard, GameLaunchMode, AppProfile, ModErrorStat, HealthIssue, profileBuildMajor, profileMembers, STUDIO_LINK_MOD_ID } from './types';
 import { DeveloperModule } from './components/dev/DeveloperModule';
 import { StudioHeader } from './components/layout/StudioHeader';
+import { UpdateNotice } from './components/layout/UpdateNotice';
 import { StudioSidebar } from './components/layout/StudioSidebar';
 import { LoadOrderModule } from './components/load_order/LoadOrderModule';
 import { SandboxModule } from './components/sandbox/SandboxModule';
@@ -842,6 +843,8 @@ export const App: React.FC = () => {
         onNavigateToProfiles={() => setActiveTab('PROFILES')}
         onRunSandbox={handleRunSandbox}
       />
+      {/* A newer PZ Mod Studio on GitHub (once a day; Settings can switch it off). */}
+      {!isInitializing && <UpdateNotice userZomboidDir={paths.user_zomboid_dir} />}
       {/* The help of the screen in front: "?" in the corner, or F1. */}
       <HelpButton tab={activeTab} />
 

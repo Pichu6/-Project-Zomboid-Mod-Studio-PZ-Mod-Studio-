@@ -828,6 +828,18 @@ export interface GameInstall {
 }
 
 /** The community rules in use: how many, and when the copy was fetched. */
+/** Whether a newer PZ Mod Studio is out (app_update.rs). */
+export interface AppUpdateStatus {
+  enabled: boolean;
+  current: string;
+  latest: string | null;
+  url: string | null;
+  newer: boolean;
+  dismissed: boolean;
+  checked_at: number | null;
+  error: string | null;
+}
+
 export interface CommunitySummary {
   rules: number;
   pairs: number;

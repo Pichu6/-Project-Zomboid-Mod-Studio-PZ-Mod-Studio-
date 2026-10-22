@@ -1,4 +1,5 @@
 pub mod app_docs;
+pub mod app_update;
 pub mod bisect;
 pub mod catalog;
 pub mod claude_agent;
@@ -1071,6 +1072,24 @@ fn propose_shared_list_cmd(list: rules::shared_lists::SharedList) -> Result<rule
     })
 }
 
+/// Whether a newer PZ Mod Studio is out (asked of GitHub once a day while the check is on);
+/// `force` is Settings' "Check now".
+#[tauri::command(async)]
+fn app_update_status_cmd(user_zomboid_dir: String, force: bool) -> app_update::UpdateStatus {
+    app_update::check(&user_zomboid_dir, force)
+}
+
+#[tauri::command(async)]
+fn set_app_update_check_cmd(user_zomboid_dir: String, enabled: bool) -> Result<app_update::UpdateStatus, String> {
+    app_update::set_enabled(&user_zomboid_dir, enabled)
+}
+
+/// "Not now" on the notice: quiet until the next version.
+#[tauri::command(async)]
+fn dismiss_app_update_cmd(user_zomboid_dir: String, version: String) -> Result<(), String> {
+    app_update::dismiss(&user_zomboid_dir, &version)
+}
+
 /// Whether the Studio fetches the community rules and index (Settings).
 #[tauri::command(async)]
 fn community_downloads_cmd(user_zomboid_dir: String) -> bool {
@@ -1609,6 +1628,9 @@ pub fn run() {
             refresh_community_cmd,
             community_index_cmd,
             community_downloads_cmd,
+            app_update_status_cmd,
+            set_app_update_check_cmd,
+            dismiss_app_update_cmd,
             set_community_downloads_cmd,
             add_load_rule_cmd,
             remove_load_rule_cmd,

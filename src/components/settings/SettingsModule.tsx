@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DiagnosticsCard } from './DiagnosticsCard';
 import { FolderOpen, CheckCircle, AlertTriangle, RefreshCw, HardDrive, Wrench, Bell, Bot, Copy, Check, Terminal, Radio, Code2, Layers, Info, Lightbulb, KeyRound, ExternalLink, Loader2 } from 'lucide-react';
-import { PolyfillSection, ShimPatch } from '../../types';
+import { AppUpdateStatus, PolyfillSection, ShimPatch } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { COMMUNITY_SITE } from '../../utils/communityIndex';
 import { useTranslation } from 'react-i18next';
@@ -105,6 +105,24 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
     if (!paths.user_zomboid_dir) return;
     void TauriService.communityDownloads(paths.user_zomboid_dir).then(setCommunityDownloads);
   }, [paths.user_zomboid_dir]);
+  // The check for a newer PZ Mod Studio: its switch and "Check now".
+  const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  useEffect(() => {
+    void TauriService.appUpdateStatus(paths.user_zomboid_dir).then(setAppUpdate);
+  }, [paths.user_zomboid_dir]);
+  const toggleAppUpdate = async (on: boolean) => {
+    try {
+      setAppUpdate(await TauriService.setAppUpdateCheck(paths.user_zomboid_dir, on));
+    } catch {
+      // Already shown by TauriService.
+    }
+  };
+  const checkUpdateNow = async () => {
+    setCheckingUpdate(true);
+    setAppUpdate(await TauriService.appUpdateStatus(paths.user_zomboid_dir, true));
+    setCheckingUpdate(false);
+  };
   const toggleCommunityDownloads = async (on: boolean) => {
     try {
       await TauriService.setCommunityDownloads(paths.user_zomboid_dir, on);
@@ -818,6 +836,51 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               onClick={() => void toggleCommunityDownloads(!communityDownloads)}
               className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
                 communityDownloads ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-full bg-white shadow-md" />
+            </button>
+          </div>
+        )}
+
+        {activeSubTab === 'PATHS' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-200">{t('settings.updateCheck')}</div>
+              <p className="text-[11px] text-slate-400 max-w-2xl">{t('settings.updateCheckBlurb')}</p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button type="button" disabled={checkingUpdate} onClick={() => void checkUpdateNow()}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer disabled:opacity-60">
+                  {checkingUpdate
+                    ? <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+                    : <RefreshCw className="w-3 h-3" aria-hidden="true" />}
+                  {checkingUpdate ? t('settings.updateChecking') : t('settings.updateCheckNow')}
+                </button>
+                {appUpdate && !checkingUpdate && (
+                  appUpdate.error && !appUpdate.latest ? (
+                    <span className="text-[11px] text-amber-400">{t('settings.updateFailed', { error: appUpdate.error })}</span>
+                  ) : appUpdate.newer && appUpdate.latest ? (
+                    <>
+                      <span className="text-[11px] text-emerald-300">{t('settings.updateAvailable', { latest: appUpdate.latest, current: appUpdate.current })}</span>
+                      <button type="button" onClick={() => appUpdate.url && TauriService.openExternalUrl(appUpdate.url)}
+                        className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[11px] text-white font-semibold cursor-pointer">
+                        <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('settings.updateDownload')}
+                      </button>
+                    </>
+                  ) : appUpdate.latest ? (
+                    <span className="text-[11px] text-slate-400">{t('settings.updateUpToDate', { current: appUpdate.current })}</span>
+                  ) : null
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={appUpdate?.enabled ?? true}
+              aria-label={t('settings.updateCheck')}
+              onClick={() => void toggleAppUpdate(!(appUpdate?.enabled ?? true))}
+              className={`w-10 h-5 shrink-0 rounded-full p-0.5 flex items-center transition cursor-pointer ${
+                appUpdate?.enabled ?? true ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-white shadow-md" />

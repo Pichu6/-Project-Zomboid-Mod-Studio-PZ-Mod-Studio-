@@ -112,7 +112,7 @@ impl CommunityRules {
 }
 
 /// A file beside the mod list, for every community download's cache.
-pub(super) fn cache_path(user_zomboid_dir: &str, file: &str) -> Option<PathBuf> {
+pub(crate) fn cache_path(user_zomboid_dir: &str, file: &str) -> Option<PathBuf> {
     get_existing_user_zomboid_dirs(user_zomboid_dir).into_iter().next().map(|d| d.join(file))
 }
 
@@ -138,7 +138,7 @@ pub fn set_downloads_enabled(user_zomboid_dir: &str, on: bool) -> Result<(), Str
 }
 
 /// One small file over HTTPS, with a ten-second patience.
-pub(super) fn fetch_text(url: &str) -> Result<String, String> {
+pub(crate) fn fetch_text(url: &str) -> Result<String, String> {
     // The default provider is Rustls, which this build does not carry: without saying NativeTls,
     // ureq panics on the first https URL (the rules fetch did, since 2026-10-18).
     let tls = ureq::tls::TlsConfig::builder().provider(ureq::tls::TlsProvider::NativeTls).build();
@@ -151,7 +151,7 @@ pub(super) fn fetch_text(url: &str) -> Result<String, String> {
     agent.get(url).call().map_err(|e| e.to_string())?.body_mut().read_to_string().map_err(|e| e.to_string())
 }
 
-pub(super) fn is_fresh(fetched_at: i64) -> bool {
+pub(crate) fn is_fresh(fetched_at: i64) -> bool {
     now() - fetched_at < FRESH_FOR_SECS
 }
 
@@ -177,7 +177,7 @@ pub fn load_cached(user_zomboid_dir: &str) -> Option<CommunityRules> {
     parse(&text).ok()
 }
 
-pub(super) fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     chrono::Utc::now().timestamp()
 }
 

@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, CommunityLists, SharedList, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordCommandsStatus, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, CommunityLists, SharedList, ProposeResult, LoadTimes, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordCommandsStatus, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer, AppUpdateStatus } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -489,6 +489,33 @@ export const TauriService = {
       return await invoke<CommunityIndex | null>('community_index_cmd', { paths });
     } catch {
       return null;
+    }
+  },
+
+  /** Whether a newer PZ Mod Studio is out (GitHub, once a day while the check is on). */
+  appUpdateStatus: async (userZomboidDir: string, force = false): Promise<AppUpdateStatus | null> => {
+    try {
+      return await invoke<AppUpdateStatus>('app_update_status_cmd', { userZomboidDir, force });
+    } catch {
+      return null;
+    }
+  },
+
+  setAppUpdateCheck: async (userZomboidDir: string, enabled: boolean): Promise<AppUpdateStatus> => {
+    try {
+      return await invoke<AppUpdateStatus>('set_app_update_check_cmd', { userZomboidDir, enabled });
+    } catch (err) {
+      reportBackendError('Switching the update check', err);
+      throw err;
+    }
+  },
+
+  /** "Not now" on the notice: quiet until the next version. */
+  dismissAppUpdate: async (userZomboidDir: string, version: string): Promise<void> => {
+    try {
+      await invoke('dismiss_app_update_cmd', { userZomboidDir, version });
+    } catch (err) {
+      reportBackendError('Hiding the update notice', err);
     }
   },
 
