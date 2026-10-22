@@ -2676,7 +2676,7 @@
     "passwordKept": "Contraseña guardada (escribí para cambiarla)",
     "remember": "Recordar la contraseña",
     "join": "Entrar",
-    "joinBlurb": "Abre el juego en la ventana de conexión de este servidor (cerrá el juego antes), con la contraseña del servidor y tu usuario ya puestos. Ahí escribís la contraseña de tu cuenta y tocás Conectar; el botón no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods y tus perfiles quedan como están.",
+    "joinBlurb": "Abre el juego en la ventana de conexión de este servidor (cerrá el juego antes), con la contraseña del servidor y tu usuario ya puestos. Ahí escribís la contraseña de tu cuenta y tocás Conectar; el botón no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego carga los mods del servidor solo ahí; tu lista de mods queda como está.",
     "started": "El juego está abriendo y entrando a {{name}}. Cuando vuelvas después de jugar, vas a ver la lista completa de sus mods.",
     "makeProfile": "Crear un perfil con estos {{count}} mods",
     "profileAfterJoin": "Entrá una vez desde acá y vas a poder crear un perfil con todos los mods que usa.",
@@ -2697,9 +2697,7 @@
     "profilePartial": "\n\nEl servidor anuncia solo {{count}} de sus {{total}} mods. Entrá una vez desde acá y creá el perfil de nuevo para tenerlos todos.",
     "usernamePlaceholder": "Tu usuario en este servidor",
     "usernameTitle": "El nombre de tu cuenta en este servidor. El Studio lo guarda y el juego lo trae escrito en su ventana de conexión; la contraseña de la cuenta la escribís ahí.",
-    "linkedProfile": "Cada vez que entrás desde acá, {{name}} se actualiza con los mods que carga el servidor (también los que el juego te hace descargar), activos y en su orden.",
-    "serverProfile": "Perfil del servidor:",
-    "serverProfileNone": "(ninguno)",
-    "serverProfileBlurb": "Elegí el perfil que usás para este servidor: cada vez que entres desde acá se actualiza con los mods que carga el servidor, también los que el juego te hace descargar."
+    "intoProfile": "Los mods que carga el servidor (también los que el juego te hace descargar) se agregan a tu perfil activo, {{name}}, activos y en su orden. Los demás mods del perfil quedan en él, apagados.",
+    "noProfile": "Sin un perfil activo, los mods que descargues para el servidor quedan instalados pero en ningún perfil."
   }
 }

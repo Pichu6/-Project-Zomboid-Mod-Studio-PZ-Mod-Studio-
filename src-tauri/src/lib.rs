@@ -234,22 +234,6 @@ fn saved_servers_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: 
     Ok(list)
 }
 
-/// Keeps the profile made from a server with it, so later joins bring it up to what it loads.
-/// A server already joined gives the profile what it loaded at once.
-#[tauri::command(async)]
-fn set_server_profile_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: StudioPaths, address: String, name: String, profile_id: Option<String>) -> Result<Vec<server_browser::SavedServer>, String> {
-    let z = zomboid_dir_of(&paths)?;
-    let list = server_browser::set_server_profile(&z, &address, &name, profile_id.as_deref())?;
-    if let (Some(id), Some(server)) = (profile_id.as_deref(), list.iter().find(|s| s.address.eq_ignore_ascii_case(address.trim()))) {
-        if !server.mods.is_empty() {
-            if let Ok(Some(profile)) = instance_manager::take_server_mods(&z.to_string_lossy(), id, &server.mods) {
-                let _ = tauri::Emitter::emit(&app_handle, studio_link::PROFILE_CHANGED_EVENT, profile);
-            }
-        }
-    }
-    Ok(list)
-}
-
 /// Keeps a server in the player's list; `password` Some("") forgets it, None leaves it.
 #[tauri::command(async)]
 fn save_server_cmd(paths: StudioPaths, server: server_browser::SavedServer, password: Option<String>) -> Result<Vec<server_browser::SavedServer>, String> {
@@ -271,7 +255,9 @@ fn join_server_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: St
     let extra_args = server_browser::join_args(&address, password.as_deref())?;
     if let Ok(z) = zomboid_dir_of(&paths) {
         let username = username.unwrap_or_default();
-        let _ = server_browser::note_join(&z, &address, &name, &username);
+        // The profile played on the server: what it loads goes into this one.
+        let profile = instance_manager::active_profile(&paths.user_zomboid_dir).map(|(id, _)| id);
+        let _ = server_browser::note_join(&z, &address, &name, &username, profile.as_deref());
         // The account the game's connect window asks for: the one typed now, else the one kept.
         let kept = server_browser::read_saved(&z).into_iter().find(|s| s.address.eq_ignore_ascii_case(address.trim())).map(|s| s.username).unwrap_or_default();
         let _ = server_browser::write_join_file(&z, &address, if username.trim().is_empty() { &kept } else { &username });
@@ -1739,7 +1725,6 @@ pub fn run() {
             saved_servers_cmd,
             save_server_cmd,
             forget_server_cmd,
-            set_server_profile_cmd,
             join_server_cmd,
             map_images_cmd,
             map_image_bytes_cmd,

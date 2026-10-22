@@ -2676,7 +2676,7 @@
     "passwordKept": "Password kept (type to change)",
     "remember": "Remember the password",
     "join": "Join",
-    "joinBlurb": "Starts the game on this server's connect window (close the game first), with the server password and your username filled in. There you type your account password and press Connect; the button stays off without a username. A new username makes a new account on that server. The game downloads the server's mods and uses them only there: your own mod list and profiles stay as they are.",
+    "joinBlurb": "Starts the game on this server's connect window (close the game first), with the server password and your username filled in. There you type your account password and press Connect; the button stays off without a username. A new username makes a new account on that server. The game loads the server's mods only there; your own mod list stays as it is.",
     "started": "The game is starting and joining {{name}}. Back here after playing, the full list of its mods will be known.",
     "makeProfile": "Make a profile with these {{count}} mods",
     "profileAfterJoin": "Join it once from here and you can make a profile with every mod it uses.",
@@ -2697,9 +2697,7 @@
     "profilePartial": "\n\nThe server only announces {{count}} of its {{total}} mods. Join it once from here and make the profile again to get all of them.",
     "usernamePlaceholder": "Your username on this server",
     "usernameTitle": "Your account name on this server. The Studio keeps it and the game's connect window comes with it typed in; you type the account password there.",
-    "linkedProfile": "Each time you join from here, {{name}} takes the mods the server loads (the ones the game has you download too), on and in its order.",
-    "serverProfile": "Server's profile:",
-    "serverProfileNone": "(none)",
-    "serverProfileBlurb": "Pick the profile you use for this server: each time you join from here it takes the mods the server loads, the ones the game has you download too."
+    "intoProfile": "The mods the server loads (the ones the game has you download too) go into your active profile, {{name}}, switched on and in its order. The profile's other mods stay in it, switched off.",
+    "noProfile": "With no active profile, the mods you download for the server stay installed but in no profile."
   }
 }

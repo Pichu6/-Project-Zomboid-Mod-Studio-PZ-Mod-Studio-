@@ -866,11 +866,6 @@ export const TauriService = {
   },
 
   /** Starts the game joining this server. Throws when the game is already running. */
-  /** Keeps the profile made from a server with it (null takes it away). */
-  setServerProfile: async (paths: StudioPathsUI, address: string, name: string, profileId: string | null): Promise<SavedServer[]> => {
-    return await invoke<SavedServer[]>('set_server_profile_cmd', { paths, address, name, profileId });
-  },
-
   joinServer: async (paths: StudioPathsUI, address: string, name: string, password: string | null, username: string | null): Promise<number> => {
     return await invoke<number>('join_server_cmd', { paths, address, name, password, username });
   },

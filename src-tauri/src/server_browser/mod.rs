@@ -392,7 +392,7 @@ pub struct SavedServer {
     pub address: String,
     #[serde(default)]
     pub note: String,
-    /// The profile made for it, when there is one.
+    /// The profile active when the Studio last joined it: what the server loads goes into it.
     #[serde(default)]
     pub profile_id: Option<String>,
     #[serde(default)]
@@ -501,9 +501,9 @@ pub fn fill_from_logs(user_zomboid_dir: &Path, list: &mut [SavedServer]) -> bool
     changed
 }
 
-/// What the last joins loaded, from the logs; a server's profile (one made from it) is brought
-/// up to what the server loaded, so the mods the game downloaded for it are in it. Returns the
-/// kept servers and the profiles that changed.
+/// What the last joins loaded, from the logs; the profile each was joined with takes what the
+/// server loaded, so the mods the game downloaded for it are in it. Returns the kept servers and
+/// the profiles that changed.
 pub fn refresh_joins(user_zomboid_dir: &Path) -> (Vec<SavedServer>, Vec<crate::instance_manager::AppInstance>) {
     let mut list = read_saved(user_zomboid_dir);
     let before: Vec<Option<i64>> = list.iter().map(|s| s.mods_seen).collect();
@@ -529,32 +529,9 @@ pub fn read_saved_filled(user_zomboid_dir: &Path) -> Vec<SavedServer> {
     refresh_joins(user_zomboid_dir).0
 }
 
-/// The profile made from a server, kept with it (the server is kept too, as a recent one, when
-/// it was not yet). None takes the link away.
-pub fn set_server_profile(user_zomboid_dir: &Path, address: &str, name: &str, profile_id: Option<&str>) -> Result<Vec<SavedServer>, String> {
-    let mut list = read_saved(user_zomboid_dir);
-    match list.iter_mut().find(|s| s.address.eq_ignore_ascii_case(address.trim())) {
-        Some(s) => s.profile_id = profile_id.map(str::to_string),
-        None => list.push(SavedServer {
-            name: if name.trim().is_empty() { address.trim().to_string() } else { name.trim().to_string() },
-            address: address.trim().to_string(),
-            note: String::new(),
-            profile_id: profile_id.map(str::to_string),
-            has_password: crate::secrets::get(&password_key(address)).ok().flatten().is_some(),
-            starred: false,
-            last_joined: None,
-            mods: Vec::new(),
-            items: Vec::new(),
-            mods_seen: None,
-            username: String::new(),
-        }),
-    }
-    write_saved(user_zomboid_dir, &list)?;
-    Ok(list)
-}
 
 /// The Studio is starting the game joining `address`: it goes to the top of the recent list.
-pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str, username: &str) -> Result<(), String> {
+pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str, username: &str, profile_id: Option<&str>) -> Result<(), String> {
     let mut list = read_saved(user_zomboid_dir);
     let at = list.iter().position(|s| s.address.eq_ignore_ascii_case(address.trim()));
     let mut entry = match at {
@@ -574,6 +551,7 @@ pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str, username: &
         },
     };
     entry.last_joined = Some(now_secs());
+    entry.profile_id = profile_id.map(str::to_string);
     if !username.trim().is_empty() {
         entry.username = username.trim().to_string();
     }
@@ -767,7 +745,7 @@ mod tests {
         let p = crate::vfs::studio_paths();
         let z = std::path::PathBuf::from(&p.user_zomboid_dir);
         let address = std::env::var("PZMS_JOIN").unwrap();
-        note_join(&z, &address, "studio_jointest", "").unwrap();
+        note_join(&z, &address, "studio_jointest", "", None).unwrap();
         let mut args = crate::compat::launch_args(&p.user_zomboid_dir);
         args.extend(join_args(&address, None).unwrap());
         println!("args {:?}", args);

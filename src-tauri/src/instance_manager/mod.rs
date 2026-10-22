@@ -178,9 +178,10 @@ pub fn add_members_to_active(z_dir: &std::path::Path, ids: &[String]) -> Result<
     Ok(Some(inst))
 }
 
-/// A server's profile takes what the server loaded on the last join: those mods on, in the
-/// server's order and first in the load order; any other mod it held stays in it, off (a server
-/// loads only its own). None when it already was so.
+/// The profile a server was joined with becomes what the server loaded: those mods in it and on,
+/// in the server's order and first in the load order (the ones the game had the player download
+/// too); any other mod it holds stays in it, off, as the server does not load it. None when it
+/// already was so.
 pub fn take_server_mods(user_zomboid_dir: &str, instance_id: &str, server_mods: &[String]) -> Result<Option<AppInstance>, String> {
     let dir = get_instances_dir(user_zomboid_dir);
     let path = instance_file_path(&dir, instance_id)?;

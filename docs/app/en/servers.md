@@ -17,13 +17,13 @@ Narrow the list with the box (**Name or map**) and the filters: **Only my build*
 3. Type the server password if it has one, and tick **Remember the password** to keep it.
 4. Close the game if it is open, and press **Join**.
 
-The game starts on this server's connect window with the server password filled in, and your username too when you typed it in **Your username on this server** (the Studio keeps it; the Studio Link mod fills it in). There you type your account password and press **Connect**, which stays off without a username. A new username makes a new account on that server. The game downloads the server's mods and uses them only there: your own mod list stays as it is, and so do your profiles except the server's own (below).
+The game starts on this server's connect window with the server password filled in, and your username too when you typed it in **Your username on this server** (the Studio keeps it; the Studio Link mod fills it in). There you type your account password and press **Connect**, which stays off without a username. A new username makes a new account on that server. The game downloads the server's mods and uses them only there: your own mod list stays as it is; the profile you join with gets them (below).
 
 ## Making a profile for a server
 
 A server only announces its first few mods (Steam cuts the list). After you join it once from here, the Studio knows the full list, and the button becomes **Make a profile with these N mods**. Before that, **Make a profile with the N mods it announces** uses the partial list. The profile is named "Server: (name)" and keeps the server's order. Mods not installed now are pointed out before the profile is made.
 
-That profile stays the server's (**Server's profile** in the server's pane picks another one, or none). Each time you join from here, once the game has loaded the server's mods, the profile takes them: on, in the server's order, with the ones the game had you download. Mods of your own in it stay, switched off.
+To play with it, activate it in Profiles before joining. Each time you join from here, once the game has loaded the server's mods, they go into the profile active when you joined: on, in the server's order, with the ones the game had you download. Its other mods stay in it, switched off. The server's pane says which profile that is.
 
 ## Host a server: the server list
 
