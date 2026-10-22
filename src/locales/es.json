@@ -2698,6 +2698,8 @@
     "usernamePlaceholder": "Tu usuario en este servidor",
     "usernameTitle": "El nombre de tu cuenta en este servidor. El Studio lo guarda y el juego lo trae escrito en su ventana de conexión; la contraseña de la cuenta la escribís ahí.",
     "intoProfile": "Los mods que carga el servidor (también los que el juego te hace descargar) se agregan a tu perfil activo, {{name}}, activos y en su orden. Los demás mods del perfil quedan en él, apagados.",
-    "noProfile": "Sin un perfil activo, los mods que descargues para el servidor quedan instalados pero en ningún perfil."
+    "noProfile": "Sin un perfil activo, los mods que descargues para el servidor quedan instalados pero en ningún perfil.",
+    "madeProfileActive": "Este servidor tiene su perfil, {{name}}, y es el activo.",
+    "madeProfileInactive": "Este servidor tiene su perfil, {{name}}, pero no es el activo: activalo en Perfiles para entrar con él."
   }
 }

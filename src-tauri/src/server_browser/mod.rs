@@ -416,6 +416,9 @@ pub struct SavedServer {
     /// game's own server list holds it; the Studio Link fills it in from here.
     #[serde(default)]
     pub username: String,
+    /// The profile made from it with "Make a profile" (shown in its pane).
+    #[serde(default)]
+    pub made_profile_id: Option<String>,
 }
 
 /// The last join in a DebugLog: the Workshop items the server named
@@ -524,6 +527,31 @@ pub fn refresh_joins(user_zomboid_dir: &Path) -> (Vec<SavedServer>, Vec<crate::i
     (list, changed)
 }
 
+/// The profile just made from a server, kept with it (the server is kept too, as a recent one,
+/// when it was not yet).
+pub fn set_made_profile(user_zomboid_dir: &Path, address: &str, name: &str, profile_id: &str) -> Result<Vec<SavedServer>, String> {
+    let mut list = read_saved(user_zomboid_dir);
+    match list.iter_mut().find(|s| s.address.eq_ignore_ascii_case(address.trim())) {
+        Some(s) => s.made_profile_id = Some(profile_id.to_string()),
+        None => list.push(SavedServer {
+            name: if name.trim().is_empty() { address.trim().to_string() } else { name.trim().to_string() },
+            address: address.trim().to_string(),
+            note: String::new(),
+            profile_id: None,
+            has_password: crate::secrets::get(&password_key(address)).ok().flatten().is_some(),
+            starred: false,
+            last_joined: None,
+            mods: Vec::new(),
+            items: Vec::new(),
+            mods_seen: None,
+            username: String::new(),
+            made_profile_id: Some(profile_id.to_string()),
+        }),
+    }
+    write_saved(user_zomboid_dir, &list)?;
+    Ok(list)
+}
+
 /// Read the kept servers, with what the last joins loaded filled in from the logs.
 pub fn read_saved_filled(user_zomboid_dir: &Path) -> Vec<SavedServer> {
     refresh_joins(user_zomboid_dir).0
@@ -548,6 +576,7 @@ pub fn note_join(user_zomboid_dir: &Path, address: &str, name: &str, username: &
             items: Vec::new(),
             mods_seen: None,
             username: String::new(),
+            made_profile_id: None,
         },
     };
     entry.last_joined = Some(now_secs());

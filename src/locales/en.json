@@ -2698,6 +2698,8 @@
     "usernamePlaceholder": "Your username on this server",
     "usernameTitle": "Your account name on this server. The Studio keeps it and the game's connect window comes with it typed in; you type the account password there.",
     "intoProfile": "The mods the server loads (the ones the game has you download too) go into your active profile, {{name}}, switched on and in its order. The profile's other mods stay in it, switched off.",
-    "noProfile": "With no active profile, the mods you download for the server stay installed but in no profile."
+    "noProfile": "With no active profile, the mods you download for the server stay installed but in no profile.",
+    "madeProfileActive": "This server has its own profile, {{name}}, and it is the active one.",
+    "madeProfileInactive": "This server has its own profile, {{name}}, but it is not the active one: activate it in Profiles to join with it."
   }
 }

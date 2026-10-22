@@ -14,7 +14,7 @@ interface JoinServersProps {
   installedBuild: string | null;
   /** Makes a profile with these mods, in this order; `announcedOf` when they are only the first
    * ones the server announces out of that many. */
-  onMakeProfile: (name: string, modIds: string[], announcedOf?: number) => Promise<void>;
+  onMakeProfile: (name: string, modIds: string[], announcedOf?: number, server?: { address: string; name: string }) => Promise<void>;
 }
 
 /** What is selected: a server from the public list, or one of the player's own. */
@@ -147,6 +147,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
       items: old?.items ?? [],
       mods_seen: old?.mods_seen ?? null,
       username: old?.username ?? '',
+      made_profile_id: old?.made_profile_id ?? null,
     };
     try {
       setSaved(await TauriService.saveServer(paths, server, pw));
@@ -176,7 +177,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
   const makeProfileFor = async (p: Picked) => {
     const kept = savedOf(p.address);
     if (kept && kept.mods.length > 0) {
-      await onMakeProfile(t('join.profileName', { name: p.name }), kept.mods.map(bare));
+      await onMakeProfile(t('join.profileName', { name: p.name }), kept.mods.map(bare), undefined, p);
       return;
     }
     let r = picked?.address === p.address ? rules : null;
@@ -193,7 +194,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
       return;
     }
     const total = r.mod_count ?? r.mods.length;
-    await onMakeProfile(t('join.profileName', { name: p.name }), r.mods.map(bare), total > r.mods.length ? total : undefined);
+    await onMakeProfile(t('join.profileName', { name: p.name }), r.mods.map(bare), total > r.mods.length ? total : undefined, p);
   };
 
   const copyAddress = (address: string) => {
@@ -217,6 +218,8 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
 
   /** The profile played on the server when joining from here: the server's mods go into it. */
   const activeProfile = profiles.find((p) => p.is_active);
+  /** The profile made from the picked server, while it still exists. */
+  const madeProfile = (s: SavedServer | undefined) => (s?.made_profile_id ? profiles.find((p) => p.id === s.made_profile_id) : undefined);
 
   const byId = useMemo(() => new Map(mods.map((m) => [bare(m.mod_id), m])), [mods]);
   const pickedSaved = picked ? savedOf(picked.address) : undefined;
@@ -424,11 +427,18 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
                 <Play className="w-4 h-4" />{t('join.join')}
               </button>
               <p className="text-[10px] text-slate-500">{t('join.joinBlurb')}</p>
+              {madeProfile(pickedSaved) && (
+                <p className="text-[11px] text-sky-200 bg-sky-950/40 border border-sky-800/60 rounded-md px-2.5 py-1.5">
+                  {madeProfile(pickedSaved)!.is_active
+                    ? t('join.madeProfileActive', { name: madeProfile(pickedSaved)!.name })
+                    : t('join.madeProfileInactive', { name: madeProfile(pickedSaved)!.name })}
+                </p>
+              )}
               <p className={`text-[11px] rounded-md px-2.5 py-1.5 border ${activeProfile ? 'text-emerald-300/90 bg-emerald-950/30 border-emerald-900/60' : 'text-slate-400 bg-slate-900/60 border-slate-800'}`}>
                 {activeProfile ? t('join.intoProfile', { name: activeProfile.name }) : t('join.noProfile')}
               </p>
               {fullMods && (
-                <button onClick={() => void onMakeProfile(t('join.profileName', { name: picked.name }), fullMods.map(bare))} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 cursor-pointer">
+                <button onClick={() => void onMakeProfile(t('join.profileName', { name: picked.name }), fullMods.map(bare), undefined, picked)} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 cursor-pointer">
                   <UserPlus className="w-3.5 h-3.5" />{t('join.makeProfile', { count: fullMods.length })}
                 </button>
               )}

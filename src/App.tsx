@@ -461,14 +461,16 @@ export const App: React.FC = () => {
     setActiveTab('BROWSE');
   };
 
-  const handleMakeProfileFromServer = async (name: string, modIds: string[], announcedOf?: number) => {
+  const handleMakeProfileFromServer = async (name: string, modIds: string[], announcedOf?: number, server?: { address: string; name: string }) => {
     const installed = new Set(mods.map((m) => m.mod_id));
     const missing = modIds.filter((id) => !installed.has(id));
     const partial = announcedOf ? i18next.t('join.profilePartial', { count: modIds.length, total: announcedOf }) : '';
     const ok = confirm(i18next.t(announcedOf ? 'join.profileConfirmAnnounced' : 'join.profileConfirm', { name, count: modIds.length, missing: (missing.length > 0 ? i18next.t('join.profileMissing', { count: missing.length }) : '') + partial }));
     if (!ok) return;
     try {
-      await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('join.profileDescription'), modIds, modIds);
+      const made = await TauriService.createInstance(paths.user_zomboid_dir, name, i18next.t('join.profileDescription'), modIds, modIds);
+      // The server's pane then says it has a profile of its own.
+      if (server && made?.id) await TauriService.setServerMadeProfile(paths, server.address, server.name, made.id);
       await refreshActiveProfile();
       setActiveTab('PROFILES');
     } catch (err) {

@@ -489,6 +489,8 @@ export interface SavedServer {
   mods_seen: number | null;
   /** The player's account on it, filled into the game's connect window by the Studio Link. */
   username: string;
+  /** The profile made from it with "Make a profile". */
+  made_profile_id: string | null;
 }
 
 /** One real map image, placed in squares (map_cells::images::MapImage). */

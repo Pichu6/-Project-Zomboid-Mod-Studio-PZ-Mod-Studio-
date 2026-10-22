@@ -245,6 +245,12 @@ fn forget_server_cmd(paths: StudioPaths, address: String) -> Result<Vec<server_b
     server_browser::forget_server(&zomboid_dir_of(&paths)?, &address)
 }
 
+/// Keeps the profile just made from a server with it, for its pane to say so.
+#[tauri::command(async)]
+fn set_server_made_profile_cmd(paths: StudioPaths, address: String, name: String, profile_id: String) -> Result<Vec<server_browser::SavedServer>, String> {
+    server_browser::set_made_profile(&zomboid_dir_of(&paths)?, &address, &name, &profile_id)
+}
+
 /// Starts the game joining `address` (the kept password unless one is given). The game must be
 /// closed: a running one cannot be told to join.
 #[tauri::command(async)]
@@ -1725,6 +1731,7 @@ pub fn run() {
             saved_servers_cmd,
             save_server_cmd,
             forget_server_cmd,
+            set_server_made_profile_cmd,
             join_server_cmd,
             map_images_cmd,
             map_image_bytes_cmd,
