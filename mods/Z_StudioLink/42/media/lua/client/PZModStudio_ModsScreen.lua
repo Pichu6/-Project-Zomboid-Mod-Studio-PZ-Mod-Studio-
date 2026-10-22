@@ -63,6 +63,8 @@ local C = {
     accentDark = { 0.016, 0.47, 0.34 },
     text = { 0.945, 0.96, 0.976 },
     muted = { 0.58, 0.64, 0.72 },
+    -- "Support the author": the app's pink.
+    support = { 0.96, 0.6, 0.78 },
     warn = { 0.98, 0.75, 0.14 },
     error = { 0.97, 0.44, 0.44 },
     map = { 0.65, 0.55, 0.98 },
@@ -1475,7 +1477,7 @@ function Screen:select(mod, groupName)
     if support then
         local names = {}
         for _, link in ipairs(support) do table.insert(names, link.name) end
-        fact(text("modsSupport"), table.concat(names, ", "), "0.96,0.6,0.78")
+        fact(text("modsSupport"), table.concat(names, ", "), table.concat(C.support, ","))
     end
     local okMin, vMin = pcall(function() return info:getVersionMin() end)
     local okMax, vMax = pcall(function() return info:getVersionMax() end)
@@ -1562,23 +1564,28 @@ function Screen:select(mod, groupName)
     self:updateButtons()
 end
 
---- The support buttons for these links: one wide button for one link, side by side for more; the
---- options button goes under them, or takes their row when there are none.
+--- The support links under their own heading ("Support the author", drawn in prerender), in the
+--- pink of that line of the details, so they read as one thing: one wide button for one link,
+--- side by side for more. The options button goes under them, or takes their place.
 function Screen:layoutSupport(links)
     local n = math.min(#links, #self.supportButtons)
     local w = n > 0 and math.floor((self.buttonW - 6 * (n - 1)) / n) or 0
+    local top = self.buttonY + self.buttonStep * 4
+    local y = top + self.supportLabelH
+    self.supportAt = n > 0 and { x = self.buttonX, y = top + 1 } or nil
     for i, b in ipairs(self.supportButtons) do
         local link = links[i]
         b:setVisible(i <= n)
         if i <= n then
             b.url = link.url
             b:setX(self.buttonX + (w + 6) * (i - 1))
+            b:setY(y)
             b:setWidth(i == n and self.buttonW - (w + 6) * (n - 1) or w)
-            b:setTitle(n == 1 and text("modsSupportOne", link.name) or link.name)
+            b:setTitle(link.name)
             b.tooltip = text("modsSupportTip") .. " " .. link.url
         end
     end
-    self.optionsButton:setY(self.buttonY + self.buttonStep * (n > 0 and 5 or 4))
+    self.optionsButton:setY(n > 0 and y + self.buttonStep or top)
 end
 
 function Screen:updateButtons()
@@ -1607,6 +1614,7 @@ function Screen:updateButtons()
         self.workshopButton:setVisible(false)
         self.optionsButton:setVisible(false)
         for _, b in ipairs(self.supportButtons) do b:setVisible(false) end
+        self.supportAt = nil
         self.acceptButton:setTitle(self.changes > 0 and text("modsAcceptN", self.changes) or text("modsAccept"))
         for key, button in pairs(self.filterButtons) do styleButton(button, key == self.filter) end
         self.sortButton:setTitle(self.sort == "order" and text("modsSortOrder") or text("modsSortName"))
@@ -1807,15 +1815,19 @@ function Screen:createChildren()
     -- Where to support its author (up to three links, side by side); the mod's options below.
     self.buttonX, self.buttonW, self.buttonY, self.buttonStep = bx, bw, by, bh + 6
     self.supportButtons = {}
+    self.supportLabelH = fontH(UIFont.Small) + 4
     for i = 1, 3 do
-        local b = button(self, bx, by + (bh + 6) * 4, bw, bh, "", function(screen, clicked)
+        local b = button(self, bx, by + (bh + 6) * 4 + self.supportLabelH, bw, bh, "", function(screen, clicked)
             if clicked.url then pcall(function() openUrl(clicked.url) end) end
         end)
+        b.borderColor = { r = C.support[1], g = C.support[2], b = C.support[3], a = 0.7 }
+        b.textColor = { r = C.support[1], g = C.support[2], b = C.support[3], a = 1 }
+        b.backgroundColorMouseOver = { r = 0.3, g = 0.08, b = 0.2, a = 1 }
         b.tooltip = text("modsSupportTip")
         b:setVisible(false)
         self.supportButtons[i] = b
     end
-    self.optionsButton = button(self, bx, by + (bh + 6) * 5, bw, bh, text("modsOptions"), function(screen) screen:openOptions() end)
+    self.optionsButton = button(self, bx, by + (bh + 6) * 5 + self.supportLabelH, bw, bh, text("modsOptions"), function(screen) screen:openOptions() end)
     local descTop = math.max(listTop + self.posterSize, self.optionsButton:getBottom()) + 14
     self.desc = ISRichTextPanel:new(dx, descTop, dw, bottom - descTop - 24)
     self.desc.background = false
@@ -1889,11 +1901,12 @@ function Screen:setRatio(ratio)
         b:setWidth(bw)
     end
     self.buttonX, self.buttonW = bx, bw
+    self:updateButtons()
     self.upButton:setX(bx)
     self.upButton:setWidth(half)
     self.downButton:setX(bx + half + 6)
     self.downButton:setWidth(bw - half - 6)
-    local descTop = math.max(self.detailY + self.posterSize, self.buttonY + self.buttonStep * 5 + self.bh) + 14
+    local descTop = math.max(self.detailY + self.posterSize, self.buttonY + self.buttonStep * 5 + self.supportLabelH + self.bh) + 14
     self.desc:setX(dx)
     self.desc:setY(descTop)
     self.desc:setWidth(dw)
@@ -1955,6 +1968,9 @@ end
 
 function Screen:prerender()
     PanelJoypad.prerender(self)
+    if self.supportAt then
+        self:drawText(text("modsSupport"), self.supportAt.x, self.supportAt.y, C.support[1], C.support[2], C.support[3], 1, UIFont.Small)
+    end
     -- While the divider is held only its line follows the pointer; let go, the list and the
     -- details are laid out again for the new split.
     if self.resizing then

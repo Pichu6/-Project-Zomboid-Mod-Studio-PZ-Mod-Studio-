@@ -176,7 +176,6 @@ local TEXT = {
     modsAllTags = "All tags",
     modsMoreWithApp = "With PZ Mod Studio open there are more filters: Updated, Libraries, a group, source and tag.",
     modsSupport = "Support the author",
-    modsSupportOne = "Support the author: {1}",
     modsSupportTip = "Opens in your browser:",
     modsDragLimited = "{1} stopped where it can go: never above what it requires, never below what requires it.",
     modsSelected = "{1} mods selected",
