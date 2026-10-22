@@ -544,6 +544,9 @@ export const App: React.FC = () => {
     return localStorage.getItem('pz_skip_no_merge_warning') === 'true';
   });
 
+  /** Files the active mods share that the active package does not merge, or merges from older copies. */
+  const unmergedFiles = (health.report?.issues ?? []).filter((i) => i.code === 'file_conflict' || i.code === 'file_conflict_stale');
+
   const executeLaunch = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN', onlyIds?: string[]) => {
     try {
       // A caller that has just changed the list passes it: `mods` here is still the old render's.
@@ -593,12 +596,16 @@ export const App: React.FC = () => {
       (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && m.is_packaged === false
     );
 
-    // If there is no active closed package (either because it is open/draft, or none is active)
-    if (!hasActiveClosedMergePackage) {
-      if (openDraftPackages.length > 0 || !skipNoMergeWarning) {
-        setPendingLaunchMode(mode);
-        return;
-      }
+    // A package being edited is switched off: what it fixes is not in the game until it is published.
+    if (!hasActiveClosedMergePackage && openDraftPackages.length > 0) {
+      setPendingLaunchMode(mode);
+      return;
+    }
+    // Without a package nothing is wrong by itself: the warning is for files the active mods share
+    // that no package merges (or merges from older versions of the mods), as Mod Health finds them.
+    if (!skipNoMergeWarning && unmergedFiles.length > 0) {
+      setPendingLaunchMode(mode);
+      return;
     }
 
     await executeLaunch(mode);
@@ -1144,7 +1151,10 @@ export const App: React.FC = () => {
         const openPackages = mods.filter(
           (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && m.is_packaged === false
         );
-        const isOpenPackageWarning = openPackages.length > 0;
+        const isOpenPackageWarning = openPackages.length > 0 && !mods.some(
+          (m) => m.enabled && m.mod_id.startsWith('Z_PZModStudio_') && m.is_packaged === true && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier')
+        );
+        const SHOWN_FILES = 5;
         const openPackageNames = openPackages.map((p) => p.name || p.mod_id).join(', ');
 
         return (
@@ -1156,15 +1166,26 @@ export const App: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-slate-100">
-                  {isOpenPackageWarning ? i18next.t('app.launch.openTitle') : i18next.t('app.launch.noneTitle')}
+                  {isOpenPackageWarning ? i18next.t('app.launch.openTitle') : i18next.t('app.launch.unmergedTitle')}
                 </h3>
-                <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: isOpenPackageWarning ? tHtml('app.launch.openLine', { names: openPackageNames }) : tHtml('app.launch.noneLine') }} />
+                <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: isOpenPackageWarning ? tHtml('app.launch.openLine', { names: openPackageNames }) : tHtml('app.launch.unmergedLine', { count: unmergedFiles.length }) }} />
               </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-              {isOpenPackageWarning ? i18next.t('app.launch.openBody') : i18next.t('app.launch.noneBody')}
-            </p>
+            <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
+              <p>{isOpenPackageWarning ? i18next.t('app.launch.openBody') : i18next.t('app.launch.unmergedBody')}</p>
+              {!isOpenPackageWarning && (
+                <ul className="space-y-1">
+                  {unmergedFiles.slice(0, SHOWN_FILES).map((i) => (
+                    <li key={`${i.code}|${i.params?.path ?? i.message}`} className="text-[11px]">
+                      <span className="font-mono text-amber-200 break-all">{i.params?.path}</span>
+                      <span className="text-slate-500"> · {i.params?.mods}{i.code === 'file_conflict_stale' ? ` · ${i18next.t('app.launch.stale')}` : ''}</span>
+                    </li>
+                  ))}
+                  {unmergedFiles.length > SHOWN_FILES && <li className="text-[11px] text-slate-500">{i18next.t('app.launch.moreFiles', { count: unmergedFiles.length - SHOWN_FILES })}</li>}
+                </ul>
+              )}
+            </div>
 
             {!isOpenPackageWarning && (
               <div className="flex items-center gap-2 pt-1">
