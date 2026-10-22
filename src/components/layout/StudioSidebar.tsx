@@ -47,7 +47,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: Archive,
       badge: null,
       badgeColor: '',
-      requiresProfile: false,
+      requiresProfile: true,
     },
     {
       id: 'MONITOR' as ActiveTab,
@@ -71,7 +71,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: Newspaper,
       badge: whatsNewCount > 0 ? whatsNewCount : null,
       badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
-      requiresProfile: false,
+      requiresProfile: true,
     },
     {
       id: 'HEALTH' as ActiveTab,
@@ -95,7 +95,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
       icon: MapIcon,
       badge: null,
       badgeColor: '',
-      requiresProfile: false,
+      requiresProfile: true,
     },
     {
       id: 'MERGER' as ActiveTab,

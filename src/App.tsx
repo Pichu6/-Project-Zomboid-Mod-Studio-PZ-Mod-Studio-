@@ -198,6 +198,8 @@ export const App: React.FC = () => {
   /** The issue a row's chip sent the player to: Mod Health scrolls to it and lights it up. */
   const [healthFocus, setHealthFocus] = useState<HealthIssue | null>(null);
 
+  /** Whether the profiles were read once (until then "none active" is not known yet). */
+  const [profilesRead, setProfilesRead] = useState(false);
   const refreshActiveProfile = useCallback(async (customUserDir?: string): Promise<AppProfile | null> => {
     const userDir = customUserDir || paths.user_zomboid_dir;
     if (userDir) {
@@ -206,6 +208,7 @@ export const App: React.FC = () => {
         const active = list.find((i) => i.is_active) || null;
         setProfiles(list);
         setActiveProfile(active);
+        setProfilesRead(true);
         return active;
       } catch (err) {
         console.error('Error listing profiles:', err);
@@ -214,6 +217,12 @@ export const App: React.FC = () => {
     }
     return null;
   }, [paths.user_zomboid_dir]);
+
+  // Every screen but Profiles and Settings is about a profile (the sidebar locks them without
+  // one): with none active, whatever was open goes back to Profiles.
+  useEffect(() => {
+    if (profilesRead && !activeProfile && activeTab !== 'PROFILES' && activeTab !== 'SETTINGS') setActiveTab('PROFILES');
+  }, [profilesRead, activeProfile, activeTab]);
 
   // Load saved profile or auto-detect paths from Rust backend on initial load
   useEffect(() => {
@@ -974,7 +983,7 @@ export const App: React.FC = () => {
                   setActiveProfile(inst);
                   setActiveTab('MOD_LIST');
                 }}
-                onGoToBrowse={() => setActiveTab('BROWSE')}
+                onGoToBrowse={activeProfile ? () => setActiveTab('BROWSE') : undefined}
                 onProfilesChanged={() => void refreshActiveProfile()}
               />
             </div>
