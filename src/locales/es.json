@@ -2584,6 +2584,7 @@
     "stillAnswering": "— todavía están respondiendo más",
     "searchBlurb": "Le pide a Steam todos los servidores de Project Zomboid, como el buscador del propio juego, a través del cliente de Steam que ya está abierto en esta PC (no hace falta clave; mientras pregunta, Steam te muestra jugando a Project Zomboid). Los servidores aparecen a medida que responden; todos tardan alrededor de un minuto y medio.",
     "filterPlaceholder": "Nombre o mapa",
+    "clearSearch": "Limpiar búsqueda",
     "sameBuild": "Solo mi versión ({{build}})",
     "hideEmpty": "Con jugadores",
     "hideFull": "No llenos",

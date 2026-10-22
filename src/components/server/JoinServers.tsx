@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, Copy, Globe, Info, Lock, Play, RefreshCw, Search, Square, Star, Trash2, UserPlus, Users, Wifi } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Globe, Info, Lock, Play, RefreshCw, Search, Square, Star, Trash2, UserPlus, Users, Wifi, X } from 'lucide-react';
 import { useContextMenu, MenuItem } from '../common/ContextMenu';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, explainError } from '../../services/tauri';
@@ -216,6 +216,22 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
   const shownMods = fullMods ?? rules?.mods ?? [];
   const missing = shownMods.filter((id) => !byId.has(bare(id))).length;
   const buildDiffers = !!(build && rules?.version && majorMinor(rules.version) !== build);
+  /** Page buttons and the count, drawn above and below the public list. */
+  const pager = (edge: string) => (
+    <div className={`flex flex-wrap items-center gap-1 px-3 py-1.5 bg-slate-900/60 text-[11px] text-slate-400 border-slate-800 ${edge}`}>
+      <button onClick={() => setPage(Math.max(0, shownPage - 1))} disabled={shownPage === 0} aria-label={t('join.prevPage')} className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"><ChevronLeft className="w-3.5 h-3.5" /></button>
+      {Array.from({ length: pages }, (_, i) => i)
+        .filter((i) => i === 0 || i === pages - 1 || Math.abs(i - shownPage) <= 2)
+        .map((i, n, all) => (
+          <React.Fragment key={i}>
+            {n > 0 && i - all[n - 1] > 1 && <span className="px-1">…</span>}
+            <button onClick={() => setPage(i)} className={`min-w-[26px] px-1.5 py-0.5 rounded cursor-pointer ${i === shownPage ? 'bg-emerald-700/50 text-emerald-100' : 'hover:bg-slate-800'}`}>{i + 1}</button>
+          </React.Fragment>
+        ))}
+      <button onClick={() => setPage(Math.min(pages - 1, shownPage + 1))} disabled={shownPage >= pages - 1} aria-label={t('join.nextPage')} className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"><ChevronRight className="w-3.5 h-3.5" /></button>
+      <span className="ml-2">{t('join.pageOf', { from: shownPage * PAGE + 1, to: Math.min(filtered.length, shownPage * PAGE + PAGE), count: filtered.length })}</span>
+    </div>
+  );
   const starred = saved.filter((s) => s.starred);
   const recent = saved.filter((s) => !s.starred);
 
@@ -263,26 +279,32 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
             </div>
             {searchError && <div className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">{searchError}</div>}
             {list.length === 0 && !searching && !searchError && <p className="text-[11px] text-slate-500 max-w-2xl">{t('join.searchBlurb')}</p>}
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+              <div className="relative">
+                <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setText(''); }} placeholder={t('join.filterPlaceholder')} className="pl-2 pr-7 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 w-56" />
+                {text && (
+                  <button onClick={() => setText('')} title={t('join.clearSearch')} aria-label={t('join.clearSearch')} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+                )}
+            </div>
+            {build && <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={sameBuild} onChange={(e) => setSameBuild(e.target.checked)} className="accent-emerald-500" />{t('join.sameBuild', { build })}</label>}
+            <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} className="accent-emerald-500" />{t('join.hideEmpty')}</label>
+            <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={hideFull} onChange={(e) => setHideFull(e.target.checked)} className="accent-emerald-500" />{t('join.hideFull')}</label>
+            <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={hideLocked} onChange={(e) => setHideLocked(e.target.checked)} className="accent-emerald-500" />{t('join.hideLocked')}</label>
+            <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="px-1.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs">
+              <option value="all">{t('join.kind_all')}</option>
+              <option value="modded">{t('join.kind_modded')}</option>
+              <option value="vanilla">{t('join.kind_vanilla')}</option>
+            </select>
+            <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="px-1.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs">
+              <option value="players">{t('join.sort_players')}</option>
+              <option value="ping">{t('join.sort_ping')}</option>
+              <option value="name">{t('join.sort_name')}</option>
+            </select>
+            </div>
             {list.length > 0 && (
               <>
-                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
-                  <input value={text} onChange={(e) => setText(e.target.value)} placeholder={t('join.filterPlaceholder')} className="px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 w-56" />
-                  {build && <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={sameBuild} onChange={(e) => setSameBuild(e.target.checked)} className="accent-emerald-500" />{t('join.sameBuild', { build })}</label>}
-                  <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} className="accent-emerald-500" />{t('join.hideEmpty')}</label>
-                  <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={hideFull} onChange={(e) => setHideFull(e.target.checked)} className="accent-emerald-500" />{t('join.hideFull')}</label>
-                  <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={hideLocked} onChange={(e) => setHideLocked(e.target.checked)} className="accent-emerald-500" />{t('join.hideLocked')}</label>
-                  <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="px-1.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs">
-                    <option value="all">{t('join.kind_all')}</option>
-                    <option value="modded">{t('join.kind_modded')}</option>
-                    <option value="vanilla">{t('join.kind_vanilla')}</option>
-                  </select>
-                  <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="px-1.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs">
-                    <option value="players">{t('join.sort_players')}</option>
-                    <option value="ping">{t('join.sort_ping')}</option>
-                    <option value="name">{t('join.sort_name')}</option>
-                  </select>
-                </div>
                 <div className="rounded-lg border border-slate-800 overflow-hidden">
+                  {pages > 1 && pager('border-b')}
                   <table className="w-full text-xs">
                     <thead className="bg-slate-900 text-slate-400 text-[10px] uppercase tracking-wide">
                       <tr><th className="text-left px-3 py-1.5">{t('join.col_name')}</th><th className="px-2">{t('join.col_players')}</th><th className="px-2">{t('join.col_ping')}</th><th className="px-2">{t('join.col_build')}</th></tr>
@@ -305,21 +327,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, installed
                       ))}
                     </tbody>
                   </table>
-                  {pages > 1 && (
-                    <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 bg-slate-900/60 text-[11px] text-slate-400">
-                      <button onClick={() => setPage(Math.max(0, shownPage - 1))} disabled={shownPage === 0} aria-label={t('join.prevPage')} className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"><ChevronLeft className="w-3.5 h-3.5" /></button>
-                      {Array.from({ length: pages }, (_, i) => i)
-                        .filter((i) => i === 0 || i === pages - 1 || Math.abs(i - shownPage) <= 2)
-                        .map((i, n, all) => (
-                          <React.Fragment key={i}>
-                            {n > 0 && i - all[n - 1] > 1 && <span className="px-1">…</span>}
-                            <button onClick={() => setPage(i)} className={`min-w-[26px] px-1.5 py-0.5 rounded cursor-pointer ${i === shownPage ? 'bg-emerald-700/50 text-emerald-100' : 'hover:bg-slate-800'}`}>{i + 1}</button>
-                          </React.Fragment>
-                        ))}
-                      <button onClick={() => setPage(Math.min(pages - 1, shownPage + 1))} disabled={shownPage >= pages - 1} aria-label={t('join.nextPage')} className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"><ChevronRight className="w-3.5 h-3.5" /></button>
-                      <span className="ml-2">{t('join.pageOf', { from: shownPage * PAGE + 1, to: Math.min(filtered.length, shownPage * PAGE + PAGE), count: filtered.length })}</span>
-                    </div>
-                  )}
+                  {pages > 1 && pager('border-t')}
                   {filtered.length === 0 && <div className="px-3 py-4 text-center text-[11px] text-slate-500">{t('join.noneMatch')}</div>}
                 </div>
               </>

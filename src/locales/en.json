@@ -2584,6 +2584,7 @@
     "stillAnswering": "— more are still answering",
     "searchBlurb": "Asks Steam for every Project Zomboid server, the way the game's own browser does, through the Steam client already running on this PC (no key needed; Steam shows you as in Project Zomboid while it asks). Servers appear as they answer; it takes about a minute and a half for all of them.",
     "filterPlaceholder": "Name or map",
+    "clearSearch": "Clear search",
     "sameBuild": "Only my build ({{build}})",
     "hideEmpty": "With players",
     "hideFull": "Not full",
