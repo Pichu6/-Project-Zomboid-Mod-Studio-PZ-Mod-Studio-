@@ -46,7 +46,13 @@ A PZ Mod Studio package (`Z_PZModStudio_*`) that is on goes into `Mods=` too, bu
 
 ## Players
 
-**Connected Players** lists who is online, read from the server's own log, with role, ping, health and position. Kicking, banning and messaging need the server console; the Studio does not do them.
+**Connected Players** lists who is online, read from the server's own log, with role, ping, health and position. While the server runs, the Studio talks to it over RCON (the `RCONPassword` and `RCONPort` of its `.ini`; a server the Studio starts without a password gets one):
+
+- **Kick** on a player's row disconnects them; they can join again. You can give a reason, which they see.
+- **Ban** bans them from this server, with an optional reason. To take a ban back, use the server console: `unbanuser "name"`.
+- The box at the top sends a message to everyone in the game (**Send to all**, or Enter); it shows on their screen.
+
+The server's answer appears under the box.
 
 ## Quick .ini
 

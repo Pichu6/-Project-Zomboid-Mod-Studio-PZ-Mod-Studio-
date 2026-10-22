@@ -46,7 +46,13 @@ Un paquete de PZ Mod Studio (`Z_PZModStudio_*`) activo también entra en `Mods=`
 
 ## Jugadores
 
-**Jugadores conectados** lista quién está en línea, leído del log del propio servidor, con rol, ping, salud y posición. Expulsar, banear y mandar mensajes necesita la consola del servidor; el Studio no lo hace.
+**Jugadores conectados** lista quién está en línea, leído del log del propio servidor, con rol, ping, salud y posición. Mientras el servidor está en marcha, el Studio habla con él por RCON (el `RCONPassword` y el `RCONPort` de su `.ini`; un servidor que el Studio inicia sin contraseña recibe una):
+
+- **Expulsar** en la fila de un jugador lo desconecta; puede volver a entrar. Podés dar un motivo, que el jugador ve.
+- **Banear** lo banea de este servidor, con un motivo opcional. Para quitar un baneo, usá la consola del servidor: `unbanuser "nombre"`.
+- El cuadro de arriba manda un mensaje a todos en el juego (**Enviar a todos**, o Enter); aparece en su pantalla.
+
+La respuesta del servidor aparece debajo del cuadro.
 
 ## .ini rápido
 

@@ -1,4 +1,4 @@
-//! Enough of the Source RCON protocol to tell a dedicated server to save and quit.
+//! Enough of the Source RCON protocol to send a dedicated server one command and read its answer.
 //!
 //! Project Zomboid's server listens for RCON on `RCONPort` when `RCONPassword` is set, and its
 //! `quit` command saves the world and exits. Killing the process instead loses everything since
@@ -39,8 +39,9 @@ fn read_packet(stream: &mut TcpStream) -> Result<(i32, i32, String), String> {
     Ok((id, kind, body))
 }
 
-/// Logs in on `127.0.0.1:port` and sends `command`. Ok once the server has accepted it.
-pub fn send(port: u16, password: &str, command: &str) -> Result<(), String> {
+/// Logs in on `127.0.0.1:port` and sends `command`. Ok once the server has accepted it, with
+/// what the server answered (empty when no answer came).
+pub fn send(port: u16, password: &str, command: &str) -> Result<String, String> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(3)).map_err(|e| format!("RCON: {}", e))?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
@@ -59,8 +60,7 @@ pub fn send(port: u16, password: &str, command: &str) -> Result<(), String> {
     }
     stream.write_all(&packet(2, EXEC, command)).map_err(|e| format!("RCON: {}", e))?;
     // The answer may never come for "quit" (the server is going away): sent is enough.
-    let _ = read_packet(&mut stream);
-    Ok(())
+    Ok(read_packet(&mut stream).map(|(_, _, body)| body.trim().to_string()).unwrap_or_default())
 }
 
 #[cfg(test)]

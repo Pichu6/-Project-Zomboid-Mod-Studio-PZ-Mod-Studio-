@@ -918,6 +918,22 @@ fn discord_commands_status_cmd() -> Option<discord_commands::CommandsStatus> {
     discord_commands::status()
 }
 
+/// Kick, ban or message the players of a server this Studio runs, over RCON. `action` is "kick",
+/// "ban" or "message"; the server's answer comes back.
+#[tauri::command(async)]
+fn server_player_action_cmd(paths: StudioPaths, server: String, action: String, player: Option<String>, text: Option<String>) -> Result<String, String> {
+    use server_manager::PlayerAction;
+    let player = player.unwrap_or_default();
+    let text = text.unwrap_or_default();
+    let action = match action.as_str() {
+        "kick" => PlayerAction::Kick { user: &player, reason: &text },
+        "ban" => PlayerAction::Ban { user: &player, reason: &text },
+        "message" => PlayerAction::Message { text: &text },
+        other => return Err(format!("Unknown action: {}", other)),
+    };
+    server_manager::player_action(&zomboid_dir_of(&paths)?, &server, &action)
+}
+
 #[tauri::command(async)]
 fn discord_test_cmd(paths: StudioPaths, server: String) -> Result<(), String> {
     discord::send_test(&zomboid_dir_of(&paths)?, &server)
@@ -1629,6 +1645,7 @@ pub fn run() {
             community_index_cmd,
             community_downloads_cmd,
             app_update_status_cmd,
+            server_player_action_cmd,
             set_app_update_check_cmd,
             dismiss_app_update_cmd,
             set_community_downloads_cmd,

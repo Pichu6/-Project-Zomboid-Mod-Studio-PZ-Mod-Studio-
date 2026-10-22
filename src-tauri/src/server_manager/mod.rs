@@ -550,6 +550,51 @@ fn is_tracked_server_alive(pid: u32) -> bool {
 #[cfg(target_os = "windows")]
 /// One RCON command to a server this Studio runs (its .ini's RCONPort and RCONPassword).
 pub fn rcon_command(zomboid_dir: &Path, server_name: &str, command: &str) -> Result<(), String> {
+    rcon_query(zomboid_dir, server_name, command).map(|_| ())
+}
+
+/// A moderation action on the players screen, as the server console command it becomes.
+pub enum PlayerAction<'a> {
+    Kick { user: &'a str, reason: &'a str },
+    Ban { user: &'a str, reason: &'a str },
+    Message { text: &'a str },
+}
+
+/// Text that fits between the console's quotes: one line, no quotes or backslashes.
+fn quoted_arg(text: &str, max: usize) -> String {
+    text.chars().filter(|c| !matches!(c, '"' | '\\' | '\r' | '\n')).take(max).collect::<String>().trim().to_string()
+}
+
+/// The console command for `action` (`kickuser`, `banuser`, `servermsg`), or why there is none.
+pub fn player_command(action: &PlayerAction) -> Result<String, String> {
+    let with_reason = |verb: &str, user: &str, reason: &str| {
+        let user = quoted_arg(user, 64);
+        if user.is_empty() {
+            return Err("No player name.".to_string());
+        }
+        let reason = quoted_arg(reason, 200);
+        Ok(if reason.is_empty() { format!("{} \"{}\"", verb, user) } else { format!("{} \"{}\" -r \"{}\"", verb, user, reason) })
+    };
+    match action {
+        PlayerAction::Kick { user, reason } => with_reason("kickuser", user, reason),
+        PlayerAction::Ban { user, reason } => with_reason("banuser", user, reason),
+        PlayerAction::Message { text } => {
+            let text = quoted_arg(text, 200);
+            if text.is_empty() {
+                return Err("The message is empty.".to_string());
+            }
+            Ok(format!("servermsg \"{}\"", text))
+        }
+    }
+}
+
+/// Sends a moderation action to a server this Studio runs; the server's answer comes back.
+pub fn player_action(zomboid_dir: &Path, server_name: &str, action: &PlayerAction) -> Result<String, String> {
+    rcon_query(zomboid_dir, server_name, &player_command(action)?)
+}
+
+/// One RCON command, with what the server answered.
+pub fn rcon_query(zomboid_dir: &Path, server_name: &str, command: &str) -> Result<String, String> {
     let ini = zomboid_dir.join("Server").join(format!("{}.ini", server_name));
     let text = fs::read_to_string(&ini).map_err(|e| format!("Cannot read {}: {}", ini.display(), e))?;
     let value = |key: &str| {
@@ -1318,6 +1363,18 @@ pub fn save_server_quick_settings(file_path: String, settings: ServerQuickSettin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn player_actions_become_console_commands() {
+        let kick = PlayerAction::Kick { user: "Bob", reason: "" };
+        assert_eq!(player_command(&kick).unwrap(), r#"kickuser "Bob""#);
+        let ban = PlayerAction::Ban { user: "Bob \"x\"", reason: "griefing\nthe base" };
+        assert_eq!(player_command(&ban).unwrap(), r#"banuser "Bob x" -r "griefingthe base""#, "quotes and new lines cannot break out");
+        let msg = PlayerAction::Message { text: "Restart in 5 minutes" };
+        assert_eq!(player_command(&msg).unwrap(), r#"servermsg "Restart in 5 minutes""#);
+        assert!(player_command(&PlayerAction::Kick { user: "  ", reason: "" }).is_err());
+        assert!(player_command(&PlayerAction::Message { text: "\"" }).is_err());
+    }
 
     fn temp_zomboid(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("pzms-server-{}-{}", tag, std::process::id()));

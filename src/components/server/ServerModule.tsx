@@ -21,6 +21,9 @@ import {
   Eye,
   EyeOff,
   MessageSquare,
+  UserX,
+  Ban,
+  Send,
 } from 'lucide-react';
 import {
   ModInfo,
@@ -56,6 +59,10 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
 
   // Dedicated Server Running State
   const [serverStatus, setServerStatus] = useState<DedicatedServerStatus>({ is_running: false });
+  // Moderation over RCON: the message to all players, and the server's last answer.
+  const [broadcast, setBroadcast] = useState('');
+  const [modBusy, setModBusy] = useState(false);
+  const [modAnswer, setModAnswer] = useState<{ ok: boolean; text: string } | null>(null);
   const [selectedRam, setSelectedRam] = useState<number>(4);
   const [isNoSteam, setIsNoSteam] = useState<boolean>(false);
   const [isLaunching, setIsLaunching] = useState<boolean>(false);
@@ -290,6 +297,32 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
       alert(t('servers.status.errorSaving', { error: explainError(err) }));
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  /** Kick, ban or message over RCON, on the server that runs (the one selected otherwise). */
+  const moderate = async (action: 'kick' | 'ban' | 'message', player: string | null) => {
+    const server = serverStatus.server_name || selectedServer?.name;
+    if (!server) return;
+    let text = '';
+    if (action === 'message') {
+      text = broadcast.trim();
+      if (!text) return;
+    } else {
+      const reason = window.prompt(t(action === 'ban' ? 'servers.players.banPrompt' : 'servers.players.kickPrompt', { name: player }), '');
+      if (reason === null) return;
+      text = reason;
+    }
+    setModBusy(true);
+    setModAnswer(null);
+    try {
+      const answer = await TauriService.serverPlayerAction(paths, server, action, player, text);
+      setModAnswer({ ok: true, text: answer || t('servers.players.sent') });
+      if (action === 'message') setBroadcast('');
+    } catch (err) {
+      setModAnswer({ ok: false, text: explainError(err) });
+    } finally {
+      setModBusy(false);
     }
   };
 
@@ -821,6 +854,33 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                       <span>{t('servers.players.note')}</span>
                     </div>
 
+                    {/* A message to everyone in the game, over RCON. */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={broadcast}
+                        maxLength={200}
+                        disabled={!serverStatus.is_running || modBusy}
+                        onChange={(e) => setBroadcast(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void moderate('message', null); }}
+                        placeholder={t('servers.players.messagePlaceholder')}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-600 disabled:opacity-50"
+                      />
+                      <button
+                        type="button"
+                        disabled={!serverStatus.is_running || modBusy || !broadcast.trim()}
+                        onClick={() => void moderate('message', null)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                      >
+                        <Send className="w-3.5 h-3.5" aria-hidden="true" /> {t('servers.players.sendMessage')}
+                      </button>
+                    </div>
+                    {modAnswer && (
+                      <div className={`text-[11px] px-3 py-1.5 rounded-lg border ${modAnswer.ok ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300' : 'border-rose-800 bg-rose-950/40 text-rose-300'}`}>
+                        {modAnswer.text}
+                      </div>
+                    )}
+
                     {/* Connected Players Table */}
                     <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
                       <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs font-bold text-slate-300">
@@ -866,6 +926,26 @@ export const ServerModule: React.FC<ServerModuleProps> = ({ paths, mods }) => {
                                 </div>
                               </div>
 
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={!serverStatus.is_running || modBusy}
+                                  onClick={() => void moderate('kick', p.username)}
+                                  title={t('servers.players.kickTitle', { name: p.username })}
+                                  className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800 cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                                >
+                                  <UserX className="w-3 h-3" aria-hidden="true" /> {t('servers.players.kick')}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!serverStatus.is_running || modBusy}
+                                  onClick={() => void moderate('ban', p.username)}
+                                  title={t('servers.players.banTitle', { name: p.username })}
+                                  className="flex items-center gap-1 px-2 py-1 rounded border border-rose-900 text-[11px] text-rose-300 hover:bg-rose-950/60 cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                                >
+                                  <Ban className="w-3 h-3" aria-hidden="true" /> {t('servers.players.ban')}
+                                </button>
+                              </div>
                             </div>
                           ))
                         ) : (

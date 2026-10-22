@@ -492,6 +492,12 @@ export const TauriService = {
     }
   },
 
+  /** Kick, ban or message the players of a server this Studio runs, over RCON; the server's answer. */
+  serverPlayerAction: async (paths: StudioPathsUI, server: string, action: 'kick' | 'ban' | 'message', player: string | null, text: string): Promise<string> => {
+    // The players screen shows a failure itself, beside the buttons.
+    return await invoke<string>('server_player_action_cmd', { paths, server, action, player, text });
+  },
+
   /** Whether a newer PZ Mod Studio is out (GitHub, once a day while the check is on). */
   appUpdateStatus: async (userZomboidDir: string, force = false): Promise<AppUpdateStatus | null> => {
     try {
