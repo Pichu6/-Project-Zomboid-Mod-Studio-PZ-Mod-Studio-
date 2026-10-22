@@ -434,9 +434,10 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
                     : t('join.madeProfileInactive', { name: madeProfile(pickedSaved)!.name })}
                 </p>
               )}
-              <p className={`text-[11px] rounded-md px-2.5 py-1.5 border ${activeProfile ? 'text-emerald-300/90 bg-emerald-950/30 border-emerald-900/60' : 'text-slate-400 bg-slate-900/60 border-slate-800'}`}>
-                {activeProfile ? t('join.intoProfile', { name: activeProfile.name }) : t('join.noProfile')}
-              </p>
+              {/* Servers opens only with a profile active (the sidebar locks it otherwise). */}
+              {activeProfile && (
+                <p className="text-[11px] text-emerald-300/90 bg-emerald-950/30 border border-emerald-900/60 rounded-md px-2.5 py-1.5">{t('join.intoProfile', { name: activeProfile.name })}</p>
+              )}
               {fullMods && (
                 <button onClick={() => void onMakeProfile(t('join.profileName', { name: picked.name }), fullMods.map(bare), undefined, picked)} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 cursor-pointer">
                   <UserPlus className="w-3.5 h-3.5" />{t('join.makeProfile', { count: fullMods.length })}
