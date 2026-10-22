@@ -513,12 +513,22 @@ pub fn refresh_joins(user_zomboid_dir: &Path) -> (Vec<SavedServer>, Vec<crate::i
     let mut changed = Vec::new();
     if fill_from_logs(user_zomboid_dir, &mut list) {
         let _ = write_saved(user_zomboid_dir, &list);
+        let mut catalog: Option<crate::catalog::ModCatalog> = None;
         for (s, seen) in list.iter().zip(before) {
             if s.mods_seen == seen || s.mods.is_empty() {
                 continue;
             }
             if let Some(profile) = s.profile_id.as_deref() {
-                if let Ok(Some(p)) = crate::instance_manager::take_server_mods(&user_zomboid_dir.to_string_lossy(), profile, &s.mods) {
+                // The mods of the server's Workshop items it did not switch on: they came with it.
+                let user = user_zomboid_dir.to_string_lossy().to_string();
+                let catalog = catalog.get_or_insert_with(|| crate::catalog::build_catalog(&crate::vfs::studio_paths().workshop_dir, &user, None));
+                let came_with: Vec<String> = catalog
+                    .mods
+                    .iter()
+                    .filter(|m| matches!(&m.source, crate::catalog::ModSource::Workshop { workshop_id } if s.items.contains(workshop_id)))
+                    .map(|m| m.id.clone())
+                    .collect();
+                if let Ok(Some(p)) = crate::instance_manager::take_server_mods(&user, profile, &s.mods, &came_with) {
                     changed.push(p);
                 }
             }

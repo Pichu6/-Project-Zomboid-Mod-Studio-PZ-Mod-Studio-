@@ -898,13 +898,11 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
             polyfill_rule_id_suggestion: Some("SANITIZE_TRANSLATOR_FORMAT".to_string()),
         })
         .map(|card| {
-            // `Formatting "Sandbox_X_Y"`: a text in a mod's translation file with a bare % that
-            // Java formats while building the menu. The game shows it unformatted and goes on;
-            // the shim, being Lua, never sees it (it showed up with the shim in the game), so
-            // the card says where the fix is instead of pointing at the Merger.
-            if !line.contains("Formatting \"") {
-                return card;
-            }
+            // A text in a mod's translation file with a bare % that Java formats (a sandbox
+            // option's name, `Formatting "Sandbox_X_Y"`, or a mod's options panel, from
+            // MainOptions.addModOptionsPanel). The game shows it unformatted and goes on; the
+            // shim, being Lua, never sees it, so the card says where the fix is instead of
+            // pointing at the Merger.
             TranslatedErrorPayload {
                 called_from: Vec::new(),
                 code: "translator_text".to_string(),
@@ -1532,6 +1530,8 @@ mod card_gate_tests {
         )
         .expect("a card");
         assert_eq!(translator.severity, Severity::Warning);
+        assert_eq!(translator.code, "translator_text", "a bare % in a mod's text, whatever names it");
+        assert_eq!(translator.polyfill_rule_id_suggestion, None);
 
         // A mod's text with a bare %: the shim does not cover it, so the card does not offer it.
         let text = translate_log_error(
