@@ -23,7 +23,7 @@ The game starts on this server's connect window with the server password filled 
 
 A server only announces its first few mods (Steam cuts the list). After you join it once from here, the Studio knows the full list, and the button becomes **Make a profile with these N mods**. Before that, **Make a profile with the N mods it announces** uses the partial list. The profile is named "Server: (name)" and keeps the server's order. Mods not installed now are pointed out before the profile is made.
 
-To play with it, activate it in Profiles before joining. Each time you join from here, once the game has loaded the server's mods, they go into the profile active when you joined: on, in the server's order, with the ones the game had you download. Its other mods stay in it, switched off. The server's pane says which profile that is.
+To play with it, activate it in Profiles before joining. Each time you join from here, once the game has loaded the server's mods, they go into the profile active when you joined: on, in the server's order, with the ones the game had you download. Its other mods stay in it, switched off, except those that run only on your side (ZombieBuddy and its client-only Java mods, such as Viewpoint): they stay as you had them. The server's pane says which profile that is.
 
 ## Host a server: the server list
 

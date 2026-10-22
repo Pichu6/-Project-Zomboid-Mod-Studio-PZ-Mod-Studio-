@@ -23,7 +23,7 @@ El juego abre en la ventana de conexión de este servidor con la contraseña del
 
 Un servidor solo anuncia sus primeros mods (Steam corta la lista). Después de entrar una vez desde acá, el Studio conoce la lista completa y el botón pasa a ser **Crear un perfil con estos N mods**. Antes de eso, **Crear un perfil con los N mods que anuncia** usa la lista parcial. El perfil se llama "Servidor: (nombre)" y respeta el orden del servidor. Antes de crearlo te avisa qué mods no están instalados ahora.
 
-Para jugar con él, activalo en Perfiles antes de entrar. Cada vez que entrás desde acá, cuando el juego ya cargó los mods del servidor, se agregan al perfil activo con el que entraste: activos, en el orden del servidor, con los que el juego te hizo descargar. Sus otros mods quedan en él, apagados. El panel del servidor dice qué perfil es.
+Para jugar con él, activalo en Perfiles antes de entrar. Cada vez que entrás desde acá, cuando el juego ya cargó los mods del servidor, se agregan al perfil activo con el que entraste: activos, en el orden del servidor, con los que el juego te hizo descargar. Sus otros mods quedan en él, apagados, salvo los que corren solo de tu lado (ZombieBuddy y sus mods de Java para el cliente, como Viewpoint): siguen como los tenías. El panel del servidor dice qué perfil es.
 
 ## Alojar un servidor: la lista de servidores
 

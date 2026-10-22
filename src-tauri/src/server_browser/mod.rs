@@ -528,7 +528,9 @@ pub fn refresh_joins(user_zomboid_dir: &Path) -> (Vec<SavedServer>, Vec<crate::i
                     .filter(|m| matches!(&m.source, crate::catalog::ModSource::Workshop { workshop_id } if s.items.contains(workshop_id)))
                     .map(|m| m.id.clone())
                     .collect();
-                if let Ok(Some(p)) = crate::instance_manager::take_server_mods(&user, profile, &s.mods, &came_with) {
+                // What runs only on the player's side stays as the player had it.
+                let own_side: Vec<String> = catalog.mods.iter().filter(|m| m.shadowed_by.is_none() && client_side_only(m)).map(|m| m.id.clone()).collect();
+                if let Ok(Some(p)) = crate::instance_manager::take_server_mods(&user, profile, &s.mods, &came_with, &own_side) {
                     changed.push(p);
                 }
             }
@@ -560,6 +562,24 @@ pub fn set_made_profile(user_zomboid_dir: &Path, address: &str, name: &str, prof
     }
     write_saved(user_zomboid_dir, &list)?;
     Ok(list)
+}
+
+/// A mod that runs only on the player's side, so a server neither lists nor needs it: ZombieBuddy
+/// (it hooks into the game itself), and Java mods whose jar is client-only
+/// (`javaJarFile=media/java/client/...`, which ZombieBuddy skips on a server).
+fn client_side_only(m: &crate::catalog::CatalogMod) -> bool {
+    if m.id == "ZombieBuddy" {
+        return true;
+    }
+    // The mod.info the game reads, and the shared one in common/ (where Viewpoint declares it).
+    let root = std::path::Path::new(&m.root_dir);
+    let candidates = [m.mod_info_path.as_ref().map(std::path::PathBuf::from), Some(root.join("common").join("mod.info")), Some(root.join("mod.info"))];
+    let info: String = candidates.iter().flatten().filter_map(|p| std::fs::read_to_string(p).ok()).collect::<Vec<_>>().join("
+");
+    info.lines().any(|l| {
+        let l = l.trim();
+        l.to_ascii_lowercase().starts_with("javajarfile=") && l.replace('\\', "/").contains("java/client/")
+    })
 }
 
 /// Read the kept servers, with what the last joins loaded filled in from the logs.

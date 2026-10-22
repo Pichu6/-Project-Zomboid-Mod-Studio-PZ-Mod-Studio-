@@ -182,8 +182,10 @@ pub fn add_members_to_active(z_dir: &std::path::Path, ids: &[String]) -> Result<
 /// in the server's order and first in the load order (the ones the game had the player download
 /// too); any other mod it holds stays in it, off, as the server does not load it. `also_off`
 /// joins it switched off: the other mods of the Workshop items the server had downloaded, so they
-/// are in a profile. None when it already was so.
-pub fn take_server_mods(user_zomboid_dir: &str, instance_id: &str, server_mods: &[String], also_off: &[String]) -> Result<Option<AppInstance>, String> {
+/// are in a profile. `keep_on` stay on when they were: mods that run only on the player's side
+/// (ZombieBuddy and its client-only Java mods), which the server does not list and does not need.
+/// None when it already was so.
+pub fn take_server_mods(user_zomboid_dir: &str, instance_id: &str, server_mods: &[String], also_off: &[String], keep_on: &[String]) -> Result<Option<AppInstance>, String> {
     let dir = get_instances_dir(user_zomboid_dir);
     let path = instance_file_path(&dir, instance_id)?;
     let Some(mut inst) = read_instance(&path) else { return Ok(None) };
@@ -191,6 +193,11 @@ pub fn take_server_mods(user_zomboid_dir: &str, instance_id: &str, server_mods: 
     for id in server_mods.iter().map(|id| id.trim().trim_start_matches('\\').to_string()).filter(|id| !id.is_empty()) {
         if !active.contains(&id) {
             active.push(id);
+        }
+    }
+    for id in keep_on {
+        if inst.active_mod_ids.contains(id) && !active.contains(id) {
+            active.push(id.clone());
         }
     }
     let mut members = inst.members.clone().unwrap_or_else(|| inst.active_mod_ids.clone());
@@ -645,13 +652,15 @@ mod build_tests {
         fs::create_dir_all(z.join("mods")).unwrap();
         let user = z.to_string_lossy().to_string();
         let made = create_instance(user.clone(), "Online: X".into(), None, ids(&["A", "Mine"]), ids(&["A", "Mine"])).unwrap();
-        let p = take_server_mods(&user, &made.id, &ids(&["A", "B", "C"]), &ids(&["D"])).unwrap().expect("changed");
-        assert_eq!(p.active_mod_ids, ids(&["A", "B", "C", crate::studio_link::LINK_MOD_ID]), "the server's mods on, in its order");
+        let p = take_server_mods(&user, &made.id, &ids(&["A", "B", "C"]), &ids(&["D"]), &ids(&["Mine", "Never"])).unwrap().expect("changed");
+        assert_eq!(p.active_mod_ids, ids(&["A", "B", "C", "Mine", crate::studio_link::LINK_MOD_ID]), "the server's mods on, in its order; one of the player's side that was on stays on");
+        assert!(!p.member_ids().contains(&"Never".to_string()), "kept on only when it was on");
+        let p = take_server_mods(&user, &made.id, &ids(&["A", "B", "C"]), &ids(&["D"]), &[]).unwrap().unwrap_or(p);
         assert!(p.member_ids().contains(&"Mine".to_string()), "a mod of its own stays in it");
         assert!(!p.active_mod_ids.contains(&"Mine".to_string()), "off: the server does not load it");
         assert_eq!(&p.load_order[..3], &ids(&["A", "B", "C"])[..]);
         assert!(p.member_ids().contains(&"D".to_string()) && !p.active_mod_ids.contains(&"D".to_string()), "the rest of the server's items: in it, off");
-        assert!(take_server_mods(&user, &made.id, &ids(&["A", "B", "C"]), &ids(&["D"])).unwrap().is_none(), "nothing new, nothing written");
+        assert!(take_server_mods(&user, &made.id, &ids(&["A", "B", "C"]), &ids(&["D"]), &[]).unwrap().is_none(), "nothing new, nothing written");
         let _ = fs::remove_dir_all(&z);
     }
 }
