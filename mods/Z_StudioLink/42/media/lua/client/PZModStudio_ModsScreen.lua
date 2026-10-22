@@ -1968,9 +1968,6 @@ end
 
 function Screen:prerender()
     PanelJoypad.prerender(self)
-    if self.supportAt then
-        self:drawText(text("modsSupport"), self.supportAt.x, self.supportAt.y, C.support[1], C.support[2], C.support[3], 1, UIFont.Small)
-    end
     -- While the divider is held only its line follows the pointer; let go, the list and the
     -- details are laid out again for the new split.
     if self.resizing then
@@ -2054,6 +2051,10 @@ function Screen:prerender()
     end
     if self.moreAt then
         self:drawText(text("modsMoreWithApp"), self.moreAt.x, self.moreAt.y, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small)
+    end
+    -- Last, over the details panel drawn above.
+    if self.supportAt then
+        self:drawText(text("modsSupport"), self.supportAt.x, self.supportAt.y, C.support[1], C.support[2], C.support[3], 1, UIFont.Small)
     end
     -- A short note (why a move was refused...), for a few seconds.
     if self.note and self.noteAt and Link.now() - self.noteAt < 8 then
