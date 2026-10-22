@@ -70,6 +70,9 @@ interface RowHealthChipsProps {
   onOpenMerger?: (relativePath: string) => void;
   /** Opens Mod Health, scrolled to the issue when one is given. */
   onGoToHealth?: (issue?: HealthIssue) => void;
+  /** Opens a Workshop item / a Workshop search in Explore Mods. */
+  onOpenInBrowser?: (workshopId: string) => void;
+  onSearchInBrowser?: (text: string) => void;
   /** A line for the list's toast, for a fix that happened on disk. */
   onNote?: (message: string) => void;
 }
@@ -79,7 +82,7 @@ interface RowHealthChipsProps {
  * the fix beside it when the row can apply it. The chip itself goes to the other mod involved,
  * or to Mod Health when there is none.
  */
-export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, mods, onApplyList, onJumpToMod, onOpenMerger, onGoToHealth, onNote }) => {
+export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, mods, onApplyList, onJumpToMod, onOpenMerger, onGoToHealth, onOpenInBrowser, onSearchInBrowser, onNote }) => {
   if (issues.length === 0) return null;
   const nameOf = (id: string) => mods.find((m) => m.mod_id === id)?.name ?? id;
   // The names and ids a message may mention, set in bold in the tips.
@@ -110,10 +113,12 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
   const runFix = (fix: HealthFix, issue: HealthIssue) => {
     switch (fix.action) {
       case 'subscribe_workshop':
-        TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`);
+        if (onSearchInBrowser) onSearchInBrowser(fix.hint);
+        else TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`);
         return;
       case 'open_workshop_page':
-        TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${fix.workshop_id}`);
+        if (onOpenInBrowser) onOpenInBrowser(fix.workshop_id);
+        else TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${fix.workshop_id}`);
         return;
       case 'open_in_merger':
         if (onOpenMerger) onOpenMerger(fix.relative_path);

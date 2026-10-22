@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, Copy, Download, ExternalLink, FileArchive, FolderOpen, Globe, Heart, KeyRound, Layers, Library, Link2, Loader2, Plus, Search, Trash2, Users, X,
 } from 'lucide-react';
@@ -26,6 +26,9 @@ interface BrowseModuleProps {
   /** Workshop item to open the detail view on (set when the Mod List sends the user here). */
   focusWorkshopId?: string | null;
   onFocusHandled?: () => void;
+  /** Text to search the Workshop for (set when Mod Health or the Mod List look for a missing mod). */
+  focusSearch?: string | null;
+  onSearchHandled?: () => void;
   /** Installed mods as the game sees them (from useModHealth). */
   catalog: CatalogModSummary[];
   /** Called after mods were installed, so the mod list is rescanned. */
@@ -303,7 +306,9 @@ const WorkshopTab: React.FC<{
   steamReady: boolean;
   onSubscribe: (ids: string[], subscribe: boolean) => Promise<void>;
   keep: KeepActions;
-}> = ({ installedByItem, stateByItem, onOpen, steamReady, onSubscribe, keep }) => {
+  searchFor?: string | null;
+  onSearchHandled?: () => void;
+}> = ({ installedByItem, stateByItem, onOpen, steamReady, onSubscribe, keep, searchFor, onSearchHandled }) => {
   const showContextMenu = useContextMenu();
   const [text, setText] = useState('');
   const [query, setQuery] = useState<WorkshopQuery>({ text: '', sort: 'trending', build: '42', category: '', days: 7, collections: false });
@@ -332,10 +337,15 @@ const WorkshopTab: React.FC<{
     }
   };
 
+  // Only the latest search may fill the list: one sent from another screen can overtake the
+  // default one the tab starts with.
+  const searchTicket = useRef(0);
   const runSearch = useCallback(async (q: WorkshopQuery, p: number) => {
+    const ticket = ++searchTicket.current;
     setSearching(true);
     try {
       const r = await TauriService.workshopSearch(toBrowseQuery(q, p));
+      if (ticket !== searchTicket.current) return;
       setTotal(r.total);
       setPages(r.pages);
       setItems(r.items);
@@ -346,11 +356,12 @@ const WorkshopTab: React.FC<{
       const next = { ...toBrowseQuery(q, p + 1) };
       if (p + 1 <= r.pages) TauriService.prefetch(TauriService.workshopSearchKey(next), () => TauriService.workshopSearch(next));
     } catch (err) {
+      if (ticket !== searchTicket.current) return;
       setSearchError(explainError(err));
       setItems([]);
       setTotal(0);
     } finally {
-      setSearching(false);
+      if (ticket === searchTicket.current) setSearching(false);
     }
   }, []);
 
@@ -377,6 +388,15 @@ const WorkshopTab: React.FC<{
     setLookup(null);
     setQuery((q) => ({ ...q, text: t }));
   };
+
+  // Another screen asked for a search: the text in the box, by relevance, in every category.
+  useEffect(() => {
+    if (!searchFor) return;
+    setText(searchFor);
+    setLookup(null);
+    setQuery((q) => ({ ...q, text: searchFor, sort: 'relevance', category: '', collections: false }));
+    onSearchHandled?.();
+  }, [searchFor, onSearchHandled]);
 
   const setFilter = (patch: Partial<WorkshopQuery>) => {
     setLookup(null);
@@ -827,7 +847,7 @@ const TABS: { id: SourceTab; active: string }[] = [
   { id: 'lists', active: 'bg-amber-950/80 text-amber-200 border-amber-700' },
 ];
 
-export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, onSubscribed, focusWorkshopId, onFocusHandled, onMakeProfile, installedBuild = null, profiles = [], onProfilesChanged }) => {
+export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onInstalled, onSubscribed, focusWorkshopId, onFocusHandled, focusSearch, onSearchHandled, onMakeProfile, installedBuild = null, profiles = [], onProfilesChanged }) => {
   const { t } = useTranslation();
   const keep = useKeepActions(paths, profiles, onProfilesChanged);
   const [tab, setTab] = useState<SourceTab>('workshop');
@@ -936,6 +956,13 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
     setDetailStack([{ kind: 'workshop', id: focusWorkshopId }]);
     onFocusHandled?.();
   }, [focusWorkshopId, onFocusHandled]);
+  // A search from another screen lands on the Workshop tab's list, not on whatever was open.
+  useEffect(() => {
+    if (!focusSearch) return;
+    setTab('workshop');
+    setVisited((v) => new Set(v).add('workshop'));
+    setDetailStack([]);
+  }, [focusSearch]);
   const closeDetail = useCallback(() => setDetailStack([]), []);
 
   const handleNexusDownload = (m: NexusMod) => {
@@ -1028,6 +1055,8 @@ export const BrowseModule: React.FC<BrowseModuleProps> = ({ paths, catalog, onIn
               steamReady={steamReady}
               onSubscribe={handleSubscribe}
               keep={keep}
+              searchFor={focusSearch}
+              onSearchHandled={onSearchHandled}
             />
           )}
         </div>

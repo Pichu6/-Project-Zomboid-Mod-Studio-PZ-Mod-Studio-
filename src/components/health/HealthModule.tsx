@@ -24,6 +24,9 @@ interface HealthModuleProps {
   onModsChanged: () => void;
   /** Opens the Mod Merger on this conflicting file. */
   onOpenMerger: (relativePath: string) => void;
+  /** Opens a Workshop item / a Workshop search in Explore Mods. */
+  onOpenInBrowser?: (workshopId: string) => void;
+  onSearchInBrowser?: (text: string) => void;
   /** The issue a Mod List chip pointed at: scrolled to and lit up once. */
   focusIssue?: HealthIssue | null;
   onFocusHandled?: () => void;
@@ -83,7 +86,7 @@ const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: str
   info: { icon: Info, row: 'border-slate-700 bg-slate-900/50', iconColor: 'text-slate-400' },
 };
 
-export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged, onOpenMerger, focusIssue = null, onFocusHandled }) => {
+export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report, checking, onRecheck, onApplyModList, onModsChanged, onOpenMerger, onOpenInBrowser, onSearchInBrowser, focusIssue = null, onFocusHandled }) => {
   const { t } = useTranslation();
   const [litKey, setLitKey] = useState<string | null>(null);
   const issueKey = (i: HealthIssue) => `${i.code}|${i.mod_id ?? ''}|${i.message}`;
@@ -225,13 +228,13 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       return;
     }
     if (fix.action === 'open_workshop_page') {
-      TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${fix.workshop_id}`);
+      if (onOpenInBrowser) onOpenInBrowser(fix.workshop_id);
+      else TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${fix.workshop_id}`);
       return;
     }
     if (fix.action === 'subscribe_workshop') {
-      TauriService.openExternalUrl(
-        `https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`
-      );
+      if (onSearchInBrowser) onSearchInBrowser(fix.hint);
+      else TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`);
       return;
     }
     if (fix.action === 'disable_mod') {

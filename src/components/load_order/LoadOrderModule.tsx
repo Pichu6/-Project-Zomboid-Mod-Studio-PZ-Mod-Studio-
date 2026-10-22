@@ -73,6 +73,8 @@ interface LoadOrderModuleProps {
   installedBuild?: string | null;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
   onOpenInBrowser?: (workshopId: string) => void;
+  /** Searches the Workshop in Explore Mods (a mod that is not installed has no item to open). */
+  onSearchInBrowser?: (text: string) => void;
   /** Opens the Mod Merger on this conflicting file (a row chip's fix). */
   onOpenMerger?: (relativePath: string) => void;
   /** Opens Mod Health, for a fix a row cannot apply by itself. */
@@ -165,6 +167,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   loadTimes,
   installedBuild = null,
   onOpenInBrowser,
+  onSearchInBrowser,
   onOpenMerger,
   onGoToHealth,
   onRulesChanged,
@@ -728,14 +731,24 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       disabledReason: t('modList.menu.alreadyFirst') },
     { label: t('modList.menu.toBottom'), icon: ChevronsDown, onSelect: () => moveToBottom(index),
       disabled: index === mods.length - 1, disabledReason: t('modList.menu.alreadyLast') },
-    {
-      label: t('modList.menu.openBrowser'),
-      icon: BookOpen,
-      separatorBefore: true,
-      onSelect: () => mod.workshop_id && onOpenInBrowser?.(mod.workshop_id),
-      disabled: !mod.workshop_id || !onOpenInBrowser,
-      disabledReason: t('modList.menu.notWorkshop'),
-    },
+    // A mod that is not installed has no Workshop item to open: look for it by name instead.
+    !mod.workshop_id && mod.not_installed
+      ? {
+          label: t('modList.menu.searchBrowser'),
+          icon: Search,
+          separatorBefore: true,
+          onSelect: () => onSearchInBrowser?.(mod.name || mod.mod_id),
+          disabled: !onSearchInBrowser,
+          disabledReason: t('modList.menu.notWorkshop'),
+        }
+      : {
+          label: t('modList.menu.openBrowser'),
+          icon: BookOpen,
+          separatorBefore: true,
+          onSelect: () => mod.workshop_id && onOpenInBrowser?.(mod.workshop_id),
+          disabled: !mod.workshop_id || !onOpenInBrowser,
+          disabledReason: t('modList.menu.notWorkshop'),
+        },
     {
       label: t('modList.menu.openFolder'),
       icon: FolderOpen,
@@ -973,8 +986,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
 
     if (!targetMod) {
       const cleanSearch = normalizeModId(depModIdRaw);
-      const searchUrl = `https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(cleanSearch)}`;
-      TauriService.openExternalUrl(searchUrl);
+      if (onSearchInBrowser) onSearchInBrowser(cleanSearch);
+      else TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(cleanSearch)}`);
       return;
     }
 
@@ -1173,6 +1186,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       handleJumpToMod={handleJumpToMod}
                       onOpenMerger={onOpenMerger}
                       onGoToHealth={onGoToHealth}
+                      onOpenInBrowser={onOpenInBrowser}
+                      onSearchInBrowser={onSearchInBrowser}
                       moveToTop={moveToTop}
                       moveUp={moveUp}
                       moveDown={moveDown}

@@ -47,6 +47,9 @@ export interface ModRowBodyProps {
   handleJumpToMod: (modId: string) => void;
   onOpenMerger?: (relativePath: string) => void;
   onGoToHealth?: (issue?: HealthIssue) => void;
+  /** Opens a Workshop item / a Workshop search in Explore Mods. */
+  onOpenInBrowser?: (workshopId: string) => void;
+  onSearchInBrowser?: (text: string) => void;
   moveToTop: (index: number) => void;
   moveUp: (index: number) => void;
   moveDown: (index: number) => void;
@@ -90,6 +93,8 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   handleJumpToMod,
   onOpenMerger,
   onGoToHealth,
+  onOpenInBrowser,
+  onSearchInBrowser,
   moveToTop,
   moveUp,
   moveDown,
@@ -332,6 +337,8 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
             onJumpToMod={handleJumpToMod}
             onOpenMerger={onOpenMerger}
             onGoToHealth={onGoToHealth}
+            onOpenInBrowser={onOpenInBrowser}
+            onSearchInBrowser={onSearchInBrowser}
           />
         </div>
       </div>

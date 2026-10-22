@@ -56,6 +56,7 @@ export const App: React.FC = () => {
   } | null>(null);
   /** Workshop item Browse Mods should open on (set from the Mod List). */
   const [browseFocusWorkshopId, setBrowseFocusWorkshopId] = useState<string | null>(null);
+  const [browseFocusSearch, setBrowseFocusSearch] = useState<string | null>(null);
   const [errorCards, setErrorCards] = useState<TranslatedErrorCard[]>([]);
   const [autoMergeResultModal, setAutoMergeResultModal] = useState<{
     patch_mod_dir: string;
@@ -383,6 +384,16 @@ export const App: React.FC = () => {
   const [serversView, setServersView] = useState<'JOIN' | 'HOST'>('JOIN');
 
   /** A profile with the mods a server loaded, in its order. */
+  /** Explore Mods, on one Workshop item / on a Workshop search. */
+  const openInBrowser = (workshopId: string) => {
+    setBrowseFocusWorkshopId(workshopId);
+    setActiveTab('BROWSE');
+  };
+  const searchInBrowser = (text: string) => {
+    setBrowseFocusSearch(text);
+    setActiveTab('BROWSE');
+  };
+
   const handleMakeProfileFromServer = async (name: string, modIds: string[], announcedOf?: number) => {
     const installed = new Set(mods.map((m) => m.mod_id));
     const missing = modIds.filter((id) => !installed.has(id));
@@ -930,10 +941,8 @@ export const App: React.FC = () => {
               profiles={profiles}
               activeProfileId={activeProfile?.id ?? null}
               onProfilesChanged={() => void refreshActiveProfile()}
-              onOpenInBrowser={(workshopId) => {
-                setBrowseFocusWorkshopId(workshopId);
-                setActiveTab('BROWSE');
-              }}
+              onOpenInBrowser={openInBrowser}
+              onSearchInBrowser={searchInBrowser}
               focusModId={modListFocus}
               onFocusHandled={() => setModListFocus(null)}
             />
@@ -967,6 +976,8 @@ export const App: React.FC = () => {
               onSubscribed={handleSubscribed}
               focusWorkshopId={browseFocusWorkshopId}
               onFocusHandled={() => setBrowseFocusWorkshopId(null)}
+              focusSearch={browseFocusSearch}
+              onSearchHandled={() => setBrowseFocusSearch(null)}
               onMakeProfile={handleMakeProfileFromCollection}
               installedBuild={health.report?.game_version ?? null}
               profiles={profiles}
@@ -989,6 +1000,8 @@ export const App: React.FC = () => {
                 setMergerFocusPath(relativePath);
                 setActiveTab('MERGER');
               }}
+              onOpenInBrowser={openInBrowser}
+              onSearchInBrowser={searchInBrowser}
             />
           )}
 

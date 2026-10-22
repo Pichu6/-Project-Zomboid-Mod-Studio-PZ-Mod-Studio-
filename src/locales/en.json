@@ -456,6 +456,7 @@
       "toBottom": "Move to the bottom",
       "alreadyLast": "Already last",
       "openBrowser": "Open in Mod Browser",
+      "searchBrowser": "Search for it in Mod Browser",
       "notWorkshop": "This mod did not come from the Workshop",
       "openFolder": "Open its folder",
       "noFolder": "The Studio does not know where this mod lives",
