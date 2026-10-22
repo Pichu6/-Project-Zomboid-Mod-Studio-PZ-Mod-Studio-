@@ -44,7 +44,10 @@ local function measure(font, s) return getTextManager():MeasureStringX(font, s) 
 local WORKSHOP_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id="
 local FAVOURITES_FILE = "pz_modlist_settings.cfg"
 local UPDATED_FILE = "PZModStudio_LinkUpdated.txt"
-local FILTERS = { "all", "on", "off", "favourites", "updated", "problems", "maps" }
+local FILTERS = { "all", "on", "off", "favourites", "updated", "problems", "maps", "libraries", "unloadable" }
+-- Shown only with PZ Mod Studio: it is what tells.
+local APP_FILTERS = { updated = true, libraries = true }
+local MODS_FILE = "PZModStudio_LinkMods.txt"
 local META_FILE = "PZModStudio_LinkMeta.txt"
 local VIEW_FILE = "PZModStudio_LinkView.txt"
 -- reopen=1: the game reloaded its Lua for mods synced from PZ Mod Studio while this screen was
@@ -174,6 +177,39 @@ local function readUpdated()
     end
     file:close()
     return updated
+end
+
+local function noFacts()
+    return { origin = {}, library = {}, tags = {}, origins = {}, tagNames = {} }
+end
+
+--- What the app knows of each mod for the filters (origin, library, tags) and its words for them:
+--- origin=<kind>\t<label>, tag=<id>\t<label>, mod=<id>\t<origin>\t<1 for a library>\t<tag;tag>.
+local function readLinkMods()
+    local facts = noFacts()
+    local file = getFileReader(MODS_FILE, false)
+    if not file then return facts end
+    local line = file:readLine()
+    while line ~= nil do
+        local key, rest = string.match(line, "^(%a+)=(.*)$")
+        if key == "origin" or key == "tag" then
+            local id, label = string.match(rest, "^([^\t]+)\t(.*)$")
+            if id then table.insert(key == "origin" and facts.origins or facts.tagNames, { id = id, label = label }) end
+        elseif key == "mod" then
+            local id, origin, lib, tags = string.match(rest, "^([^\t]+)\t([^\t]*)\t([^\t]*)\t?(.*)$")
+            if id then
+                id = plainId(id)
+                facts.origin[id] = origin
+                if lib == "1" then facts.library[id] = true end
+                local set = {}
+                for tag in string.gmatch(tags or "", "[^;]+") do set[tag] = true end
+                facts.tags[id] = set
+            end
+        end
+        line = file:readLine()
+    end
+    file:close()
+    return facts
 end
 
 --- The player's notes and groups, as the app wrote them: notes[id] = text, groups = { {name, ids} }.
@@ -457,6 +493,9 @@ function Screen:new(x, y, w, h)
     o.history, o.future = {}, {}
     o.ratio = readRatio()
     o.search = ""
+    -- One of the player's groups, an origin, a tag (nil: all of them).
+    o.groupPick, o.originPick, o.tagPick = nil, nil, nil
+    o.facts = noFacts()
     o.on, o.changed, o.position, o.missingReq, o.health, o.updated, o.favs = {}, {}, {}, {}, {}, {}, {}
     -- Big screens get bigger rows and text.
     o.big = h >= 900
@@ -482,6 +521,7 @@ function Screen:readState()
     self.health = self.link and Link.readHealth() or {}
     self.updated = Link.appInstalled() and readUpdated() or {}
     if Link.appInstalled() then self.notes, self.groups, self.groupNotes = readMeta() end
+    self.facts = Link.appInstalled() and readLinkMods() or noFacts()
     self.onlyProfile = self.link ~= nil
     self:recount()
 end
@@ -541,6 +581,11 @@ function Screen:visibleMods()
         if show and f == "updated" and not self.updated[mod.id] then show = false end
         if show and f == "maps" and not mod.map then show = false end
         if show and f == "problems" and not (self.health[mod.id] or self.missingReq[mod.id] or (self.on[mod.id] and not mod.available)) then show = false end
+        if show and f == "libraries" and not self.facts.library[mod.id] then show = false end
+        if show and f == "unloadable" and mod.available then show = false end
+        if show and self.groupPick and not self:inGroup(mod, self.groupPick) then show = false end
+        if show and self.originPick and self.facts.origin[mod.id] ~= self.originPick then show = false end
+        if show and self.tagPick and not (self.facts.tags[mod.id] or {})[self.tagPick] then show = false end
         if show and q ~= "" then
             show = string.find(string.lower(mod.name), q) ~= nil or string.find(string.lower(mod.id), q) ~= nil
                 or string.find(mod.workshop, q) ~= nil or string.find(string.lower(mod.author), q) ~= nil
@@ -557,6 +602,50 @@ function Screen:visibleMods()
         end)
     end
     return out
+end
+
+function Screen:inGroup(mod, name)
+    for _, g in ipairs(self.groups) do
+        if g.name == name then
+            for _, id in ipairs(g.ids) do
+                if id == mod.id then return true end
+            end
+        end
+    end
+    return false
+end
+
+--- The group, origin and tag pickers, from what the app wrote: each lists only what some mod
+--- has, with how many; a pick that is gone goes back to "all".
+function Screen:fillPicks()
+    local function fill(combo, allLabel, items, current)
+        if not combo then return nil end
+        combo:clear()
+        combo:addOptionWithData(allLabel, nil)
+        local at = 1
+        for i, item in ipairs(items) do
+            combo:addOptionWithData(item.label, item.id)
+            if item.id == current then at = i + 1 end
+        end
+        combo.selected = at
+        return at > 1 and current or nil
+    end
+    local function counted(list, has)
+        local out = {}
+        for _, item in ipairs(list) do
+            local n = 0
+            for _, mod in ipairs(self.mods) do
+                if has(mod, item.id) then n = n + 1 end
+            end
+            if n > 0 then table.insert(out, { id = item.id, label = item.label .. " (" .. n .. ")" }) end
+        end
+        return out
+    end
+    local groups = {}
+    for _, g in ipairs(self.groups) do table.insert(groups, { id = g.name, label = g.name .. " (" .. #g.ids .. ")" }) end
+    self.groupPick = fill(self.groupCombo, text("modsAllGroups"), groups, self.groupPick)
+    self.originPick = fill(self.originCombo, text("modsAllOrigins"), counted(self.facts.origins, function(mod, id) return self.facts.origin[mod.id] == id end), self.originPick)
+    self.tagPick = fill(self.tagCombo, text("modsAllTags"), counted(self.facts.tagNames, function(mod, id) return (self.facts.tags[mod.id] or {})[id] end), self.tagPick)
 end
 
 --- A mod's group: its author(s), or its category (a map mod with none set is a map).
@@ -1538,8 +1627,8 @@ function Screen:createChildren()
     self.filterButtons = {}
     local fx = self.searchBox:getRight() + 12
     for _, key in ipairs(FILTERS) do
-        -- "Updated" only with the app (it is what tells).
-        if key ~= "updated" or Link.appInstalled() then
+        -- "Updated" and "Libraries" only with the app (it is what tells).
+        if not APP_FILTERS[key] or Link.appInstalled() then
             local label = text("modsFilter_" .. key)
             local b = button(self, fx, top, measure(UIFont.Small, label) + 22, bh, label, function(screen)
                 screen.filter = key
@@ -1549,15 +1638,19 @@ function Screen:createChildren()
             fx = b:getRight() + 6
         end
     end
+    -- The second row, in the app's order: sort, groups, one group, origin, tag, the profile.
+    local top2 = top + bh + 6
+    self.controlsY2 = top2
+    fx = pad
     local sw = math.max(measure(UIFont.Small, text("modsSortName")), measure(UIFont.Small, text("modsSortOrder"))) + 22
-    self.sortButton = button(self, fx + 12, top, sw, bh, text("modsSortName"), function(screen)
+    self.sortButton = button(self, fx, top2, sw, bh, text("modsSortName"), function(screen)
         screen.sort = screen.sort == "order" and "name" or "order"
         screen:refreshList()
     end)
     fx = self.sortButton:getRight() + 6
     local gw = 0
     for _, g in ipairs({ "none", "author", "category", "mine" }) do gw = math.max(gw, measure(UIFont.Small, text("modsGroup_" .. g))) end
-    self.groupButton = button(self, fx, top, gw + 22, bh, text("modsGroup_none"), function(screen)
+    self.groupButton = button(self, fx, top2, gw + 22, bh, text("modsGroup_none"), function(screen)
         local cycle = { "none", "author", "category" }
         if #screen.groups > 0 then table.insert(cycle, "mine") end
         local nextGroup = cycle[1]
@@ -1568,6 +1661,25 @@ function Screen:createChildren()
         screen:refreshList()
     end)
     fx = self.groupButton:getRight() + 6
+    if Link.appInstalled() then
+        local function picker(width, onPick)
+            local combo = ISComboBox:new(fx, top2, width, bh, nil, function(_, c)
+                onPick(c:getOptionData(c.selected))
+                self:refreshList()
+            end)
+            combo:initialise()
+            self:addChild(combo)
+            fx = combo:getRight() + 6
+            return combo
+        end
+        self.groupCombo = picker(170, function(v) self.groupPick = v end)
+        self.originCombo = picker(170, function(v) self.originPick = v end)
+        self.tagCombo = picker(200, function(v) self.tagPick = v end)
+        self:fillPicks()
+    else
+        -- Without the app: what it would add, where those pickers would be.
+        self.moreAt = { x = fx + 6, y = top2 + math.floor((bh - fontH(UIFont.Small)) / 2) }
+    end
 
     -- The summary, right of the title: each one shows its mods.
     self.summary = {}
@@ -1589,7 +1701,7 @@ function Screen:createChildren()
 
     if self.link then
         local w = math.max(measure(UIFont.Small, text("modsOnlyProfileOn")), measure(UIFont.Small, text("modsOnlyProfileOff"))) + 22
-        self.profileTick = button(self, fx + 12, top, w, bh, text("modsOnlyProfileOn"), function(screen)
+        self.profileTick = button(self, fx + 6, top2, w, bh, text("modsOnlyProfileOn"), function(screen)
             screen.onlyProfile = not screen.onlyProfile
             screen:refreshList()
         end)
@@ -1603,7 +1715,7 @@ function Screen:createChildren()
         end
         if #fresh > 0 then
             local nl = text("newMods", #fresh)
-            self.newButton = button(self, fx + 6, top, measure(UIFont.Small, nl) + 22, bh, nl, function(screen, b)
+            self.newButton = button(self, fx + 6, top2, measure(UIFont.Small, nl) + 22, bh, nl, function(screen, b)
                 Link.requestAdd(fresh)
                 b:setTitle(text("adding"))
                 b:setEnable(false)
@@ -1611,7 +1723,7 @@ function Screen:createChildren()
         end
     end
 
-    local listTop = top + bh + 12
+    local listTop = top2 + bh + 12
     local bottom = self.height - pad - bh - 14
     local listW = math.floor((self.width - pad * 3) * self.ratio)
     self.layoutTop, self.layoutBottom, self.bh = listTop, bottom, bh
@@ -1867,6 +1979,9 @@ function Screen:prerender()
         ny = ny + fontH(UIFont.Small) + 2
         if mod.author ~= "" then self:drawText(text("modsBy", mod.author), nx, ny, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small) end
     end
+    if self.moreAt then
+        self:drawText(text("modsMoreWithApp"), self.moreAt.x, self.moreAt.y, C.muted[1], C.muted[2], C.muted[3], 1, UIFont.Small)
+    end
     -- A short note (why a move was refused...), for a few seconds.
     if self.note and self.noteAt and Link.now() - self.noteAt < 8 then
         self:drawNote(self.note)
@@ -1918,6 +2033,7 @@ function Screen.reopen(note)
     local old = Screen.instance
     local keep = old and {
         filter = old.filter, sort = old.sort, group = old.group, search = old.search,
+        groupPick = old.groupPick, originPick = old.originPick, tagPick = old.tagPick,
         collapsed = old.collapsed, shown = old.selectedMod and old.selectedMod.id, onlyProfile = old.onlyProfile,
     }
     Screen.open(keep)
@@ -1930,6 +2046,8 @@ function Screen:refreshAppData()
     self.health = self.link and Link.readHealth() or {}
     self.updated = readUpdated()
     self.notes, self.groups, self.groupNotes = readMeta()
+    self.facts = readLinkMods()
+    self:fillPicks()
     self:recount()
     self:refreshList()
 end
@@ -2093,9 +2211,13 @@ function Screen:onJoypadDown(button)
     elseif button == Joypad.YButton then
         self:accept()
     elseif button == Joypad.XButton then
-        for i, key in ipairs(FILTERS) do
+        local shown = {}
+        for _, key in ipairs(FILTERS) do
+            if self.filterButtons[key] then table.insert(shown, key) end
+        end
+        for i, key in ipairs(shown) do
             if key == self.filter then
-                self.filter = FILTERS[(i % #FILTERS) + 1]
+                self.filter = shown[(i % #shown) + 1]
                 break
             end
         end
@@ -2149,6 +2271,7 @@ function Screen.open(keep)
     screen:readState()
     if keep then
         screen.filter, screen.sort, screen.group = keep.filter, keep.sort, keep.group
+        screen.groupPick, screen.originPick, screen.tagPick = keep.groupPick, keep.originPick, keep.tagPick
         screen.search = keep.search or ""
         screen.collapsed = keep.collapsed or {}
         if screen.link and keep.onlyProfile ~= nil then screen.onlyProfile = keep.onlyProfile end

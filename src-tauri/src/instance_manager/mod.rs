@@ -72,6 +72,8 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
     if let Err(e) = crate::studio_link::install_link_mod(z_dir) {
         crate::diagnostics::error(format!("[StudioLink] {}", e));
     }
+    // Groups are each profile's own: the game shows this one's.
+    crate::mod_meta::refresh_link_copy(z_dir);
     // What the other profiles hold, so the game can tell a mod that is in no profile at all.
     let mut others: Vec<String> = Vec::new();
     if let Ok(entries) = fs::read_dir(z_dir.join("PZModStudio_Instances")) {

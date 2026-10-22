@@ -545,6 +545,16 @@ fn write_link_health_cmd(paths: StudioPaths, lines: Vec<(String, String, String)
     studio_link::write_health_file(&z_dir, &lines)
 }
 
+/// Each mod's origin, library flag and tags for the game's Mods screen filters (see
+/// `studio_link::MODS_FILE`), already in the player's language.
+#[tauri::command(async)]
+fn write_link_mods_cmd(paths: StudioPaths, text: String) -> Result<(), String> {
+    let Some(z_dir) = load_order::mod_info::get_existing_user_zomboid_dirs(&paths.user_zomboid_dir).into_iter().next() else {
+        return Ok(());
+    };
+    studio_link::write_mods_file(&z_dir, &text)
+}
+
 fn zomboid_dir_of(paths: &StudioPaths) -> Result<std::path::PathBuf, String> {
     load_order::mod_info::get_existing_user_zomboid_dirs(&paths.user_zomboid_dir)
         .into_iter()
@@ -1658,6 +1668,7 @@ pub fn run() {
             mark_profile_played_cmd,
             mod_error_stats_cmd,
             write_link_health_cmd,
+            write_link_mods_cmd,
             link_status_cmd,
             saves_overview_cmd,
             map_cells_cmd,

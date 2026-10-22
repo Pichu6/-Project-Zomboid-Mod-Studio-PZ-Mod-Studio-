@@ -25,6 +25,7 @@ import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
 import { useModHealth } from './hooks/useModHealth';
 import { BrowseModule } from './components/browse/BrowseModule';
+import { issuesByModOf, linkModsText, modTagsOf } from './components/load_order/modFacets';
 import { ContextMenuProvider } from './components/common/ContextMenu';
 
 // The Merger bundles the Monaco editor (~4 MB): load it only when its tab is opened.
@@ -111,6 +112,16 @@ export const App: React.FC = () => {
   const [errorStats, setErrorStats] = useState<Map<string, ModErrorStat>>(new Map());
   /** Mod id -> how long its files took to load last session, read with the error stats. */
   const [loadTimes, setLoadTimes] = useState<Map<string, number>>(new Map());
+
+  /**
+   * The game's Mods screen has the app's filters while the app is used: each mod's origin, whether
+   * it is a library and its tags, in the language the Studio speaks.
+   */
+  useEffect(() => {
+    if (!paths.is_valid || !paths.user_zomboid_dir || mods.length === 0) return;
+    const tags = modTagsOf(mods, errorStats, loadTimes, health.catalogById, issuesByModOf(healthIssues));
+    void TauriService.writeLinkMods(paths, linkModsText(mods, health.catalogById, tags));
+  }, [paths, mods, healthIssues, health.catalogById, errorStats, loadTimes, i18next.language]);
   const loadErrorStats = useCallback(async () => {
     if (!paths.is_valid) return;
     const list = await TauriService.modErrorStats(paths);

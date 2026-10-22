@@ -425,6 +425,8 @@ export interface ModGroup {
   name: string;
   mods: string[];
   note?: string;
+  /** The profile it belongs to (the app only ever gets the active profile's). */
+  profile?: string | null;
 }
 export interface ModMeta {
   notes: Record<string, string>;

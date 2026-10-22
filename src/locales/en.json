@@ -379,8 +379,8 @@
     "searchPlaceholder": "Search mod name, ID, workshop...",
     "onlyProfileTitle": "Show only what the profile {{name}} uses",
     "everythingTitle": "Show every installed mod, so you can add one to this profile",
-    "showingEverything": "Showing everything",
-    "onlyProfile": "Only {{name}}",
+    "showingEverything": "All installed",
+    "onlyProfile": "Profile's mods",
     "filterLabel": "Filter the list",
     "filterTitle": "Show only the mods you are looking for",
     "sourceLabel": "Filter by source",
@@ -388,6 +388,7 @@
     "sources": {
       "all": "All sources",
       "steam": "Steam Workshop",
+      "upload": "Your Workshop uploads",
       "nexus": "Nexus Mods",
       "manual": "Installed by hand",
       "local": "Local (other)",
@@ -426,6 +427,10 @@
       "updated": {
         "label": "Updated recently",
         "hint": "Changed on the Workshop since you last played, or waiting to download"
+      },
+      "favourites": {
+        "label": "Favourites",
+        "hint": "The ones you starred"
       }
     },
     "enableAllTitle": "Switch every mod on",
@@ -655,6 +660,23 @@
       "category_vehicle": "Vehicles",
       "category_features": "Features",
       "category_modpack": "Modpacks"
+    },
+    "filterButtons": {
+      "all": "All",
+      "enabled": "On",
+      "disabled": "Off",
+      "favourites": "Favourites",
+      "updated": "Updated",
+      "problems": "Problems",
+      "maps": "Maps",
+      "libraries": "Libraries",
+      "unloadable": "Can't load"
+    },
+    "sortBy": {
+      "label": "Sort",
+      "title": "Sort the list as the game's Mods screen does",
+      "order": "Sort: load order",
+      "name": "Sort: name"
     }
   },
   "health": {
@@ -1823,7 +1845,14 @@
         "fillFirst": "Write the channel and the role first; then the switch can be ticked.",
         "listening": "Listening in #{{channel}}: write !help there.",
         "otherServer": "The commands are on for {{server}}: only one server reads them at a time.",
-        "errors": {"no_channel": "The bot sees no text channel called \"{{channel}}\". Create it, or check the bot may see it (it needs \"View Channel\" there).", "no_role": "There is no role called \"{{role}}\" in that Discord.", "no_token": "Save the bot token above first (Chat with the game).", "bad_token": "Discord does not take the bot token: reset it in the Developer Portal and save it again above.", "forbidden": "The bot may not read or write in #{{channel}}: give it \"View Channel\", \"Read Message History\" and \"Send Messages\" there.", "unreachable": "Discord could not be reached; trying again. ({{detail}})"},
+        "errors": {
+          "no_channel": "The bot sees no text channel called \"{{channel}}\". Create it, or check the bot may see it (it needs \"View Channel\" there).",
+          "no_role": "There is no role called \"{{role}}\" in that Discord.",
+          "no_token": "Save the bot token above first (Chat with the game).",
+          "bad_token": "Discord does not take the bot token: reset it in the Developer Portal and save it again above.",
+          "forbidden": "The bot may not read or write in #{{channel}}: give it \"View Channel\", \"Read Message History\" and \"Send Messages\" there.",
+          "unreachable": "Discord could not be reached; trying again. ({{detail}})"
+        },
         "title": "Commands from Discord (while the Studio is open)",
         "intro": "Members with the role you choose can write commands in one channel; the Studio reads it every 5 seconds with the same bot as the chat above and answers there. They only work while PZ Mod Studio is open, and they never run console commands typed by hand.",
         "list": "!status · !players · !restart [minutes] · !restart cancel · !save · !msg <text> · !help",

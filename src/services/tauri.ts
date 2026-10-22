@@ -763,6 +763,14 @@ export const TauriService = {
    * Mod Health's warnings for the Studio Link mod, which marks those mods in the game's Mods
    * screen: [severity, mod id, text in the player's language] each.
    */
+  /** Each mod's origin, library flag and tags for the game's Mods screen filters. */
+  writeLinkMods: async (paths: StudioPathsUI, text: string): Promise<void> => {
+    try {
+      await invoke('write_link_mods_cmd', { paths, text });
+    } catch {
+      // The game's extra filters are a convenience; the app has them all.
+    }
+  },
   writeLinkHealth: async (paths: StudioPathsUI, lines: [string, string, string][]): Promise<void> => {
     try {
       await invoke('write_link_health_cmd', { paths, lines });

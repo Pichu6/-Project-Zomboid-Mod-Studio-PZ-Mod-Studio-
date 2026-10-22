@@ -147,3 +147,18 @@ mod tests {
         assert!(code.user_code.contains('-'));
     }
 }
+
+#[cfg(test)]
+mod live {
+    /// The saved token's account and scopes (never the token). cargo test --release saved_token_works -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn saved_token_works() {
+        let token = crate::secrets::get(super::super::propose::GITHUB_TOKEN).unwrap().expect("a token is saved");
+        let mut r = super::agent().get("https://api.github.com/user").header("Authorization", &format!("Bearer {}", token)).call().unwrap();
+        let kind = token.split('_').next().unwrap_or("").chars().take(10).collect::<String>();
+        let scopes = r.headers().get("x-oauth-scopes").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+        let v: serde_json::Value = serde_json::from_str(&r.body_mut().read_to_string().unwrap()).unwrap();
+        println!("status {} login {} ({}) scopes [{}]", r.status(), v["login"], kind, scopes);
+    }
+}

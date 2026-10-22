@@ -34,17 +34,20 @@ El número de cada fila es el lugar del mod entre los mods **prendidos**: el ord
 ## Encontrar mods
 
 - El buscador busca en el nombre, el ID del mod, el ID del Workshop y tus notas.
-- El primer filtro: **Todos los mods**, **Activos**, **Apagados**, **Con un problema**, **Mapas**, **Librerías**, **No cargan en esta build**, **Actualizados hace poco**. Cada uno muestra su cantidad.
-- Filtro por origen (**Steam Workshop**, **Instalados a mano**, **Copias compatibles**...) y por etiqueta (errores o avisos de la última sesión, carga lenta, un problema de Salud de mods).
+- Los botones de filtro: **Todos**, **Activos**, **Desactivados**, **Favoritos**, **Actualizados**, **Problemas**, **Mapas**, **Librerías**, **No cargan**. Cada uno muestra su cantidad.
+- Debajo: **Orden: de carga** u **Orden: nombre**, el menú de **Grupos**, uno de tus grupos, el origen (**Steam Workshop**, **Tus subidas al Workshop**, **Instalados a mano**, **Copias compatibles**...), una etiqueta (errores o avisos de la última sesión, carga lenta, un problema de Salud de mods) y **Mods del perfil** / **Todos los instalados**.
+- La pantalla de Mods del juego (mod Studio Link) tiene los mismos filtros en el mismo orden. Actualizados, Librerías, el grupo, el origen y la etiqueta necesitan PZ Mod Studio; sin la app, el juego lo dice donde irían.
+- Arrastrar funciona también ordenado por nombre: el mod va al lugar del mod sobre el que lo soltás.
 - **quitar filtros** vuelve a mostrar todos los mods.
 
 ## Grupos y notas
 
 - El menú de grupos arma la lista en secciones plegables: **Grupos: ninguno**, **Grupos: autor**, **Grupos: categoría** o **Grupos: míos**. Cada encabezado muestra cuántos están prendidos, con **Activar todos** / **Desactivar todos**. En **Grupos: míos**, un botón de nota edita la nota del grupo.
 - Clic derecho en un mod y elegí **Grupos…** para marcar en qué grupos está, crear uno nuevo (**Agregar**), renombrar o borrar uno. Un grupo que queda vacío desaparece. Los grupos nunca cambian el orden de carga.
-- Cuando tenés grupos aparece un filtro de grupo, con **Activar el grupo** (con lo que requieren sus mods) y **Desactivar el grupo**.
+- Al elegir uno de tus grupos aparecen **Activar el grupo** (con lo que requieren sus mods) y **Desactivar el grupo**.
 - Clic derecho y elegí **Agregar una nota…** para escribirle una nota a un mod. Su fila muestra un ícono de nota.
-- Las notas y los grupos son solo tuyos. El juego los muestra en la pantalla de Mods del mod Studio Link.
+- Cada perfil tiene sus propios grupos: un grupo es del perfil donde lo creaste. Las notas son sobre un mod y son las mismas en todos los perfiles.
+- Las notas y los grupos son solo tuyos. El juego los muestra (los grupos del perfil activo) en la pantalla de Mods del mod Studio Link.
 
 ## Los mods del perfil
 

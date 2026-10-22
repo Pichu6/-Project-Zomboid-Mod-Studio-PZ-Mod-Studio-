@@ -34,17 +34,20 @@ The number on each row is the mod's place among the mods that are **on**: the lo
 ## Finding mods
 
 - The search box matches the name, the mod id, the Workshop id and your notes.
-- The first filter: **Every mod**, **Switched on**, **Switched off**, **With a problem**, **Maps**, **Libraries**, **Won't load on this build**, **Updated recently**. Each shows its count.
-- Source filter (**Steam Workshop**, **Installed by hand**, **Compatible copies**...) and tag filter (errors or warnings last session, slow to load, a Mod Health problem).
+- The filter buttons: **All**, **On**, **Off**, **Favourites**, **Updated**, **Problems**, **Maps**, **Libraries**, **Can't load**. Each shows its count.
+- Below them: **Sort: load order** or **Sort: name**, the **Groups** menu, one of your groups, the source (**Steam Workshop**, **Your Workshop uploads**, **Installed by hand**, **Compatible copies**...), a tag (errors or warnings last session, slow to load, a Mod Health problem) and **Profile's mods** / **All installed**.
+- The game's Mods screen (Studio Link mod) has the same filters in the same order. Updated, Libraries, the group, the source and the tag need PZ Mod Studio; without it the game says so where they would be.
+- Dragging works sorted by name too: the mod goes to the place of the one you drop it on.
 - **clear filters** shows every mod again.
 
 ## Groups and notes
 
 - The **Groups** menu lays the list out in folding sections: **Groups: none**, **Groups: author**, **Groups: category** or **Groups: mine**. Each heading shows how many are on, with **All on** / **All off**. In **Groups: mine**, a note button edits the group's note.
 - Right-click a mod and choose **Groups…** to tick the groups it is in, create a new one (**Add to it**), rename or delete one. A group left empty goes away. Groups never change the load order.
-- When you have groups, a group filter appears, with **Turn the group on** (with what its mods require) and **Turn the group off**.
+- Picking one of your groups shows **Turn the group on** (with what its mods require) and **Turn the group off**.
 - Right-click and choose **Add a note…** to write a note on a mod. A note icon shows on its row.
-- Notes and groups are yours only. The game shows them on the Studio Link mod's Mods screen.
+- Each profile has its own groups: a group belongs to the profile you made it in. Notes are about a mod and the same in every profile.
+- Notes and groups are yours only. The game shows them (the active profile's groups) on the Studio Link mod's Mods screen.
 
 ## The profile's mods
 

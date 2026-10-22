@@ -11,8 +11,8 @@ import { findInstalledDependencyInMods, normalizeModId } from './modLookup';
 import { ModPresets } from './ModPresets';
 import { ModListHistory } from './ModListHistory';
 import { ModInspector } from './ModInspector';
-import { ModRowBody, SLOW_LOAD_MS } from './ModRow';
-import { labelFor, rowIssueCodes } from './RowHealth';
+import { ModRowBody } from './ModRow';
+import { MOD_FILTERS, MOD_SOURCES, ModFilterId, issuesByModOf, modTagsOf, tagLabel } from './modFacets';
 import { useKeepActions } from '../common/keep';
 import { KeptVersions } from './KeptVersions';
 import { LoadRules } from './LoadRules';
@@ -103,10 +103,6 @@ const PACKAGE_COLOR_PALETTES = [
 ];
 
 /** The questions worth asking of a long mod list. */
-const MOD_FILTERS = ['all', 'enabled', 'disabled', 'problems', 'maps', 'libraries', 'unloadable', 'updated'] as const;
-
-type ModFilterId = (typeof MOD_FILTERS)[number];
-
 /**
  * A row's border colour and background. Every row has the same border widths (1px, 4px on the
  * left), whatever its state, so the switches and names of all rows sit on the same line; states
@@ -248,19 +244,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const modIndexById = useMemo(() => new Map(mods.map((m, idx) => [m.mod_id, idx])), [mods]);
 
   /** The health check's issues by mod, for the row chips; an incompatible pair is on both rows. */
-  const issuesByMod = useMemo(() => {
-    const map = new Map<string, HealthIssue[]>();
-    const add = (id: string, issue: HealthIssue) => {
-      const list = map.get(id) ?? [];
-      list.push(issue);
-      map.set(id, list);
-    };
-    for (const issue of healthIssues ?? []) {
-      if (issue.mod_id) add(issue.mod_id, issue);
-      if (issue.code === 'incompatible') issue.related.forEach((other) => add(other, issue));
-    }
-    return map;
-  }, [healthIssues]);
+  const issuesByMod = useMemo(() => issuesByModOf(healthIssues), [healthIssues]);
 
   const {
     activeConflictsMap,
@@ -479,6 +463,8 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         return true;
       case 'enabled':
         return m.enabled;
+      case 'favourites':
+        return keep.isFavorite({ workshop_id: m.workshop_id ?? null, mod_id: m.workshop_id ? null : m.mod_id, name: m.name, installedModIds: [m.mod_id] });
       case 'disabled':
         return !m.enabled;
       case 'problems':
@@ -520,6 +506,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     missingUninstalledDependenciesMap,
     loadOrderViolationsMap,
     activeConflictsMap,
+    keep,
   ]);
 
   /**
@@ -555,9 +542,11 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const [metaOf, setMetaOf] = useState<{ mod: ModInfo; tab: 'note' | 'groups' } | null>(null);
   useEffect(() => {
     if (!paths.user_zomboid_dir) return;
+    // Groups are each profile's own: another profile, its groups.
     void TauriService.modMeta(paths).then(setMeta);
+    setGroupFilter('all');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paths.user_zomboid_dir]);
+  }, [paths.user_zomboid_dir, activeProfileId]);
   const groupsByMod = useMemo(() => {
     const out = new Map<string, string[]>();
     for (const g of meta.groups) for (const id of g.mods) out.set(id, [...(out.get(id) ?? []), g.name]);
@@ -572,33 +561,27 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     onReorder(next);
     showToast(on ? t('modList.groups.turnedOn', { name }) : t('modList.groups.turnedOff', { name }));
   };
-  const modTags = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const m of mods) {
-      const tags: string[] = [];
-      const stat = errorStats?.get(m.name);
-      if (stat && stat.exceptions > 0) tags.push('errors');
-      else if (stat && stat.warnings > 0) tags.push('warnings');
-      if ((loadTimes?.get(m.mod_id) ?? 0) >= SLOW_LOAD_MS) tags.push('slow');
-      const compat = sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind === 'compat';
-      for (const code of rowIssueCodes(issuesByMod.get(m.mod_id) ?? [])) {
-        if (compat && code === 'shadowed_copy') continue;
-        if (!tags.includes(`health:${code}`)) tags.push(`health:${code}`);
-      }
-      map.set(m.mod_id, tags);
-    }
-    return map;
-  }, [mods, errorStats, loadTimes, catalogById, issuesByMod]);
+  const modTags = useMemo(() => modTagsOf(mods, errorStats, loadTimes, catalogById, issuesByMod), [mods, errorStats, loadTimes, catalogById, issuesByMod]);
   const tagOptions = useMemo(() => {
     const counts = new Map<string, number>();
     for (const m of scopeMods) for (const tag of modTags.get(m.mod_id) ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    const label = (tag: string) => (tag.startsWith('health:') ? labelFor({ code: tag.slice(7) }) : t(`modList.tags.${tag}`, { min: SLOW_LOAD_MS }));
-    return [...counts.entries()].map(([id, count]) => ({ id, count, label: label(id) })).sort((a, b) => a.label.localeCompare(b.label));
+    return [...counts.entries()].map(([id, count]) => ({ id, count, label: tagLabel(id) })).sort((a, b) => a.label.localeCompare(b.label));
   }, [modTags, scopeMods, t]);
 
+  const [sortBy, setSortByState] = useState<'order' | 'name'>(() => {
+    try {
+      return localStorage.getItem('pzms_sort_by') === 'name' ? 'name' : 'order';
+    } catch {
+      return 'order';
+    }
+  });
+  const setSortBy = (v: 'order' | 'name') => {
+    setSortByState(v);
+    try { localStorage.setItem('pzms_sort_by', v); } catch { /* per-viewer convenience */ }
+  };
   const filteredMods = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    return scopeMods.filter((m) => {
+    const shown = scopeMods.filter((m) => {
       if (sourceFilter !== 'all' && sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind !== sourceFilter) return false;
       if (!matchesFilter(m, stateFilter)) return false;
       if (tagFilter !== 'all' && !(modTags.get(m.mod_id) ?? []).includes(tagFilter)) return false;
@@ -611,7 +594,9 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         (meta.notes[m.mod_id] ?? '').toLowerCase().includes(query)
       );
     });
+    return sortBy === 'name' ? [...shown].sort((x, y) => x.name.localeCompare(y.name, undefined, { sensitivity: 'base' })) : shown;
   }, [
+    sortBy,
     groupFilter,
     groupsByMod,
     meta,
@@ -1367,19 +1352,70 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         </div>
 
         <Filter className="w-3.5 h-3.5 text-slate-500 ml-1" aria-hidden="true" />
+        <div role="group" aria-label={t('modList.filterLabel')} title={t('modList.filterTitle')} className="flex flex-wrap items-center rounded-md border border-slate-800 bg-slate-950 overflow-hidden text-xs">
+          {MOD_FILTERS.map((id, i) => (
+            <React.Fragment key={id}>
+              {i > 0 && <span className="w-px self-stretch bg-slate-800" />}
+              <button
+                type="button"
+                onClick={() => setStateFilter(id)}
+                aria-pressed={stateFilter === id}
+                title={t(`modList.filters.${id}.hint`)}
+                className={`px-2 py-1 transition cursor-pointer ${stateFilter === id ? 'bg-emerald-900/60 text-emerald-200' : 'text-slate-300 hover:bg-slate-800'} ${id !== 'all' && (filterCounts[id] ?? 0) === 0 && stateFilter !== id ? 'opacity-50' : ''}`}
+              >
+                {t(`modList.filterButtons.${id}`)}
+                {id !== 'all' && <span className="ml-1 text-[10px] text-slate-500">{filterCounts[id] ?? 0}</span>}
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+        {anyFilter && (
+          <button onClick={clearFilters} className="text-[11px] text-cyan-400 hover:text-cyan-300 underline cursor-pointer" title={t('modList.clearFiltersTitle')}>
+            {t('modList.clearFilters')}
+          </button>
+        )}
+        <div className="basis-full h-0" aria-hidden="true" />
         <select
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value as ModFilterId)}
-          aria-label={t('modList.filterLabel')}
-          title={t('modList.filterTitle')}
-          className={selectClass(stateFilter !== 'all')}
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as 'order' | 'name')}
+          aria-label={t('modList.sortBy.label')}
+          title={t('modList.sortBy.title')}
+          className={selectClass(sortBy !== 'order')}
         >
-          {MOD_FILTERS.map((id) => (
-            <option key={id} value={id} title={t(`modList.filters.${id}.hint`)}>
-              {t(`modList.filters.${id}.label`)} ({filterCounts[id] ?? 0})
-            </option>
+          <option value="order">{t('modList.sortBy.order')}</option>
+          <option value="name">{t('modList.sortBy.name')}</option>
+        </select>
+        <select
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value as 'none' | 'author' | 'category' | 'mine')}
+          aria-label={t('modList.groupBy.label')}
+          title={t('modList.groupBy.title')}
+          className={selectClass(groupBy !== 'none')}
+        >
+          <option value="none">{t('modList.groupBy.none')}</option>
+          <option value="author">{t('modList.groupBy.author')}</option>
+          <option value="category">{t('modList.groupBy.category')}</option>
+          <option value="mine">{t('modList.groupBy.mine')}</option>
+        </select>
+        <select
+          value={groupFilter}
+          onChange={(e) => setGroupFilter(e.target.value)}
+          disabled={meta.groups.length === 0}
+          aria-label={t('modList.groups.filterLabel')}
+          title={t('modList.groups.filterTitle')}
+          className={`${selectClass(groupFilter !== 'all')} disabled:opacity-50`}
+        >
+          <option value="all">{t('modList.groups.all')}</option>
+          {meta.groups.map((g) => (
+            <option key={g.name} value={g.name}>{g.name} ({g.mods.length})</option>
           ))}
         </select>
+        {groupFilter !== 'all' && (
+          <>
+            <button onClick={() => setGroupOn(groupFilter, true)} className="text-[11px] px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-300 hover:bg-emerald-950/50 cursor-pointer">{t('modList.groups.turnOn')}</button>
+            <button onClick={() => setGroupOn(groupFilter, false)} className="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">{t('modList.groups.turnOff')}</button>
+          </>
+        )}
         <select
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
@@ -1387,7 +1423,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
           title={t('modList.sourceTitle')}
           className={selectClass(sourceFilter !== 'all')}
         >
-          {(['all', 'steam', 'nexus', 'manual', 'local', 'studio', 'compat'] as const).map((id) => (
+          {(['all', ...MOD_SOURCES] as const).map((id) => (
             <option key={id} value={id}>{t(`modList.sources.${id}`)}</option>
           ))}
         </select>
@@ -1406,43 +1442,6 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
             </option>
           ))}
         </select>
-        <select
-          value={groupBy}
-          onChange={(e) => setGroupBy(e.target.value as 'none' | 'author' | 'category' | 'mine')}
-          aria-label={t('modList.groupBy.label')}
-          title={t('modList.groupBy.title')}
-          className={selectClass(groupBy !== 'none')}
-        >
-          <option value="none">{t('modList.groupBy.none')}</option>
-          <option value="author">{t('modList.groupBy.author')}</option>
-          <option value="category">{t('modList.groupBy.category')}</option>
-          <option value="mine">{t('modList.groupBy.mine')}</option>
-        </select>
-        {meta.groups.length > 0 && (
-          <select
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-            aria-label={t('modList.groups.filterLabel')}
-            title={t('modList.groups.filterTitle')}
-            className={selectClass(groupFilter !== 'all')}
-          >
-            <option value="all">{t('modList.groups.all')}</option>
-            {meta.groups.map((g) => (
-              <option key={g.name} value={g.name}>{g.name} ({g.mods.length})</option>
-            ))}
-          </select>
-        )}
-        {groupFilter !== 'all' && (
-          <>
-            <button onClick={() => setGroupOn(groupFilter, true)} className="text-[11px] px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-300 hover:bg-emerald-950/50 cursor-pointer">{t('modList.groups.turnOn')}</button>
-            <button onClick={() => setGroupOn(groupFilter, false)} className="text-[11px] px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">{t('modList.groups.turnOff')}</button>
-          </>
-        )}
-        {anyFilter && (
-          <button onClick={clearFilters} className="text-[11px] text-cyan-400 hover:text-cyan-300 underline cursor-pointer" title={t('modList.clearFiltersTitle')}>
-            {t('modList.clearFilters')}
-          </button>
-        )}
         {activeProfile && (
           <button
             type="button"

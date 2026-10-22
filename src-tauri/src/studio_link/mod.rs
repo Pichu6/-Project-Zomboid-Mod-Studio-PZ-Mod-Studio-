@@ -642,6 +642,20 @@ pub fn write_health_file(user_zomboid_dir: &Path, lines: &[(String, String, Stri
 
 // ------------------------------------------------------------------ the game's mod list
 
+/// What the game's Mods screen cannot tell by itself, for its filters: each mod's origin, whether
+/// it is a library, its tags, and their words in the player's language (made by the app).
+pub const MODS_FILE: &str = "PZModStudio_LinkMods.txt";
+
+pub fn write_mods_file(user_zomboid_dir: &Path, text: &str) -> Result<(), String> {
+    let lua_dir = user_zomboid_dir.join("Lua");
+    std::fs::create_dir_all(&lua_dir).map_err(|e| format!("Cannot create {}: {}", lua_dir.display(), e))?;
+    let path = lua_dir.join(MODS_FILE);
+    if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
+        return Ok(());
+    }
+    crate::load_order::ini_parser::atomic_write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))
+}
+
 static WATCHER_STARTED: AtomicBool = AtomicBool::new(false);
 
 /// app -> game: `mods/default.txt` as it is, copied where the game's Lua can read it. The game
