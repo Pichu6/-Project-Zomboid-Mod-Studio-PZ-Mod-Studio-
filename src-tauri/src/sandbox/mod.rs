@@ -952,6 +952,27 @@ fn translate_log_error_rule(line: &str, counter: usize) -> Option<TranslatedErro
             severity: Severity::Warning,
             polyfill_rule_id_suggestion: None,
         })
+    } else if line.contains("NullPointerException")
+        && (line.contains("ConnectToServerState") || line.contains("GameClient.connection") || line.contains("UdpConnection"))
+    {
+        // Joining a server: the connection was gone when the game wanted to use it (it drops
+        // while a long Workshop download runs). The game's, not a mod's: no polyfill or merge
+        // reaches it; joining again does, with the mods already downloaded.
+        Some(TranslatedErrorPayload {
+            called_from: Vec::new(),
+            id: format!("err_{}", counter),
+            code: "connection_lost".to_string(),
+            params: BTreeMap::new(),
+            raw_error: line.to_string(),
+            source_file: None,
+            line_number: None,
+            title: "The connection to the server was lost while joining".to_string(),
+            explanation: "While joining, the connection to the server closed (it often does while the game downloads the server's mods), and the game then failed on it and stayed on a blank screen. It is the game's connection, not a mod.".to_string(),
+            recommended_action: "Close the game and join again: what it downloaded is kept, so this time it goes straight in. A warning just before (\"required mod ... not found\") is a mod the game only sees after it restarts.".to_string(),
+            mod_name: None,
+            severity: Severity::Exception,
+            polyfill_rule_id_suggestion: None,
+        })
     } else if line.contains("NullPointerException") {
         Some(TranslatedErrorPayload {
             called_from: Vec::new(),
@@ -1762,6 +1783,15 @@ mod blame_window_tests {
             blame.observe("LOG  : General      f:0> something else entirely");
         }
         assert_eq!(blame.of("ERROR: General      f:9> Exception thrown"), None);
+    }
+
+    #[test]
+    fn a_connection_lost_while_joining_is_the_games_not_a_merge() {
+        // From a real 42.21 join, right after the Workshop downloads.
+        let threw = "\tjava.lang.NullPointerException: Cannot invoke \"zombie.core.raknet.UdpConnection.forceDisconnect(String)\" because \"zombie.network.GameClient.connection\" is null at ConnectToServerState.CheckMods(ConnectToServerState.java:674). Message: StateAction Exception thrown. Handled gracefully, returning StateAction.Continue";
+        let card = super::translate_log_error(threw, 1).expect("a card");
+        assert_eq!(card.code, "connection_lost");
+        assert_eq!(card.polyfill_rule_id_suggestion, None, "no merge or polyfill reaches the game's connection");
     }
 
     #[test]

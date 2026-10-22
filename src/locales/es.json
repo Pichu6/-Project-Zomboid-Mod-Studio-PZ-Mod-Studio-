@@ -2405,6 +2405,11 @@
       "mod_named_warning": {
         "title": "{{mod}} reportó un problema",
         "action": "El juego nombró a {{mod}} acá y siguió. No hay nada que hacer salvo que algo de ese mod ande mal en el juego; en ese caso, esta es la línea a mirar."
+      },
+      "connection_lost": {
+        "title": "Se perdió la conexión con el servidor al entrar",
+        "explanation": "Mientras entrabas, la conexión con el servidor se cerró (pasa seguido mientras el juego descarga los mods del servidor), y después el juego falló con eso y quedó en una pantalla en blanco. Es la conexión del juego, no un mod.",
+        "action": "Cerrá el juego y volvé a entrar: lo que descargó queda, así que esta vez entra directo. Un aviso justo antes (\"required mod ... not found\") es un mod que el juego recién ve después de reiniciarse."
       }
     },
     "validate": {

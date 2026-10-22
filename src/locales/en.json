@@ -2405,6 +2405,11 @@
       "mod_named_warning": {
         "title": "{{mod}} reported a problem",
         "action": "The game named {{mod}} here and carried on. Nothing to do unless something in that mod misbehaves in game; then this line is where to look."
+      },
+      "connection_lost": {
+        "title": "The connection to the server was lost while joining",
+        "explanation": "While joining, the connection to the server closed (it often does while the game downloads the server's mods), and the game then failed on it and stayed on a blank screen. It is the game's connection, not a mod.",
+        "action": "Close the game and join again: what it downloaded is kept, so this time it goes straight in. A warning just before (\"required mod ... not found\") is a mod the game only sees after it restarts."
       }
     },
     "validate": {
