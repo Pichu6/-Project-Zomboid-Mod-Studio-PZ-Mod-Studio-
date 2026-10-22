@@ -677,6 +677,25 @@
       "title": "Sort the list as the game's Mods screen does",
       "order": "Sort: load order",
       "name": "Sort: name"
+    },
+    "undoTitle": "Undo the last change to the list (Ctrl+Z)",
+    "redoTitle": "Redo (Ctrl+Y)",
+    "picked": {
+      "count": "{{count}} picked",
+      "clear": "Let the picked mods go (Esc)",
+      "switchOn": "Switch on {{count}} mods (with what they need)",
+      "switchOff": "Switch off {{count}} mods",
+      "allOn": "They are all on already",
+      "allOff": "They are all off already",
+      "removeFromProfile": "Take {{count}} mods out of \"{{name}}\"",
+      "removed": "{{count}} mods left \"{{name}}\" (and are off).",
+      "unsubscribe": "Unsubscribe from {{count}} Workshop items",
+      "noneFromWorkshop": "None of these mods came from the Workshop",
+      "unsubscribeConfirm": "Unsubscribe from {{count}} Workshop items?\n\nSteam deletes them from the disk. These mods go:\n{{mods}}\n\nA Workshop item can hold more than one mod: all of its go.",
+      "andMore": "and {{count}} more",
+      "unsubscribed": "Unsubscribed from {{count}} items. Steam deletes them in a moment.",
+      "unsubscribedPartly": "Unsubscribed from {{done}} of {{count}} items. The first that failed: {{reason}}",
+      "unsubscribeFailed": "Could not unsubscribe: {{reason}}"
     }
   },
   "health": {

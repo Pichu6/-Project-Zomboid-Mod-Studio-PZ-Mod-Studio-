@@ -22,6 +22,8 @@ El número de cada fila es el lugar del mod entre los mods **prendidos**: el ord
 - Hacé clic en el cuadrado de la fila, o clic derecho y elegí **Activar** / **Desactivar**.
 - Cuando un mod necesita otros, una ventana muestra lo que se prende con él (y lo que se apaga con él). Elegí **Prender los N**, o **Solo ...** para ese mod solo.
 - **Activar todo** y **Apagar todo** actúan solo sobre las filas que se ven ahora (después del buscador y los filtros), y preguntan antes.
+- **Deshacer** / **Rehacer** (las flechas al lado, o Ctrl+Z / Ctrl+Y) van para atrás y para adelante por los cambios hechos acá: movimientos, arrastres, activar o apagar, ordenar. Cada perfil tiene los suyos, también después de cerrar la app.
+- Ctrl+clic elige varios mods, Shift+clic elige un rango, Esc los suelta. Clic derecho sobre los elegidos: activarlos o apagarlos, sacarlos del perfil, o desuscribirte de sus ítems del Workshop.
 - Un paquete abierto en borrador en el Fusionador no se puede prender hasta empaquetarlo.
 
 ## Cambiar el orden de carga

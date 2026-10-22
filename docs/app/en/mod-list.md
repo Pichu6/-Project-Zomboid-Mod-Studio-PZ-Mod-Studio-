@@ -22,6 +22,8 @@ The number on each row is the mod's place among the mods that are **on**: the lo
 - Click the square on a row, or right-click and choose **Switch on** / **Switch off**.
 - When a mod needs other mods, a window lists what comes on with it (and what goes off with it). Choose **Switch on all N**, or **Only ...** for that one mod alone.
 - **Enable All** and **Disable All** act only on the rows shown now (after search and filters), and ask first.
+- **Undo** / **Redo** (the arrows next to them, or Ctrl+Z / Ctrl+Y) step back and forward through the changes made here: moves, drags, switches, sorting. Each profile keeps its own, also after closing the app.
+- Ctrl+click picks several mods, Shift+click picks a range, Esc lets them go. Right-click on the picked ones: switch them on or off, take them out of the profile, or unsubscribe from their Workshop items.
 - An open draft package from the Mod Merger cannot be switched on until it is packaged.
 
 ## Changing the load order

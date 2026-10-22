@@ -48,6 +48,10 @@ import {
   Tags,
   Wand2,
   X,
+  Undo2,
+  Redo2,
+  UserMinus,
+  Trash2,
 } from 'lucide-react';
 import { tHtml } from '../../i18n/html';
 
@@ -192,11 +196,79 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   /** The mod whose load-order rules are open in the dialog. */
   const [rulesOf, setRulesOf] = useState<ModInfo | null>(null);
 
+  /**
+   * Undo / redo: what the list was (order and switches) before each change made here. Restored
+   * onto the mods as they are now, so a mod installed since is kept, at the end.
+   */
+  type Snap = { id: string; on: boolean }[];
+  const history = useRef<Snap[]>([]);
+  const future = useRef<Snap[]>([]);
+  const [, setHistoryTick] = useState(0);
+  const snapOf = (list: ModInfo[]): Snap => list.map((m) => ({ id: m.mod_id, on: m.enabled }));
+  const sameSnap = (a: Snap, b: Snap) => a.length === b.length && a.every((x, i) => x.id === b[i].id && x.on === b[i].on);
+  const remember = () => {
+    const now = snapOf(mods);
+    const last = history.current[history.current.length - 1];
+    if (!last || !sameSnap(last, now)) {
+      history.current.push(now);
+      if (history.current.length > 50) history.current.shift();
+    }
+    future.current = [];
+    saveHistory();
+    setHistoryTick((n) => n + 1);
+  };
+  const restore = (snap: Snap) => {
+    const byId = new Map(mods.map((m) => [m.mod_id, m]));
+    const out = snap.filter((x) => byId.has(x.id)).map((x) => ({ ...byId.get(x.id)!, enabled: x.on }));
+    const kept = new Set(snap.map((x) => x.id));
+    for (const m of mods) if (!kept.has(m.mod_id)) out.push(m);
+    onReorder(out);
+  };
+  /** One step back (or forward): a step that changed nothing (a toggle cancelled) is skipped. */
+  const step = (from: React.MutableRefObject<Snap[]>, to: React.MutableRefObject<Snap[]>) => {
+    const now = snapOf(mods);
+    let target: Snap | undefined;
+    while ((target = from.current.pop()) && sameSnap(target, now)) {
+      // the same as now: try the one before
+    }
+    if (target) {
+      to.current.push(now);
+      restore(target);
+    }
+    saveHistory();
+    setHistoryTick((n) => n + 1);
+  };
+  const undo = () => step(history, future);
+  const redo = () => step(future, history);
+  // Each profile keeps its own history, across restarts (kept in this browser's storage; the
+  // previous lists on disk are in "Previous lists").
+  const historyKey = `pzms_list_history_${activeProfileId ?? 'none'}`;
+  useEffect(() => {
+    try {
+      const kept = JSON.parse(localStorage.getItem(historyKey) ?? 'null') as { past: Snap[]; future: Snap[] } | null;
+      history.current = kept?.past ?? [];
+      future.current = kept?.future ?? [];
+    } catch {
+      history.current = [];
+      future.current = [];
+    }
+    setHistoryTick((n) => n + 1);
+  }, [historyKey]);
+  const saveHistory = () => {
+    try {
+      localStorage.setItem(historyKey, JSON.stringify({ past: history.current, future: future.current }));
+    } catch {
+      // A convenience: without storage it lasts this session.
+    }
+  };
+
   const triggerReorder = (newOrder: ModInfo[]) => {
+    remember();
     onReorder(newOrder);
   };
 
   const triggerToggleMod = (modId: string) => {
+    remember();
     onToggleMod(modId);
   };
 
@@ -558,7 +630,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     if (!group) return;
     const ids = new Set(group.mods);
     const next = on ? enableWithRequirements(mods, group.mods) : mods.map((m) => (ids.has(m.mod_id) && m.mod_id !== STUDIO_LINK_MOD_ID ? { ...m, enabled: false } : m));
-    onReorder(next);
+    triggerReorder(next);
     showToast(on ? t('modList.groups.turnedOn', { name }) : t('modList.groups.turnedOff', { name }));
   };
   const modTags = useMemo(() => modTagsOf(mods, errorStats, loadTimes, catalogById, issuesByMod), [mods, errorStats, loadTimes, catalogById, issuesByMod]);
@@ -714,7 +786,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     {
       label: mod.enabled ? t('modList.menu.switchOff') : t('modList.menu.switchOn'),
       icon: mod.enabled ? EyeOff : Check,
-      onSelect: () => onToggleMod(mod.mod_id),
+      onSelect: () => triggerToggleMod(mod.mod_id),
     },
     ...(activeProfile
       ? [{
@@ -889,6 +961,127 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
       triggerReorder(updated);
     } else {
       triggerToggleMod(modId);
+    }
+  };
+
+  /**
+   * Several mods at once: Ctrl+click adds or takes one, Shift+click takes the rows from the last
+   * one clicked; right-click on them acts on all. Esc lets them go.
+   */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const anchor = useRef<string | null>(null);
+  const pickRow = (e: React.MouseEvent, id: string) => {
+    if (e.ctrlKey || e.metaKey) {
+      setPicked((prev) => {
+        const next = new Set(prev.size > 0 ? prev : selectedModId ? [selectedModId] : []);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      anchor.current = id;
+    } else if (e.shiftKey && anchor.current) {
+      const ids = filteredMods.map((m) => m.mod_id);
+      const a = ids.indexOf(anchor.current);
+      const b = ids.indexOf(id);
+      if (a >= 0 && b >= 0) setPicked(new Set(ids.slice(Math.min(a, b), Math.max(a, b) + 1)));
+    } else {
+      setPicked(new Set());
+      anchor.current = id;
+    }
+    setSelectedModId(id);
+  };
+  useEffect(() => setPicked(new Set()), [activeProfileId]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable);
+      if (typing) return;
+      if (e.key === 'Escape') setPicked(new Set());
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        undo();
+      } else if (ctrl && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  /** Right-click on several picked mods: what can be done to all of them. */
+  const pickedMenu = (list: ModInfo[]): MenuItem[] => {
+    const ids = new Set(list.map((m) => m.mod_id));
+    const off = list.filter((m) => !m.enabled);
+    const on = list.filter((m) => m.enabled && !(activeProfile && m.mod_id === STUDIO_LINK_MOD_ID));
+    const items = [...new Set(list.map((m) => m.workshop_id).filter((w): w is string => !!w && w !== '9999999999' && w !== '0'))];
+    const out: MenuItem[] = [
+      {
+        label: t('modList.picked.switchOn', { count: off.length }),
+        icon: Check,
+        disabled: off.length === 0,
+        disabledReason: t('modList.picked.allOn'),
+        onSelect: () => triggerReorder(enableWithRequirements(mods, off.map((m) => m.mod_id))),
+      },
+      {
+        label: t('modList.picked.switchOff', { count: on.length }),
+        icon: EyeOff,
+        disabled: on.length === 0,
+        disabledReason: t('modList.picked.allOff'),
+        onSelect: () => triggerReorder(mods.map((m) => (ids.has(m.mod_id) && !(activeProfile && m.mod_id === STUDIO_LINK_MOD_ID) ? { ...m, enabled: false } : m))),
+      },
+    ];
+    if (activeProfile) {
+      out.push({
+        label: t('modList.picked.removeFromProfile', { count: list.length, name: activeProfile.name }),
+        icon: UserMinus,
+        separatorBefore: true,
+        onSelect: () => void takeOutOfProfile(list),
+      });
+    }
+    out.push({
+      label: t('modList.picked.unsubscribe', { count: items.length }),
+      icon: Trash2,
+      danger: true,
+      separatorBefore: !activeProfile,
+      disabled: items.length === 0,
+      disabledReason: t('modList.picked.noneFromWorkshop'),
+      onSelect: () => void unsubscribe(list, items),
+    });
+    out.push({ label: t('modList.picked.clear'), icon: X, separatorBefore: true, onSelect: () => setPicked(new Set()) });
+    return out;
+  };
+  const takeOutOfProfile = async (list: ModInfo[]) => {
+    if (!activeProfile) return;
+    const leaving = new Set(list.map((m) => m.mod_id).filter((id) => id !== STUDIO_LINK_MOD_ID));
+    const current = await freshProfile(paths.user_zomboid_dir || '', activeProfile);
+    try {
+      await TauriService.setProfileMembers(paths.user_zomboid_dir || '', activeProfile.id, profileMembers(current).filter((id) => !leaving.has(id)));
+      showToast(t('modList.picked.removed', { count: leaving.size, name: activeProfile.name }));
+      setPicked(new Set());
+      onProfilesChanged?.();
+      onRefreshMods();
+    } catch {
+      // Already shown by TauriService.
+    }
+  };
+  /** Unsubscribes from the Workshop items of these mods (a Workshop item can hold several). */
+  const unsubscribe = async (list: ModInfo[], items: string[]) => {
+    const names = list.filter((m) => m.workshop_id && items.includes(m.workshop_id)).map((m) => `- ${m.name}`);
+    const shown = names.slice(0, 15).join('\n') + (names.length > 15 ? `\n${t('modList.picked.andMore', { count: names.length - 15 })}` : '');
+    if (!confirm(t('modList.picked.unsubscribeConfirm', { count: items.length, mods: shown }))) return;
+    try {
+      const outcome = await TauriService.workshopSubscribe(paths, items, false);
+      showToast(
+        outcome.failed.length > 0
+          ? t('modList.picked.unsubscribedPartly', { done: outcome.done.length, count: items.length, reason: outcome.failed[0][1] })
+          : t('modList.picked.unsubscribed', { count: outcome.done.length }),
+        6000
+      );
+      setPicked(new Set());
+      onRefreshMods();
+    } catch (err) {
+      showToast(t('modList.picked.unsubscribeFailed', { reason: String(err) }), 6000);
     }
   };
 
@@ -1135,14 +1328,23 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       const box = e.currentTarget.getBoundingClientRect();
                       handleDropOnMod(mod.mod_id, e.clientY > box.top + box.height / 2);
                     }}
-                    onClick={() => setSelectedModId(mod.mod_id)}
+                    onMouseDown={(e) => {
+                      // Shift+click picks rows, not text.
+                      if (e.shiftKey) e.preventDefault();
+                    }}
+                    onClick={(e) => pickRow(e, mod.mod_id)}
                     onContextMenu={(e) => {
+                      if (picked.size > 1 && picked.has(mod.mod_id)) {
+                        showContextMenu(e, pickedMenu(mods.filter((m) => picked.has(m.mod_id))));
+                        return;
+                      }
+                      setPicked(new Set());
                       setSelectedModId(mod.mod_id);
                       showContextMenu(e, modRowMenu(mod, originalIndex));
                     }}
-                    className={`flex gap-2 px-2 py-1.5 items-center rounded-lg text-xs cursor-pointer transition border border-l-4 ${rowFrame({
+                    className={`flex gap-2 px-2 py-1.5 items-center rounded-lg text-xs cursor-pointer transition border border-l-4 ${picked.has(mod.mod_id) ? 'ring-1 ring-emerald-400/70 bg-emerald-950/40' : ''} ${rowFrame({
                       isHighlighted,
-                      isSelected,
+                      isSelected: isSelected || picked.has(mod.mod_id),
                       isConflictPartner: Boolean(isConflictPartner),
                       isOpenedPackage,
                       worstIssue,
@@ -1219,7 +1421,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   const setManyOn = (list: ModInfo[], on: boolean) => {
     const ids = new Set(list.map((m) => m.mod_id));
     const next = on ? enableWithRequirements(mods, [...ids]) : mods.map((m) => (ids.has(m.mod_id) && m.mod_id !== STUDIO_LINK_MOD_ID ? { ...m, enabled: false } : m));
-    onReorder(next);
+    triggerReorder(next);
   };
   const renderGrouped = () => {
     const groups = new Map<string, ModInfo[]>();
@@ -1479,6 +1681,21 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
         <div className="flex-1" />
 
 
+        {picked.size > 1 && (
+          <span className="flex items-center gap-1.5 text-[11px] text-emerald-300">
+            {t('modList.picked.count', { count: picked.size })}
+            <button onClick={() => setPicked(new Set())} title={t('modList.picked.clear')} className="p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 cursor-pointer"><X className="w-3 h-3" /></button>
+          </span>
+        )}
+        <div className="flex items-center rounded-md border border-slate-800 bg-slate-950 overflow-hidden text-xs">
+          <button onClick={undo} disabled={history.current.length === 0} title={t('modList.undoTitle')} aria-label={t('modList.undoTitle')} className="px-2 py-1 text-slate-300 hover:bg-slate-800 disabled:opacity-30 cursor-pointer">
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <span className="w-px self-stretch bg-slate-800" />
+          <button onClick={redo} disabled={future.current.length === 0} title={t('modList.redoTitle')} aria-label={t('modList.redoTitle')} className="px-2 py-1 text-slate-300 hover:bg-slate-800 disabled:opacity-30 cursor-pointer">
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
         <div className="flex items-center rounded-md border border-slate-800 bg-slate-950 overflow-hidden text-xs">
           <button
             onClick={() => handleEnableAllWithoutDiscrimination(true)}

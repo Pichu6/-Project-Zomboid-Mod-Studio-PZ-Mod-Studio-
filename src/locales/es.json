@@ -677,6 +677,25 @@
       "title": "Ordenar la lista como la pantalla de Mods del juego",
       "order": "Orden: de carga",
       "name": "Orden: nombre"
+    },
+    "undoTitle": "Deshacer el último cambio de la lista (Ctrl+Z)",
+    "redoTitle": "Rehacer (Ctrl+Y)",
+    "picked": {
+      "count": "{{count}} seleccionados",
+      "clear": "Soltar la selección (Esc)",
+      "switchOn": "Activar {{count}} mods (con lo que necesitan)",
+      "switchOff": "Desactivar {{count}} mods",
+      "allOn": "Ya están todos activos",
+      "allOff": "Ya están todos desactivados",
+      "removeFromProfile": "Sacar {{count}} mods de \"{{name}}\"",
+      "removed": "{{count}} mods salieron de \"{{name}}\" (y quedaron desactivados).",
+      "unsubscribe": "Desuscribirse de {{count}} ítems del Workshop",
+      "noneFromWorkshop": "Ninguno de estos mods vino del Workshop",
+      "unsubscribeConfirm": "¿Desuscribirse de {{count}} ítems del Workshop?\n\nSteam los borra del disco. Estos mods se van:\n{{mods}}\n\nUn ítem del Workshop puede traer más de un mod: se van todos los suyos.",
+      "andMore": "y {{count}} más",
+      "unsubscribed": "Desuscripto de {{count}} ítems. Steam los borra en un momento.",
+      "unsubscribedPartly": "Desuscripto de {{done}} de {{count}} ítems. El primero que falló: {{reason}}",
+      "unsubscribeFailed": "No se pudo desuscribir: {{reason}}"
     }
   },
   "health": {
