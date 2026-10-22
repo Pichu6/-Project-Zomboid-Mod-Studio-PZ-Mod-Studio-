@@ -133,6 +133,8 @@
     "uiPrefs": "UI Preferences",
     "chooseWarnings": "Choose which warnings the Studio shows you.",
     "noMergeWarning": "Warning at launch about unmerged mod conflicts",
+    "definitionWarning": "Notice at launch about mods that define the same things",
+    "definitionWarningBlurb": "Tell me before launching when two active mods define the same item, recipe or text differently and no package decides which stays. Nothing breaks: the one loading last wins.",
     "noMergeWarningBlurb": "Warn me before launching when my active mods share files that no active merge package merges (or merges from older versions of the mods).",
     "restoreWarning": "Restore Warning",
     "silenceWarning": "Silence Warning",
@@ -1747,6 +1749,13 @@
       "accept": "Accept and Continue"
     },
     "launch": {
+      "definitionsTitle": "Mods that define the same things",
+      "definitionsLine_one": "Two of your active mods define the same thing differently.",
+      "definitionsLine_other": "In {{count}} cases, your active mods define the same things differently.",
+      "definitionsBody": "Nothing breaks: the game uses the version of the mod that loads last. If you'd rather have the other one, or both combined, decide in Mod Health or the Merger.",
+      "wins": "{{winner}} wins over {{losers}}",
+      "dontShowDefinitions": "Don't warn me about repeated definitions at launch",
+      "goToHealth": "See in Mod Health",
       "openTitle": "Open Package (Deactivated)",
       "unmergedTitle": "Unmerged mod conflicts",
       "unmergedLine_one": "{{count}} file your active mods share is not merged.",

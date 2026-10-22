@@ -90,6 +90,9 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const [noMergeWarningSilenced, setNoMergeWarningSilenced] = useState<boolean>(
     localStorage.getItem('pz_skip_no_merge_warning') === 'true'
   );
+  const [definitionWarningSilenced, setDefinitionWarningSilenced] = useState<boolean>(
+    localStorage.getItem('pz_skip_definition_warning') === 'true'
+  );
   const { t, i18n } = useTranslation();
   /** Whether the launch button starts on the mode used last time (on) or always on Debug (off). */
   const [rememberLaunchMode, setRememberLaunchMode] = useState<boolean>(
@@ -235,6 +238,16 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   const handleSilenceNoMergeWarning = () => {
     localStorage.setItem('pz_skip_no_merge_warning', 'true');
     setNoMergeWarningSilenced(true);
+  };
+
+  const handleRestoreDefinitionWarning = () => {
+    localStorage.removeItem('pz_skip_definition_warning');
+    setDefinitionWarningSilenced(false);
+  };
+
+  const handleSilenceDefinitionWarning = () => {
+    localStorage.setItem('pz_skip_definition_warning', 'true');
+    setDefinitionWarningSilenced(true);
   };
 
   const handlePickFolder = async (field: keyof StudioPathsUI, currentVal: string) => {
@@ -598,6 +611,37 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                     ) : (
                       <button
                         onClick={handleSilenceNoMergeWarning}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
+                      >
+                        {t('settings.silenceWarning')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 1b. Notice before launching with definitions two mods disagree on */}
+                <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-1 max-w-xl">
+                    <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-sky-400" />
+                      <span>{t('settings.definitionWarning')}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      {t('settings.definitionWarningBlurb')}
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {definitionWarningSilenced ? (
+                      <button
+                        onClick={handleRestoreDefinitionWarning}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow"
+                      >
+                        {t('settings.restoreWarning')}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSilenceDefinitionWarning}
                         className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition cursor-pointer"
                       >
                         {t('settings.silenceWarning')}

@@ -32,7 +32,7 @@ const MergerModule = lazy(() => import('./components/merger/MergerModule').then(
 /** The list set aside by Developer > launch with only this mod, until it is put back. */
 const DEV_LAUNCH_KEY = 'pzms_dev_launch';
 
-import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import i18next from 'i18next';
 import { tHtml } from './i18n/html';
 import { issueText } from './i18n/backendText';
@@ -540,12 +540,16 @@ export const App: React.FC = () => {
   };
 
   const [pendingLaunchMode, setPendingLaunchMode] = useState<GameLaunchMode | null>(null);
-  const [skipNoMergeWarning, setSkipNoMergeWarning] = useState<boolean>(() => {
-    return localStorage.getItem('pz_skip_no_merge_warning') === 'true';
-  });
+  // Read again on every launch: Settings can switch them while the app is open.
+  const [skipNoMergeWarning, setSkipNoMergeWarning] = useState<boolean>(() => localStorage.getItem('pz_skip_no_merge_warning') === 'true');
+  const [skipDefinitionWarning, setSkipDefinitionWarning] = useState<boolean>(() => localStorage.getItem('pz_skip_definition_warning') === 'true');
 
   /** Files the active mods share that the active package does not merge, or merges from older copies. */
   const unmergedFiles = (health.report?.issues ?? []).filter((i) => i.code === 'file_conflict' || i.code === 'file_conflict_stale');
+  /** Items, recipes or texts two active mods define differently, with no package settling which wins
+   * (or settled before a mod changed). Not broken, the last mod decides: so a softer notice. */
+  const unsettledDefinitions = (health.report?.issues ?? []).filter((i) =>
+    ['script_definition_conflict', 'script_definition_stale', 'translation_conflict', 'translation_stale'].includes(i.code));
 
   const executeLaunch = async (mode: GameLaunchMode = 'DEBUG_FULLSCREEN', onlyIds?: string[]) => {
     try {
@@ -603,7 +607,12 @@ export const App: React.FC = () => {
     }
     // Without a package nothing is wrong by itself: the warning is for files the active mods share
     // that no package merges (or merges from older versions of the mods), as Mod Health finds them.
-    if (!skipNoMergeWarning && unmergedFiles.length > 0) {
+    // Then, more softly, things two mods define differently: one of them wins without a word.
+    const skipFiles = localStorage.getItem('pz_skip_no_merge_warning') === 'true';
+    const skipDefinitions = localStorage.getItem('pz_skip_definition_warning') === 'true';
+    setSkipNoMergeWarning(skipFiles);
+    setSkipDefinitionWarning(skipDefinitions);
+    if ((!skipFiles && unmergedFiles.length > 0) || (!skipDefinitions && unsettledDefinitions.length > 0)) {
       setPendingLaunchMode(mode);
       return;
     }
@@ -1146,7 +1155,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Launch Warning Modal — Open Package or No Merge Package */}
+      {/* Launch Warning Modal — an open package, unmerged shared files, or definitions two mods disagree on */}
       {pendingLaunchMode && (() => {
         const openPackages = mods.filter(
           (m) => m.mod_id.startsWith('Z_PZModStudio_') && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier') && m.is_packaged === false
@@ -1154,68 +1163,105 @@ export const App: React.FC = () => {
         const isOpenPackageWarning = openPackages.length > 0 && !mods.some(
           (m) => m.enabled && m.mod_id.startsWith('Z_PZModStudio_') && m.is_packaged === true && m.mod_id !== 'Z_PZModStudio_Bridge' && !m.mod_id.includes('Carrier')
         );
-        const SHOWN_FILES = 5;
         const openPackageNames = openPackages.map((p) => p.name || p.mod_id).join(', ');
+        const SHOWN = 5;
+        // Each part shows while it is not switched off; the box takes the tone of the worst one.
+        const files = !isOpenPackageWarning && !skipNoMergeWarning ? unmergedFiles : [];
+        const definitions = !isOpenPackageWarning && !skipDefinitionWarning ? unsettledDefinitions : [];
+        const soft = !isOpenPackageWarning && files.length === 0;
+        const definitionName = (i: HealthIssue) => i.params?.what || i.params?.named || i.mod_id || '';
+        const toggle = (key: string, set: (v: boolean) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+          set(e.target.checked);
+          localStorage.setItem(key, e.target.checked ? 'true' : 'false');
+        };
 
         return (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-amber-500/50 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in text-slate-200">
+          <div className={`bg-slate-900 border rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-fade-in text-slate-200 ${soft ? 'border-sky-500/50' : 'border-amber-500/50'}`}>
             <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${soft ? 'bg-sky-500/10 border-sky-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
+                {soft ? <Info className="w-5 h-5 text-sky-400" /> : <AlertTriangle className="w-5 h-5 text-amber-400" />}
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-slate-100">
-                  {isOpenPackageWarning ? i18next.t('app.launch.openTitle') : i18next.t('app.launch.unmergedTitle')}
+                  {isOpenPackageWarning ? i18next.t('app.launch.openTitle') : soft ? i18next.t('app.launch.definitionsTitle') : i18next.t('app.launch.unmergedTitle')}
                 </h3>
-                <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: isOpenPackageWarning ? tHtml('app.launch.openLine', { names: openPackageNames }) : tHtml('app.launch.unmergedLine', { count: unmergedFiles.length }) }} />
+                {isOpenPackageWarning ? (
+                  <p className="text-xs text-amber-300/90 font-medium" dangerouslySetInnerHTML={{ __html: tHtml('app.launch.openLine', { names: openPackageNames }) }} />
+                ) : soft ? (
+                  <p className="text-xs text-sky-300/90 font-medium">{i18next.t('app.launch.definitionsLine', { count: definitions.length })}</p>
+                ) : (
+                  <p className="text-xs text-amber-300/90 font-medium">{i18next.t('app.launch.unmergedLine', { count: files.length })}</p>
+                )}
               </div>
             </div>
 
-            <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
-              <p>{isOpenPackageWarning ? i18next.t('app.launch.openBody') : i18next.t('app.launch.unmergedBody')}</p>
-              {!isOpenPackageWarning && (
+            {isOpenPackageWarning && (
+              <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">{i18next.t('app.launch.openBody')}</p>
+            )}
+
+            {files.length > 0 && (
+              <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
+                <p>{i18next.t('app.launch.unmergedBody')}</p>
                 <ul className="space-y-1">
-                  {unmergedFiles.slice(0, SHOWN_FILES).map((i) => (
+                  {files.slice(0, SHOWN).map((i) => (
                     <li key={`${i.code}|${i.params?.path ?? i.message}`} className="text-[11px]">
                       <span className="font-mono text-amber-200 break-all">{i.params?.path}</span>
                       <span className="text-slate-500"> · {i.params?.mods}{i.code === 'file_conflict_stale' ? ` · ${i18next.t('app.launch.stale')}` : ''}</span>
                     </li>
                   ))}
-                  {unmergedFiles.length > SHOWN_FILES && <li className="text-[11px] text-slate-500">{i18next.t('app.launch.moreFiles', { count: unmergedFiles.length - SHOWN_FILES })}</li>}
+                  {files.length > SHOWN && <li className="text-[11px] text-slate-500">{i18next.t('app.launch.moreFiles', { count: files.length - SHOWN })}</li>}
                 </ul>
-              )}
-            </div>
-
-            {!isOpenPackageWarning && (
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="skipNoMergeWarningCheckbox"
-                  checked={skipNoMergeWarning}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setSkipNoMergeWarning(checked);
-                    localStorage.setItem('pz_skip_no_merge_warning', checked ? 'true' : 'false');
-                  }}
-                  className="rounded border-slate-700 text-amber-500 focus:ring-amber-500/40 bg-slate-950 cursor-pointer"
-                />
-                <label htmlFor="skipNoMergeWarningCheckbox" className="text-[11px] text-slate-400 select-none cursor-pointer">
+                <label className="flex items-center gap-2 pt-1 text-[11px] text-slate-400 select-none cursor-pointer">
+                  <input type="checkbox" checked={skipNoMergeWarning} onChange={toggle('pz_skip_no_merge_warning', setSkipNoMergeWarning)} className="rounded border-slate-700 accent-amber-500 bg-slate-950 cursor-pointer" />
                   {i18next.t('app.launch.dontShow')}
                 </label>
               </div>
             )}
 
+            {definitions.length > 0 && (
+              <div className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
+                {!soft && <p className="font-semibold text-sky-300">{i18next.t('app.launch.definitionsLine', { count: definitions.length })}</p>}
+                <p>{i18next.t('app.launch.definitionsBody')}</p>
+                <ul className="space-y-1">
+                  {definitions.slice(0, SHOWN).map((i) => (
+                    <li key={`${i.code}|${i.message}`} className="text-[11px]">
+                      <span className="text-sky-200">{definitionName(i)}</span>
+                      <span className="text-slate-500"> · {i18next.t('app.launch.wins', { winner: i.params?.winner ?? '', losers: i.params?.losers ?? '' })}{i.code.endsWith('_stale') ? ` · ${i18next.t('app.launch.stale')}` : ''}</span>
+                    </li>
+                  ))}
+                  {definitions.length > SHOWN && <li className="text-[11px] text-slate-500">{i18next.t('app.launch.moreFiles', { count: definitions.length - SHOWN })}</li>}
+                </ul>
+                <label className="flex items-center gap-2 pt-1 text-[11px] text-slate-400 select-none cursor-pointer">
+                  <input type="checkbox" checked={skipDefinitionWarning} onChange={toggle('pz_skip_definition_warning', setSkipDefinitionWarning)} className="rounded border-slate-700 accent-sky-500 bg-slate-950 cursor-pointer" />
+                  {i18next.t('app.launch.dontShowDefinitions')}
+                </label>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                onClick={() => {
-                  setPendingLaunchMode(null);
-                  setActiveTab('MERGER');
-                }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shadow"
-              >
-                {i18next.t('app.launch.goToMerger')}
-              </button>
+              {soft ? (
+                <button
+                  onClick={() => {
+                    setPendingLaunchMode(null);
+                    setHealthFocus(definitions[0] ?? null);
+                    setActiveTab('HEALTH');
+                  }}
+                  className="px-4 py-2 bg-sky-700 hover:bg-sky-600 text-white text-xs font-bold rounded-lg transition cursor-pointer shadow"
+                >
+                  {i18next.t('app.launch.goToHealth')}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setPendingLaunchMode(null);
+                    setActiveTab('MERGER');
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shadow"
+                >
+                  {i18next.t('app.launch.goToMerger')}
+                </button>
+              )}
               <button
                 onClick={() => {
                   const mode = pendingLaunchMode;

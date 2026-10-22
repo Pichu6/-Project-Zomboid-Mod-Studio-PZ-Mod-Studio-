@@ -133,6 +133,8 @@
     "uiPrefs": "Preferencias",
     "chooseWarnings": "Elegí qué avisos te muestra el Studio.",
     "noMergeWarning": "Aviso al iniciar con mods en conflicto sin fusionar",
+    "definitionWarning": "Aviso al iniciar con mods que definen lo mismo",
+    "definitionWarningBlurb": "Avisarme antes de iniciar cuando dos mods activos definen distinto el mismo objeto, receta o texto y ningún paquete decide cuál queda. No rompe nada: gana el que carga último.",
     "noMergeWarningBlurb": "Avisarme antes de iniciar cuando mis mods activos comparten archivos que ningún paquete de fusión activo resuelve (o los resuelve desde versiones viejas de los mods).",
     "restoreWarning": "Volver a mostrar",
     "silenceWarning": "Silenciar",
@@ -1747,6 +1749,13 @@
       "accept": "Aceptar y continuar"
     },
     "launch": {
+      "definitionsTitle": "Mods que definen lo mismo",
+      "definitionsLine_one": "Dos de tus mods activos definen distinto lo mismo.",
+      "definitionsLine_other": "En {{count}} casos, tus mods activos definen distinto lo mismo.",
+      "definitionsBody": "No rompe nada: el juego usa la versión del mod que carga último. Si preferís la del otro, o combinar las dos, decidilo en Salud de mods o en el Merger.",
+      "wins": "gana {{winner}} sobre {{losers}}",
+      "dontShowDefinitions": "No avisarme de definiciones repetidas al iniciar",
+      "goToHealth": "Ver en Salud de mods",
       "openTitle": "Paquete abierto (desactivado)",
       "unmergedTitle": "Mods en conflicto sin fusionar",
       "unmergedLine_one": "{{count}} archivo que comparten tus mods activos no está fusionado.",
