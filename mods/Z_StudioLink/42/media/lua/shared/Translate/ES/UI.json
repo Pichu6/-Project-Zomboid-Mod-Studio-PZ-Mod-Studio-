@@ -111,7 +111,6 @@
     "UI_StudioLink_modsUp": "Subir",
     "UI_StudioLink_modsDown": "Bajar",
     "UI_StudioLink_modsSearchTip": "Nombre, id del mod, id del Workshop o autor",
-    "UI_StudioLink_modsDragNeedsOrder": "Para arrastrar, ordená por orden de carga (y sin grupos).",
     "UI_StudioLink_modsDragOnlyOn": "Solo los mods activos tienen lugar en el orden de carga.",
     "UI_StudioLink_modsDragLimited": "{1} quedó donde puede ir: nunca arriba de lo que necesita ni abajo de lo que lo necesita.",
     "UI_StudioLink_modsSelected": "{1} mods elegidos",

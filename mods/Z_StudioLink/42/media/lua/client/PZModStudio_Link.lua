@@ -168,7 +168,6 @@ local TEXT = {
     modsUp = "Move up",
     modsDown = "Move down",
     modsSearchTip = "Name, mod id, Workshop id or author",
-    modsDragNeedsOrder = "To drag, sort by load order (and no groups).",
     modsDragOnlyOn = "Only mods that are on have a place in the load order.",
     modsDragLimited = "{1} stopped where it can go: never above what it requires, never below what requires it.",
     modsSelected = "{1} mods selected",

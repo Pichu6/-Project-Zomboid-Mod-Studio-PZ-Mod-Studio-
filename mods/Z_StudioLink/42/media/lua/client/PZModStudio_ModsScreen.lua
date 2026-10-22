@@ -31,6 +31,10 @@ require "ISUI/ISTickBox"
 require "ISUI/ISComboBox"
 require "RadioCom/ISUIRadio/ISSliderPanel"
 
+-- The base classes, held here: the game reloads its Lua going into a save, and a list left over
+-- from the menu still gets every mouse-up; looked up as globals then, they were already gone.
+local ListBox, Panel, PanelJoypad = ISScrollingListBox, ISPanel, ISPanelJoypad
+
 local Link = PZModStudioLink
 local text = Link.text
 local plainId = Link.plainId
@@ -228,7 +232,7 @@ end
 local ModList = ISScrollingListBox:derive("StudioLinkModList")
 
 function ModList:new(x, y, w, h, screen)
-    local o = ISScrollingListBox.new(self, x, y, w, h)
+    local o = ListBox.new(self, x, y, w, h)
     o.screen = screen
     o.font = screen.listFont
     o.fontHgt = fontH(o.font)
@@ -389,7 +393,7 @@ function ModList:onMouseDown(x, y)
 end
 
 function ModList:onMouseMove(dx, dy)
-    ISScrollingListBox.onMouseMove(self, dx, dy)
+    ListBox.onMouseMove(self, dx, dy)
     if self.dragFrom then
         local my = self:getMouseY()
         if not self.dragging and math.abs(my - self.dragStartY) > 6 then self.dragging = true end
@@ -398,7 +402,7 @@ function ModList:onMouseMove(dx, dy)
 end
 
 function ModList:onMouseUp(x, y)
-    ISScrollingListBox.onMouseUp(self, x, y)
+    ListBox.onMouseUp(self, x, y)
     if self.dragging and self.dropRow and self.items[self.dragFrom] and self.items[self.dropRow] then
         self.screen:dropAt(self.items[self.dragFrom].item, self.items[self.dropRow].item)
     end
@@ -406,7 +410,7 @@ function ModList:onMouseUp(x, y)
 end
 
 function ModList:onMouseUpOutside(x, y)
-    ISScrollingListBox.onMouseUpOutside(self, x, y)
+    ListBox.onMouseUpOutside(self, x, y)
     self.dragFrom, self.dragging, self.dropRow = nil, false, nil
 end
 
@@ -419,7 +423,7 @@ end
 local Divider = ISPanel:derive("StudioLinkModsDivider")
 
 function Divider:new(x, y, h, screen)
-    local o = ISPanel.new(self, x, y, 14, h)
+    local o = Panel.new(self, x, y, 14, h)
     o.screen = screen
     o.background = false
     return o
@@ -441,7 +445,7 @@ end
 -- ------------------------------------------------------------------ the screen
 
 function Screen:new(x, y, w, h)
-    local o = ISPanelJoypad.new(self, x, y, w, h)
+    local o = PanelJoypad.new(self, x, y, w, h)
     o.backgroundColor = { r = C.bg[1], g = C.bg[2], b = C.bg[3], a = 0.97 }
     o.borderColor = { r = C.border[1], g = C.border[2], b = C.border[3], a = 1 }
     o.filter = "all"
@@ -969,7 +973,7 @@ local OptionsWindow = ISPanelJoypad:derive("StudioLinkModOptions")
 function OptionsWindow:new(screen, mod, list)
     local w = math.min(760, screen.width - 80)
     local h = math.min(screen.height - 120, 640)
-    local o = ISPanelJoypad.new(self, (screen.width - w) / 2, (screen.height - h) / 2, w, h)
+    local o = PanelJoypad.new(self, (screen.width - w) / 2, (screen.height - h) / 2, w, h)
     o.screen, o.mod, o.list = screen, mod, list
     o.backgroundColor = { r = C.panel[1], g = C.panel[2], b = C.panel[3], a = 0.99 }
     o.borderColor = { r = C.accent[1], g = C.accent[2], b = C.accent[3], a = 0.8 }
@@ -992,7 +996,7 @@ function OptionsWindow:createChildren()
     end
     -- What does not fit is cut at the window's edge and scrolled into view.
     body.prerender = function(panel)
-        ISPanelJoypad.prerender(panel)
+        PanelJoypad.prerender(panel)
         panel:setStencilRect(0, 0, panel.width, panel.height)
     end
     local controls = self.controls
@@ -1000,7 +1004,7 @@ function OptionsWindow:createChildren()
         for _, c in ipairs(controls) do
             if c.kind == "slider" and c.valueLabel then c.valueLabel:setName(tostring(c.control:getCurrentValue())) end
         end
-        ISPanelJoypad.render(panel)
+        PanelJoypad.render(panel)
         panel:clearStencilRect()
     end
     self:addChild(body)
@@ -1135,7 +1139,7 @@ function OptionsWindow:createChildren()
 end
 
 function OptionsWindow:prerender()
-    ISPanelJoypad.prerender(self)
+    PanelJoypad.prerender(self)
     self:drawText(text("modsOptionsTitle", self.mod.name), 16, 12, C.text[1], C.text[2], C.text[3], 1, UIFont.Medium)
 end
 
@@ -1236,11 +1240,12 @@ function Screen:move(mod, step)
     self:refreshList()
 end
 
---- A mod dropped on another row of the load order: it goes there, but never above what it
---- requires nor below a mod that requires it (it stops at the nearest place it can go).
+--- A mod dropped on another row: it goes to that mod's place in the load order, but never above
+--- what it requires nor below a mod that requires it (it stops at the nearest place it can go).
+--- Sorted by name or in groups too: the place is the target's in the load order, which the list
+--- then shows.
 function Screen:dropAt(mod, target)
     if not mod or not target or target.header or mod.id == target.id then return end
-    if self.sort ~= "order" or self.group ~= "none" then return self:say(text("modsDragNeedsOrder")) end
     if not self.on[mod.id] or not self.on[target.id] then return self:say(text("modsDragOnlyOn")) end
     self:checkpoint()
     local from
@@ -1270,8 +1275,16 @@ function Screen:dropAt(mod, target)
     if to < lo then to = lo end
     if to > hi then to = hi end
     table.insert(self.order, to, entry)
-    if to ~= wanted then self:say(text("modsDragLimited", mod.name)) else self.note = nil end
+    if to ~= wanted then
+        self:say(text("modsDragLimited", mod.name))
+    elseif self.sort ~= "order" then
+        self:say(text("modsSortedByOrder"))
+    else
+        self.note = nil
+    end
+    self.sort = "order"
     self:recount()
+    self:select(mod)
     self:refreshList()
 end
 
@@ -1772,7 +1785,7 @@ function Screen:drawBars()
 end
 
 function Screen:prerender()
-    ISPanelJoypad.prerender(self)
+    PanelJoypad.prerender(self)
     -- While the divider is held only its line follows the pointer; let go, the list and the
     -- details are laid out again for the new split.
     if self.resizing then
