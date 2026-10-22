@@ -16,6 +16,8 @@ interface InstanceModuleProps {
   onProfileDeleted?: () => void;
   /** Takes the user to Browse Mods, for a profile that starts with nothing in it. */
   onGoToBrowse?: () => void;
+  /** A profile was renamed or edited: the header and the other screens show it as it is now. */
+  onProfilesChanged?: () => void;
 }
 
 /** What a new profile starts with. */
@@ -28,6 +30,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
   onProfileActivated,
   onProfileDeleted,
   onGoToBrowse,
+  onProfilesChanged,
 }) => {
   const { t } = useTranslation();
   const [instances, setInstances] = useState<AppInstance[]>([]);
@@ -150,6 +153,7 @@ export const InstanceModule: React.FC<InstanceModuleProps> = ({
       setStatusMessage(t('profiles.updated', { name: updated.name }));
       setEditingInstance(null);
       await loadInstances();
+      onProfilesChanged?.();
     } catch (err: any) {
       alert(t('profiles.updateError', { error: explainError(err) }));
     }

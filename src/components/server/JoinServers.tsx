@@ -218,8 +218,22 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
 
   /** The profile played on the server when joining from here: the server's mods go into it. */
   const activeProfile = profiles.find((p) => p.is_active);
-  /** The profile made from the picked server, while it still exists. */
-  const madeProfile = (s: SavedServer | undefined) => (s?.made_profile_id ? profiles.find((p) => p.id === s.made_profile_id) : undefined);
+  /**
+   * The profile made from the picked server, while it still exists. One made before servers
+   * kept it is the profile the server was joined with, when that one was made from a server.
+   */
+  const madeProfile = (s: SavedServer | undefined) => {
+    if (!s) return undefined;
+    if (s.made_profile_id) return profiles.find((p) => p.id === s.made_profile_id);
+    const joinedWith = profiles.find((p) => p.id === s.profile_id);
+    return joinedWith && joinedWith.description === t('join.profileDescription') ? joinedWith : undefined;
+  };
+  useEffect(() => {
+    const kept = picked ? savedOf(picked.address) : undefined;
+    const found = madeProfile(kept);
+    if (kept && found && !kept.made_profile_id) void TauriService.setServerMadeProfile(paths, kept.address, kept.name, found.id).then((list) => list.length > 0 && setSaved(list));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked?.address, saved, profiles]);
 
   const byId = useMemo(() => new Map(mods.map((m) => [bare(m.mod_id), m])), [mods]);
   const pickedSaved = picked ? savedOf(picked.address) : undefined;

@@ -975,6 +975,7 @@ export const App: React.FC = () => {
                   setActiveTab('MOD_LIST');
                 }}
                 onGoToBrowse={() => setActiveTab('BROWSE')}
+                onProfilesChanged={() => void refreshActiveProfile()}
               />
             </div>
           )}
