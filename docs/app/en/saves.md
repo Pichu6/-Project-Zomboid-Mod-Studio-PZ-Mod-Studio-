@@ -2,6 +2,14 @@
 
 Your Project Zomboid saves and their backups. The Studio backs a save up on its own at the moments a save is most at risk; here you see those backups, make one yourself, keep one for good, or put one back.
 
+## Each profile's saves
+
+Every profile has its own saves. A save belongs to the profile that was active when you last played it with the Studio open; a save played without it belongs to a profile only if that profile's mods are exactly the save's. A save is never moved to another profile.
+
+- This screen shows the active profile's saves. **Show all** adds the other profiles' saves and those with no profile, each with a **Profile: <name>** or **No profile** chip.
+- A server's save shows as its address (`ip:port`) with an **Online** chip, and belongs to the profile you played it with.
+- In the game, with the Studio Link mod: the **Load** screen lists the active profile's saves, with **Show all** beside the search box, and **Continue** loads the newest save of the active profile (it is hidden when the profile has none). Without the Studio, the game lists every save as usual.
+
 ## What you see
 
 - At the top, **Open backups folder** opens the folder where backups go (`Zomboid/PZModStudio_SaveBackups`), and the round arrow refreshes the screen.

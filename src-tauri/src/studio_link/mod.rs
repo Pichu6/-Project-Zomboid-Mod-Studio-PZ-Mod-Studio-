@@ -150,10 +150,11 @@ pub fn link_needs_update(user_zomboid_dir: &Path) -> bool {
     info.is_file() && link_files(user_zomboid_dir).iter().any(|(path, content)| std::fs::read_to_string(path).map_or(true, |now| now != *content))
 }
 
-/// The text of `PZModStudio_Link.txt` for a profile: its name, its mods in load order, and the
-/// mods other profiles hold (so the game can tell a mod that is in no profile at all, a new one).
-pub fn link_file_text(profile_name: &str, members: &[String], others: &[String]) -> String {
-    let mut out = format!("profile={}\n", profile_name.replace(['\r', '\n'], " "));
+/// The text of `PZModStudio_Link.txt` for a profile: its name and id (the saves are told apart
+/// by it), its mods in load order, and the mods other profiles hold (so the game can tell a mod
+/// that is in no profile at all, a new one).
+pub fn link_file_text(profile_id: &str, profile_name: &str, members: &[String], others: &[String]) -> String {
+    let mut out = format!("profile={}\nprofileid={}\n", profile_name.replace(['\r', '\n'], " "), profile_id.replace(['\r', '\n'], ""));
     for id in members {
         out.push_str(&format!("member={}\n", id));
     }
@@ -166,11 +167,11 @@ pub fn link_file_text(profile_name: &str, members: &[String], others: &[String])
 }
 
 /// Writes what the game's Mods screen should show for the active profile.
-pub fn write_link_file(user_zomboid_dir: &Path, profile_name: &str, members: &[String], others: &[String]) -> Result<(), String> {
+pub fn write_link_file(user_zomboid_dir: &Path, profile_id: &str, profile_name: &str, members: &[String], others: &[String]) -> Result<(), String> {
     let lua_dir = user_zomboid_dir.join("Lua");
     std::fs::create_dir_all(&lua_dir).map_err(|e| format!("Cannot create {}: {}", lua_dir.display(), e))?;
     let path = lua_dir.join(LINK_FILE);
-    let text = link_file_text(profile_name, members, others);
+    let text = link_file_text(profile_id, profile_name, members, others);
     if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
         return Ok(());
     }
@@ -504,8 +505,38 @@ pub fn session_diffs(user_zomboid_dir: &Path) -> std::collections::BTreeMap<Stri
     out
 }
 
+/// The profile each save belongs to, by save id: the one that was active when it was last played
+/// with the Studio open, or, for a save played without it, a profile whose mods are exactly the
+/// save's. A save with neither belongs to none (it is not guessed).
+pub fn save_profiles(user_zomboid_dir: &Path) -> std::collections::BTreeMap<String, String> {
+    let refs = save_references(user_zomboid_dir);
+    let profiles = crate::instance_manager::list_instances(user_zomboid_dir.to_string_lossy().to_string()).unwrap_or_default();
+    let plain = |id: &String| crate::load_order::mod_info::sanitize_mod_id(id).rsplit('/').next().unwrap_or_default().to_string();
+    let mut out = std::collections::BTreeMap::new();
+    for id in crate::save_backup::list_saves(user_zomboid_dir) {
+        if let Some(profile) = refs.get(&id).and_then(|r| r.profile.clone()) {
+            out.insert(id, profile);
+            continue;
+        }
+        let dir = crate::save_backup::saves_dir(user_zomboid_dir).join(&id);
+        let mods: std::collections::BTreeSet<String> = crate::save_backup::save_mods(&dir).iter().map(plain).collect();
+        if mods.is_empty() {
+            continue;
+        }
+        let same = profiles.iter().find(|p| {
+            let theirs: std::collections::BTreeSet<String> = p.active_mod_ids.iter().map(plain).collect();
+            theirs == mods && theirs.len() == p.active_mod_ids.len()
+        });
+        if let Some(p) = same {
+            out.insert(id, p.id.clone());
+        }
+    }
+    out
+}
+
 pub fn saves_file_text(user_zomboid_dir: &Path) -> String {
     let paths = crate::vfs::studio_paths();
+    let owners = save_profiles(user_zomboid_dir);
     let by_mod = if paths.workshop_dir.is_empty() { Default::default() } else { workshop_ids_by_mod(Path::new(&paths.workshop_dir)) };
     let state = (!paths.workshop_dir.is_empty()).then(|| crate::workshop::local_state(&paths.workshop_dir)).flatten();
     let refs = save_references(user_zomboid_dir);
@@ -515,14 +546,16 @@ pub fn saves_file_text(user_zomboid_dir: &Path) -> String {
         let session = refs.get(&id);
         let updated = session.map(|s| updated_since(s, &by_mod, state.as_ref())).unwrap_or_default();
         out.push_str(&format!(
-            "save\t{}\tbacked={}\tbytes={}\tsession={}\tupdated={}\tupdatedmods={}\tmods={}\n",
+            "save\t{}\tbacked={}\tbytes={}\tsession={}\tupdated={}\tupdatedmods={}\tmods={}\tprofile={}\tmodified={}\n",
             id,
             u8::from(summary.backed_up),
             summary.bytes,
             session.map(|s| s.at).unwrap_or(0),
             updated.len(),
             updated.join(";"),
-            session.map(|s| s.mods.join(";")).unwrap_or_default()
+            session.map(|s| s.mods.join(";")).unwrap_or_default(),
+            owners.get(&id).map(String::as_str).unwrap_or(""),
+            summary.modified
         ));
     }
     out
@@ -992,8 +1025,8 @@ mod tests {
 
     #[test]
     fn the_link_file_lists_the_profile_and_its_mods() {
-        let text = link_file_text("Vanilla+\nx", &ids(&["A", "B"]), &ids(&["B", "C"]));
-        assert_eq!(text, "profile=Vanilla+ x\nmember=A\nmember=B\nother=C\n");
+        let text = link_file_text("inst_1", "Vanilla+\nx", &ids(&["A", "B"]), &ids(&["B", "C"]));
+        assert_eq!(text, "profile=Vanilla+ x\nprofileid=inst_1\nmember=A\nmember=B\nother=C\n");
     }
 
     #[test]

@@ -278,6 +278,8 @@ local TEXT = {
     modsAppNoOpen = "PZ Mod Studio is closed: open it from Windows. With its Settings, \"The close button (X)\", set to keep it in the tray, it stays running, and this button brings it up.",
     modsAppShown = "PZ Mod Studio is in front of the game.",
     modsFromApp = "PZ Mod Studio changed the mods: this is its list now.",
+    savesShowAll = "Show all ({1} more)",
+    savesOnlyProfile = "Only {1}'s",
 }
 
 local translated = {}
@@ -321,6 +323,8 @@ function Link.read()
         local key, value = string.match(line, "^%s*([%w_]+)%s*=%s*(.-)%s*$")
         if key == "profile" then
             data.name = value
+        elseif key == "profileid" then
+            data.profileid = value
         elseif key == "member" and value ~= "" then
             if not data.members[value] then table.insert(data.order, value) end
             data.members[value] = true
@@ -627,6 +631,14 @@ function Link.cardData()
     pcall(function()
         local link = Link.read()
         if not link then return end
+        -- Another profile made active in the app while on the menu: Continue is its save now.
+        if link.profileid and link.profileid ~= "" and link.profileid ~= Link.latestFor then
+            MainScreen.instance:getLatestSave()
+            local screen = MainScreen.instance
+            if screen and screen.latestSaveOption and not MainScreen.latestSaveWorld then
+                screen.latestSaveOption:setVisible(false)
+            end
+        end
         card.profile = link.name
         card.size = #link.order
         card.alive = Link.appAlive()
@@ -1178,6 +1190,89 @@ local function drawSaveBadge(list, y, item)
     list:drawTextRight(label, right, y + 6, r, g, b, 0.95, UIFont.Small)
 end
 
+-- ------------------------------------------------------------------ each profile's saves
+-- Every profile has its own saves. The app writes, for each save, the profile it belongs to (the
+-- one active when it was last played with the app open, or one whose mods are exactly the
+-- save's), and the active profile's id. The Load screen lists the active profile's saves, with a
+-- button for all of them (those of other profiles and those of none), and Continue loads the
+-- newest save of the active profile. Without those files (no app, an older app) all are shown.
+
+--- The active profile's id and the app's saves, or nil when saves are not told apart.
+function Link.profileSaves()
+    local link = Link.read()
+    if not link or not link.profileid or link.profileid == "" then return nil end
+    local saves = Link.readSaves()
+    if not saves then return nil end
+    return link.profileid, saves, link
+end
+
+--- Points Continue at the newest save of the active profile (nothing, when it has none).
+function Link.latestOfProfile()
+    local profile, saves = Link.profileSaves()
+    if not profile then return end
+    Link.latestFor = profile
+    local mode, world = MainScreen.latestSaveGameMode, MainScreen.latestSaveWorld
+    if mode and world then
+        local save = saves[tostring(mode) .. "/" .. tostring(world)]
+        if save and save.profile == profile then return end
+    end
+    local best, bestAt = nil, -1
+    for _, k in ipairs(getFullSaveDirectoryTable()) do
+        local id = string.gsub(tostring(k), "\\", "/")
+        local save = saves[id]
+        if save and save.profile == profile and save.modified > bestAt then
+            best, bestAt = id, save.modified
+        end
+    end
+    if best then
+        MainScreen.latestSaveGameMode, MainScreen.latestSaveWorld = string.match(best, "^([^/]+)/(.+)$")
+    else
+        MainScreen.latestSaveGameMode, MainScreen.latestSaveWorld = nil, nil
+    end
+    Link.latestExists = nil
+    Link.card = nil
+end
+
+local getLatestSave = MainScreen.getLatestSave
+function MainScreen:getLatestSave(...)
+    local result = getLatestSave(self, ...)
+    local ok, err = pcall(Link.latestOfProfile)
+    if not ok then print("[StudioLink] the profile's latest save: " .. tostring(err)) end
+    return result
+end
+
+--- The Load screen's list: the active profile's saves, or all of them.
+function Link.filterSaveList(screen)
+    local profile, saves, link = Link.profileSaves()
+    screen.linkHidden = 0
+    if not profile then
+        if screen.linkAllButton then screen.linkAllButton:setVisible(false) end
+        return
+    end
+    local keep = {}
+    for _, row in ipairs(screen.listbox.items) do
+        local save = saves[string.gsub(tostring(row.text), "\\", "/")]
+        if Link.showAllSaves or (save and save.profile == profile) then
+            table.insert(keep, row)
+        else
+            screen.listCache[row.text] = nil
+            screen.linkHidden = screen.linkHidden + 1
+        end
+    end
+    screen.listbox:clear()
+    for _, row in ipairs(keep) do screen.listbox:addItem(row.text, row.item) end
+    if screen.linkAllButton then
+        local shown = Link.showAllSaves or screen.linkHidden > 0
+        screen.linkAllButton:setVisible(shown)
+        screen.linkAllButton:setTitle(Link.showAllSaves and text("savesOnlyProfile", link.name) or text("savesShowAll", screen.linkHidden))
+    end
+end
+
+function Link.toggleAllSaves(screen)
+    Link.showAllSaves = not Link.showAllSaves
+    screen:setSaveGamesList()
+end
+
 local createLoadScreen = LoadGameScreen.create
 function LoadGameScreen:create(...)
     local result = createLoadScreen(self, ...)
@@ -1187,6 +1282,18 @@ function LoadGameScreen:create(...)
         pcall(drawSaveBadge, list, y, item)
         return nextY
     end
+    -- "Show all" beside the search box, which gives it the room.
+    pcall(function()
+        local w = 220
+        self.searchEntry:setWidth(self.searchEntry:getWidth() - w - 10)
+        self.linkAllButton = ISButton:new(self.searchEntry:getRight() + 10, self.searchEntry:getY(), w, self.searchEntry:getHeight(), "", self, Link.toggleAllSaves)
+        self.linkAllButton:initialise()
+        self.linkAllButton:instantiate()
+        self.linkAllButton:setAnchorLeft(false)
+        self.linkAllButton:setAnchorRight(true)
+        self.linkAllButton:setVisible(false)
+        self:addChild(self.linkAllButton)
+    end)
     return result
 end
 
@@ -1194,7 +1301,10 @@ end
 local setSaveGamesList = LoadGameScreen.setSaveGamesList
 function LoadGameScreen:setSaveGamesList(...)
     Link.listLink = Link.read()
-    return setSaveGamesList(self, ...)
+    local result = setSaveGamesList(self, ...)
+    local ok, err = pcall(Link.filterSaveList, self)
+    if not ok then print("[StudioLink] the profile's saves: " .. tostring(err)) end
+    return result
 end
 
 -- ------------------------------------------------------------------ save backups
@@ -1240,11 +1350,12 @@ function Link.readSaves()
     while line ~= nil do
         local fields = splitTabs(line)
         if fields[1] == "save" and fields[2] and fields[2] ~= "" then
-            local save = { backed = false, bytes = 0, session = 0, updated = 0, mods = {} }
+            local save = { backed = false, bytes = 0, session = 0, updated = 0, modified = 0, mods = {} }
             for i = 3, #fields do
                 local key, value = string.match(fields[i], "^(%w+)=(.*)$")
                 if key == "backed" then save.backed = value == "1"
-                elseif key == "bytes" or key == "session" or key == "updated" then save[key] = tonumber(value) or 0
+                elseif key == "bytes" or key == "session" or key == "updated" or key == "modified" then save[key] = tonumber(value) or 0
+                elseif key == "profile" then save.profile = value ~= "" and value or nil
                 elseif key == "mods" then
                     for id in string.gmatch(value, "[^;]+") do table.insert(save.mods, plainId(id)) end
                 elseif key == "updatedmods" then

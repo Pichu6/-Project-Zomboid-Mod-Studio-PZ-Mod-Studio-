@@ -2,6 +2,14 @@
 
 Tus partidas de Project Zomboid y sus copias de seguridad. El Studio hace copias solo en los momentos en que una partida corre más riesgo; acá ves esas copias, hacés una vos, guardás una para siempre o volvés a una anterior.
 
+## Las partidas de cada perfil
+
+Cada perfil tiene sus propias partidas. Una partida pertenece al perfil que estaba activo la última vez que la jugaste con el Studio abierto; una partida jugada sin él pertenece a un perfil solo si los mods de ese perfil son exactamente los de la partida. Una partida nunca se pasa a otro perfil.
+
+- Esta pantalla muestra las partidas del perfil activo. **Ver todas** agrega las de otros perfiles y las que no tienen perfil, cada una con la etiqueta **Perfil: <nombre>** o **Sin perfil**.
+- La partida de un servidor se muestra con su dirección (`ip:puerto`) y la etiqueta **Online**, y pertenece al perfil con el que la jugaste.
+- En el juego, con el mod Studio Link: la pantalla **Cargar** lista las partidas del perfil activo, con **Ver todas** al lado de la búsqueda, y **Continuar** carga la partida más reciente del perfil activo (no aparece si el perfil no tiene ninguna). Sin el Studio, el juego lista todas las partidas como siempre.
+
 ## Qué ves
 
 - Arriba, **Abrir carpeta de copias** abre la carpeta donde van las copias (`Zomboid/PZModStudio_SaveBackups`), y la flecha circular actualiza la pantalla.

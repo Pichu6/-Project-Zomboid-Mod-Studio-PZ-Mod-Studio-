@@ -1,4 +1,6 @@
 {
+    "UI_StudioLink_savesShowAll": "Ver todas ({1} más)",
+    "UI_StudioLink_savesOnlyProfile": "Solo las de {1}",
     "UI_StudioLink_profile": "Perfil: {1}",
     "UI_StudioLink_profileTip": "El perfil activo en PZ Mod Studio. Solo se listan sus mods.",
     "UI_StudioLink_appClosed": "(PZ Mod Studio cerrado)",

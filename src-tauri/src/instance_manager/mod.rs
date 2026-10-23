@@ -90,7 +90,7 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
             }
         }
     }
-    if let Err(e) = crate::studio_link::write_link_file(z_dir, &instance.name, &instance.member_ids(), &others) {
+    if let Err(e) = crate::studio_link::write_link_file(z_dir, &instance.id, &instance.name, &instance.member_ids(), &others) {
         crate::diagnostics::error(format!("[StudioLink] {}", e));
     }
     // Tests run on throwaway folders and must never edit the real game's launch file.
@@ -641,7 +641,7 @@ mod build_tests {
         p = read_instance(&dir.join("a.json")).unwrap();
         assert_eq!(p.active_mod_ids, ids(&["C", "A"]));
         let link = fs::read_to_string(z.join("Lua").join(crate::studio_link::LINK_FILE)).unwrap();
-        assert_eq!(link, "profile=A\nmember=C\nmember=B\nmember=A\n");
+        assert_eq!(link, "profile=A\nprofileid=a\nmember=C\nmember=B\nmember=A\n");
         let _ = fs::remove_dir_all(&z);
     }
 
