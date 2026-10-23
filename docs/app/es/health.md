@@ -7,11 +7,12 @@ Salud de mods revisa tus mods activos como los lee el juego y lista cada problem
 - Arriba: tu **Build del juego** y cuántos mods hay activos.
 - El botón de la **comunidad** (por ejemplo **comunidad: 40 reglas, 120 mods ↻**): lo que suman a la revisión los archivos compartidos de la comunidad. Hacé clic para descargarlos ahora. **Índice de la comunidad**, al lado, abre la página web del índice: los problemas conocidos de cada mod y sus arreglos.
 - **Revisar de nuevo** vuelve a hacer la revisión. También se hace sola cuando cambia tu lista.
-- Cuatro pestañas, cada una con cuántas filas tiene:
+- Cinco pestañas, cada una con cuántas filas tiene:
   - **Problemas**: lo que rompe el juego o lo va a romper (requisitos que faltan o están apagados, orden de carga, mods que tu versión no carga, pares incompatibles). Acá está **Arreglar N problema(s) automáticamente**.
   - **Conflictos**: dos mods que traen el mismo archivo, ítem, receta o texto; el juego usa uno, y cuál es decisión tuya. Acá está **Fusionar N archivos automáticamente**.
   - **Para saber**: nada que arreglar (copias ignoradas, mods actualizados desde la última vez que jugaste, notas de la comunidad).
   - **Rendimiento**: tiempo de juego por mod (más abajo).
+  - **Disco**: cuánto ocupa cada mod y cuáles se pueden sacar (más abajo).
 - Cada fila muestra el mod, qué anda mal, un código corto (como `missing_dependency`) y sus botones de arreglo a la derecha. La pantalla recuerda la última pestaña; la etiqueta de un problema en la Lista de mods abre la pestaña que lo tiene.
 
 Si no hay nada mal, ves **No se encontraron problemas en tus N mods activos.**
@@ -77,6 +78,19 @@ Cada perfil guarda su propio valor: al activar un perfil, el juego recibe su mem
 En la pestaña **Rendimiento**: qué mods frenan el juego mientras jugás. **Medir** pone un mod chico del Studio (PZ Mod Studio Profiler) primero en tu lista de mods y en la partida que jugaste por última vez; abrí el juego (reinicialo si estaba abierto) y jugá unos minutos como siempre. Cada handler de eventos de cada mod lo mide el propio juego y se suma por mod: la parte del tiempo real que se llevó, milisegundos por segundo y su llamada más larga (una larga es un congelamiento que se ve). Abrí una fila para ver los handlers que más cuestan, con su archivo y línea. **Dejar de medir** saca el medidor de la lista y de la partida; los últimos números quedan.
 
 También cuentan las ventanas, barras y acciones con tiempo de un mod (como Clase:render, Clase:update); cada función cuenta solo su propio tiempo. El medidor le suma un poco de tiempo propio a cada handler, así que apagalo cuando termines.
+
+## Espacio en disco
+
+En la pestaña **Disco**: cuánto ocupa cada mod instalado, contado por lo que se va junto (un ítem del Workshop con todos sus mods, una carpeta de `Zomboid/mods`). Medirlo tarda un par de segundos.
+
+- **Nada lo usa** (ámbar): ningún perfil lo tiene, ni prendido ni apagado; ninguna partida lo nombra en su lista; ningún servidor guardado lo cargó; no está en la lista activa del juego.
+- **Apagado en todos lados** (celeste): algún perfil lo guarda, pero apagado, y ninguna partida ni servidor lo usa.
+- **Sobrante**: una carpeta del Workshop de un ítem al que ya no estás suscrito; Steam a veces las deja.
+- **Tu subida**: un mod tuyo en `Zomboid/Workshop`. Se muestra, nunca se ofrece borrarlo.
+
+Marcá los que quieras sacar. Un ítem del Workshop se va con **Desuscribirse** (Steam tiene que estar abierto, y borra los archivos solo). Una carpeta local o un sobrante va con **Mandar a la Papelera**: se puede recuperar desde la Papelera de reciclaje. Antes de cada una se pide confirmación con los nombres. Con el juego abierto no se manda nada a la Papelera.
+
+Abajo, **Carpetas del Studio y del juego**: cuánto ocupan las copias de partidas, las versiones guardadas de mods, la caché y los registros, con un botón para abrir cada carpeta. Desde ahí no se borra nada.
 
 ## Para tener en cuenta
 

@@ -483,12 +483,59 @@ pub fn session_diff(session: &SaveReference, now: &[String], updated: Vec<String
     SessionDiff { at: session.at, profile: session.profile.clone(), profile_name: session.profile_name.clone(), added, removed, updated, reordered: kept_then != kept_now }
 }
 
+/// `Multiplayer/<ip>_<port>_<hash>` -> `<ip>:<port>`.
+fn server_address_of(save_id: &str) -> Option<String> {
+    let world = save_id.strip_prefix("Multiplayer/")?;
+    let mut parts = world.rsplitn(3, '_');
+    let hash = parts.next()?;
+    let port = parts.next()?;
+    let ip = parts.next()?;
+    (hash.len() >= 16 && hash.chars().all(|c| c.is_ascii_hexdigit()) && !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) && !ip.is_empty())
+        .then(|| format!("{}:{}", ip, port))
+}
+
+/// Servers' saves (`Multiplayer/<ip>_<port>_<hash>`) the game wrote to after `since`. The game
+/// rewrites files at the top of a save (`map_t.bin`, `InGameMap.ini`...) whenever it saves.
+fn server_saves_changed_since(user_zomboid_dir: &Path, since: SystemTime) -> Vec<String> {
+    crate::save_backup::list_saves(user_zomboid_dir)
+        .into_iter()
+        .filter(|id| server_address_of(id).is_some())
+        .filter(|id| {
+            let dir = crate::save_backup::saves_dir(user_zomboid_dir).join(id);
+            std::fs::read_dir(dir).map(|entries| entries.flatten().filter_map(|e| e.metadata().ok()?.modified().ok()).any(|m| m > since)).unwrap_or(false)
+        })
+        .collect()
+}
+
+/// A server's save the Link never saw: on a server the game loads only the server's mods, so the
+/// Link is not running there to say which save it is. The Studio's own list of servers knows the
+/// profile it last joined each one with, and that is the session noted for its save.
+fn add_server_sessions(user_zomboid_dir: &Path, refs: &mut std::collections::BTreeMap<String, SaveReference>) {
+    let servers = crate::server_browser::read_saved(user_zomboid_dir);
+    if servers.is_empty() {
+        return;
+    }
+    let profiles = crate::instance_manager::list_instances(user_zomboid_dir.to_string_lossy().to_string()).unwrap_or_default();
+    for id in crate::save_backup::list_saves(user_zomboid_dir) {
+        if refs.get(&id).is_some_and(|r| r.profile.is_some()) {
+            continue;
+        }
+        let Some(address) = server_address_of(&id) else { continue };
+        let Some(server) = servers.iter().find(|s| s.address.eq_ignore_ascii_case(&address)) else { continue };
+        let Some(profile) = server.profile_id.clone().or_else(|| server.made_profile_id.clone()) else { continue };
+        let profile_name = profiles.iter().find(|p| p.id == profile).map(|p| p.name.clone());
+        let at = server.last_joined.unwrap_or(0).max(0) as u64;
+        refs.insert(id, SaveReference { mods: Vec::new(), at, profile: Some(profile), profile_name });
+    }
+}
+
 /// For each save with a recorded session: what changed since.
 pub fn session_diffs(user_zomboid_dir: &Path) -> std::collections::BTreeMap<String, SessionDiff> {
     let paths = crate::vfs::studio_paths();
     let by_mod = if paths.workshop_dir.is_empty() { Default::default() } else { workshop_ids_by_mod(Path::new(&paths.workshop_dir)) };
     let state = (!paths.workshop_dir.is_empty()).then(|| crate::workshop::local_state(&paths.workshop_dir)).flatten();
-    let refs = save_references(user_zomboid_dir);
+    let mut refs = save_references(user_zomboid_dir);
+    add_server_sessions(user_zomboid_dir, &mut refs);
     let mut out = std::collections::BTreeMap::new();
     for id in crate::save_backup::list_saves(user_zomboid_dir) {
         let Some(session) = refs.get(&id) else { continue };
@@ -509,7 +556,8 @@ pub fn session_diffs(user_zomboid_dir: &Path) -> std::collections::BTreeMap<Stri
 /// with the Studio open, or, for a save played without it, a profile whose mods are exactly the
 /// save's. A save with neither belongs to none (it is not guessed).
 pub fn save_profiles(user_zomboid_dir: &Path) -> std::collections::BTreeMap<String, String> {
-    let refs = save_references(user_zomboid_dir);
+    let mut refs = save_references(user_zomboid_dir);
+    add_server_sessions(user_zomboid_dir, &mut refs);
     let profiles = crate::instance_manager::list_instances(user_zomboid_dir.to_string_lossy().to_string()).unwrap_or_default();
     let plain = |id: &String| crate::load_order::mod_info::sanitize_mod_id(id).rsplit('/').next().unwrap_or_default().to_string();
     let mut out = std::collections::BTreeMap::new();
@@ -758,6 +806,9 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         // A Link installed by an older Studio is brought up to this one's version at once, not
         // only when a profile is next applied.
         let mut link_checked = false;
+        // When the game was seen starting: a server's save changed after it is backed up when the
+        // game closes (the Link does not run on a server, so it never says it left one).
+        let mut game_since: Option<SystemTime> = None;
         loop {
             ticks += 1;
             thread::sleep(Duration::from_secs(2));
@@ -822,6 +873,18 @@ pub fn watch_mod_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             if playing.is_some() && ticks % 5 == 0 && crate::sandbox::find_running_pz_pid().is_none() {
                 if let Some(save) = playing.take() {
                     start_backup(&app, &z_dir, &save, crate::save_backup::REASON_EXIT, None);
+                }
+            }
+            if ticks % 15 == 0 {
+                match (crate::sandbox::find_running_pz_pid().is_some(), game_since) {
+                    (true, None) => game_since = Some(SystemTime::now()),
+                    (false, Some(since)) => {
+                        game_since = None;
+                        for save in server_saves_changed_since(&z_dir, since) {
+                            start_backup(&app, &z_dir, &save, crate::save_backup::REASON_EXIT, None);
+                        }
+                    }
+                    _ => {}
                 }
             }
             // What the Link needs to know of each save, about once a minute.
@@ -1199,6 +1262,30 @@ waiting=C
         assert!(record_save_reference(&z, &state).unwrap());
         let r = &save_references(&z)["Sandbox/W"];
         assert_eq!((r.profile.as_deref(), r.profile_name.as_deref()), (Some("inst_1"), Some("Main")));
+        let _ = std::fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn a_server_save_belongs_to_the_profile_its_server_was_joined_with() {
+        let z = temp("server-save");
+        std::fs::create_dir_all(z.join("PZModStudio_Instances")).unwrap();
+        std::fs::write(
+            z.join("PZModStudio_Instances").join("inst_9.json"),
+            r#"{"id":"inst_9","name":"Online","created_at":"0","is_active":true,"active_mod_ids":["A"],"load_order":["A"]}"#,
+        )
+        .unwrap();
+        let world = "208.75.182.221_27955_f5e85281397522383aa0b8b39114e853";
+        std::fs::create_dir_all(z.join("Saves").join("Multiplayer").join(world)).unwrap();
+        std::fs::create_dir_all(z.join("Saves").join("Multiplayer").join("servertest")).unwrap();
+        std::fs::write(z.join("PZModStudio_Servers.json"), r#"[{"name":"S","address":"208.75.182.221:27955","profile_id":"inst_9","last_joined":77}]"#).unwrap();
+        let id = format!("Multiplayer/{}", world);
+        assert_eq!(server_address_of(&id).as_deref(), Some("208.75.182.221:27955"));
+        assert_eq!(server_address_of("Multiplayer/servertest"), None);
+        assert_eq!(server_address_of("Sandbox/1.2.3.4_16261_f5e85281397522383aa0b8b39114e853"), None);
+        let diffs = session_diffs(&z);
+        assert_eq!((diffs[&id].profile.as_deref(), diffs[&id].profile_name.as_deref(), diffs[&id].at), (Some("inst_9"), Some("Online"), 77));
+        assert!(!diffs.contains_key("Multiplayer/servertest"));
+        assert_eq!(save_profiles(&z).get(&id).map(String::as_str), Some("inst_9"));
         let _ = std::fs::remove_dir_all(&z);
     }
 

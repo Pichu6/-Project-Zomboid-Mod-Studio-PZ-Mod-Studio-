@@ -7,11 +7,12 @@ Mod Health checks your active mods the way the game reads them, and lists every 
 - At the top: your **Game build** and how many mods are active.
 - The **community** button (for example **community: 40 rules, 120 mods ↻**): what the shared community files add to the check. Click it to download them now. **Community index** beside it opens the index's web page: every mod's known issues and their fixes.
 - **Check again** runs the check again. It also runs by itself when your list changes.
-- Four tabs, each with how many rows it has:
+- Five tabs, each with how many rows it has:
   - **Problems**: what breaks the game or will (missing or switched-off requirements, load order, mods your build cannot load, incompatible pairs). **Fix N problem(s) automatically** is here.
   - **Conflicts**: two mods giving the same file, item, recipe or text; the game uses one, and which one is your call. **Merge N files automatically** is here.
   - **Good to know**: nothing to fix (ignored copies, mods updated since you last played, community notes).
   - **Performance**: game time per mod (below).
+  - **Disk**: how much each mod takes and which ones can go (below).
 - Each row shows the mod, what is wrong, a short code (like `missing_dependency`) and its fix buttons on the right. The screen remembers the last tab; a problem chip in the Mod List opens the tab that has it.
 
 If nothing is wrong, you see **No problems found in your N active mods.**
@@ -77,6 +78,19 @@ Each profile keeps its own value: switching a profile on gives the game its memo
 In the **Performance** tab: which mods slow the game down while you play. **Measure** puts a small Studio mod (PZ Mod Studio Profiler) first in your mod list and in the save you played last; start the game (restart it if it was open) and play a few minutes as usual. Every event handler of every mod is timed by the game and added up per mod: the share of real time it took, milliseconds per second, and its longest single call (a long one is a freeze you see). Open a row for the handlers that cost the most, with their file and line. **Stop measuring** takes the profiler out of the list and the save again; the last numbers stay.
 
 The windows, bars and timed actions of a mod count too (as Class:render, Class:update); each function counts only its own time. The profiler adds a little time of its own to every handler, so stop it when you are done.
+
+## Disk space
+
+On the **Disk** tab: how much each installed mod takes, counted by what goes as one (a Workshop item with all its mods, a folder in `Zomboid/mods`). Measuring takes a couple of seconds.
+
+- **Nothing uses it** (amber): no profile has it, on or off; no save names it in its list; no kept server loaded it; it is not in the game's active list.
+- **Off everywhere** (light blue): some profile keeps it, switched off, and no save or server uses it.
+- **Leftover**: a Workshop folder of an item you are no longer subscribed to; Steam sometimes leaves them.
+- **Your upload**: a mod of yours in `Zomboid/Workshop`. Shown, never offered for removal.
+
+Tick the ones you want gone. A Workshop item goes with **Unsubscribe** (Steam must be running, and deletes the files itself). A local folder or a leftover goes with **Send to the Recycle Bin**: it can be restored from the Recycle Bin. Each one asks first, with the names. Nothing goes to the Recycle Bin while the game is open.
+
+Below, **Studio and game folders**: how much save backups, kept mod versions, the cache and the logs take, with a button to open each folder. Nothing is deleted from there.
 
 ## Good to know
 

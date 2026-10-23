@@ -7,7 +7,7 @@ Tus partidas de Project Zomboid y sus copias de seguridad. El Studio hace copias
 Cada perfil tiene sus propias partidas. Una partida pertenece al perfil que estaba activo la última vez que la jugaste con el Studio abierto; una partida jugada sin él pertenece a un perfil solo si los mods de ese perfil son exactamente los de la partida. Una partida nunca se pasa a otro perfil.
 
 - Esta pantalla muestra las partidas del perfil activo. **Ver todas** agrega las de otros perfiles y las que no tienen perfil, cada una con la etiqueta **Perfil: <nombre>** o **Sin perfil**.
-- La partida de un servidor se muestra con su dirección (`ip:puerto`) y la etiqueta **Online**, y pertenece al perfil con el que la jugaste.
+- La partida de un servidor se muestra con su dirección (`ip:puerto`) y la etiqueta **Online**, y pertenece al perfil con el que entraste a ese servidor desde **Servidores** (el Link no corre en un servidor, así que el Studio se guía por su propia lista de servidores).
 - En el juego, con el mod Studio Link: la pantalla **Cargar** lista las partidas del perfil activo, con **Ver todas** al lado de la búsqueda, y **Continuar** carga la partida más reciente del perfil activo (no aparece si el perfil no tiene ninguna). Sin el Studio, el juego lista todas las partidas como siempre.
 
 ## Qué ves
@@ -16,6 +16,7 @@ Cada perfil tiene sus propias partidas. Una partida pertenece al perfil que esta
 - Una barra con el espacio del disco: cuánto queda libre, el tamaño del disco y cuánto ocupan las copias. Se pone ámbar con **Queda poco espacio** cuando tu partida más grande puede no entrar dos veces más.
 - Una fila por partida: el nombre del mundo, y abajo el modo de juego, el tamaño, la cantidad de archivos, la cantidad de mods y el último cambio.
 - Si los mods de la partida cambiaron desde su última sesión, una línea ámbar lo dice: **Desde su última sesión (...)**, con cuántos mods se agregaron, se sacaron, se actualizaron, o si cambió el orden. Pasá el mouse por encima para ver los nombres.
+- Si la lista de mods de la partida nombra mods que no están instalados, una línea roja lo dice: **No carga: N mods de su lista no están instalados**, con un botón por mod. Tocalo para abrirlo en **Explorar mods** (el ítem del Workshop si la lista lo nombra, si no, una búsqueda con su id). Las partidas de servidor no tienen lista propia: el juego baja los mods del servidor al entrar.
 - A la derecha de cada fila, su estado:
   - **Copia al día**: la copia más nueva coincide con la partida.
   - **Cambió desde la copia del ...**: la partida cambió después de su última copia.
@@ -53,5 +54,6 @@ Hacé clic en la flecha a la izquierda de una fila para abrir sus copias. Cada u
 
 - Se guardan las 5 copias automáticas más nuevas de cada partida; las más viejas se borran cuando se hace una nueva. Las que hacés o fijás quedan hasta que las borres.
 - Las copias automáticas necesitan PZ Mod Studio abierto mientras jugás, y el mod Studio Link prendido en el juego (es el que le avisa a la app cuando entrás y salís de una partida).
+- La partida de un servidor se copia cuando el juego se cierra con el Studio abierto, si cambió durante esa sesión.
 - Con la app cerrada, el mod Link avisa antes de cargar que la partida no se puede copiar, y te deja seguir sin copia.
 - El mod Link también puede jugar una partida en una copia (`<mundo>_copy`), que hace la app; la original queda como está.

@@ -672,6 +672,50 @@ export interface SaveBackupOutcome {
   pruned: string[];
 }
 
+/** Who uses a mod folder: profiles, saves, kept servers, the game's active list. */
+export interface DiskUsedBy {
+  /** Profiles that have it on / keep it switched off. */
+  profiles: string[];
+  profiles_off: string[];
+  saves: string[];
+  servers: string[];
+  active: boolean;
+}
+
+/** What can be given back as one: a Workshop item, a folder in Zomboid/mods, an upload, a leftover. */
+export interface DiskUnit {
+  kind: 'workshop' | 'local' | 'upload' | 'leftover';
+  workshop_id: string | null;
+  folder: string;
+  name: string;
+  mod_ids: string[];
+  bytes: number;
+  files: number;
+  used_by: DiskUsedBy;
+  unused: boolean;
+  /** Only kept switched off by some profile: nothing plays with it. */
+  idle: boolean;
+}
+
+export interface DiskReport {
+  units: DiskUnit[];
+  folders: { name: string; path: string; bytes: number }[];
+  mods_bytes: number;
+  unused_bytes: number;
+  unused_count: number;
+  idle_bytes: number;
+  idle_count: number;
+  free_bytes: number | null;
+  total_bytes: number | null;
+}
+
+/** A mod a save's own list names that is not installed. */
+export interface SaveMissingMod {
+  id: string;
+  /** The Workshop item, when the list names one. */
+  workshop_id: string | null;
+}
+
 export interface SaveSummary {
   /** <mode>/<world> */
   id: string;

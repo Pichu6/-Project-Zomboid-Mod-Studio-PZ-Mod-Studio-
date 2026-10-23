@@ -3,12 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { Archive, CheckCircle2, ChevronDown, ChevronRight, FolderOpen, HardDrive, Loader2, Pin, PinOff, RefreshCw, RotateCcw, ShieldAlert, Trash2 } from 'lucide-react';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { AppInstance, SaveBackupEntry, SaveSummary, SavesOverview, SessionDiff } from '../../types';
+import { AppInstance, SaveBackupEntry, SaveMissingMod, SaveSummary, SavesOverview, SessionDiff } from '../../types';
 import { formatBytes } from '../browse/common';
 import i18next from 'i18next';
 
 interface SavesModuleProps {
   paths: StudioPathsUI;
+  /** Explore Mods on one Workshop item / on a Workshop search. */
+  onOpenWorkshopItem?: (workshopId: string) => void;
+  onSearchWorkshop?: (text: string) => void;
 }
 
 const when = (secs: number) => (secs ? new Date(secs * 1000).toLocaleString(i18next.language) : '');
@@ -27,10 +30,11 @@ const SHOW_ALL_KEY = 'pz_saves_show_all';
  * the player sees them, makes one, keeps one, or puts one back. Every backup listed was read back
  * after it was written, and the room on the disk is always in view.
  */
-export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
+export const SavesModule: React.FC<SavesModuleProps> = ({ paths, onOpenWorkshopItem, onSearchWorkshop }) => {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<SavesOverview | null>(null);
   const [diffs, setDiffs] = useState<Record<string, SessionDiff>>({});
+  const [missing, setMissing] = useState<Record<string, SaveMissingMod[]>>({});
   const [profiles, setProfiles] = useState<AppInstance[]>([]);
   /** Every save, not only the active profile's (remembered). */
   const [showAll, setShowAll] = useState<boolean>(() => {
@@ -57,13 +61,15 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
   const refresh = useCallback(async () => {
     if (!paths.user_zomboid_dir) return;
     setLoading(true);
-    const [next, sessions, list] = await Promise.all([
+    const [next, sessions, list, absent] = await Promise.all([
       TauriService.savesOverview(paths),
       TauriService.saveSessionDiffs(paths),
       TauriService.listInstances(paths.user_zomboid_dir).catch(() => [] as AppInstance[]),
+      TauriService.saveMissingMods(paths),
     ]);
     if (next) setOverview(next);
     setDiffs(sessions);
+    setMissing(absent);
     setProfiles(list);
     setLoading(false);
   }, [paths]);
@@ -262,6 +268,27 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
                       </div>
                     );
                   })()}
+                  {(missing[save.id]?.length ?? 0) > 0 && (
+                    <div className="mt-1 text-[11px] text-rose-300">
+                      <span className="inline-flex items-center gap-1" title={t('saves.missing.title')}>
+                        <ShieldAlert size={12} />
+                        {t('saves.missing.line', { count: missing[save.id].length })}
+                      </span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {missing[save.id].map((m) => (
+                          <button
+                            key={`${m.workshop_id ?? ''}/${m.id}`}
+                            onClick={() => (m.workshop_id ? onOpenWorkshopItem?.(m.workshop_id) : onSearchWorkshop?.(m.id))}
+                            disabled={m.workshop_id ? !onOpenWorkshopItem : !onSearchWorkshop}
+                            title={m.workshop_id ? t('saves.missing.openTitle', { id: m.workshop_id }) : t('saves.missing.searchTitle')}
+                            className="px-1.5 py-0.5 rounded border border-rose-800/60 text-rose-200 hover:bg-rose-900/40 disabled:cursor-default cursor-pointer"
+                          >
+                            {m.id}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="text-[11px] shrink-0">{status(save)}</div>
                 <button

@@ -998,7 +998,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'SAVES' && <SavesModule paths={paths} />}
+          {activeTab === 'SAVES' && <SavesModule paths={paths} onOpenWorkshopItem={openInBrowser} onSearchWorkshop={searchInBrowser} />}
           {activeTab === 'WHATS_NEW' && <WhatsNewModule paths={paths} />}
           {activeTab === 'MAPS' && (
             <MapsModule

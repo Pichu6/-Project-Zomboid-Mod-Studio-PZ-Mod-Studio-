@@ -18,7 +18,7 @@
 //! the ones the player made or marked are kept until the player removes them.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -632,6 +632,38 @@ pub fn summary(user_zomboid_dir: &Path, save_id: &str) -> Option<SaveSummary> {
     })
 }
 
+/// A mod a save's list names that is not installed: the save will not load with it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MissingMod {
+    /// The mod id, as the list names it (without its Workshop item).
+    pub id: String,
+    /// The Workshop item, when the list names one (`<item>/<id>`, the Build 42 form).
+    pub workshop_id: Option<String>,
+}
+
+/// For each save whose own list (`mods.txt`) names mods that are not installed: those mods.
+/// A server's save keeps no list (the server says which mods, and the game downloads them).
+pub fn missing_mods(user_zomboid_dir: &Path, catalog: &crate::catalog::ModCatalog) -> BTreeMap<String, Vec<MissingMod>> {
+    let mut out = BTreeMap::new();
+    for id in list_saves(user_zomboid_dir) {
+        let missing: Vec<MissingMod> = save_mods(&saves_dir(user_zomboid_dir).join(&id))
+            .iter()
+            .filter(|entry| catalog.resolve(entry).is_none())
+            .map(|entry| {
+                let entry = crate::load_order::mod_info::sanitize_mod_id(entry);
+                match entry.split_once('/') {
+                    Some((item, mod_id)) if !item.is_empty() && item.chars().all(|c| c.is_ascii_digit()) => MissingMod { id: mod_id.to_string(), workshop_id: Some(item.to_string()) },
+                    _ => MissingMod { id: entry.to_string(), workshop_id: None },
+                }
+            })
+            .collect();
+        if !missing.is_empty() {
+            out.insert(id, missing);
+        }
+    }
+    out
+}
+
 pub fn overview(user_zomboid_dir: &Path) -> SavesOverview {
     let mut saves: Vec<SaveSummary> = list_saves(user_zomboid_dir).iter().filter_map(|id| summary(user_zomboid_dir, id)).collect();
     saves.sort_by(|a, b| b.modified.cmp(&a.modified));
@@ -683,6 +715,23 @@ mod tests {
         let listed = backups_of(&z, "Sandbox/World 1");
         assert_eq!(listed.len(), 1);
         assert!(summary(&z, "Sandbox/World 1").unwrap().backed_up);
+        let _ = fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn mods_a_save_lists_and_nobody_installed_are_named() {
+        let z = temp("missing");
+        let save = make_save(&z, "Sandbox/W");
+        fs::write(save.join("mods.txt"), "VERSION = 1,\nmods\n{\n    mod = 123/Gone,\n    mod = \\AlsoGone,\n}\n").unwrap();
+        let server = make_save(&z, "Multiplayer/1.2.3.4_16261_f5e85281397522383aa0b8b39114e853");
+        fs::remove_file(server.join("mods.txt")).unwrap();
+        let catalog = crate::catalog::ModCatalog { game_version: None, mods: Vec::new() };
+        let missing = missing_mods(&z, &catalog);
+        assert_eq!(
+            missing.get("Sandbox/W").cloned().unwrap_or_default(),
+            vec![MissingMod { id: "Gone".into(), workshop_id: Some("123".into()) }, MissingMod { id: "AlsoGone".into(), workshop_id: None }]
+        );
+        assert_eq!(missing.len(), 1);
         let _ = fs::remove_dir_all(&z);
     }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Gauge, GitMerge, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Gauge, GitMerge, HardDrive, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
@@ -14,6 +14,7 @@ import { GameTimePanel } from './GameTimePanel';
 import { openRequiredItem } from '../../utils/workshopRequirement';
 import { BootTimePanel } from './BootTimePanel';
 import { MemoryPanel } from './MemoryPanel';
+import { DiskPanel } from './DiskPanel';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -59,9 +60,9 @@ const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definitio
  * which mod's file or item wins where two mods give the same one (your call), what is only worth
  * knowing, and what the mods cost while the game runs.
  */
-type HealthTab = 'problems' | 'conflicts' | 'info' | 'performance';
-const TABS: HealthTab[] = ['problems', 'conflicts', 'info', 'performance'];
-const TAB_ICON: Record<HealthTab, React.ElementType> = { problems: XCircle, conflicts: GitMerge, info: Info, performance: Gauge };
+type HealthTab = 'problems' | 'conflicts' | 'info' | 'performance' | 'disk';
+const TABS: HealthTab[] = ['problems', 'conflicts', 'info', 'performance', 'disk'];
+const TAB_ICON: Record<HealthTab, React.ElementType> = { problems: XCircle, conflicts: GitMerge, info: Info, performance: Gauge, disk: HardDrive };
 const TAB_KEY = 'pz_health_tab';
 /** Two mods giving the same file, item, recipe or text: the game uses one, which one is your call. */
 const CONFLICT_CODE = /^(file_conflict|script_definition|translation|definition)/;
@@ -365,10 +366,10 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       (i) => !YOUR_CALL_CODES.has(i.code) && i.fixes.some((f) => SAFE_FIX_ACTIONS.has(f.action))
     ).length ?? 0;
 
-  const tabOf = (i: HealthIssue): Exclude<HealthTab, 'performance'> =>
+  const tabOf = (i: HealthIssue): Exclude<HealthTab, 'performance' | 'disk'> =>
     CONFLICT_CODE.test(i.code) || YOUR_CALL_CODES.has(i.code) ? 'conflicts' : i.severity === 'info' ? 'info' : 'problems';
   const byTab = useMemo(() => {
-    const out: Record<Exclude<HealthTab, 'performance'>, HealthIssue[]> = { problems: [], conflicts: [], info: [] };
+    const out: Record<Exclude<HealthTab, 'performance' | 'disk'>, HealthIssue[]> = { problems: [], conflicts: [], info: [] };
     report?.issues.forEach((i) => out[tabOf(i)].push(i));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,6 +403,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
     conflicts: byTab.conflicts.filter((i) => conflictStateOf(i.code) !== 'settled').length,
     info: byTab.info.length,
     performance: null,
+    disk: null,
   };
 
   /**
@@ -410,7 +412,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
    * each with its colour and a word saying so.
    */
   const sections = useMemo(() => {
-    if (tab === 'performance') return [];
+    if (tab === 'performance' || tab === 'disk') return [];
     if (tab === 'conflicts') {
       const by: Record<ConflictState, HealthIssue[]> = { open: [], stale: [], settled: [] };
       byTab.conflicts.forEach((i) => by[conflictStateOf(i.code)].push(i));
@@ -533,7 +535,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         })}
       </div>
 
-      {tab !== 'performance' && (
+      {tab !== 'performance' && tab !== 'disk' && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-slate-400 max-w-3xl">{t(`health.tabs.${tab}Intro`)}</p>
           {tab === 'problems' && safeFixes.length > 0 && (
@@ -638,7 +640,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         </div>
       )}
 
-      {report && tab !== 'performance' && byTab[tab].length === 0 && (
+      {report && tab !== 'performance' && tab !== 'disk' && byTab[tab].length === 0 && (
         <div className="flex items-center gap-3 p-5 rounded-xl border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-400" aria-hidden="true" />
           {tab === 'problems' ? t('health.noProblems', { count: report.active_count }) : t(`health.tabs.${tab}Empty`)}
@@ -761,6 +763,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       {tab === 'performance' && <MemoryPanel paths={paths} />}
       {tab === 'performance' && <BootTimePanel paths={paths} />}
       {tab === 'performance' && <GameTimePanel paths={paths} mods={mods} onModsChanged={onModsChanged} />}
+      {tab === 'disk' && <DiskPanel paths={paths} onModsChanged={onModsChanged} onOpenInBrowser={onOpenInBrowser} />}
     </div>
   );
 };

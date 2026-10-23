@@ -7,7 +7,7 @@ Your Project Zomboid saves and their backups. The Studio backs a save up on its 
 Every profile has its own saves. A save belongs to the profile that was active when you last played it with the Studio open; a save played without it belongs to a profile only if that profile's mods are exactly the save's. A save is never moved to another profile.
 
 - This screen shows the active profile's saves. **Show all** adds the other profiles' saves and those with no profile, each with a **Profile: <name>** or **No profile** chip.
-- A server's save shows as its address (`ip:port`) with an **Online** chip, and belongs to the profile you played it with.
+- A server's save shows as its address (`ip:port`) with an **Online** chip, and belongs to the profile you joined that server with from **Servers** (the Link does not run on a server, so the Studio goes by its own list of servers).
 - In the game, with the Studio Link mod: the **Load** screen lists the active profile's saves, with **Show all** beside the search box, and **Continue** loads the newest save of the active profile (it is hidden when the profile has none). Without the Studio, the game lists every save as usual.
 
 ## What you see
@@ -16,6 +16,7 @@ Every profile has its own saves. A save belongs to the profile that was active w
 - A bar with the room on the disk: how much is free, the disk's size, and how much the backups use. It turns amber with **Little room left** when your biggest save may not fit twice more.
 - One row per save: its world name, then the game mode, size, number of files, number of mods and when it last changed.
 - When the save's mods changed since its last session, an amber line says so: **Since its last session (...)**, with how many mods were added, taken out, updated, or that the order changed. Hover it to see the mod names.
+- When the save's mod list names mods that are not installed, a red line says so: **Won't load: N mods in its list are not installed**, with a button per mod. Click one to open it in **Browse Mods** (the Workshop item when the list names it, otherwise a search for its id). Servers' saves keep no list of their own: the game downloads the server's mods when you join.
 - On the right of each row, its state:
   - **Backed up as it is**: the newest backup matches the save.
   - **Changed since the backup of ...**: the save changed after its last backup.
@@ -53,5 +54,6 @@ Click the arrow at the left of a row to open its backups. Each one shows when it
 
 - The newest 5 automatic backups of each save are kept; older ones go when a new one is made. Backups you make or pin stay until you remove them.
 - Automatic backups need PZ Mod Studio open while you play, and the Studio Link mod on in the game (it tells the app when you enter and leave a save).
+- A server's save is backed up when the game closes with the Studio open, if it changed during that session.
 - With the app closed, the Link mod warns before loading that the save cannot be backed up, and lets you go on without a backup.
 - The Link mod can also play a save on a copy (`<world>_copy`), which the app makes; the original stays as it is.

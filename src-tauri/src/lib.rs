@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod diff_engine;
 pub mod discord;
 pub mod discord_commands;
+pub mod disk_usage;
 pub mod error_report;
 pub mod game_memory;
 pub mod images;
@@ -733,6 +734,32 @@ fn open_studio_log_folder_cmd() -> Result<(), String> {
 #[tauri::command(async)]
 fn saves_overview_cmd(paths: StudioPaths) -> Result<save_backup::SavesOverview, String> {
     Ok(save_backup::overview(&zomboid_dir_of(&paths)?))
+}
+
+/// What every installed mod takes on the disk, and which of them nothing uses.
+#[tauri::command(async)]
+fn disk_report_cmd(paths: StudioPaths) -> Result<disk_usage::DiskReport, String> {
+    let z_dir = zomboid_dir_of(&paths)?;
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    Ok(disk_usage::report(&paths.workshop_dir, &z_dir, &catalog))
+}
+
+/// An unused local mod folder or leftover Workshop folder to the Recycle Bin. The report is made
+/// again here, so only a folder that is unused right now can go.
+#[tauri::command(async)]
+fn disk_recycle_cmd(paths: StudioPaths, folder: String) -> Result<(), String> {
+    let z_dir = zomboid_dir_of(&paths)?;
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    let report = disk_usage::report(&paths.workshop_dir, &z_dir, &catalog);
+    disk_usage::recycle(&report, &folder, sandbox::find_running_pz_pid().is_some())
+}
+
+/// For each save whose own list names mods that are not installed: those mods.
+#[tauri::command(async)]
+fn save_missing_mods_cmd(paths: StudioPaths) -> Result<std::collections::BTreeMap<String, Vec<save_backup::MissingMod>>, String> {
+    let z_dir = zomboid_dir_of(&paths)?;
+    let catalog = catalog::build_catalog(&paths.workshop_dir, &paths.user_zomboid_dir, None);
+    Ok(save_backup::missing_mods(&z_dir, &catalog))
 }
 
 /// For each save with a recorded session: mods added, removed and updated since.
@@ -1771,6 +1798,9 @@ pub fn run() {
             open_studio_log_folder_cmd,
             whats_new_cmd,
             save_session_diffs_cmd,
+            save_missing_mods_cmd,
+            disk_report_cmd,
+            disk_recycle_cmd,
             java_agents_plan_cmd,
             backup_save_cmd,
             restore_save_backup_cmd,
