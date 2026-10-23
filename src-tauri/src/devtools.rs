@@ -375,6 +375,75 @@ pub fn check_before_reload(files: &[ChangedFile]) -> (Vec<ChangedFile>, Vec<File
     (good, problems)
 }
 
+/// The name `require` knows a file by: its path under `media/lua/<shared|client|server>/`,
+/// without `.lua`, lowercased (the game's file lookup ignores case).
+fn module_name(path: &str) -> Option<String> {
+    let lower = path.replace('\\', "/").to_lowercase();
+    let start = ["media/lua/shared/", "media/lua/client/", "media/lua/server/"]
+        .iter()
+        .find_map(|dir| lower.find(dir).map(|i| i + dir.len()))?;
+    Some(lower[start..].trim_end_matches(".lua").to_string())
+}
+
+/// The modules a file requires: `require "x"`, `require("x")`, `require 'x'`.
+fn required_modules(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("require") {
+        let after = &rest[i + "require".len()..];
+        let before_ok = rest[..i].chars().last().map_or(true, |c| !(c.is_alphanumeric() || c == '_' || c == '.' || c == ':'));
+        let arg = after.trim_start().trim_start_matches('(').trim_start();
+        if before_ok {
+            if let Some(q) = arg.chars().next().filter(|c| *c == '"' || *c == '\'') {
+                if let Some(end) = arg[1..].find(q) {
+                    out.push(arg[1..1 + end].replace('\\', "/").to_lowercase().trim_end_matches(".lua").to_string());
+                }
+            }
+        }
+        rest = after;
+    }
+    out
+}
+
+/// The changed files, then every other file of the mod that requires one of them (and the files
+/// that require those), nearest first. `reloadLuaFile` runs a file again but leaves the files
+/// that took its module with `local X = require "..."` holding the old one: running them again
+/// after it makes them take the new one.
+pub fn with_dependents(root: &Path, changed: Vec<ChangedFile>) -> Vec<ChangedFile> {
+    let all = changed_lua_files(root, 0);
+    let mut users: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+    for (i, f) in all.iter().enumerate() {
+        let Ok(text) = std::fs::read_to_string(&f.absolute) else { continue };
+        for m in required_modules(&text) {
+            users.entry(m).or_default().push(i);
+        }
+    }
+    let mut seen: std::collections::HashSet<String> = changed.iter().map(|f| f.absolute.clone()).collect();
+    let mut out = changed;
+    let mut next = 0;
+    while next < out.len() {
+        let Some(name) = module_name(&out[next].path) else {
+            next += 1;
+            continue;
+        };
+        // `require "Foo/Bar"` names the path from media/lua/<side>/; some mods name only its end.
+        let mut found: Vec<usize> = Vec::new();
+        for (module, files) in &users {
+            if *module == name || name.ends_with(&format!("/{}", module)) {
+                found.extend(files);
+            }
+        }
+        found.sort_unstable();
+        for i in found {
+            if seen.insert(all[i].absolute.clone()) {
+                out.push(all[i].clone());
+            }
+        }
+        next += 1;
+    }
+    out
+}
+
 /// Checks these files, hands the good ones to the game and waits for its answer, telling the
 /// window at each stage.
 pub fn send_reload<R: tauri::Runtime>(app: &tauri::AppHandle<R>, user_zomboid_dir: &str, files: Vec<ChangedFile>, detected_ms: u64) {
@@ -490,7 +559,7 @@ fn watch_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, root: &Path, user_zo
         }
         let changed = take_changes(root, &mut since);
         if !changed.is_empty() && !stop.load(Ordering::Relaxed) {
-            send_reload(app, user_zomboid_dir, changed, detected);
+            send_reload(app, user_zomboid_dir, with_dependents(root, changed), detected);
         }
     }
     unsafe { FindCloseChangeNotification(handle) };
@@ -507,7 +576,7 @@ fn poll_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, root: &Path, user_zom
         std::thread::sleep(std::time::Duration::from_millis(500));
         let changed = take_changes(root, &mut since);
         if !changed.is_empty() {
-            send_reload(app, user_zomboid_dir, changed, now_ms());
+            send_reload(app, user_zomboid_dir, with_dependents(root, changed), now_ms());
         }
     }
 }
@@ -536,6 +605,27 @@ mod reload_tests {
         assert_eq!(good.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), vec!["media/lua/client/good.lua"]);
         assert!(!problems.is_empty() && problems.iter().all(|p| p.path == "media/lua/client/bad.lua"), "{:?}", problems);
         assert_eq!(problems[0].line, Some(1));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_changed_module_brings_the_files_that_require_it_after_it() {
+        assert_eq!(module_name("42/media/lua/client/PZTest/A.lua").as_deref(), Some("pztest/a"));
+        assert_eq!(required_modules("local A = require \"PZTest/A\"
+local B = require('PZTest/B.lua')
+myrequire('no')
+x.require('no')"), vec!["pztest/a", "pztest/b"]);
+        let dir = std::env::temp_dir().join(format!("pzms-reload-deps-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let lua = dir.join("42/media/lua/client/PZTest");
+        std::fs::create_dir_all(&lua).unwrap();
+        std::fs::write(lua.join("A.lua"), "local M = {} return M").unwrap();
+        std::fs::write(lua.join("B.lua"), "local A = require \"PZTest/A\"").unwrap();
+        std::fs::write(lua.join("C.lua"), "local B = require(\"PZTest/B\")").unwrap();
+        std::fs::write(lua.join("D.lua"), "print('alone')").unwrap();
+        let a: Vec<ChangedFile> = changed_lua_files(&dir, 0).into_iter().filter(|f| f.path.ends_with("A.lua")).collect();
+        let order: Vec<String> = with_dependents(&dir, a).into_iter().map(|f| f.path).collect();
+        assert_eq!(order, vec!["42/media/lua/client/PZTest/A.lua", "42/media/lua/client/PZTest/B.lua", "42/media/lua/client/PZTest/C.lua"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

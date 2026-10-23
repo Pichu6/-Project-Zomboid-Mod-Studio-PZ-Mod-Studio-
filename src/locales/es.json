@@ -2060,7 +2060,7 @@
     },
     "reload": {
       "title": "Recargar en el juego mientras corre",
-      "intro": "Guardá un archivo Lua de este mod y el juego lo recarga sin reiniciar. El Studio ve el archivo en cuanto se guarda, lo revisa con el parser (uno que no parsea no se manda: su línea y columna se muestran acá), y su puente le pasa al juego <code class=\"mx-1\">reloadLuaFile</code>, en el menú principal, en la partida o en pausa. El mod puente tiene que estar activo. Los manejadores de eventos del archivo corren una vez cada uno (los nuevos arrancan, los sacados se detienen), y las tablas globales que vuelve a crear conservan su identidad y su estado con las funciones nuevas; <code class=\"mx-1\">PZStudio.onReload(fn)</code> vuelve a correr tu preparación. Una constante cambiada necesita un Reset Lua completo.",
+      "intro": "Guardá un archivo Lua de este mod y el juego lo recarga sin reiniciar. El Studio ve el archivo en cuanto se guarda, lo revisa con el parser (uno que no parsea no se manda: su línea y columna se muestran acá), y su puente le pasa al juego <code class=\"mx-1\">reloadLuaFile</code>, en el menú principal, en la partida o en pausa. El mod puente tiene que estar activo. Los manejadores de eventos del archivo corren una vez cada uno (los nuevos arrancan, los sacados se detienen), y las tablas globales que vuelve a crear conservan su identidad y su estado con las funciones nuevas; <code class=\"mx-1\">PZStudio.onReload(fn)</code> vuelve a correr tu preparación. Los archivos del mod que lo usan con <code class=\"mx-1\">require</code> se recargan justo después, así toman su módulo nuevo. Una constante cambiada necesita un Reset Lua completo.",
       "watchAria": "Vigilar los archivos Lua de este mod y recargarlos en el juego cuando cambien",
       "allTitle": "Todos los .lua de este mod, ahora",
       "all": "Recargar todos los Lua de este mod ahora",
@@ -2724,5 +2724,28 @@
     "intoProfile": "Los mods que carga el servidor (también los que el juego te hace descargar) se agregan a tu perfil activo, {{name}}, activos y en su orden. Los demás mods del perfil quedan en él, apagados, salvo los que corren solo de tu lado (ZombieBuddy y sus mods de Java para el cliente, como Viewpoint), que siguen como los tenías.",
     "madeProfileActive": "Este servidor tiene su perfil, {{name}}, y es el activo.",
     "madeProfileInactive": "Este servidor tiene su perfil, {{name}}, pero no es el activo: activalo en Perfiles para entrar con él."
+  },
+  "gameTime": {
+    "title": "Tiempo de juego por mod",
+    "blurb": "Qué mods frenan el juego mientras jugás: cada handler de eventos de cada mod (OnTick, OnPlayerUpdate, OnZombieUpdate...) medido por el propio juego y sumado por mod. \"Medir\" pone un mod chico del Studio primero en tu lista y en la partida que jugaste por última vez; abrí el juego, jugá unos minutos como siempre y los números aparecen acá.",
+    "start": "Medir",
+    "stop": "Dejar de medir",
+    "onWithSave": "La medición está activada: el medidor está primero en tu lista de mods y en la partida {{save}}. Empieza la próxima vez que abras el juego; si está abierto, reinicialo.",
+    "onNoSave": "La medición está activada: el medidor está primero en tu lista de mods (no encontré ninguna partida para agregarlo). Empieza la próxima vez que abras el juego.",
+    "live": "midiendo ahora",
+    "lastRun": "última medición",
+    "inSave": "{{min}} min en una partida",
+    "atMenu": "{{min}} min en el menú",
+    "total": "todos los mods: {{pct}} % del tiempo del juego",
+    "perSecond": "{{ms}} ms/s",
+    "worst": "la más larga {{ms}} ms",
+    "calls_one": "{{count}} llamada",
+    "calls_other": "{{count}} llamadas",
+    "theGame": "Archivos del propio juego",
+    "viaPackage": "Parte de este tiempo es código del mod fusionado en un paquete del Studio.",
+    "showAll": "Ver los {{count}}",
+    "showFewer": "Ver menos",
+    "waiting": "Todavía no hay números: abrí el juego (reinicialo si ya estaba abierto) y llegan cada 5 segundos.",
+    "how": "El % es la parte del tiempo real que se llevaron los handlers del mod (a 60 FPS hay 16,7 ms por cuadro). Una sola llamada larga es un tirón que se ve como un congelamiento. No se cuentan las ventanas que dibuja un mod ni las acciones con tiempo. El reloj del juego cuenta milisegundos enteros, así que un handler corto se mide en promedio sobre muchas llamadas: dale uno o dos minutos. Dejá de medir cuando termines: el medidor le suma un poco de tiempo propio a cada handler."
   }
 }

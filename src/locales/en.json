@@ -2060,7 +2060,7 @@
     },
     "reload": {
       "title": "Reload in the game while it runs",
-      "intro": "Save a Lua file of this mod and the game reloads it without restarting. The Studio sees the file the moment it is saved, checks it with the parser (one that does not parse is not sent: its line and column show here), and its bridge hands the game <code class=\"mx-1\">reloadLuaFile</code> for it, on the main menu, in game or paused. The bridge mod must be on. The file's event handlers run once each (new ones start, removed ones stop), and the global tables it makes again keep their identity and state with the new functions; <code class=\"mx-1\">PZStudio.onReload(fn)</code> runs your own set-up again. A changed constant needs a full Reset Lua.",
+      "intro": "Save a Lua file of this mod and the game reloads it without restarting. The Studio sees the file the moment it is saved, checks it with the parser (one that does not parse is not sent: its line and column show here), and its bridge hands the game <code class=\"mx-1\">reloadLuaFile</code> for it, on the main menu, in game or paused. The bridge mod must be on. The file's event handlers run once each (new ones start, removed ones stop), and the global tables it makes again keep their identity and state with the new functions; <code class=\"mx-1\">PZStudio.onReload(fn)</code> runs your own set-up again. The files of the mod that <code class=\"mx-1\">require</code> it are reloaded right after it, so they take its new module. A changed constant needs a full Reset Lua.",
       "watchAria": "Watch this mod's Lua files and reload them in the game when they change",
       "allTitle": "Every .lua of this mod, now",
       "all": "Reload every Lua of this mod now",
@@ -2724,5 +2724,28 @@
     "intoProfile": "The mods the server loads (the ones the game has you download too) go into your active profile, {{name}}, switched on and in its order. The profile's other mods stay in it, switched off, except those that run only on your side (ZombieBuddy and its client Java mods, like Viewpoint), which stay as you had them.",
     "madeProfileActive": "This server has its own profile, {{name}}, and it is the active one.",
     "madeProfileInactive": "This server has its own profile, {{name}}, but it is not the active one: activate it in Profiles to join with it."
+  },
+  "gameTime": {
+    "title": "Game time per mod",
+    "blurb": "Which mods slow the game down while you play: every event handler of every mod (OnTick, OnPlayerUpdate, OnZombieUpdate...) timed by the game itself and added up per mod. \"Measure\" puts a small Studio mod first in your list and in the save you played last; start the game, play a few minutes as usual, and the numbers appear here.",
+    "start": "Measure",
+    "stop": "Stop measuring",
+    "onWithSave": "Measuring is on: the profiler is first in your mod list and in the save {{save}}. It starts with the next game launch; restart the game if it is running.",
+    "onNoSave": "Measuring is on: the profiler is first in your mod list (no save found to add it to). It starts with the next game launch.",
+    "live": "measuring now",
+    "lastRun": "last measurement",
+    "inSave": "{{min}} min in a game",
+    "atMenu": "{{min}} min at the menu",
+    "total": "all mods: {{pct}} % of the game's time",
+    "perSecond": "{{ms}} ms/s",
+    "worst": "longest {{ms}} ms",
+    "calls_one": "{{count}} call",
+    "calls_other": "{{count}} calls",
+    "theGame": "The game's own files",
+    "viaPackage": "Part of this time is the mod's code merged into a Studio package.",
+    "showAll": "Show all {{count}}",
+    "showFewer": "Show fewer",
+    "waiting": "No numbers yet: start the game (restart it if it was running) and they arrive every 5 seconds.",
+    "how": "The % is the share of real time the mod's handlers took (60 FPS leaves 16.7 ms a frame). A long single call is a hitch you see as a freeze. Not counted: windows a mod draws and timed actions. The game's clock counts whole milliseconds, so a short handler is measured on average over many calls; give it a minute or two. Stop measuring when you are done: the profiler adds a little time of its own to every handler."
   }
 }

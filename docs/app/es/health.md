@@ -61,6 +61,12 @@ Una línea verde confirma cada cambio, con **Guardado en tu lista de mods.**
 
 El Studio descarga una vez al día reglas compartidas desde su propio repositorio: reglas de orden de carga, pares de mods que no van juntos y un índice de problemas conocidos con su arreglo. Aparecen como filas `community_*`. Podés apagar la descarga diaria en Configuración; entonces se usa la última copia.
 
+## Tiempo de juego por mod
+
+Al final de la pantalla: qué mods frenan el juego mientras jugás. **Medir** pone un mod chico del Studio (PZ Mod Studio Profiler) primero en tu lista de mods y en la partida que jugaste por última vez; abrí el juego (reinicialo si estaba abierto) y jugá unos minutos como siempre. Cada handler de eventos de cada mod lo mide el propio juego y se suma por mod: la parte del tiempo real que se llevó, milisegundos por segundo y su llamada más larga (una larga es un congelamiento que se ve). Abrí una fila para ver los handlers que más cuestan, con su archivo y línea. **Dejar de medir** saca el medidor de la lista y de la partida; los últimos números quedan.
+
+No se cuentan las ventanas que dibuja un mod ni las acciones con tiempo. El medidor le suma un poco de tiempo propio a cada handler, así que apagalo cuando termines.
+
 ## Para tener en cuenta
 
 - Los cambios de acá se guardan en la lista de mods del perfil activo.

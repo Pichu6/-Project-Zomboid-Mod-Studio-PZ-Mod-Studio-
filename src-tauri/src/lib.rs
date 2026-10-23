@@ -1035,6 +1035,18 @@ fn mod_load_times_cmd(paths: StudioPaths) -> sandbox::load_times::LoadTimes {
     sandbox::load_times::from_logs(&paths.user_zomboid_dir)
 }
 
+/// Whether the in-game profiler is on, and what it measured last.
+#[tauri::command(async)]
+fn profiler_status_cmd(paths: StudioPaths) -> sandbox::profiler::ProfilerStatus {
+    sandbox::profiler::status(&paths.user_zomboid_dir, &paths.workshop_dir)
+}
+
+/// Puts the profiler first in the mod list (and in the last save's) or takes it out.
+#[tauri::command(async)]
+fn profiler_set_cmd(paths: StudioPaths, on: bool) -> Result<sandbox::profiler::ProfilerStatus, String> {
+    sandbox::profiler::set_on(&paths.user_zomboid_dir, &paths.workshop_dir, on)
+}
+
 /// The active profile was just played: remember on which build.
 #[tauri::command(async)]
 fn mark_profile_played_cmd(user_zomboid_dir: String, instance_id: String) -> Result<Option<String>, String> {
@@ -1747,6 +1759,8 @@ pub fn run() {
             set_save_backup_kept_cmd,
             open_backups_folder_cmd,
             mod_load_times_cmd,
+            profiler_status_cmd,
+            profiler_set_cmd,
             mod_lists_cmd,
             validate_mod_cmd,
             open_in_editor_cmd,

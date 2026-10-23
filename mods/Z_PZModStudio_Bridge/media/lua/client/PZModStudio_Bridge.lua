@@ -18,6 +18,7 @@ function Bridge.ClearPlayersState()
             writer:write("[]")
             writer:close()
         end
+        Bridge.lastPlayersJson = nil
     end)
 end
 
@@ -76,10 +77,14 @@ function Bridge.UpdatePlayersState(player)
         steamId:gsub('"', '\\"')
     )
 
+    -- Twice a second, but the file is written only when something in it changed: a player
+    -- standing still costs no disk write.
+    if jsonStr == Bridge.lastPlayersJson then return end
     local writer = getFileWriter(Bridge.PLAYERS_FILE, true, false)
     if writer then
         writer:write(jsonStr)
         writer:close()
+        Bridge.lastPlayersJson = jsonStr
     end
 end
 

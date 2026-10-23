@@ -279,6 +279,18 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "get_mod_game_time".to_string(),
+            description: "Which mods cost the game the most time while it runs: the Studio's in-game profiler (PZModStudio_Profiler) times every event handler of every mod and this adds them up per mod (ms, share of real time, longest single call, top handlers with file:line). With on=true/false it switches measuring on (the profiler first in default.txt and in the last-played save's mods.txt; it starts with the next game launch) or off. Without on it only reads.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "on": { "type": "boolean", "description": "Switch measuring on or off; leave out to only read the last measurement" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom path to the user Zomboid folder" },
+                    "workshop_dir": { "type": "string", "description": "Optional Steam Workshop content folder (108600)" }
+                }
+            }),
+        },
+        McpTool {
             name: "list_installed_mods".to_string(),
             description: "Scans and lists all installed Project Zomboid mods from Steam Workshop and local user mods folder, including mod IDs, names, versions, and compatibility tags.".to_string(),
             input_schema: json!({
@@ -616,6 +628,13 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "sort_mod_load_order" => handle_sort_mod_load_order(args),
         "scan_mod_conflicts" => handle_scan_mod_conflicts(args),
         "get_mod_health" => handle_get_mod_health(args),
+        "get_mod_game_time" => {
+            let paths = resolve_paths(&args);
+            match args.get("on").and_then(|v| v.as_bool()) {
+                Some(on) => json_result(crate::sandbox::profiler::set_on(&paths.user_zomboid_dir, &paths.workshop_dir, on)),
+                None => json_result(Ok::<_, String>(crate::sandbox::profiler::status(&paths.user_zomboid_dir, &paths.workshop_dir))),
+            }
+        }
         "validate_lua_syntax" => handle_validate_lua_syntax(args),
         "merge_lua_scripts" => handle_merge_lua_scripts(args),
         "get_master_patch_status" => handle_get_master_patch_status(args),

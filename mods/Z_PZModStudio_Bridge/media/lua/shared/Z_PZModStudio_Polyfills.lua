@@ -148,6 +148,8 @@ local function wrapEventAddRemove(eventObj, wrapperBuilder)
             if type(func) ~= "function" then return end
             local wrapper = wrapperBuilder(func)
             wrapperMap[func] = wrapper
+            -- The Studio's profiler times the wrapper; this tells it whose handler is inside.
+            if PZStudioInnerOf then PZStudioInnerOf[wrapper] = func end
             orig_add(wrapper)
         end
     end
@@ -989,8 +991,12 @@ local function initB42Bridge()
         local sm = ScriptManager.instance
         if sm.getAllItems then
             local ok, items = pcall(sm.getAllItems, sm)
-            if ok and items then
-                local sz = items:size()
+            -- The init runs again every 120 ticks; the items only change when the scripts load
+            -- again, so they are walked once per count (thousands of pcalls with a big mod list,
+            -- measured at about 8 ms a pass).
+            local sz = ok and items and items:size() or 0
+            if sz > 0 and sz ~= Poly._itemsSanitized then
+                Poly._itemsSanitized = sz
                 for i = 0, sz - 1 do
                     local item = items:get(i)
                     if item then

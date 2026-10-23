@@ -102,6 +102,42 @@ export interface ModList {
 }
 
 /** How long each mod's files took to load in the last session, from the game's DebugLog. */
+/** One event handler the in-game profiler timed. */
+export interface HandlerCost {
+  event: string;
+  file: string;
+  line: number;
+  ms: number;
+  calls: number;
+  worst: number;
+}
+
+/** What one mod's event handlers cost the game while it ran (mod_id null: the game's own files). */
+export interface ModCost {
+  mod_id: string | null;
+  name: string;
+  ms: number;
+  calls: number;
+  worst: number;
+  via_package: boolean;
+  handlers: HandlerCost[];
+}
+
+export interface ProfileReport {
+  window_ms: number;
+  in_game: boolean;
+  ticks: number;
+  age_secs: number;
+  total_ms: number;
+  mods: ModCost[];
+}
+
+export interface ProfilerStatus {
+  on: boolean;
+  saves: string[];
+  report: ProfileReport | null;
+}
+
 export interface LoadTimes {
   log_file: string | null;
   session: string | null;

@@ -1510,7 +1510,9 @@ pub fn sort_load_order(catalog: &ModCatalog, order: &[String]) -> SortResult {
         .iter()
         .map(|e| resolve_entry(catalog, e.trim()).map(|m| m.id.clone()).unwrap_or_else(|| e.trim().to_string()))
         .collect();
-    let (regular, packages): (Vec<usize>, Vec<usize>) = (0..ids.len()).partition(|&i| !is_studio_package(&ids[i]));
+    // The Studio's profiler must load before every mod it measures; the packages go last.
+    let (first, rest): (Vec<usize>, Vec<usize>) = (0..ids.len()).partition(|&i| ids[i] == crate::sandbox::profiler::PROFILER_ID);
+    let (regular, packages): (Vec<usize>, Vec<usize>) = rest.into_iter().partition(|&i| !is_studio_package(&ids[i]));
     let index_of: HashMap<&str, usize> = regular.iter().rev().map(|&i| (ids[i].as_str(), i)).collect();
 
     let mut successors: Vec<Vec<usize>> = vec![Vec::new(); ids.len()];
@@ -1541,7 +1543,7 @@ pub fn sort_load_order(catalog: &ModCatalog, order: &[String]) -> SortResult {
 
     let mut ready: std::collections::BTreeSet<usize> = regular.iter().copied().filter(|&i| in_degree[i] == 0).collect();
     let mut placed = vec![false; ids.len()];
-    let mut sorted: Vec<usize> = Vec::with_capacity(ids.len());
+    let mut sorted: Vec<usize> = first;
     while let Some(i) = ready.pop_first() {
         placed[i] = true;
         sorted.push(i);

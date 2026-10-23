@@ -268,9 +268,10 @@ export const App: React.FC = () => {
       } catch (e) {
         console.error('Initialization error:', e);
       } finally {
+        // Long enough for the bar to be seen full; someone who skipped the intro is waiting.
         setTimeout(() => {
           setIsInitializing(false);
-        }, 600);
+        }, 150);
       }
     };
     initPaths();

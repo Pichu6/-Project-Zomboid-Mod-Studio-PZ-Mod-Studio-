@@ -1,4 +1,5 @@
 pub mod load_times;
+pub mod profiler;
 pub mod requires;
 
 use serde::{Deserialize, Serialize};

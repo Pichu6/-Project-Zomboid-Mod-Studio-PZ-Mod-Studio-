@@ -10,6 +10,7 @@ import i18next from 'i18next';
 import { issueText } from '../../i18n/backendText';
 import { RichText } from '../common/RichText';
 import { tHtml } from '../../i18n/html';
+import { GameTimePanel } from './GameTimePanel';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -620,6 +621,8 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
           </section>
         )
       )}
+
+      <GameTimePanel paths={paths} mods={mods} onModsChanged={onModsChanged} />
     </div>
   );
 };
