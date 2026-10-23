@@ -14,6 +14,12 @@ interface SavesModuleProps {
 const when = (secs: number) => (secs ? new Date(secs * 1000).toLocaleString(i18next.language) : '');
 /** A mod list entry as a plain id (`<workshop id>/<Mod>` -> `Mod`). */
 const plainId = (id: string) => id.split('/').pop() ?? id;
+/** A multiplayer save's folder (`<ip>_<port>_<hash>`) as the server's address. */
+const serverOf = (world: string) => {
+  const m = world.match(/^(.+)_(\d+)_[0-9a-f]{16,}$/i);
+  return m ? `${m[1]}:${m[2]}` : world;
+};
+const SHOW_ALL_KEY = 'pz_saves_show_all';
 
 /**
  * The player's saves and their backups. The Studio backs a save up when the player leaves it,
@@ -26,6 +32,23 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
   const [overview, setOverview] = useState<SavesOverview | null>(null);
   const [diffs, setDiffs] = useState<Record<string, SessionDiff>>({});
   const [profiles, setProfiles] = useState<AppInstance[]>([]);
+  /** Every save, not only the active profile's (remembered). */
+  const [showAll, setShowAll] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SHOW_ALL_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleShowAll = () => {
+    const next = !showAll;
+    setShowAll(next);
+    try {
+      localStorage.setItem(SHOW_ALL_KEY, next ? '1' : '0');
+    } catch {
+      // only a convenience
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -58,13 +81,25 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
    * played while it runs; a save played without it is matched only to a profile whose mods are
    * exactly the save's. Anything less than that names no profile.
    */
-  const profileOf = (save: SaveSummary): string | null => {
+  const profileOf = (save: SaveSummary): { id: string; name: string } | null => {
     const noted = diffs[save.id];
-    if (noted?.profile) return profiles.find((p) => p.id === noted.profile)?.name ?? noted.profile_name ?? null;
+    if (noted?.profile) {
+      const name = profiles.find((p) => p.id === noted.profile)?.name ?? noted.profile_name ?? noted.profile;
+      return { id: noted.profile, name };
+    }
     const mods = new Set(save.mods.map(plainId));
+    if (mods.size === 0) return null;
     const same = profiles.find((p) => p.active_mod_ids.length === mods.size && p.active_mod_ids.every((id) => mods.has(plainId(id))));
-    return same?.name ?? null;
+    return same ? { id: same.id, name: same.name } : null;
   };
+  /**
+   * Each profile has its own saves: the active profile's are shown, and "Show all" adds the
+   * other profiles' and the saves no profile is known for. With no profile active, all are.
+   */
+  const activeProfile = profiles.find((p) => p.is_active) ?? null;
+  const allSaves = overview?.saves ?? [];
+  const shownSaves = !activeProfile || showAll ? allSaves : allSaves.filter((s) => profileOf(s)?.id === activeProfile.id);
+  const hiddenCount = allSaves.length - shownSaves.length;
 
   const free = overview?.free_bytes ?? null;
   const biggest = useMemo(() => Math.max(0, ...(overview?.saves ?? []).map((s) => s.bytes)), [overview]);
@@ -152,12 +187,28 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
         <div className={`rounded-md border px-3 py-2 text-xs ${notice.tone === 'ok' ? 'border-emerald-700/60 bg-emerald-950/40 text-emerald-200' : 'border-red-700/60 bg-red-950/40 text-red-200'}`}>{notice.text}</div>
       )}
 
-      {overview && overview.saves.length === 0 && (
+      {activeProfile && allSaves.length > 0 && (
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-slate-400">
+            {showAll ? t('saves.showingAll', { count: allSaves.length }) : t('saves.showingProfile', { name: activeProfile.name, count: shownSaves.length })}
+          </span>
+          {(showAll || hiddenCount > 0) && (
+            <button onClick={toggleShowAll} className="px-2.5 py-1.5 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">
+              {showAll ? t('saves.onlyProfile', { name: activeProfile.name }) : t('saves.showAll', { count: hiddenCount })}
+            </button>
+          )}
+        </div>
+      )}
+
+      {overview && allSaves.length === 0 && (
         <div className="p-8 text-center text-slate-500 text-xs">{t('saves.empty')}</div>
+      )}
+      {allSaves.length > 0 && shownSaves.length === 0 && activeProfile && (
+        <div className="p-8 text-center text-slate-500 text-xs">{t('saves.noneForProfile', { name: activeProfile.name })}</div>
       )}
 
       <div className="space-y-2">
-        {overview?.saves.map((save) => {
+        {shownSaves.map((save) => {
           const expanded = open === save.id;
           const roomFor = free === null || free > save.bytes + 256 * 1024 * 1024;
           return (
@@ -168,12 +219,22 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-semibold text-slate-100 truncate">{save.world}</span>
+                    <span className="text-sm font-semibold text-slate-100 truncate">{save.mode === 'Multiplayer' ? serverOf(save.world) : save.world}</span>
+                    {save.mode === 'Multiplayer' && (
+                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-violet-700/60 text-violet-300">{t('saves.online')}</span>
+                    )}
                     {(() => {
                       const profile = profileOf(save);
-                      return profile ? (
-                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-sky-700/60 text-sky-300" title={t('saves.profileTitle')}>
-                          {t('saves.profile', { name: profile })}
+                      if (profile) {
+                        return (
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-sky-700/60 text-sky-300" title={t('saves.profileTitle')}>
+                            {t('saves.profile', { name: profile.name })}
+                          </span>
+                        );
+                      }
+                      return showAll ? (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-400" title={t('saves.noProfileTitle')}>
+                          {t('saves.noProfile')}
                         </span>
                       ) : null;
                     })()}

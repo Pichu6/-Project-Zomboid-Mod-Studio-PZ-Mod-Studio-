@@ -2552,7 +2552,18 @@
       "updatedList": "Actualizados en el Workshop"
     },
     "profile": "Perfil: {{name}}",
-    "profileTitle": "El perfil que estaba activo la última vez que se jugó esta partida con el Studio abierto; para una partida jugada sin él, el perfil cuyos mods son exactamente los de la partida."
+    "profileTitle": "El perfil que estaba activo la última vez que se jugó esta partida con el Studio abierto; para una partida jugada sin él, el perfil cuyos mods son exactamente los de la partida.",
+    "online": "Online",
+    "showingProfile_one": "{{count}} partida del perfil {{name}}",
+    "showingProfile_other": "{{count}} partidas del perfil {{name}}",
+    "showingAll_one": "{{count}} partida, de todos los perfiles",
+    "showingAll_other": "Las {{count}} partidas, de todos los perfiles",
+    "showAll_one": "Ver todas (1 más)",
+    "showAll_other": "Ver todas ({{count}} más)",
+    "onlyProfile": "Solo las de {{name}}",
+    "noneForProfile": "Todavía no hay partidas jugadas con el perfil {{name}}. Una partida toma su perfil cuando la jugás con el Studio abierto; \"Ver todas\" muestra el resto.",
+    "noProfile": "Sin perfil",
+    "noProfileTitle": "No se jugó con el Studio abierto desde que se anotan los perfiles, y sus mods no son exactamente los de ningún perfil."
   },
   "update": {
     "available": "Salió PZ Mod Studio {{latest}}",

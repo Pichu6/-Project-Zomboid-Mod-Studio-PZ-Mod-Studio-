@@ -492,6 +492,12 @@ pub fn session_diffs(user_zomboid_dir: &Path) -> std::collections::BTreeMap<Stri
     for id in crate::save_backup::list_saves(user_zomboid_dir) {
         let Some(session) = refs.get(&id) else { continue };
         let Ok(dir) = crate::save_backup::saves_dir(user_zomboid_dir).join(&id).canonicalize() else { continue };
+        // A server's save keeps no mods.txt: the server says which mods, so there is no list to
+        // set beside the last session's. Its profile is still worth showing.
+        if !dir.join("mods.txt").is_file() {
+            out.insert(id, SessionDiff { at: session.at, profile: session.profile.clone(), profile_name: session.profile_name.clone(), ..Default::default() });
+            continue;
+        }
         let now = crate::save_backup::save_mods(&dir);
         out.insert(id, session_diff(session, &now, updated_since(session, &by_mod, state.as_ref())));
     }

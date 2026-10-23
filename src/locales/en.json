@@ -2552,7 +2552,18 @@
       "updatedList": "Updated on the Workshop"
     },
     "profile": "Profile: {{name}}",
-    "profileTitle": "The profile that was active the last time this save was played with the Studio open; for a save played without it, the profile whose mods are exactly the save's."
+    "profileTitle": "The profile that was active the last time this save was played with the Studio open; for a save played without it, the profile whose mods are exactly the save's.",
+    "online": "Online",
+    "showingProfile_one": "{{count}} save of the profile {{name}}",
+    "showingProfile_other": "{{count}} saves of the profile {{name}}",
+    "showingAll_one": "{{count}} save, every profile",
+    "showingAll_other": "All {{count}} saves, every profile",
+    "showAll_one": "Show all (1 more)",
+    "showAll_other": "Show all ({{count}} more)",
+    "onlyProfile": "Only {{name}}'s",
+    "noneForProfile": "No save played with the profile {{name}} yet. Saves get their profile when you play them with the Studio open; \"Show all\" has the rest.",
+    "noProfile": "No profile",
+    "noProfileTitle": "Not played with the Studio open since profiles are noted, and its mods are not exactly any profile's."
   },
   "update": {
     "available": "PZ Mod Studio {{latest}} is available",
