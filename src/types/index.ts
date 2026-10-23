@@ -672,6 +672,9 @@ export interface SaveSummary {
 /** What changed for a save since its last session (studio_link::SessionDiff). */
 export interface SessionDiff {
   at: number;
+  /** The Studio profile it was played with (id), and its name then. */
+  profile?: string | null;
+  profile_name?: string | null;
   added: string[];
   removed: string[];
   updated: string[];

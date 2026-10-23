@@ -2550,7 +2550,9 @@
       "addedList": "Added",
       "removedList": "Taken out",
       "updatedList": "Updated on the Workshop"
-    }
+    },
+    "profile": "Profile: {{name}}",
+    "profileTitle": "The profile that was active the last time this save was played with the Studio open; for a save played without it, the profile whose mods are exactly the save's."
   },
   "update": {
     "available": "PZ Mod Studio {{latest}} is available",

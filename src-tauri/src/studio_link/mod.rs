@@ -311,6 +311,11 @@ pub fn parse_game_state(text: &str) -> Option<GameState> {
 pub struct SaveReference {
     pub mods: Vec<String>,
     pub at: u64,
+    /// The Studio profile that was active then (its id, and its name then, for one deleted since).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_name: Option<String>,
 }
 
 /// `<Zomboid>/PZModStudio_SaveRefs.json`: save folder -> its reference.
@@ -331,10 +336,11 @@ pub fn record_save_reference(user_zomboid_dir: &Path, state: &GameState) -> Resu
     // Refs that could not be read must not be replaced by this one save's.
     crate::load_order::ini_parser::guard_overwrite::<std::collections::BTreeMap<String, SaveReference>>(&user_zomboid_dir.join(SAVE_REFS_FILE))?;
     let mut refs = save_references(user_zomboid_dir);
-    if refs.get(&state.save).is_some_and(|r| r.mods == state.mods) {
+    let (profile, profile_name) = crate::instance_manager::active_profile(&user_zomboid_dir.to_string_lossy()).unzip();
+    if refs.get(&state.save).is_some_and(|r| r.mods == state.mods && r.profile == profile) {
         return Ok(false);
     }
-    refs.insert(state.save.clone(), SaveReference { mods: state.mods.clone(), at: state.at });
+    refs.insert(state.save.clone(), SaveReference { mods: state.mods.clone(), at: state.at, profile, profile_name });
     let text = serde_json::to_string_pretty(&refs).map_err(|e| e.to_string())?;
     let path = user_zomboid_dir.join(SAVE_REFS_FILE);
     crate::load_order::ini_parser::atomic_write(&path, text).map_err(|e| format!("Cannot write {}: {}", path.display(), e))?;
@@ -455,6 +461,9 @@ fn updated_since(session: &SaveReference, by_mod: &std::collections::HashMap<Str
 pub struct SessionDiff {
     /// When the last session was (unix seconds).
     pub at: u64,
+    /// The profile it was played with (id, and its name then).
+    pub profile: Option<String>,
+    pub profile_name: Option<String>,
     pub added: Vec<String>,
     pub removed: Vec<String>,
     pub updated: Vec<String>,
@@ -470,7 +479,7 @@ pub fn session_diff(session: &SaveReference, now: &[String], updated: Vec<String
     let removed: Vec<String> = then.iter().filter(|m| !now.contains(m)).cloned().collect();
     let kept_then: Vec<&String> = then.iter().filter(|m| now.contains(m)).collect();
     let kept_now: Vec<&String> = now.iter().filter(|m| then.contains(m)).collect();
-    SessionDiff { at: session.at, added, removed, updated, reordered: kept_then != kept_now }
+    SessionDiff { at: session.at, profile: session.profile.clone(), profile_name: session.profile_name.clone(), added, removed, updated, reordered: kept_then != kept_now }
 }
 
 /// For each save with a recorded session: what changed since.
@@ -1024,7 +1033,7 @@ mod tests {
 
     #[test]
     fn a_session_counts_the_mods_published_after_it() {
-        let session = SaveReference { mods: ids(&["A", "\\B", "C", "Local"]), at: 1000 };
+        let session = SaveReference { mods: ids(&["A", "\\B", "C", "Local"]), at: 1000, ..Default::default() };
         let by_mod: std::collections::HashMap<String, String> =
             [("A", "1"), ("B", "2"), ("C", "3")].into_iter().map(|(m, w)| (m.to_string(), w.to_string())).collect();
         let item = |t: u64| crate::workshop::InstalledItemState { installed_time: Some(t), latest_time: Some(t), size: None, update_pending: false, updated_since_last_play: false };
@@ -1133,8 +1142,24 @@ waiting=C
         // The same list again is not a change; the menu never is.
         assert!(!record_save_reference(&z, &GameState { at: 200, ..state.clone() }).unwrap());
         assert!(!record_save_reference(&z, &parse_game_state("state=menu\n").unwrap()).unwrap());
-        assert_eq!(save_references(&z)["Sandbox/World 1"], SaveReference { mods: ids(&["A", "B"]), at: 100 });
+        assert_eq!(save_references(&z)["Sandbox/World 1"], SaveReference { mods: ids(&["A", "B"]), at: 100, ..Default::default() });
         assert!(parse_game_state("noise\n").is_none());
+        let _ = std::fs::remove_dir_all(&z);
+    }
+
+    #[test]
+    fn a_session_notes_the_profile_that_was_active() {
+        let z = temp("saverefs-profile");
+        std::fs::create_dir_all(z.join("PZModStudio_Instances")).unwrap();
+        std::fs::write(
+            z.join("PZModStudio_Instances").join("inst_1.json"),
+            r#"{"id":"inst_1","name":"Main","created_at":"0","is_active":true,"active_mod_ids":["A"],"load_order":["A"]}"#,
+        )
+        .unwrap();
+        let state = parse_game_state("protocol=2\nstate=ingame\nsave=Sandbox/W\nmod=A\nat=5\n").unwrap();
+        assert!(record_save_reference(&z, &state).unwrap());
+        let r = &save_references(&z)["Sandbox/W"];
+        assert_eq!((r.profile.as_deref(), r.profile_name.as_deref()), (Some("inst_1"), Some("Main")));
         let _ = std::fs::remove_dir_all(&z);
     }
 

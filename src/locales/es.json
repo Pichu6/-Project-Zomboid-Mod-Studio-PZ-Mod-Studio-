@@ -2550,7 +2550,9 @@
       "addedList": "Agregados",
       "removedList": "Sacados",
       "updatedList": "Actualizados en el Workshop"
-    }
+    },
+    "profile": "Perfil: {{name}}",
+    "profileTitle": "El perfil que estaba activo la última vez que se jugó esta partida con el Studio abierto; para una partida jugada sin él, el perfil cuyos mods son exactamente los de la partida."
   },
   "update": {
     "available": "Salió PZ Mod Studio {{latest}}",

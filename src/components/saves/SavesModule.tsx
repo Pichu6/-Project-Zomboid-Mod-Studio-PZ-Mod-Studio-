@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Archive, CheckCircle2, ChevronDown, ChevronRight, FolderOpen, HardDrive, Loader2, Pin, PinOff, RefreshCw, RotateCcw, ShieldAlert, Trash2 } from 'lucide-react';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService } from '../../services/tauri';
-import { SaveBackupEntry, SaveSummary, SavesOverview, SessionDiff } from '../../types';
+import { AppInstance, SaveBackupEntry, SaveSummary, SavesOverview, SessionDiff } from '../../types';
 import { formatBytes } from '../browse/common';
 import i18next from 'i18next';
 
@@ -12,6 +12,8 @@ interface SavesModuleProps {
 }
 
 const when = (secs: number) => (secs ? new Date(secs * 1000).toLocaleString(i18next.language) : '');
+/** A mod list entry as a plain id (`<workshop id>/<Mod>` -> `Mod`). */
+const plainId = (id: string) => id.split('/').pop() ?? id;
 
 /**
  * The player's saves and their backups. The Studio backs a save up when the player leaves it,
@@ -23,6 +25,7 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<SavesOverview | null>(null);
   const [diffs, setDiffs] = useState<Record<string, SessionDiff>>({});
+  const [profiles, setProfiles] = useState<AppInstance[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -31,9 +34,14 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
   const refresh = useCallback(async () => {
     if (!paths.user_zomboid_dir) return;
     setLoading(true);
-    const [next, sessions] = await Promise.all([TauriService.savesOverview(paths), TauriService.saveSessionDiffs(paths)]);
+    const [next, sessions, list] = await Promise.all([
+      TauriService.savesOverview(paths),
+      TauriService.saveSessionDiffs(paths),
+      TauriService.listInstances(paths.user_zomboid_dir).catch(() => [] as AppInstance[]),
+    ]);
     if (next) setOverview(next);
     setDiffs(sessions);
+    setProfiles(list);
     setLoading(false);
   }, [paths]);
 
@@ -44,6 +52,19 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
     void TauriService.listenLinkGameState(() => void refresh()).then((u) => unlisten.push(u));
     return () => unlisten.forEach((u) => u());
   }, [refresh]);
+
+  /**
+   * The profile a save was played with. The Studio notes the active profile each time a save is
+   * played while it runs; a save played without it is matched only to a profile whose mods are
+   * exactly the save's. Anything less than that names no profile.
+   */
+  const profileOf = (save: SaveSummary): string | null => {
+    const noted = diffs[save.id];
+    if (noted?.profile) return profiles.find((p) => p.id === noted.profile)?.name ?? noted.profile_name ?? null;
+    const mods = new Set(save.mods.map(plainId));
+    const same = profiles.find((p) => p.active_mod_ids.length === mods.size && p.active_mod_ids.every((id) => mods.has(plainId(id))));
+    return same?.name ?? null;
+  };
 
   const free = overview?.free_bytes ?? null;
   const biggest = useMemo(() => Math.max(0, ...(overview?.saves ?? []).map((s) => s.bytes)), [overview]);
@@ -146,7 +167,17 @@ export const SavesModule: React.FC<SavesModuleProps> = ({ paths }) => {
                   {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-slate-100 truncate">{save.world}</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-semibold text-slate-100 truncate">{save.world}</span>
+                    {(() => {
+                      const profile = profileOf(save);
+                      return profile ? (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-sky-700/60 text-sky-300" title={t('saves.profileTitle')}>
+                          {t('saves.profile', { name: profile })}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                   <div className="text-[11px] text-slate-500">
                     {t('saves.line', { mode: save.mode, size: formatBytes(save.bytes), files: save.files.toLocaleString(), mods: save.mods.length, when: when(save.modified) })}
                   </div>
