@@ -2964,7 +2964,7 @@ dependencies = [
 
 [[package]]
 name = "pz-mod-studio"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "chrono",
  "dirs-next",
