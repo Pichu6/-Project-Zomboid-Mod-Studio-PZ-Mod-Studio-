@@ -66,6 +66,12 @@ Una línea verde confirma cada cambio, con **Guardado en tu lista de mods.**
 
 El Studio descarga una vez al día reglas compartidas desde su propio repositorio: reglas de orden de carga, pares de mods que no van juntos y un índice de problemas conocidos con su arreglo. Aparecen como filas `community_*`. Podés apagar la descarga diaria en Configuración; entonces se usa la última copia.
 
+## Memoria del juego
+
+En la pestaña **Rendimiento**: cuánta memoria puede usar el Java del juego (`-Xmx` en `ProjectZomboid64.json`), de la que tiene la PC, con una recomendación para tus mods activos y un aviso si en una sesión reciente se quedó sin memoria. Elegí un valor (de 2 GB hasta la mitad de la memoria de la PC) y **Aplicar** con el juego cerrado; se aplica en el próximo inicio, y una copia del archivo de antes del cambio queda en `PZModStudio_Backups`.
+
+Cada perfil guarda su propio valor: al activar un perfil, el juego recibe su memoria. Un perfil sin valor propio usa el último elegido. Si una actualización del juego vuelve a poner su valor, el Studio pone el tuyo la próxima vez que abre el juego.
+
 ## Tiempo de juego por mod
 
 En la pestaña **Rendimiento**: qué mods frenan el juego mientras jugás. **Medir** pone un mod chico del Studio (PZ Mod Studio Profiler) primero en tu lista de mods y en la partida que jugaste por última vez; abrí el juego (reinicialo si estaba abierto) y jugá unos minutos como siempre. Cada handler de eventos de cada mod lo mide el propio juego y se suma por mod: la parte del tiempo real que se llevó, milisegundos por segundo y su llamada más larga (una larga es un congelamiento que se ve). Abrí una fila para ver los handlers que más cuestan, con su archivo y línea. **Dejar de medir** saca el medidor de la lista y de la partida; los últimos números quedan.

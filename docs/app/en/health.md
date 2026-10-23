@@ -66,6 +66,12 @@ A green line confirms each change, with **Saved to your mod list.**
 
 The Studio downloads shared rules once a day from its own repository: load-order rules, pairs of mods that do not go together, and an index of known issues with their fix. They show up as `community_*` rows. You can turn the daily download off in App Settings; then the last copy is used.
 
+## Game memory
+
+In the **Performance** tab: how much memory the game's Java may use (`-Xmx` in `ProjectZomboid64.json`), out of the PC's, with a suggestion for your active mods and a warning when a recent session ran out of memory. Pick a value (2 GB up to half the PC's memory) and **Apply** with the game closed; it takes effect on the next start, and a copy of the file before the change goes to `PZModStudio_Backups`.
+
+Each profile keeps its own value: switching a profile on gives the game its memory. A profile without one uses the last value chosen. If a game update puts its own value back, the Studio restores yours the next time it starts the game.
+
 ## Game time per mod
 
 In the **Performance** tab: which mods slow the game down while you play. **Measure** puts a small Studio mod (PZ Mod Studio Profiler) first in your mod list and in the save you played last; start the game (restart it if it was open) and play a few minutes as usual. Every event handler of every mod is timed by the game and added up per mod: the share of real time it took, milliseconds per second, and its longest single call (a long one is a freeze you see). Open a row for the handlers that cost the most, with their file and line. **Stop measuring** takes the profiler out of the list and the save again; the last numbers stay.
