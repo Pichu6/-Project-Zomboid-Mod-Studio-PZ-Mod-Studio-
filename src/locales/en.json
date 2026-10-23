@@ -2716,7 +2716,7 @@
     "addTitle": "Add a server by its address",
     "addressPlaceholder": "ip:port (port 16261 if left out)",
     "namePlaceholder": "Name (optional)",
-    "passwordPlaceholder": "Password (if it has one)",
+    "passwordPlaceholder": "Server password (if any)",
     "add": "Add",
     "addBlurb": "For a private server or a friend's: the address they gave you. The password is kept in Windows' credential store, never in a file.",
     "starred": "Starred",
@@ -2743,8 +2743,7 @@
     "legendOn": "Installed and on",
     "legendInstalled": "Installed",
     "legendDownload": "The game downloads it",
-    "passwordKept": "Password kept (type to change)",
-    "remember": "Remember the password",
+    "remember": "Remember the server password",
     "join": "Join",
     "joinBlurb": "Starts the game on this server's connect window (close the game first), with the server password and your username filled in. There you type your account password and press Connect; the button stays off without a username. A new username makes a new account on that server. The game loads the server's mods only there; your own mod list stays as it is.",
     "started": "The game is starting and joining {{name}}. Back here after playing, the full list of its mods will be known.",
@@ -2769,7 +2768,13 @@
     "usernameTitle": "Your account name on this server. The Studio keeps it and the game's connect window comes with it typed in; you type the account password there.",
     "intoProfile": "The mods the server loads (the ones the game has you download too) go into your active profile, {{name}}, switched on and in its order. The profile's other mods stay in it, switched off, except those that run only on your side (ZombieBuddy and its client Java mods, like Viewpoint), which stay as you had them.",
     "madeProfileActive": "This server has its own profile, {{name}}, and it is the active one.",
-    "madeProfileInactive": "This server has its own profile, {{name}}, but it is not the active one: activate it in Profiles to join with it."
+    "madeProfileInactive": "This server has its own profile, {{name}}, but it is not the active one: activate it in Profiles to join with it.",
+    "passwordSaved": "Server password kept in Windows: the Studio fills it in when you join.",
+    "passwordChange": "Change",
+    "passwordForget": "Forget",
+    "passwordForgetConfirm": "Forget the kept password of {{name}}? You will have to type it again to join.",
+    "passwordNew": "New server password",
+    "passwordKeepOld": "Keep the saved one"
   },
   "gameTime": {
     "title": "Game time per mod",

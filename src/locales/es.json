@@ -2716,7 +2716,7 @@
     "addTitle": "Agregar un servidor por su dirección",
     "addressPlaceholder": "ip:puerto (16261 si no lo ponés)",
     "namePlaceholder": "Nombre (opcional)",
-    "passwordPlaceholder": "Contraseña (si tiene)",
+    "passwordPlaceholder": "Contraseña del servidor (si tiene)",
     "add": "Agregar",
     "addBlurb": "Para un servidor privado o de un amigo: la dirección que te pasaron. La contraseña se guarda en el almacén de credenciales de Windows, nunca en un archivo.",
     "starred": "Con estrella",
@@ -2743,8 +2743,7 @@
     "legendOn": "Instalado y activo",
     "legendInstalled": "Instalado",
     "legendDownload": "Lo descarga el juego",
-    "passwordKept": "Contraseña guardada (escribí para cambiarla)",
-    "remember": "Recordar la contraseña",
+    "remember": "Recordar la contraseña del servidor",
     "join": "Entrar",
     "joinBlurb": "Abre el juego en la ventana de conexión de este servidor (cerrá el juego antes), con la contraseña del servidor y tu usuario ya puestos. Ahí escribís la contraseña de tu cuenta y tocás Conectar; el botón no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego carga los mods del servidor solo ahí; tu lista de mods queda como está.",
     "started": "El juego está abriendo y entrando a {{name}}. Cuando vuelvas después de jugar, vas a ver la lista completa de sus mods.",
@@ -2769,7 +2768,13 @@
     "usernameTitle": "El nombre de tu cuenta en este servidor. El Studio lo guarda y el juego lo trae escrito en su ventana de conexión; la contraseña de la cuenta la escribís ahí.",
     "intoProfile": "Los mods que carga el servidor (también los que el juego te hace descargar) se agregan a tu perfil activo, {{name}}, activos y en su orden. Los demás mods del perfil quedan en él, apagados, salvo los que corren solo de tu lado (ZombieBuddy y sus mods de Java para el cliente, como Viewpoint), que siguen como los tenías.",
     "madeProfileActive": "Este servidor tiene su perfil, {{name}}, y es el activo.",
-    "madeProfileInactive": "Este servidor tiene su perfil, {{name}}, pero no es el activo: activalo en Perfiles para entrar con él."
+    "madeProfileInactive": "Este servidor tiene su perfil, {{name}}, pero no es el activo: activalo en Perfiles para entrar con él.",
+    "passwordSaved": "Contraseña del servidor guardada en Windows: el Studio la pone sola al entrar.",
+    "passwordChange": "Cambiar",
+    "passwordForget": "Olvidar",
+    "passwordForgetConfirm": "¿Olvidar la contraseña guardada de {{name}}? Vas a tener que escribirla de nuevo para entrar.",
+    "passwordNew": "Contraseña nueva del servidor",
+    "passwordKeepOld": "Dejar la guardada"
   },
   "gameTime": {
     "title": "Tiempo de juego por mod",

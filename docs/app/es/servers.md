@@ -14,7 +14,7 @@ Achicá la lista con el cuadro (**Nombre o mapa**) y los filtros: **Solo mi vers
 
 1. Hacé clic en un servidor. El panel de la derecha muestra su versión, si está abierto a todos o solo con lista blanca, su último reinicio y sus mods. Cada mod tiene un color: **Instalado y activo**, **Instalado** o **Lo descarga el juego**.
 2. Si el servidor usa otra versión que la tuya, un aviso lo dice: el juego no te deja entrar hasta que coincidan (rama beta de Steam).
-3. Escribí la contraseña del servidor si tiene, y marcá **Recordar la contraseña** para guardarla.
+3. Escribí la contraseña del servidor si tiene, y marcá **Recordar la contraseña del servidor** para guardarla. Una guardada se muestra como una línea verde (**Contraseña del servidor guardada en Windows**) en vez del campo: el Studio la pone sola al entrar. **Cambiar** abre el campo para una nueva y **Olvidar** la borra. La contraseña de tu cuenta la escribís en la ventana de conexión del juego.
 4. Cerrá el juego si está abierto y apretá **Entrar**.
 
 El juego abre en la ventana de conexión de este servidor con la contraseña del servidor ya puesta, y tu usuario también si lo escribiste en **Tu usuario en este servidor** (el Studio lo guarda; el mod Studio Link lo completa). Ahí escribís la contraseña de tu cuenta y tocás **Conectar**, que no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods queda como está; el perfil con el que entrás los recibe (abajo).

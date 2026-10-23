@@ -14,7 +14,7 @@ Narrow the list with the box (**Name or map**) and the filters: **Only my build*
 
 1. Click a server. The panel on the right shows its build, whether it is open or whitelist only, its last wipe and its mods. Each mod is coloured: **Installed and on**, **Installed**, or **The game downloads it**.
 2. If the server runs another build than yours, a warning says so: the game will not let you in until both match (Steam beta branch).
-3. Type the server password if it has one, and tick **Remember the password** to keep it.
+3. Type the server password if it has one, and tick **Remember the server password** to keep it. A kept one shows as a green line (**Server password kept in Windows**) instead of the field: the Studio fills it in when you join. **Change** opens the field for a new one and **Forget** deletes it. Your account password goes in the game's connect window.
 4. Close the game if it is open, and press **Join**.
 
 The game starts on this server's connect window with the server password filled in, and your username too when you typed it in **Your username on this server** (the Studio keeps it; the Studio Link mod fills it in). There you type your account password and press **Connect**, which stays off without a username. A new username makes a new account on that server. The game downloads the server's mods and uses them only there: your own mod list stays as it is; the profile you join with gets them (below).

@@ -56,6 +56,8 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [remember, setRemember] = useState(false);
+  /** A kept server password is being replaced: the field shows instead of the "kept" line. */
+  const [changingPw, setChangingPw] = useState(false);
   const [joining, setJoining] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [direct, setDirect] = useState({ name: '', address: '', password: '' });
@@ -120,6 +122,7 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
     setPassword('');
     setUsername(savedOf(p.address)?.username ?? '');
     setRemember(false);
+    setChangingPw(false);
     const ticket = ++asked.current;
     setAsking(true);
     try {
@@ -433,10 +436,32 @@ export const JoinServers: React.FC<JoinServersProps> = ({ paths, mods, profiles,
 
             <div className="space-y-2 pt-1 border-t border-slate-800">
               <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t('join.usernamePlaceholder')} title={t('join.usernameTitle')} autoComplete="off" className="w-full px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100" />
-              <div className="flex flex-wrap items-center gap-2">
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pickedSaved?.has_password ? t('join.passwordKept') : t('join.passwordPlaceholder')} autoComplete="off" className="px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 w-48" />
-                <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-emerald-500" />{t('join.remember')}</label>
-              </div>
+              {pickedSaved?.has_password && !changingPw ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-800/60 bg-emerald-950/30 px-2.5 py-1.5 text-[11px] text-emerald-200">
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <span className="flex-1 min-w-0">{t('join.passwordSaved')}</span>
+                  <button type="button" onClick={() => { setChangingPw(true); setRemember(true); setPassword(''); }} className="px-2 py-0.5 rounded border border-emerald-700/70 hover:bg-emerald-900/50 cursor-pointer">
+                    {t('join.passwordChange')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { if (picked && window.confirm(t('join.passwordForgetConfirm', { name: picked.name }))) void keep(picked, pickedSaved.starred, ''); }}
+                    className="px-2 py-0.5 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+                  >
+                    {t('join.passwordForget')}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={changingPw ? t('join.passwordNew') : t('join.passwordPlaceholder')} autoComplete="off" className="px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 w-48" />
+                  <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-emerald-500" />{t('join.remember')}</label>
+                  {changingPw && (
+                    <button type="button" onClick={() => { setChangingPw(false); setPassword(''); setRemember(false); }} className="text-[11px] text-slate-400 hover:text-slate-200 underline cursor-pointer">
+                      {t('join.passwordKeepOld')}
+                    </button>
+                  )}
+                </div>
+              )}
               <button onClick={() => void join()} disabled={joining} className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50 cursor-pointer">
                 <Play className="w-4 h-4" />{t('join.join')}
               </button>
