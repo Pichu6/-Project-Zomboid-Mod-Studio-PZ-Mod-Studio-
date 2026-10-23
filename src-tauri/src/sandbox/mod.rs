@@ -155,6 +155,8 @@ fn sync_java_agents_for_launch(install_dir: &Path, user_zomboid_dir: &str) {
             crate::diagnostics::error(format!("[StudioLink] {}", e));
         }
     }
+    // The memory the player chose, back in the launch file if a game update put its own there.
+    crate::game_memory::reapply_for_launch(install_dir, &z_dir);
     // The companion mods the player has installed run this build's scripts, not an older Studio's.
     crate::claude_agent::refresh_if_installed(&z_dir);
     let z = z_dir.to_string_lossy();

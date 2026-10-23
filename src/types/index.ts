@@ -102,6 +102,23 @@ export interface ModList {
 }
 
 /** How long each mod's files took to load in the last session, from the game's DebugLog. */
+/** The memory the game's Java may use (-Xmx), the PC's, and what the Studio suggests (MB). */
+export interface GameMemory {
+  file: string | null;
+  current_mb: number | null;
+  chosen_mb: number | null;
+  /** The active profile, and whether it has a value of its own. */
+  profile: string | null;
+  profile_has_own: boolean;
+  total_mb: number | null;
+  max_mb: number;
+  recommended_mb: number;
+  active_mods: number;
+  /** Sessions whose log has java.lang.OutOfMemoryError, newest first. */
+  out_of_memory: string[];
+  game_running: boolean;
+}
+
 /** One stage of the game's start (`start`, `mods`, `translations`, `scripts`, `clothing`, `lua`, `textures`, `models`, `menu`). */
 export interface BootPhase {
   id: string;
@@ -401,6 +418,8 @@ export interface AppInstance {
   target_build?: string | null;
   /** The mods that belong to the profile, on or off; null for an older profile (= its active mods). */
   members?: string[] | null;
+  /** The memory (MB) the game gets with this profile on; null: the last chosen. */
+  game_memory_mb?: number | null;
 }
 
 /** The mod the Studio keeps on in every profile so the game's Mods screen shows the profile. */

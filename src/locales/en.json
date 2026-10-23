@@ -2822,5 +2822,26 @@
       "models": "3D models and animations, the game's and the mods' (anims_X); the stage that grows most with mods.",
       "menu": "The game's own start-up Lua (OnGameBoot) and the logo screens."
     }
+  },
+  "gameMemory": {
+    "title": "Game memory",
+    "blurb": "Project Zomboid runs on Java, which never uses more memory than its launch file allows (-Xmx in ProjectZomboid64.json). With many mods the game's own value runs short: the game stutters while Java frees memory over and over, and in the end closes with an out-of-memory error.",
+    "current": "The game has {{gb}} GB",
+    "noValue": "The launch file sets no limit",
+    "pc": "of the {{gb}} GB in this PC",
+    "recommended_one": "suggested for {{count}} active mod: {{gb}} GB",
+    "recommended_other": "suggested for {{count}} active mods: {{gb}} GB",
+    "ranOut_one": "The game ran out of memory in {{count}} of the last sessions ({{logs}}): give it more.",
+    "ranOut_other": "The game ran out of memory in {{count}} of the last sessions ({{logs}}): give it more.",
+    "updateUndid": "You chose {{chosen}} GB, and the launch file says {{now}} GB: a game update wrote its own value. It goes back to {{chosen}} GB the next time you start the game from the Studio.",
+    "give": "Give the game",
+    "suggested": "suggested",
+    "now": "now",
+    "apply": "Apply",
+    "closeGame": "Close the game to change it: it keeps its launch file open.",
+    "done": "Done: the profile {{name}} gives the game {{gb}} GB from its next start. A copy of the launch file before the change is in PZModStudio_Backups.",
+    "how": "Takes effect the next time the game starts. More is not always better: past what the mods need, Java takes longer each time it cleans up, and Windows, the graphics driver and the game's own native side need the rest of the memory, so the Studio offers up to half of the PC's ({{max}} GB). A game update can put its own value back; the Studio restores yours when it starts the game.",
+    "profileOwn": "This is the profile {{name}}'s value: switching it on gives the game this memory.",
+    "profileNone": "The profile {{name}} has no value of its own yet: it takes the last one chosen. Apply one and it keeps it; each profile can have its own."
   }
 }

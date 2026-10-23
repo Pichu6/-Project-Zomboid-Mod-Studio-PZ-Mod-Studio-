@@ -279,6 +279,18 @@ pub fn get_available_tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "game_memory".to_string(),
+            description: "The memory the game's Java may use (-Xmx in ProjectZomboid64.json): now, the PC's, the most the Studio offers (half the PC's), what it suggests for the active mod list, the active profile and whether it has its own value, and the recent sessions that ran out of memory. With mb it sets the value from the next start, keeps it as the active profile's (switching that profile on gives it back) and as the last chosen; refused while the game runs.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "mb": { "type": "integer", "description": "Memory to give the game, in MB (2048 up to half the PC's); leave out to only read" },
+                    "user_zomboid_dir": { "type": "string", "description": "Optional custom path to the user Zomboid folder" },
+                    "pz_install_dir": { "type": "string", "description": "Optional game folder" }
+                }
+            }),
+        },
+        McpTool {
             name: "get_mod_game_time".to_string(),
             description: "Which mods cost the game the most time while it runs: the Studio's in-game profiler (PZModStudio_Profiler) times every event handler of every mod and this adds them up per mod (ms, share of real time, longest single call, top handlers with file:line). With on=true/false it switches measuring on (the profiler first in default.txt and in the last-played save's mods.txt; it starts with the next game launch) or off. Without on it only reads.".to_string(),
             input_schema: json!({
@@ -628,6 +640,13 @@ pub fn execute_tool(name: &str, args: Value) -> ToolCallResult {
         "sort_mod_load_order" => handle_sort_mod_load_order(args),
         "scan_mod_conflicts" => handle_scan_mod_conflicts(args),
         "get_mod_health" => handle_get_mod_health(args),
+        "game_memory" => {
+            let paths = resolve_paths(&args);
+            match args.get("mb").and_then(|v| v.as_u64()) {
+                Some(mb) => json_result(crate::game_memory::set(&paths.pz_install_dir, &paths.user_zomboid_dir, mb)),
+                None => json_result(Ok::<_, String>(crate::game_memory::status(&paths.pz_install_dir, &paths.user_zomboid_dir))),
+            }
+        }
         "get_mod_game_time" => {
             let paths = resolve_paths(&args);
             match args.get("on").and_then(|v| v.as_bool()) {

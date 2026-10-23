@@ -10,6 +10,7 @@ pub mod diff_engine;
 pub mod discord;
 pub mod discord_commands;
 pub mod error_report;
+pub mod game_memory;
 pub mod images;
 pub mod instance_manager;
 pub mod lists;
@@ -1035,6 +1036,18 @@ fn mod_load_times_cmd(paths: StudioPaths) -> sandbox::load_times::LoadTimes {
     sandbox::load_times::from_logs(&paths.user_zomboid_dir)
 }
 
+/// The memory the game's Java may use, the PC's, and what the Studio suggests.
+#[tauri::command(async)]
+fn game_memory_cmd(paths: StudioPaths) -> game_memory::GameMemory {
+    game_memory::status(&paths.pz_install_dir, &paths.user_zomboid_dir)
+}
+
+/// Gives the game this much memory (MB) from its next start.
+#[tauri::command(async)]
+fn set_game_memory_cmd(paths: StudioPaths, mb: u64) -> Result<game_memory::GameMemory, String> {
+    game_memory::set(&paths.pz_install_dir, &paths.user_zomboid_dir, mb)
+}
+
 /// The game's last starts, stage by stage, newest first (from its DebugLogs).
 #[tauri::command(async)]
 fn boot_history_cmd(paths: StudioPaths) -> Vec<sandbox::load_times::BootTimes> {
@@ -1767,6 +1780,8 @@ pub fn run() {
             mod_load_times_cmd,
             profiler_status_cmd,
             boot_history_cmd,
+            game_memory_cmd,
+            set_game_memory_cmd,
             profiler_set_cmd,
             mod_lists_cmd,
             validate_mod_cmd,

@@ -13,6 +13,7 @@ import { tHtml } from '../../i18n/html';
 import { GameTimePanel } from './GameTimePanel';
 import { openRequiredItem } from '../../utils/workshopRequirement';
 import { BootTimePanel } from './BootTimePanel';
+import { MemoryPanel } from './MemoryPanel';
 
 interface HealthModuleProps {
   paths: StudioPathsUI;
@@ -757,6 +758,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         )
       )}
 
+      {tab === 'performance' && <MemoryPanel paths={paths} />}
       {tab === 'performance' && <BootTimePanel paths={paths} />}
       {tab === 'performance' && <GameTimePanel paths={paths} mods={mods} onModsChanged={onModsChanged} />}
     </div>

@@ -25,6 +25,9 @@ pub struct AppInstance {
     /// before this existed: its mods are the ones it has on.
     #[serde(default)]
     pub members: Option<Vec<String>>,
+    /// The memory (MB) the game gets with this profile on (`-Xmx`); None: whatever was chosen last.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_memory_mb: Option<u64>,
 }
 
 impl AppInstance {
@@ -98,6 +101,10 @@ fn apply_link(z_dir: &std::path::Path, instance: &AppInstance) {
     if !install.is_empty() {
         if let Err(e) = crate::studio_link::sync_java_agents_when_free(std::path::Path::new(&install), z_dir, &instance.active_mod_ids) {
             crate::diagnostics::error(format!("[StudioLink] {}", e));
+        }
+        // The profile's memory; while the game runs, its next start from the Studio sets it.
+        if instance.is_active && crate::sandbox::find_running_pz_pid().is_none() {
+            crate::game_memory::reapply_for_launch(std::path::Path::new(&install), z_dir);
         }
     }
 }
@@ -270,6 +277,20 @@ fn instance_file_path(dir: &std::path::Path, instance_id: &str) -> Result<std::p
     Ok(dir.join(format!("{}.json", instance_id)))
 }
 
+/// Keeps `mb` as the active profile's game memory. Returns the profile's name, or None when no
+/// profile is active.
+pub fn set_active_memory(z_dir: &std::path::Path, mb: u64) -> Result<Option<String>, String> {
+    let Some((path, mut instance)) = find_active(&z_dir.join("PZModStudio_Instances")) else { return Ok(None) };
+    instance.game_memory_mb = Some(mb);
+    write_instance(&path, &instance)?;
+    Ok(Some(instance.name))
+}
+
+/// The active profile's game memory and name, if one is active.
+pub fn active_memory(z_dir: &std::path::Path) -> Option<(Option<u64>, String)> {
+    find_active(&z_dir.join("PZModStudio_Instances")).map(|(_, i)| (i.game_memory_mb, i.name))
+}
+
 /// The active profile's id and name, if one is active.
 pub fn active_profile(user_zomboid_dir: &str) -> Option<(String, String)> {
     find_active(&get_instances_dir(user_zomboid_dir)).map(|(_, i)| (i.id, i.name))
@@ -341,6 +362,7 @@ pub fn create_instance(
         load_order,
         last_played_build: None,
         target_build: None,
+        game_memory_mb: None,
     };
     instance.with_link();
 
@@ -539,6 +561,11 @@ pub fn update_instance(
         }
     }
 
+    // The screen's copy may be older than the game memory set since: kept unless it says another.
+    let mut instance = instance;
+    if instance.game_memory_mb.is_none() {
+        instance.game_memory_mb = read_instance(&instance_file).and_then(|stored| stored.game_memory_mb);
+    }
     let json = serde_json::to_string_pretty(&instance).map_err(|e| e.to_string())?;
     crate::load_order::ini_parser::atomic_write(&instance_file, json).map_err(|e| e.to_string())?;
 

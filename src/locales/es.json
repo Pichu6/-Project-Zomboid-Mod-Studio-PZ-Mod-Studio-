@@ -2822,5 +2822,26 @@
       "models": "Modelos 3D y animaciones, del juego y de los mods (anims_X); la fase que más crece con los mods.",
       "menu": "El Lua de arranque del propio juego (OnGameBoot) y las pantallas de logos."
     }
+  },
+  "gameMemory": {
+    "title": "Memoria del juego",
+    "blurb": "Project Zomboid corre sobre Java, que nunca usa más memoria de la que permite su archivo de inicio (-Xmx en ProjectZomboid64.json). Con muchos mods el valor de fábrica queda corto: el juego tironea mientras Java libera memoria una y otra vez, y al final se cierra con un error de memoria.",
+    "current": "El juego tiene {{gb}} GB",
+    "noValue": "El archivo de inicio no fija un límite",
+    "pc": "de los {{gb}} GB de esta PC",
+    "recommended_one": "recomendado para {{count}} mod activo: {{gb}} GB",
+    "recommended_other": "recomendado para {{count}} mods activos: {{gb}} GB",
+    "ranOut_one": "El juego se quedó sin memoria en {{count}} de las últimas sesiones ({{logs}}): dale más.",
+    "ranOut_other": "El juego se quedó sin memoria en {{count}} de las últimas sesiones ({{logs}}): dale más.",
+    "updateUndid": "Elegiste {{chosen}} GB y el archivo de inicio dice {{now}} GB: una actualización del juego puso su propio valor. Vuelve a {{chosen}} GB la próxima vez que abras el juego desde el Studio.",
+    "give": "Darle al juego",
+    "suggested": "recomendado",
+    "now": "actual",
+    "apply": "Aplicar",
+    "closeGame": "Cerrá el juego para cambiarla: mantiene abierto su archivo de inicio.",
+    "done": "Listo: el perfil {{name}} le da al juego {{gb}} GB desde su próximo inicio. Una copia del archivo de inicio de antes del cambio quedó en PZModStudio_Backups.",
+    "how": "Se aplica la próxima vez que arranca el juego. Más no siempre es mejor: pasado lo que necesitan los mods, Java tarda más cada vez que limpia, y Windows, el driver de video y la parte nativa del juego necesitan el resto de la memoria, así que el Studio ofrece hasta la mitad de la de la PC ({{max}} GB). Una actualización del juego puede volver a poner su valor; el Studio pone el tuyo cuando abre el juego.",
+    "profileOwn": "Es el valor del perfil {{name}}: al activarlo, el juego recibe esta memoria.",
+    "profileNone": "El perfil {{name}} todavía no tiene un valor propio: usa el último elegido. Aplicá uno y lo guarda; cada perfil puede tener el suyo."
   }
 }
