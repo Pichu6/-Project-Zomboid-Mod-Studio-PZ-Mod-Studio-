@@ -790,6 +790,14 @@
       "infoIntro": "Acá no hay nada que arreglar: copias que el juego ignora, mods actualizados desde la última vez que jugaste, lo que dice el índice de la comunidad sobre tus mods.",
       "conflictsEmpty": "Ningún par de tus mods trae el mismo archivo, ítem o texto.",
       "infoEmpty": "Nada más para saber sobre esta lista."
+    },
+    "conflictState": {
+      "open": "Sin resolver",
+      "openTag": "Sin resolver",
+      "stale": "Resueltos antes de un cambio",
+      "staleTag": "Revisar",
+      "settled": "Resueltos",
+      "settledTag": "Resuelto"
     }
   },
   "dialogs": {

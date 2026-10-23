@@ -95,6 +95,17 @@ const fixLabel = (fix: HealthFix): string => {
   }
 };
 
+/** Where a conflict stands: the package settles it, did but a mod changed since, or does not. */
+type ConflictState = 'open' | 'stale' | 'settled';
+const CONFLICT_STATES: ConflictState[] = ['open', 'stale', 'settled'];
+const conflictStateOf = (code: string): ConflictState =>
+  code.endsWith('_settled') ? 'settled' : code.endsWith('_stale') || code === 'package_built_for_other_list' ? 'stale' : 'open';
+const CONFLICT_STYLE: Record<ConflictState, { icon: React.ElementType; row: string; iconColor: string; tag: string }> = {
+  open: { icon: GitMerge, row: 'border-l-4 border-orange-500/70 bg-orange-950/20', iconColor: 'text-orange-400', tag: 'border-orange-600/70 text-orange-300 bg-orange-950/50' },
+  stale: { icon: AlertTriangle, row: 'border-l-4 border-amber-500/70 bg-amber-950/20', iconColor: 'text-amber-400', tag: 'border-amber-600/70 text-amber-300 bg-amber-950/50' },
+  settled: { icon: CheckCircle2, row: 'border-l-4 border-emerald-600/70 bg-emerald-950/15', iconColor: 'text-emerald-400', tag: 'border-emerald-700/70 text-emerald-300 bg-emerald-950/50' },
+};
+
 const SEVERITY_STYLE: Record<HealthSeverity, { icon: React.ElementType; row: string; iconColor: string }> = {
   error: { icon: XCircle, row: 'border-red-500/40 bg-red-950/30', iconColor: 'text-red-400' },
   warning: { icon: AlertTriangle, row: 'border-amber-500/40 bg-amber-950/20', iconColor: 'text-amber-400' },
@@ -386,17 +397,41 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
   const errorsCount = byTab.problems.filter((i) => i.severity === 'error').length;
   const tabCount: Record<HealthTab, number | null> = {
     problems: byTab.problems.length,
-    conflicts: byTab.conflicts.length,
+    // Those that want something done: the settled ones are only there to be seen.
+    conflicts: byTab.conflicts.filter((i) => conflictStateOf(i.code) !== 'settled').length,
     info: byTab.info.length,
     performance: null,
   };
 
-  // The rows of the tab in front, by severity.
-  const grouped = useMemo(() => {
-    const groups: Record<HealthSeverity, HealthIssue[]> = { error: [], warning: [], info: [] };
-    if (tab !== 'performance') byTab[tab].forEach((i) => groups[i.severity].push(i));
-    return groups;
-  }, [byTab, tab]);
+  /**
+   * The rows of the tab in front, in sections: by severity, except on Conflicts, where what
+   * matters is whether the package settles each one, so they go by that (the open ones first),
+   * each with its colour and a word saying so.
+   */
+  const sections = useMemo(() => {
+    if (tab === 'performance') return [];
+    if (tab === 'conflicts') {
+      const by: Record<ConflictState, HealthIssue[]> = { open: [], stale: [], settled: [] };
+      byTab.conflicts.forEach((i) => by[conflictStateOf(i.code)].push(i));
+      return CONFLICT_STATES.map((state) => ({
+        key: state,
+        title: t(`health.conflictState.${state}`),
+        issues: by[state],
+        style: CONFLICT_STYLE[state],
+        tag: t(`health.conflictState.${state}Tag`),
+      }));
+    }
+    const by: Record<HealthSeverity, HealthIssue[]> = { error: [], warning: [], info: [] };
+    byTab[tab].forEach((i) => by[i.severity].push(i));
+    return (['error', 'warning', 'info'] as HealthSeverity[]).map((sev) => ({
+      key: sev,
+      title: t(`health.severity.${sev}`),
+      issues: by[sev],
+      style: SEVERITY_STYLE[sev],
+      tag: null as string | null,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [byTab, tab, i18next.language]);
 
   if (!paths.is_valid) {
     return (
@@ -609,14 +644,14 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         </div>
       )}
 
-      {(['error', 'warning', 'info'] as HealthSeverity[]).map((sev) =>
-        grouped[sev].length === 0 ? null : (
-          <section key={sev} className="flex flex-col gap-2">
+      {sections.map((sec) =>
+        sec.issues.length === 0 ? null : (
+          <section key={sec.key} className="flex flex-col gap-2">
             <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono">
-              {t(`health.severity.${sev}`)} ({grouped[sev].length})
+              {sec.title} ({sec.issues.length})
             </h2>
-            {grouped[sev].map((issue, idx) => {
-              const style = SEVERITY_STYLE[sev];
+            {sec.issues.map((issue, idx) => {
+              const style = sec.style;
               const Icon = style.icon;
               // "Enable X" + "Move X before Y" for the same issue are shown as one button doing both.
               const applicable = issue.fixes.filter((f) => ACTION_FIXES.has(f.action) || applyFix(mods, f) !== null);
@@ -631,10 +666,17 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                 >
                   <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${style.iconColor}`} aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    {issue.mod_id && (
-                      <div className="text-[12.5px] font-bold text-slate-100 truncate">
-                        {nameOf(issue.mod_id)}
-                        {nameOf(issue.mod_id) !== issue.mod_id && <span className="ml-1.5 text-[10px] font-mono font-normal text-slate-500">{issue.mod_id}</span>}
+                    {(issue.mod_id || sec.tag) && (
+                      <div className="flex items-center gap-2 min-w-0">
+                        {sec.tag && (
+                          <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${'tag' in style ? style.tag : ''}`}>{sec.tag}</span>
+                        )}
+                        {issue.mod_id && (
+                          <span className="text-[12.5px] font-bold text-slate-100 truncate">
+                            {nameOf(issue.mod_id)}
+                            {nameOf(issue.mod_id) !== issue.mod_id && <span className="ml-1.5 text-[10px] font-mono font-normal text-slate-500">{issue.mod_id}</span>}
+                          </span>
+                        )}
                       </div>
                     )}
                     <RichText text={issueText(issue)} mods={modWords} foldAt={320} className="text-xs text-slate-300 leading-relaxed" />

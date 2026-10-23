@@ -790,6 +790,14 @@
       "infoIntro": "Nothing to fix here: copies the game ignores, mods updated since you last played, what the community index says about your mods.",
       "conflictsEmpty": "No two of your mods give the same file, item or text.",
       "infoEmpty": "Nothing else worth knowing about this list."
+    },
+    "conflictState": {
+      "open": "Not settled",
+      "openTag": "Not settled",
+      "stale": "Settled before a change",
+      "staleTag": "Check again",
+      "settled": "Settled",
+      "settledTag": "Settled"
     }
   },
   "dialogs": {
