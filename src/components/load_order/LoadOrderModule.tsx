@@ -1,3 +1,4 @@
+import { openRequiredItem } from '../../utils/workshopRequirement';
 import { freshProfile } from '../../utils/profiles';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { ModInfo, HealthIssue, CatalogModSummary, AppInstance, ModErrorStat, profileMembers, STUDIO_LINK_MOD_ID, ModMeta } from '../../types';
@@ -1181,9 +1182,14 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     const targetMod = findInstalledDependency(depModIdRaw);
 
     if (!targetMod) {
-      const cleanSearch = normalizeModId(depModIdRaw);
-      if (onSearchInBrowser) onSearchInBrowser(cleanSearch);
-      else TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(cleanSearch)}`);
+      // The item that provides it, from the selected mod's Required items; a search otherwise.
+      void openRequiredItem(
+        selectedMod?.mod_id,
+        normalizeModId(depModIdRaw),
+        mods,
+        (id) => (onOpenInBrowser ? onOpenInBrowser(id) : TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${id}`)),
+        (text) => (onSearchInBrowser ? onSearchInBrowser(text) : TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(text)}`))
+      );
       return;
     }
 

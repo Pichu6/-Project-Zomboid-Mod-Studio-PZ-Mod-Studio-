@@ -1,3 +1,4 @@
+import { openRequiredItem } from '../../utils/workshopRequirement';
 import React from 'react';
 import { AlertTriangle, Info, Wrench, XCircle } from 'lucide-react';
 import { HealthFix, HealthIssue, HealthSeverity, ModInfo } from '../../types';
@@ -113,8 +114,14 @@ export const RowHealthChips: React.FC<RowHealthChipsProps> = ({ paths, issues, m
   const runFix = (fix: HealthFix, issue: HealthIssue) => {
     switch (fix.action) {
       case 'subscribe_workshop':
-        if (onSearchInBrowser) onSearchInBrowser(fix.hint);
-        else TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`);
+        // The item that provides it, from the requiring mod's Required items; a search otherwise.
+        void openRequiredItem(
+          issue.mod_id,
+          fix.hint,
+          mods,
+          (id) => (onOpenInBrowser ? onOpenInBrowser(id) : TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${id}`)),
+          (text) => (onSearchInBrowser ? onSearchInBrowser(text) : TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(text)}`))
+        );
         return;
       case 'open_workshop_page':
         if (onOpenInBrowser) onOpenInBrowser(fix.workshop_id);

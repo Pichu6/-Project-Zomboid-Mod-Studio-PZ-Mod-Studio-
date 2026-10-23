@@ -11,6 +11,7 @@ import { issueText } from '../../i18n/backendText';
 import { RichText } from '../common/RichText';
 import { tHtml } from '../../i18n/html';
 import { GameTimePanel } from './GameTimePanel';
+import { openRequiredItem } from '../../utils/workshopRequirement';
 import { BootTimePanel } from './BootTimePanel';
 
 interface HealthModuleProps {
@@ -247,8 +248,14 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       return;
     }
     if (fix.action === 'subscribe_workshop') {
-      if (onSearchInBrowser) onSearchInBrowser(fix.hint);
-      else TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(fix.hint)}`);
+      // The item that provides it, from the requiring mod's Required items; a search otherwise.
+      void openRequiredItem(
+        issue?.mod_id,
+        fix.hint,
+        mods,
+        (id) => (onOpenInBrowser ? onOpenInBrowser(id) : TauriService.openExternalUrl(`https://steamcommunity.com/sharedfiles/filedetails/?id=${id}`)),
+        (text) => (onSearchInBrowser ? onSearchInBrowser(text) : TauriService.openExternalUrl(`https://steamcommunity.com/workshop/browse/?appid=108600&searchtext=${encodeURIComponent(text)}`))
+      );
       return;
     }
     if (fix.action === 'disable_mod') {
