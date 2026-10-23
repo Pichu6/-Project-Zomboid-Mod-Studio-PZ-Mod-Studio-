@@ -4,10 +4,15 @@ Mod Health checks your active mods the way the game reads them, and lists every 
 
 ## What you see
 
-- At the top: your **Game build**, how many mods are active, and how many errors and warnings there are.
+- At the top: your **Game build** and how many mods are active.
 - The **community** button (for example **community: 40 rules, 120 mods ↻**): what the shared community files add to the check. Click it to download them now. **Community index** beside it opens the index's web page: every mod's known issues and their fixes.
 - **Check again** runs the check again. It also runs by itself when your list changes.
-- The problems, grouped as **Errors**, **Warnings** and **Info**. Each row shows the mod, what is wrong, a short code (like `missing_dependency`) and its fix buttons on the right.
+- Four tabs, each with how many rows it has:
+  - **Problems**: what breaks the game or will (missing or switched-off requirements, load order, mods your build cannot load, incompatible pairs). **Fix N problem(s) automatically** is here.
+  - **Conflicts**: two mods giving the same file, item, recipe or text; the game uses one, and which one is your call. **Merge N files automatically** is here.
+  - **Good to know**: nothing to fix (ignored copies, mods updated since you last played, community notes).
+  - **Performance**: game time per mod (below).
+- Each row shows the mod, what is wrong, a short code (like `missing_dependency`) and its fix buttons on the right. The screen remembers the last tab; a problem chip in the Mod List opens the tab that has it.
 
 If nothing is wrong, you see **No problems found in your N active mods.**
 
@@ -63,7 +68,7 @@ The Studio downloads shared rules once a day from its own repository: load-order
 
 ## Game time per mod
 
-At the bottom of the screen: which mods slow the game down while you play. **Measure** puts a small Studio mod (PZ Mod Studio Profiler) first in your mod list and in the save you played last; start the game (restart it if it was open) and play a few minutes as usual. Every event handler of every mod is timed by the game and added up per mod: the share of real time it took, milliseconds per second, and its longest single call (a long one is a freeze you see). Open a row for the handlers that cost the most, with their file and line. **Stop measuring** takes the profiler out of the list and the save again; the last numbers stay.
+In the **Performance** tab: which mods slow the game down while you play. **Measure** puts a small Studio mod (PZ Mod Studio Profiler) first in your mod list and in the save you played last; start the game (restart it if it was open) and play a few minutes as usual. Every event handler of every mod is timed by the game and added up per mod: the share of real time it took, milliseconds per second, and its longest single call (a long one is a freeze you see). Open a row for the handlers that cost the most, with their file and line. **Stop measuring** takes the profiler out of the list and the save again; the last numbers stay.
 
 Windows a mod draws and timed actions are not counted. The profiler adds a little time of its own to every handler, so stop it when you are done.
 

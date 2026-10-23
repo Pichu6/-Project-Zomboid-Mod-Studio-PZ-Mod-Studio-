@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Gauge, GitMerge, HeartPulse, Info, Loader2, MessageSquare, RefreshCw, Wand2, XCircle } from 'lucide-react';
 import { AutoMergeResult, CompatResult, HealthFix, HealthIssue, HealthReport, HealthSeverity, ModInfo } from '../../types';
 import { StudioPathsUI } from '../settings/SettingsModule';
 import { TauriService, reportBackendError } from '../../services/tauri';
@@ -50,6 +50,18 @@ const SAFE_FIX_ACTIONS = new Set<HealthFix['action']>(['enable_mod', 'move_befor
  */
 const YOUR_CALL_CODES = new Set(['script_definition_conflict', 'script_definition_stale', 'script_definition_settled', 'translation_conflict', 'translation_stale', 'translation_settled', 'package_built_for_other_list']);
 
+
+/**
+ * The screen in tabs, so each kind of row is read on its own: what breaks or will break the game,
+ * which mod's file or item wins where two mods give the same one (your call), what is only worth
+ * knowing, and what the mods cost while the game runs.
+ */
+type HealthTab = 'problems' | 'conflicts' | 'info' | 'performance';
+const TABS: HealthTab[] = ['problems', 'conflicts', 'info', 'performance'];
+const TAB_ICON: Record<HealthTab, React.ElementType> = { problems: XCircle, conflicts: GitMerge, info: Info, performance: Gauge };
+const TAB_KEY = 'pz_health_tab';
+/** Two mods giving the same file, item, recipe or text: the game uses one, which one is your call. */
+const CONFLICT_CODE = /^(file_conflict|script_definition|translation|definition)/;
 
 const fixLabel = (fix: HealthFix): string => {
   const t = i18next.t;
@@ -333,11 +345,50 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
       (i) => !YOUR_CALL_CODES.has(i.code) && i.fixes.some((f) => SAFE_FIX_ACTIONS.has(f.action))
     ).length ?? 0;
 
+  const tabOf = (i: HealthIssue): Exclude<HealthTab, 'performance'> =>
+    CONFLICT_CODE.test(i.code) || YOUR_CALL_CODES.has(i.code) ? 'conflicts' : i.severity === 'info' ? 'info' : 'problems';
+  const byTab = useMemo(() => {
+    const out: Record<Exclude<HealthTab, 'performance'>, HealthIssue[]> = { problems: [], conflicts: [], info: [] };
+    report?.issues.forEach((i) => out[tabOf(i)].push(i));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report]);
+  const [tab, setTab] = useState<HealthTab>(() => {
+    try {
+      const saved = localStorage.getItem(TAB_KEY) as HealthTab | null;
+      if (saved && TABS.includes(saved)) return saved;
+    } catch {
+      // no storage: the first tab
+    }
+    return 'problems';
+  });
+  const pickTab = (next: HealthTab) => {
+    setTab(next);
+    try {
+      localStorage.setItem(TAB_KEY, next);
+    } catch {
+      // only a convenience
+    }
+  };
+  // A Mod List chip points at one issue: its tab first, so the row is there to scroll to.
+  useEffect(() => {
+    if (focusIssue) setTab(tabOf(focusIssue));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusIssue]);
+  const errorsCount = byTab.problems.filter((i) => i.severity === 'error').length;
+  const tabCount: Record<HealthTab, number | null> = {
+    problems: byTab.problems.length,
+    conflicts: byTab.conflicts.length,
+    info: byTab.info.length,
+    performance: null,
+  };
+
+  // The rows of the tab in front, by severity.
   const grouped = useMemo(() => {
     const groups: Record<HealthSeverity, HealthIssue[]> = { error: [], warning: [], info: [] };
-    report?.issues.forEach((i) => groups[i.severity].push(i));
+    if (tab !== 'performance') byTab[tab].forEach((i) => groups[i.severity].push(i));
     return groups;
-  }, [report]);
+  }, [byTab, tab]);
 
   if (!paths.is_valid) {
     return (
@@ -363,12 +414,6 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                   {t('health.gameBuild', { build: report.game_version ?? t('health.unknown') })}
                 </span>
                 <span className="px-2 py-0.5 rounded border border-slate-700 text-slate-300">{t('health.activeCount', { count: report.active_count })}</span>
-                <span className={`px-2 py-0.5 rounded border ${report.errors ? 'border-red-500/50 text-red-300' : 'border-slate-700 text-slate-400'}`}>
-                  {t('health.errorsCount', { count: report.errors })}
-                </span>
-                <span className={`px-2 py-0.5 rounded border ${report.warnings ? 'border-amber-500/50 text-amber-300' : 'border-slate-700 text-slate-400'}`}>
-                  {t('health.warningsCount', { count: report.warnings })}
-                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -403,41 +448,75 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
             )}
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          {mergeablePaths.length > 1 && (
+        <button
+          type="button"
+          onClick={onRecheck}
+          disabled={checking}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60 shrink-0"
+        >
+          {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}
+          {t('health.checkAgain')}
+        </button>
+      </div>
+
+      <div role="tablist" className="flex items-end gap-1 border-b border-slate-800">
+        {TABS.map((id) => {
+          const Icon = TAB_ICON[id];
+          const count = tabCount[id];
+          const active = tab === id;
+          const badge =
+            id === 'problems' && errorsCount > 0
+              ? 'bg-red-600 text-white'
+              : id === 'problems'
+              ? 'bg-amber-500 text-slate-950'
+              : 'bg-slate-700 text-slate-200';
+          return (
             <button
+              key={id}
               type="button"
-              onClick={() => mergeFiles(mergeablePaths)}
-              disabled={mergeBusy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer disabled:opacity-60"
-              title={t('health.mergeAllTitle')}
+              role="tab"
+              aria-selected={active}
+              onClick={() => pickTab(id)}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-t-lg border border-b-0 -mb-px cursor-pointer ${
+                active ? 'bg-slate-900 border-slate-700 text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
-              {t('health.mergeAll', { count: mergeablePaths.length })}
+              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+              {t(`health.tabs.${id}`)}
+              {count !== null && count > 0 && <span className={`px-1.5 rounded-full text-[10px] font-mono ${badge}`}>{count}</span>}
             </button>
-          )}
-          {safeFixes.length > 0 && (
+          );
+        })}
+      </div>
+
+      {tab !== 'performance' && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-400 max-w-3xl">{t(`health.tabs.${tab}Intro`)}</p>
+          {tab === 'problems' && safeFixes.length > 0 && (
             <button
               type="button"
               onClick={handleFixAllSafe}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shrink-0"
               title={t('health.fixAllTitle')}
             >
               <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
               {t('health.fixAll', { count: safeIssueCount })}
             </button>
           )}
-          <button
-            type="button"
-            onClick={onRecheck}
-            disabled={checking}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer disabled:opacity-60"
-          >
-            {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}
-            {t('health.checkAgain')}
-          </button>
+          {tab === 'conflicts' && mergeablePaths.length > 1 && (
+            <button
+              type="button"
+              onClick={() => mergeFiles(mergeablePaths)}
+              disabled={mergeBusy}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer disabled:opacity-60 shrink-0"
+              title={t('health.mergeAllTitle')}
+            >
+              <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
+              {t('health.mergeAll', { count: mergeablePaths.length })}
+            </button>
+          )}
         </div>
-      </div>
+      )}
 
       {compatBusy && (
         <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
@@ -515,10 +594,10 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         </div>
       )}
 
-      {report && report.issues.length === 0 && (
+      {report && tab !== 'performance' && byTab[tab].length === 0 && (
         <div className="flex items-center gap-3 p-5 rounded-xl border border-emerald-800/60 bg-emerald-950/30 text-emerald-200 text-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-400" aria-hidden="true" />
-          {t('health.noProblems', { count: report.active_count })}
+          {tab === 'problems' ? t('health.noProblems', { count: report.active_count }) : t(`health.tabs.${tab}Empty`)}
         </div>
       )}
 
@@ -622,7 +701,7 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
         )
       )}
 
-      <GameTimePanel paths={paths} mods={mods} onModsChanged={onModsChanged} />
+      {tab === 'performance' && <GameTimePanel paths={paths} mods={mods} onModsChanged={onModsChanged} />}
     </div>
   );
 };

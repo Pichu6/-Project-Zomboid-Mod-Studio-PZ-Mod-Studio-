@@ -774,7 +774,18 @@
     "willEnable": "activar {{count}} mod(s) que otros necesitan",
     "willMove": "mover {{count}} mod(s) más arriba en el orden de carga",
     "confirmFixAll": "Esto va a {{what}}.\n\nNo se apaga nada, y la Lista de mods puede deshacerlo.",
-    "and": " y "
+    "and": " y ",
+    "tabs": {
+      "problems": "Problemas",
+      "conflicts": "Conflictos",
+      "info": "Para saber",
+      "performance": "Rendimiento",
+      "problemsIntro": "Lo que rompe el juego o lo va a romper: requisitos que faltan o están apagados, mods en el orden equivocado, mods que tu versión no puede cargar, pares que no van juntos. Arreglá esto primero.",
+      "conflictsIntro": "Dos mods traen el mismo archivo, ítem, receta o texto, y el juego usa uno solo. No está roto por sí mismo: fusionalos o elegí qué versión querés.",
+      "infoIntro": "Acá no hay nada que arreglar: copias que el juego ignora, mods actualizados desde la última vez que jugaste, lo que dice el índice de la comunidad sobre tus mods.",
+      "conflictsEmpty": "Ningún par de tus mods trae el mismo archivo, ítem o texto.",
+      "infoEmpty": "Nada más para saber sobre esta lista."
+    }
   },
   "dialogs": {
     "kept": {

@@ -4,10 +4,15 @@ Salud de mods revisa tus mods activos como los lee el juego y lista cada problem
 
 ## Qué ves
 
-- Arriba: tu **Build del juego**, cuántos mods hay activos y cuántos errores y avisos hay.
+- Arriba: tu **Build del juego** y cuántos mods hay activos.
 - El botón de la **comunidad** (por ejemplo **comunidad: 40 reglas, 120 mods ↻**): lo que suman a la revisión los archivos compartidos de la comunidad. Hacé clic para descargarlos ahora. **Índice de la comunidad**, al lado, abre la página web del índice: los problemas conocidos de cada mod y sus arreglos.
 - **Revisar de nuevo** vuelve a hacer la revisión. También se hace sola cuando cambia tu lista.
-- Los problemas, agrupados en **Errores**, **Avisos** e **Información**. Cada fila muestra el mod, qué anda mal, un código corto (como `missing_dependency`) y sus botones de arreglo a la derecha.
+- Cuatro pestañas, cada una con cuántas filas tiene:
+  - **Problemas**: lo que rompe el juego o lo va a romper (requisitos que faltan o están apagados, orden de carga, mods que tu versión no carga, pares incompatibles). Acá está **Arreglar N problema(s) automáticamente**.
+  - **Conflictos**: dos mods que traen el mismo archivo, ítem, receta o texto; el juego usa uno, y cuál es decisión tuya. Acá está **Fusionar N archivos automáticamente**.
+  - **Para saber**: nada que arreglar (copias ignoradas, mods actualizados desde la última vez que jugaste, notas de la comunidad).
+  - **Rendimiento**: tiempo de juego por mod (más abajo).
+- Cada fila muestra el mod, qué anda mal, un código corto (como `missing_dependency`) y sus botones de arreglo a la derecha. La pantalla recuerda la última pestaña; la etiqueta de un problema en la Lista de mods abre la pestaña que lo tiene.
 
 Si no hay nada mal, ves **No se encontraron problemas en tus N mods activos.**
 
@@ -63,7 +68,7 @@ El Studio descarga una vez al día reglas compartidas desde su propio repositori
 
 ## Tiempo de juego por mod
 
-Al final de la pantalla: qué mods frenan el juego mientras jugás. **Medir** pone un mod chico del Studio (PZ Mod Studio Profiler) primero en tu lista de mods y en la partida que jugaste por última vez; abrí el juego (reinicialo si estaba abierto) y jugá unos minutos como siempre. Cada handler de eventos de cada mod lo mide el propio juego y se suma por mod: la parte del tiempo real que se llevó, milisegundos por segundo y su llamada más larga (una larga es un congelamiento que se ve). Abrí una fila para ver los handlers que más cuestan, con su archivo y línea. **Dejar de medir** saca el medidor de la lista y de la partida; los últimos números quedan.
+En la pestaña **Rendimiento**: qué mods frenan el juego mientras jugás. **Medir** pone un mod chico del Studio (PZ Mod Studio Profiler) primero en tu lista de mods y en la partida que jugaste por última vez; abrí el juego (reinicialo si estaba abierto) y jugá unos minutos como siempre. Cada handler de eventos de cada mod lo mide el propio juego y se suma por mod: la parte del tiempo real que se llevó, milisegundos por segundo y su llamada más larga (una larga es un congelamiento que se ve). Abrí una fila para ver los handlers que más cuestan, con su archivo y línea. **Dejar de medir** saca el medidor de la lista y de la partida; los últimos números quedan.
 
 No se cuentan las ventanas que dibuja un mod ni las acciones con tiempo. El medidor le suma un poco de tiempo propio a cada handler, así que apagalo cuando termines.
 

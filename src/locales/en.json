@@ -774,7 +774,18 @@
     "willEnable": "switch on {{count}} mod(s) that others need",
     "willMove": "move {{count}} mod(s) earlier in the load order",
     "confirmFixAll": "This will {{what}}.\n\nNothing is switched off, and the Mod List can undo it.",
-    "and": " and "
+    "and": " and ",
+    "tabs": {
+      "problems": "Problems",
+      "conflicts": "Conflicts",
+      "info": "Good to know",
+      "performance": "Performance",
+      "problemsIntro": "What breaks the game or will: missing or switched-off requirements, mods in the wrong order, mods your build cannot load, pairs that do not go together. Fix these first.",
+      "conflictsIntro": "Two mods give the same file, item, recipe or text, and the game uses only one. Nothing is broken by itself: merge them, or choose which version you want.",
+      "infoIntro": "Nothing to fix here: copies the game ignores, mods updated since you last played, what the community index says about your mods.",
+      "conflictsEmpty": "No two of your mods give the same file, item or text.",
+      "infoEmpty": "Nothing else worth knowing about this list."
+    }
   },
   "dialogs": {
     "kept": {
