@@ -21,6 +21,7 @@ import { MapsModule } from './components/maps/MapsModule';
 import { ChangePreview } from './components/common/ChangePreview';
 import { TogglePlan, applyPlan, enableWithRequirements, planIsSimple, planToggle } from './utils/planner';
 import { SplashScreen } from './components/layout/SplashScreen';
+import { SHOW_WELCOME_EVENT, WelcomeTour, welcomeSeen } from './components/common/WelcomeTour';
 import { BackendErrorToasts } from './components/layout/BackendErrorToasts';
 import { HealthModule } from './components/health/HealthModule';
 import { useModHealth } from './hooks/useModHealth';
@@ -208,6 +209,19 @@ export const App: React.FC = () => {
 
   /** Whether the profiles were read once (until then "none active" is not known yet). */
   const [profilesRead, setProfilesRead] = useState(false);
+  /** The welcome tour: once by itself on the first run, again from Help. */
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [tourHighlight, setTourHighlight] = useState<ActiveTab | null>(null);
+  // Not waiting for the profiles: with no Zomboid folder found they are never read, and that
+  // player needs the tour most.
+  useEffect(() => {
+    if (!isInitializing && !welcomeSeen()) setWelcomeOpen(true);
+  }, [isInitializing]);
+  useEffect(() => {
+    const open = () => setWelcomeOpen(true);
+    window.addEventListener(SHOW_WELCOME_EVENT, open);
+    return () => window.removeEventListener(SHOW_WELCOME_EVENT, open);
+  }, []);
   const refreshActiveProfile = useCallback(async (customUserDir?: string): Promise<AppProfile | null> => {
     const userDir = customUserDir || paths.user_zomboid_dir;
     if (userDir) {
@@ -961,6 +975,17 @@ export const App: React.FC = () => {
       {!isInitializing && <UpdateNotice userZomboidDir={paths.user_zomboid_dir} />}
       {/* The help of the screen in front: "?" in the corner, or F1. */}
       <HelpButton tab={activeTab} />
+      <WelcomeTour
+        open={welcomeOpen}
+        onClose={() => setWelcomeOpen(false)}
+        paths={paths}
+        activeProfileName={activeProfile?.name ?? null}
+        profileCount={profiles.length}
+        installedMods={mods.length}
+        health={health.report}
+        onShowTab={setActiveTab}
+        onHighlight={setTourHighlight}
+      />
 
 
       {/* Main Studio Body */}
@@ -970,6 +995,7 @@ export const App: React.FC = () => {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           hasActiveProfile={!!activeProfile}
+          highlightTab={tourHighlight}
           conflictCount={conflicts.length}
           errorCardCount={errorCards.filter((c) => c.severity !== 'WARNING').length}
           healthErrorCount={health.report?.errors ?? 0}

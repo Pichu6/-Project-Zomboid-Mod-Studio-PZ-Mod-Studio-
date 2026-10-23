@@ -2,6 +2,8 @@
 
 PZ Mod Studio is a free mod manager for Project Zomboid on Windows. It keeps your mods in profiles, backs up your saves, checks your mod list the way the game reads it, and helps you fix what breaks. Press "?" on any screen for its own help page.
 
+The first time you open the Studio a **Welcome** tour shows: a card at the bottom right that walks through every screen with the real screen behind it and its button lit up in the sidebar, with what the Studio already knows about your install (the folders it found, your profiles, the problems in your list). Go on with **Next** or the arrow keys; the X closes it. To see it again, open help ("?") and click **Show the welcome tour again**.
+
 ## The screens
 
 The sidebar lists the screens under **Studio Modules**. Screens with a lock need an active profile first: create or activate one in Profiles.

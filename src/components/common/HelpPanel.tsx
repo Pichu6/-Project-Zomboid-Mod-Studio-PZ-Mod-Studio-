@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { SHOW_WELCOME_EVENT } from './WelcomeTour';
 import i18next from 'i18next';
 import { HelpCircle, X } from 'lucide-react';
 import { ActiveTab } from '../../types';
@@ -161,6 +162,16 @@ export const HelpButton: React.FC<{ tab: ActiveTab }> = ({ tab }) => {
                 </button>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                window.dispatchEvent(new Event(SHOW_WELCOME_EVENT));
+              }}
+              className="ml-auto text-[11px] text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
+            >
+              {t('welcome.again')}
+            </button>
             <button type="button" onClick={() => setOpen(false)} className="p-1 rounded hover:bg-slate-800 text-slate-400 cursor-pointer" aria-label={t('help.close')}>
               <X className="w-4 h-4" aria-hidden="true" />
             </button>

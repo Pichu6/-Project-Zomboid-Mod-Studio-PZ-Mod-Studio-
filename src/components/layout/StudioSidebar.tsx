@@ -13,6 +13,8 @@ interface StudioSidebarProps {
   healthErrorCount?: number;
   /** Mods of the active list updated since the last session, or waiting in Steam. */
   whatsNewCount?: number;
+  /** The screen the welcome tour is talking about: lit up. */
+  highlightTab?: ActiveTab | null;
 }
 
 export const StudioSidebar: React.FC<StudioSidebarProps> = ({
@@ -23,6 +25,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
   errorCardCount,
   healthErrorCount = 0,
   whatsNewCount = 0,
+  highlightTab = null,
 }) => {
   const { t } = useTranslation();
   // The Developer screen shows with "Developer features" in Settings, the way the MCP tab does.
@@ -149,7 +152,7 @@ export const StudioSidebar: React.FC<StudioSidebarProps> = ({
                 }}
                 disabled={isLocked}
                 title={isLocked ? t('nav.locked') : item.label}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition ${highlightTab === item.id ? 'ring-2 ring-emerald-400/80 animate-pulse ' : ''}${
                   isLocked
                     ? 'text-slate-600 opacity-40 cursor-not-allowed border border-transparent select-none'
                     : isActive

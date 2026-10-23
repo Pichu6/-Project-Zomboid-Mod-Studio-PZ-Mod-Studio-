@@ -2933,5 +2933,167 @@
     "idleSum_other": "{{size}} in {{count}} off everywhere",
     "idleLine": "Off everywhere: only {{names}} keeps it, switched off; no save or server uses it",
     "keptOffBy": "off in {{names}}"
+  },
+  "welcome": {
+    "title": "Welcome",
+    "progress": "{{n}} of {{total}}",
+    "skip": "Close the tour",
+    "back": "Back",
+    "next": "Next",
+    "done": "Get started",
+    "again": "Show the welcome tour again",
+    "language": "Language:",
+    "notFound": "Not found: set it in Settings",
+    "lockedHere": "This screen opens once you have an active profile (Profiles step).",
+    "paths": {
+      "game": "Game folder",
+      "workshop": "Steam Workshop mods",
+      "zomboid": "Your Zomboid folder (saves, local mods, logs)",
+      "mods_one": "{{count}} installed mod found.",
+      "mods_other": "{{count}} installed mods found."
+    },
+    "profileActive_one": "Active profile: {{name}} ({{count}} profile saved).",
+    "profileActive_other": "Active profile: {{name}} ({{count}} profiles saved).",
+    "profileNone": "No profile is active yet. Make one on the left: \"What is on now\" starts it with the mods you already use. Until then the other screens stay locked.",
+    "healthClean_one": "I checked your active list ({{count}} mod): no problems.",
+    "healthClean_other": "I checked your active list ({{count}} mods): no problems.",
+    "healthFound": "I checked your active list ({{count}} mods): {{errors}} serious problem(s) and {{warnings}} warning(s). They are on the Problems tab, with their fix.",
+    "steps": {
+      "welcome": {
+        "title": "Welcome to PZ Mod Studio",
+        "body": "A mod manager for Project Zomboid that also fixes what breaks. This tour walks through every screen with the real screen behind it; go on with Next or the arrow keys, and close it whenever you like.",
+        "points": [
+          "What the Studio changes (the game's mod list, your saves, launch files) it backs up first.",
+          "It never deletes anything without asking, and what it removes goes to the Recycle Bin or can be undone.",
+          "It does not change your mods' files: fixes go into a package of its own that loads last."
+        ]
+      },
+      "folders": {
+        "title": "Your folders",
+        "body": "First things first: where the game is and where your mods are. The Studio finds them itself; if one is missing, set it in Settings (behind this card).",
+        "points": [
+          "The game folder is where ProjectZomboid64.exe is.",
+          "The Workshop folder is where Steam downloads the mods you subscribe to.",
+          "The Zomboid folder (in your user folder) holds saves, local mods and the game's logs."
+        ]
+      },
+      "profiles": {
+        "title": "Profiles",
+        "body": "A profile is a named mod list: which mods belong to it, which are on, and their load order. Switch between them with one click and the game starts with those mods.",
+        "points": [
+          "One profile per play style or per server: each with its own mods and saves.",
+          "Turning a profile on writes its mods into the list the game reads (default.txt).",
+          "Share a profile as a .pzpack file; whoever opens it subscribes to what they lack."
+        ]
+      },
+      "modList": {
+        "title": "Mod List",
+        "body": "Your installed mods: switch them on and off and order them. Every change is saved at once to the active profile and the game's list.",
+        "points": [
+          "Every problem Mod Health finds shows as a chip on the row, with the fix beside it.",
+          "\"Auto-Sort Dependencies\" puts each mod after what it needs, the way the game does.",
+          "Filters, groups, notes, right-click and undo for big lists."
+        ]
+      },
+      "health": {
+        "title": "Mod Health",
+        "body": "Checks your active list with the game's own rules, before the game fails.",
+        "points": [
+          "Problems: missing or switched-off requirements, wrong order, mods your build can't load, incompatible pairs. Many are fixed with one button.",
+          "Conflicts: two mods shipping the same file or item; merge them or pick one.",
+          "Performance: the game's memory and which mods slow the game. Disk: how much each mod takes and which ones nothing uses."
+        ]
+      },
+      "monitor": {
+        "title": "Monitor Center",
+        "body": "Start the game from here and read its log as it runs. Every error becomes a card naming the mod behind it and what you can do.",
+        "points": [
+          "Red cards for exceptions, amber for warnings the game carried on through.",
+          "Many cards carry the fix (an old require path, patching a file) or a report to hand to the author.",
+          "\"Find the mod that does it\" halves the list, tests and repeats until it finds the culprit."
+        ]
+      },
+      "saves": {
+        "title": "Saves",
+        "body": "Your saves, by profile, and their backups. The Studio backs a save up when you leave it, before it loads with changed mods, and before another one is restored.",
+        "points": [
+          "Restore puts a save back to a backup, keeping the current one first so it can be undone.",
+          "A line says when a save's mods changed since its last session, or when one is not installed.",
+          "Servers' saves show with their address and the profile you joined with."
+        ]
+      },
+      "whatsNew": {
+        "title": "What's New",
+        "body": "Workshop mods updated since you last played, with their change notes. Read it before loading a running save.",
+        "points": [
+          "It warns when an update may break saves.",
+          "You can keep a mod's version before it updates and go back to it."
+        ]
+      },
+      "browse": {
+        "title": "Browse Mods",
+        "body": "Search the Steam Workshop and Nexus Mods without leaving the Studio, subscribe, and make your own lists.",
+        "points": [
+          "Subscribing also offers what the mod needs.",
+          "Workshop collections: see which ones you lack and make a profile from them.",
+          "Install a .zip or folder you downloaded elsewhere (Nexus, GitHub, Discord)."
+        ]
+      },
+      "maps": {
+        "title": "Maps",
+        "body": "The game's world with all your map mods on top: which part of Knox Country each one changes and where two fight over the same ground.",
+        "points": []
+      },
+      "merger": {
+        "title": "Mod Merger",
+        "body": "When two mods change the same file, the game uses only one. Combine them here, or patch a bug in a mod's file, without touching the mod.",
+        "points": [
+          "Your choices go into a package of your own that loads last, so the game reads your version.",
+          "Safe cases merge by themselves from Mod Health; you come here for the rest."
+        ]
+      },
+      "servers": {
+        "title": "Servers",
+        "body": "Two sides: Join a server and Host your own.",
+        "points": [
+          "Join: find servers, see which mods they load and join; make a profile from a server's mods.",
+          "Host: run a dedicated server from this PC with your mods in sync, players, quick settings and Discord."
+        ]
+      },
+      "link": {
+        "title": "The Studio Link mod, inside the game",
+        "body": "A small mod the Studio installs and keeps on in every profile. It is the app's part inside the game.",
+        "points": [
+          "The game's MODS button opens its own Mods screen, with the active profile, search and filters.",
+          "It warns before loading a save whose mods changed, and asks for the backup.",
+          "On a server the game loads only the server's mods, so the Link does not run there."
+        ]
+      },
+      "settings": {
+        "title": "Settings",
+        "body": "Folders, language, notices, how the Studio starts, the daily download of the community rules, and the Build 42 fixes.",
+        "points": [
+          "Options are saved as soon as you change them.",
+          "Developer features are switched on here."
+        ]
+      },
+      "developer": {
+        "title": "For mod makers",
+        "body": "With \"Developer features\" on in Settings, the Developer screen shows, and the MCP tab for connecting AI agents.",
+        "points": [
+          "Make a new mod, check every Lua and script file of it before the game does.",
+          "Start the game with only that mod and reload its Lua while the game runs.",
+          "Multiplayer check: calls that on a server have to go through the server."
+        ]
+      },
+      "help": {
+        "title": "If you get stuck",
+        "body": "Click \"?\" at the bottom right (or F1) on any screen for its help page. This tour opens from there too.",
+        "points": [
+          "Monitor cards and Mod Health rows have \"Copy for an assistant\": paste it into any AI chat and it has everything needed.",
+          "Start with Mod Health: if it is clean, your list loads."
+        ]
+      }
+    }
   }
 }

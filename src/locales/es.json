@@ -2933,5 +2933,167 @@
     "idleSum_other": "{{size}} en {{count}} apagados en todos lados",
     "idleLine": "Apagado en todos lados: solo lo guarda apagado {{names}}; ninguna partida ni servidor lo usa",
     "keptOffBy": "apagado en {{names}}"
+  },
+  "welcome": {
+    "title": "Bienvenida",
+    "progress": "{{n}} de {{total}}",
+    "skip": "Cerrar la bienvenida",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "done": "Empezar",
+    "again": "Ver la bienvenida otra vez",
+    "language": "Idioma:",
+    "notFound": "No encontrada: fijala en Configuración",
+    "lockedHere": "Esta pantalla se abre cuando tengas un perfil activo (paso Perfiles).",
+    "paths": {
+      "game": "Carpeta del juego",
+      "workshop": "Mods del Steam Workshop",
+      "zomboid": "Tu carpeta Zomboid (partidas, mods locales, registros)",
+      "mods_one": "{{count}} mod instalado encontrado.",
+      "mods_other": "{{count}} mods instalados encontrados."
+    },
+    "profileActive_one": "Perfil activo: {{name}} ({{count}} perfil guardado).",
+    "profileActive_other": "Perfil activo: {{name}} ({{count}} perfiles guardados).",
+    "profileNone": "Todavía no hay un perfil activo. Creá uno a la izquierda: «Los que están activos ahora» arranca con los mods que ya usás. Hasta entonces las demás pantallas quedan con candado.",
+    "healthClean_one": "Revisé tu lista activa ({{count}} mod): no hay problemas.",
+    "healthClean_other": "Revisé tu lista activa ({{count}} mods): no hay problemas.",
+    "healthFound": "Revisé tu lista activa ({{count}} mods): {{errors}} problema(s) grave(s) y {{warnings}} aviso(s). Están en la pestaña Problemas, con su arreglo.",
+    "steps": {
+      "welcome": {
+        "title": "Bienvenido a PZ Mod Studio",
+        "body": "Un administrador de mods para Project Zomboid que también arregla lo que se rompe. Esta guía recorre cada pantalla con la pantalla real de fondo; avanzá con Siguiente o con las flechas del teclado, y cerrala cuando quieras.",
+        "points": [
+          "Lo que el Studio cambia (la lista de mods del juego, tus partidas, archivos de inicio) lo respalda antes.",
+          "Nunca borra nada sin preguntarte, y lo que manda a borrar va a la Papelera o se puede deshacer.",
+          "No modifica los archivos de tus mods: los arreglos van a un paquete propio que carga último."
+        ]
+      },
+      "folders": {
+        "title": "Tus carpetas",
+        "body": "Lo primero: dónde está el juego y dónde están tus mods. El Studio las busca solo; si alguna falta, fijala en Configuración (de fondo).",
+        "points": [
+          "La carpeta del juego es donde está ProjectZomboid64.exe.",
+          "La del Workshop es donde Steam baja los mods a los que te suscribís.",
+          "La carpeta Zomboid (en tu usuario) guarda partidas, mods locales y los registros del juego."
+        ]
+      },
+      "profiles": {
+        "title": "Perfiles",
+        "body": "Un perfil es una lista de mods con nombre: cuáles le pertenecen, cuáles están prendidos y en qué orden cargan. Cambiás de uno a otro con un clic y el juego arranca con esos mods.",
+        "points": [
+          "Un perfil por estilo de juego o por servidor: cada uno con sus mods y sus partidas.",
+          "Activar un perfil escribe sus mods en la lista que lee el juego (default.txt).",
+          "Compartí un perfil como archivo .pzpack; quien lo abre se suscribe a lo que le falta."
+        ]
+      },
+      "modList": {
+        "title": "Lista de mods",
+        "body": "Tus mods instalados: prendelos, apagalos y ordenalos. Cada cambio se guarda al instante en el perfil activo y en la lista del juego.",
+        "points": [
+          "Cada problema que encuentra Salud de mods aparece como etiqueta en la fila, con el arreglo al lado.",
+          "«Ordenar dependencias» pone cada mod después de lo que necesita, como lo hace el juego.",
+          "Filtros, grupos, notas, clic derecho y deshacer para listas grandes."
+        ]
+      },
+      "health": {
+        "title": "Salud de mods",
+        "body": "Revisa tu lista activa con las mismas reglas que el juego, antes de que el juego falle.",
+        "points": [
+          "Problemas: requisitos que faltan o están apagados, orden equivocado, mods que tu build no carga, pares incompatibles. Muchos se arreglan con un botón.",
+          "Conflictos: dos mods que traen el mismo archivo o ítem; se fusionan o elegís cuál.",
+          "Rendimiento: memoria del juego y qué mods frenan la partida. Disco: cuánto ocupa cada mod y cuáles no usa nada."
+        ]
+      },
+      "monitor": {
+        "title": "Centro de monitoreo",
+        "body": "Iniciá el juego desde acá y leé su registro mientras corre. Cada error se convierte en una tarjeta que dice qué mod lo causó y qué podés hacer.",
+        "points": [
+          "Tarjetas rojas para excepciones y ámbar para avisos con los que el juego siguió andando.",
+          "Muchas tarjetas traen el arreglo (una ruta vieja de un require, parchear un archivo) o un informe para pasarle al autor.",
+          "«Encontrar el mod que lo causa» parte la lista a la mitad, prueba y repite hasta dar con el culpable."
+        ]
+      },
+      "saves": {
+        "title": "Partidas",
+        "body": "Tus partidas, separadas por perfil, y sus copias de seguridad. El Studio copia una partida cuando salís, antes de cargarla con mods cambiados y antes de restaurar otra.",
+        "points": [
+          "Restaurar vuelve una partida a una copia, y antes guarda la de ahora para poder deshacerlo.",
+          "Una línea avisa si los mods de la partida cambiaron desde su última sesión, o si falta alguno instalado.",
+          "Las partidas de servidores aparecen con su dirección y el perfil con el que entraste."
+        ]
+      },
+      "whatsNew": {
+        "title": "Novedades",
+        "body": "Los mods del Workshop que se actualizaron desde la última vez que jugaste, con sus notas de cambios. Leelo antes de cargar una partida en curso.",
+        "points": [
+          "Avisa cuando una actualización puede romper partidas.",
+          "Podés guardar la versión de un mod antes de que se actualice y volver a ella."
+        ]
+      },
+      "browse": {
+        "title": "Explorar mods",
+        "body": "Buscá en el Steam Workshop y en Nexus Mods sin salir del Studio, suscribite y armá tus propias listas.",
+        "points": [
+          "Al suscribirte te ofrece también lo que el mod necesita.",
+          "Colecciones del Workshop: mirá cuáles te faltan y hacé un perfil con ellas.",
+          "Instalá un .zip o una carpeta que bajaste de otro lado (Nexus, GitHub, Discord)."
+        ]
+      },
+      "maps": {
+        "title": "Mapas",
+        "body": "El mundo del juego con todos tus mods de mapa encima: qué parte de Knox Country cambia cada uno y dónde dos se pelean por el mismo terreno.",
+        "points": []
+      },
+      "merger": {
+        "title": "Fusionador de mods",
+        "body": "Cuando dos mods cambian el mismo archivo, el juego usa uno solo. Acá los combinás, o parcheás un error en un archivo de un mod, sin tocar el mod.",
+        "points": [
+          "Tus decisiones van a un paquete propio que carga último, así el juego lee tu versión.",
+          "Los casos seguros se fusionan solos desde Salud de mods; acá venís para el resto."
+        ]
+      },
+      "servers": {
+        "title": "Servidores",
+        "body": "Dos lados: Unirse a un servidor y Alojar uno propio.",
+        "points": [
+          "Unirse: buscá servidores, mirá qué mods cargan y entrá; hacé un perfil con los mods del servidor.",
+          "Alojar: corré un servidor dedicado desde esta PC con tus mods sincronizados, jugadores, ajustes rápidos y Discord."
+        ]
+      },
+      "link": {
+        "title": "El mod Studio Link, dentro del juego",
+        "body": "Un mod chico que el Studio instala y deja prendido en todos los perfiles. Es la parte de la app dentro del juego.",
+        "points": [
+          "El botón MODS del juego abre su propia pantalla de Mods, con el perfil activo, buscador y filtros.",
+          "Avisa antes de cargar una partida cuyos mods cambiaron, y pide la copia de seguridad.",
+          "En un servidor el juego carga solo los mods del servidor, así que ahí el Link no corre."
+        ]
+      },
+      "settings": {
+        "title": "Configuración",
+        "body": "Carpetas, idioma, avisos, cómo arranca el Studio, la descarga diaria de las reglas de la comunidad y los arreglos para Build 42.",
+        "points": [
+          "Las opciones se guardan apenas las cambiás.",
+          "Desde acá se prenden las funciones para desarrolladores."
+        ]
+      },
+      "developer": {
+        "title": "Para quienes hacen mods",
+        "body": "Con «Funciones para desarrolladores» prendido en Configuración aparece la pantalla Desarrollador, y la pestaña MCP para conectar agentes de IA.",
+        "points": [
+          "Creá un mod nuevo, revisá todos sus archivos Lua y scripts antes que el juego.",
+          "Iniciá el juego solo con ese mod y recargá su Lua mientras el juego corre.",
+          "Revisión multijugador: llamadas que en un servidor tienen que pasar por el servidor."
+        ]
+      },
+      "help": {
+        "title": "Si te trabás",
+        "body": "Tocá «?» abajo a la derecha (o F1) en cualquier pantalla para ver su página de ayuda. Esta bienvenida también se abre desde ahí.",
+        "points": [
+          "Las tarjetas del Monitor y las filas de Salud de mods tienen «Copiar para un asistente»: pegalo en cualquier chat de IA y tiene todo lo necesario.",
+          "Empezá por Salud de mods: si está limpia, tu lista carga."
+        ]
+      }
+    }
   }
 }
