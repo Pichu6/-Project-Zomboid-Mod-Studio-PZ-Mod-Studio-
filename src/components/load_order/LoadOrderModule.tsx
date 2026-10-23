@@ -73,6 +73,8 @@ interface LoadOrderModuleProps {
   errorStats?: Map<string, ModErrorStat>;
   /** Mod id -> how long its files took to load last session, in ms (the game's DebugLog). */
   loadTimes?: Map<string, number>;
+  /** Share of the game's time per mod (%), from the last profiler measurement. */
+  gameShares?: Map<string, number>;
   /** The game build installed now, named in a rule proposed to the community. */
   installedBuild?: string | null;
   /** Opens this Workshop item's page in Browse Mods (where the Workshop link lives). */
@@ -165,6 +167,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
   catalogById,
   errorStats,
   loadTimes,
+  gameShares,
   installedBuild = null,
   onOpenInBrowser,
   onSearchInBrowser,
@@ -633,7 +636,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
     triggerReorder(next);
     showToast(on ? t('modList.groups.turnedOn', { name }) : t('modList.groups.turnedOff', { name }));
   };
-  const modTags = useMemo(() => modTagsOf(mods, errorStats, loadTimes, catalogById, issuesByMod), [mods, errorStats, loadTimes, catalogById, issuesByMod]);
+  const modTags = useMemo(() => modTagsOf(mods, errorStats, loadTimes, catalogById, issuesByMod, gameShares), [mods, errorStats, loadTimes, catalogById, issuesByMod, gameShares]);
   /** The origins and groups the list's mods have, with how many (as the game's pickers count). */
   const sourceCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1370,6 +1373,7 @@ export const LoadOrderModule: React.FC<LoadOrderModuleProps> = ({
                       catalogById={catalogById}
                       errorStats={errorStats}
                       loadTimes={loadTimes}
+                      gameShares={gameShares}
                       isFavorite={keep.isFavorite({ workshop_id: mod.workshop_id ?? null, mod_id: mod.workshop_id ? null : mod.mod_id, name: mod.name, installedModIds: [mod.mod_id] })}
                       note={meta.notes[mod.mod_id]}
                       groups={groupsByMod.get(mod.mod_id)}

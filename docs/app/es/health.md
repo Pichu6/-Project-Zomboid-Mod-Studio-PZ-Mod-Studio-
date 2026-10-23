@@ -70,7 +70,7 @@ El Studio descarga una vez al día reglas compartidas desde su propio repositori
 
 En la pestaña **Rendimiento**: qué mods frenan el juego mientras jugás. **Medir** pone un mod chico del Studio (PZ Mod Studio Profiler) primero en tu lista de mods y en la partida que jugaste por última vez; abrí el juego (reinicialo si estaba abierto) y jugá unos minutos como siempre. Cada handler de eventos de cada mod lo mide el propio juego y se suma por mod: la parte del tiempo real que se llevó, milisegundos por segundo y su llamada más larga (una larga es un congelamiento que se ve). Abrí una fila para ver los handlers que más cuestan, con su archivo y línea. **Dejar de medir** saca el medidor de la lista y de la partida; los últimos números quedan.
 
-No se cuentan las ventanas que dibuja un mod ni las acciones con tiempo. El medidor le suma un poco de tiempo propio a cada handler, así que apagalo cuando termines.
+También cuentan las ventanas, barras y acciones con tiempo de un mod (como Clase:render, Clase:update); cada función cuenta solo su propio tiempo. El medidor le suma un poco de tiempo propio a cada handler, así que apagalo cuando termines.
 
 ## Para tener en cuenta
 

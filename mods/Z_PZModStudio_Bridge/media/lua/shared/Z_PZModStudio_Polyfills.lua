@@ -217,16 +217,11 @@ if Events and Events.OnEquipSecondary then
     end)
 end
 
-if Events and Events.OnClothingUpdated then
-    wrapEventAddRemove(Events.OnClothingUpdated, function(func)
-        return function(character, ...)
-            local status, err = pcall(func, character, ...)
-            if not status and err then
-                -- Silently suppress face/hair customizer exception flood to prevent render loop stutter
-            end
-        end
-    end)
-end
+-- OnClothingUpdated and OnPlayerUpdate are not wrapped. They were, in a pcall meant to keep a
+-- handler failing every frame out of the console, but in B42 an error inside pcall is logged
+-- all the same, stack and all (checked 2026-10-22: 365 lines in 6 s either way). The game
+-- already runs each handler on its own and logs its failure with the mod's stack; the wrapper
+-- only added a call per handler per frame, and a Studio frame to every stack.
 
 -- ----------------------------------------------------------------------------
 -- 4.2 OnMainMenuEnter Protection
@@ -309,19 +304,6 @@ if _G and _G.getOnlinePlayers and not _G._pzms_online_players_wrapped then
     end
 end
 
--- ----------------------------------------------------------------------------
--- 4.4 OnPlayerUpdate Exception Suppression & Safe Remove (Prevents 60 FPS cascades & sticky loops)
--- ----------------------------------------------------------------------------
-if Events and Events.OnPlayerUpdate then
-    wrapEventAddRemove(Events.OnPlayerUpdate, function(func)
-        return function(player, ...)
-            local status, err = pcall(func, player, ...)
-            if not status and err then
-                -- Silently catch frame-by-frame player loop errors to protect FPS
-            end
-        end
-    end)
-end
 
 -- ----------------------------------------------------------------------------
 -- 4.5 Switches for the per-mod patches of part 7, and the shared ArrayList proxy

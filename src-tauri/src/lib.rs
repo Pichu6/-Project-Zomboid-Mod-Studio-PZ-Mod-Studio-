@@ -1035,6 +1035,12 @@ fn mod_load_times_cmd(paths: StudioPaths) -> sandbox::load_times::LoadTimes {
     sandbox::load_times::from_logs(&paths.user_zomboid_dir)
 }
 
+/// The game's last starts, stage by stage, newest first (from its DebugLogs).
+#[tauri::command(async)]
+fn boot_history_cmd(paths: StudioPaths) -> Vec<sandbox::load_times::BootTimes> {
+    sandbox::load_times::boot_history(&paths.user_zomboid_dir, 12)
+}
+
 /// Whether the in-game profiler is on, and what it measured last.
 #[tauri::command(async)]
 fn profiler_status_cmd(paths: StudioPaths) -> sandbox::profiler::ProfilerStatus {
@@ -1760,6 +1766,7 @@ pub fn run() {
             open_backups_folder_cmd,
             mod_load_times_cmd,
             profiler_status_cmd,
+            boot_history_cmd,
             profiler_set_cmd,
             mod_lists_cmd,
             validate_mod_cmd,

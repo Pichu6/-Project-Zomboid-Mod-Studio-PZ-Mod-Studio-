@@ -102,6 +102,20 @@ export interface ModList {
 }
 
 /** How long each mod's files took to load in the last session, from the game's DebugLog. */
+/** One stage of the game's start (`start`, `mods`, `translations`, `scripts`, `clothing`, `lua`, `textures`, `models`, `menu`). */
+export interface BootPhase {
+  id: string;
+  millis: number;
+}
+
+/** One start of the game, from launch to the main menu. */
+export interface BootTimes {
+  session: string;
+  total_ms: number;
+  phases: BootPhase[];
+  mods: number;
+}
+
 /** One event handler the in-game profiler timed. */
 export interface HandlerCost {
   event: string;

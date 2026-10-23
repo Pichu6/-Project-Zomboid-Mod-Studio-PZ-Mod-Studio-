@@ -1,7 +1,7 @@
 import i18next from 'i18next';
 import { AuthorLink, CatalogModSummary, HealthIssue, ModErrorStat, ModInfo } from '../../types';
 import { sourceOf } from '../common/SourceBadge';
-import { SLOW_LOAD_MS } from './ModRow';
+import { HEAVY_SHARE, SLOW_LOAD_MS } from './ModRow';
 import { labelFor, rowIssueCodes } from './RowHealth';
 
 /**
@@ -34,7 +34,8 @@ export function modTagsOf(
   errorStats: Map<string, ModErrorStat> | undefined,
   loadTimes: Map<string, number> | undefined,
   catalogById: Map<string, CatalogModSummary> | undefined,
-  issuesByMod: Map<string, HealthIssue[]>
+  issuesByMod: Map<string, HealthIssue[]>,
+  gameShares?: Map<string, number>
 ): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const m of mods) {
@@ -43,6 +44,7 @@ export function modTagsOf(
     if (stat && stat.exceptions > 0) tags.push('errors');
     else if (stat && stat.warnings > 0) tags.push('warnings');
     if ((loadTimes?.get(m.mod_id) ?? 0) >= SLOW_LOAD_MS) tags.push('slow');
+    if ((gameShares?.get(m.mod_id) ?? 0) >= HEAVY_SHARE) tags.push('heavy');
     const compat = sourceOf(m.mod_id, catalogById?.get(m.mod_id)).kind === 'compat';
     for (const code of rowIssueCodes(issuesByMod.get(m.mod_id) ?? [])) {
       if (compat && code === 'shadowed_copy') continue;
@@ -54,7 +56,7 @@ export function modTagsOf(
 }
 
 export const tagLabel = (tag: string): string =>
-  tag.startsWith('health:') ? labelFor({ code: tag.slice(7) }) : i18next.t(`modList.tags.${tag}`, { min: SLOW_LOAD_MS });
+  tag.startsWith('health:') ? labelFor({ code: tag.slice(7) }) : i18next.t(`modList.tags.${tag}`, { min: SLOW_LOAD_MS, pct: HEAVY_SHARE });
 
 /**
  * What the game's Mods screen cannot tell by itself, for the Studio Link's filters: each mod's

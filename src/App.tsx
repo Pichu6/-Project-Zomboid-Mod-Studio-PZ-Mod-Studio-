@@ -114,6 +114,8 @@ export const App: React.FC = () => {
   const [errorStats, setErrorStats] = useState<Map<string, ModErrorStat>>(new Map());
   /** Mod id -> how long its files took to load last session, read with the error stats. */
   const [loadTimes, setLoadTimes] = useState<Map<string, number>>(new Map());
+  /** Each mod's share of the game's time in the last profiler measurement (%), when there is one. */
+  const [gameShares, setGameShares] = useState<Map<string, number>>(new Map());
 
   /**
    * One list of favourites: the app's stars and the game's (its Mods screen keeps its own). Synced
@@ -175,15 +177,21 @@ export const App: React.FC = () => {
    */
   useEffect(() => {
     if (!paths.is_valid || !paths.user_zomboid_dir || mods.length === 0) return;
-    const tags = modTagsOf(mods, errorStats, loadTimes, health.catalogById, issuesByModOf(healthIssues));
+    const tags = modTagsOf(mods, errorStats, loadTimes, health.catalogById, issuesByModOf(healthIssues), gameShares);
     void TauriService.writeLinkMods(paths, linkModsText(mods, health.catalogById, tags, supportByMod));
-  }, [paths, mods, healthIssues, health.catalogById, errorStats, loadTimes, supportByMod, i18next.language]);
+  }, [paths, mods, healthIssues, health.catalogById, errorStats, loadTimes, gameShares, supportByMod, i18next.language]);
   const loadErrorStats = useCallback(async () => {
     if (!paths.is_valid) return;
     const list = await TauriService.modErrorStats(paths);
     setErrorStats(new Map(list.map((s) => [s.mod_name, s])));
     const times = await TauriService.modLoadTimes(paths);
     setLoadTimes(new Map(times.mods.map((t) => [t.mod_id, t.millis])));
+    const profile = (await TauriService.profilerStatus(paths)).report;
+    setGameShares(
+      new Map(
+        (profile && profile.window_ms > 0 ? profile.mods : []).flatMap((m) => (m.mod_id ? [[m.mod_id, (m.ms / profile!.window_ms) * 100] as [string, number]] : []))
+      )
+    );
   }, [paths]);
   useEffect(() => {
     void loadErrorStats();
@@ -1024,6 +1032,7 @@ export const App: React.FC = () => {
               catalogById={health.catalogById}
               errorStats={errorStats}
               loadTimes={loadTimes}
+              gameShares={gameShares}
               installedBuild={health.report?.game_version ?? null}
               onOpenMerger={(relativePath) => {
                 setMergerFocusPath(relativePath);

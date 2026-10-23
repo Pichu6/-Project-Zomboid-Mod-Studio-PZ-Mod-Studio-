@@ -277,6 +277,8 @@ struct State {
     roles: BTreeMap<String, (u64, Vec<String>)>,
     backoff_until: u64,
     backoff: u64,
+    /// The last failure written to the log: the same one again is not written again.
+    logged: Option<String>,
     countdown: Option<Countdown>,
 }
 
@@ -320,9 +322,15 @@ pub fn watch() {
                 let now = now_secs();
                 st.backoff = (st.backoff * 2).clamp(10, MAX_BACKOFF_SECS);
                 st.backoff_until = now + st.backoff;
-                crate::diagnostics::error(format!("[Discord commands] {} (trying again in {} s)", e, st.backoff));
-            } else {
+                // Once per failure: a channel that is not there was written every 10 s, all day.
+                if st.logged.as_deref() != Some(e.as_str()) {
+                    crate::diagnostics::error(format!("[Discord commands] {} (trying again, waiting longer each time up to {} s)", e, MAX_BACKOFF_SECS));
+                    st.logged = Some(e);
+                }
+            } else if now_secs() >= st.backoff_until {
+                // A round that ran (not one skipped while waiting): the wait starts over.
                 st.backoff = 0;
+                st.logged = None;
             }
         }
     });

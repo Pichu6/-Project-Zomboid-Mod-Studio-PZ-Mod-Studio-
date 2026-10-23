@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import i18next from 'i18next';
 import { StudioPathsUI } from '../components/settings/SettingsModule';
-import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, CommunityLists, SharedList, ProposeResult, LoadTimes, ProfilerStatus, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordCommandsStatus, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer, AppUpdateStatus } from '../types';
+import { AppInstance, MissingModsReport, VfsConflict,ModInfo, TranslatedErrorCard,DedicatedServerStatus, ConnectedPlayer, ServerQuickSettings, PZServerConfig, ModHealth, SortResult, NexusSearchResult, NexusSort, InstallResult, ModOrigin, WorkshopItem, WorkshopLookup, WorkshopSearchResult, CompatResult, AutoMergeResult, NexusCategory, NexusModDetails, WorkshopItemDetails, WorkshopBrowseQuery, SubscribeOutcome, BisectSession, HealthIssue, ServerLines, ServerModReport, ModListVersion, PolyfillSection, ShimPatch, KeptVersion, ModErrorStat, UserRule, CommunitySummary, CommunityIndex, CommunityLists, SharedList, ProposeResult, LoadTimes, BootTimes, ProfilerStatus, ModList, ModListItem, ModValidation, ChangedFile, DevReloadEvent, DiscordCommandsStatus, DiscordSettings, DiscordView, GameBot, ModChangelog, NewMod, CreatedMod, MapTools, MpReport, MpModReport, UrlInstallPlan, SandboxPresetInfo, PresetSandbox, ModFile, RequireAnswer, SavesOverview, SaveBackupOutcome, SaveBackupEntry, RequiredChain, SessionDiff, WhatsNew, MapCells, MapImage, WindowPrefs, ModMeta, PublicServer, ServerRules, SavedServer, AppUpdateStatus } from '../types';
 
 export interface LuaSyntaxResult {
   is_valid: boolean;
@@ -761,6 +761,15 @@ export const TauriService = {
       return await invoke<LoadTimes>('mod_load_times_cmd', { paths });
     } catch {
       return { log_file: null, session: null, mods: [] };
+    }
+  },
+
+  /** The game's last starts, stage by stage, newest first. */
+  bootHistory: async (paths: StudioPathsUI): Promise<BootTimes[]> => {
+    try {
+      return await invoke<BootTimes[]>('boot_history_cmd', { paths });
+    } catch {
+      return [];
     }
   },
 

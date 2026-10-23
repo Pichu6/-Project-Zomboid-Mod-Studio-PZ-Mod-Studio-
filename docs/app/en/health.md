@@ -70,7 +70,7 @@ The Studio downloads shared rules once a day from its own repository: load-order
 
 In the **Performance** tab: which mods slow the game down while you play. **Measure** puts a small Studio mod (PZ Mod Studio Profiler) first in your mod list and in the save you played last; start the game (restart it if it was open) and play a few minutes as usual. Every event handler of every mod is timed by the game and added up per mod: the share of real time it took, milliseconds per second, and its longest single call (a long one is a freeze you see). Open a row for the handlers that cost the most, with their file and line. **Stop measuring** takes the profiler out of the list and the save again; the last numbers stay.
 
-Windows a mod draws and timed actions are not counted. The profiler adds a little time of its own to every handler, so stop it when you are done.
+The windows, bars and timed actions of a mod count too (as Class:render, Class:update); each function counts only its own time. The profiler adds a little time of its own to every handler, so stop it when you are done.
 
 ## Good to know
 

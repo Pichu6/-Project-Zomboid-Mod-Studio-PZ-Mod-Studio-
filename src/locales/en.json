@@ -539,7 +539,11 @@
       "loadsInHead": "Loads in {{time}}",
       "loadTimeBody": "Of the time the game spent on the loading screen last session, {{time}} went to reading this mod's files.\nMost mods take a few milliseconds; tile and model packs take seconds. It says nothing about how the mod runs once loaded.",
       "loadTimeHow": "The tag shows from {{min}} ms up: every mod has its time, but the faster ones (nearly all, 2 to 20 ms) get no tag so the list stays readable. Measured from the game's own DebugLog (Zomboid/Logs), from this mod's \"loading\" line to the next mod's; the Lua phase after that is one pass and is not timed per mod.",
-      "offNoPlace": "Off: it has no place in the load order the game reads."
+      "offNoPlace": "Off: it has no place in the load order the game reads.",
+      "gameTime": "{{pct}} % of the game",
+      "gameTimeHead": "{{pct}} % of the game's time",
+      "gameTimeBody": "While the game ran last time it was measured, this mod's Lua (its event handlers, windows and timed actions) took {{pct}} % of the real time. Mod Health > Performance has the detail: which handler, file and line.",
+      "gameTimeHow": "Shown from {{min}} % up, amber from 5 %. Measured with Mod Health > Performance > Measure; it stays as it was until you measure again."
     },
     "health": {
       "labels": {
@@ -610,7 +614,8 @@
       "all": "All tags",
       "errors": "Errors last session",
       "warnings": "Warnings last session",
-      "slow": "Slow to load (from {{min}} ms)"
+      "slow": "Slow to load (from {{min}} ms)",
+      "heavy": "Heavy on the game (from {{pct}} %)"
     },
     "clearFilters": "clear filters",
     "clearFiltersTitle": "Show every mod again",
@@ -2757,6 +2762,43 @@
     "showAll": "Show all {{count}}",
     "showFewer": "Show fewer",
     "waiting": "No numbers yet: start the game (restart it if it was running) and they arrive every 5 seconds.",
-    "how": "The % is the share of real time the mod's handlers took (60 FPS leaves 16.7 ms a frame). A long single call is a hitch you see as a freeze. Not counted: windows a mod draws and timed actions. The game's clock counts whole milliseconds, so a short handler is measured on average over many calls; give it a minute or two. Stop measuring when you are done: the profiler adds a little time of its own to every handler."
+    "how": "The % is the share of real time the mod's Lua took (60 FPS leaves 16.7 ms a frame): its event handlers, and the render / prerender / update of its windows, bars and timed actions (named Class:render). Each counts its own time only: a mod's render that calls the game's counts without the game's part. A long single call is a hitch you see as a freeze. The game's clock counts whole milliseconds, so a short handler is measured on average over many calls; give it a minute or two. Stop measuring when you are done: the profiler adds a little time of its own to every handler."
+  },
+  "bootTime": {
+    "title": "Game start",
+    "blurb": "How long the game took to reach the main menu, stage by stage, from the log every launch leaves. Set beside your usual start with about as many mods, so a mod that adds seconds shows.",
+    "none": "No start to show yet: the game writes it the first time it reaches the main menu.",
+    "total": "{{s}} s to the menu",
+    "when": "{{when}}, {{mods}} mods",
+    "usually_one": "usually {{s}} s (from {{count}} other start)",
+    "usually_other": "usually {{s}} s (from {{count}} other starts)",
+    "was": "usually {{s}}",
+    "slowerNote": "A stage in amber took much longer than usual. The same mods with a slow stage once is usually the PC doing something else at the time (a disk busy, a build, an update); every start slow there since some day points at what changed that day.",
+    "earlier_one": "{{count}} start",
+    "earlier_other": "The last {{count}} starts",
+    "modsCount_one": "{{count}} mod",
+    "modsCount_other": "{{count}} mods",
+    "phase": {
+      "start": "Engine start",
+      "mods": "Mods' files",
+      "translations": "Translations and UI",
+      "scripts": "Scripts (items, recipes)",
+      "clothing": "Clothing",
+      "lua": "Lua",
+      "textures": "Tile textures",
+      "models": "Models and animations",
+      "menu": "Until the menu"
+    },
+    "about": {
+      "start": "Java, the window, the sound, before the game reads any mod.",
+      "mods": "Reading every mod's folder and its own textures; Java mods (ZombieBuddy) check and ask for approval here.",
+      "translations": "The texts of the game and the mods, and the UI textures.",
+      "scripts": "Item, recipe, vehicle and other scripts of the game and the mods.",
+      "clothing": "The clothing definitions.",
+      "lua": "Running the shared and client Lua of the game and every mod.",
+      "textures": "The game's big tile texture packs.",
+      "models": "3D models and animations, the game's and the mods' (anims_X); the stage that grows most with mods.",
+      "menu": "The game's own start-up Lua (OnGameBoot) and the logo screens."
+    }
   }
 }

@@ -523,7 +523,12 @@ impl ModBlame {
             _ => None,
         };
         if let Some(name) = Self::named_in(line) {
-            self.recent = Some((name, 0));
+            // The Studio's own wrappers (the shim's event guards, the profiler) sit in the stack
+            // under the mod's handler: they do not take the blame from the mod beside them.
+            let keep = is_studio_mod_name(&name) && self.recent.as_ref().is_some_and(|(n, _)| !is_studio_mod_name(n));
+            if !keep {
+                self.recent = Some((name, 0));
+            }
         } else if let Some(id) = Self::item_mod(line) {
             // `CreateItem() cannot create item: ... modID = "X"` comes right before the exception
             // the game throws loading that item from a save.
@@ -571,6 +576,11 @@ impl ModBlame {
             if let Some((name, _)) = rest.split_once(')') {
                 let name = name.trim();
                 if !name.is_empty() {
+                    if is_studio_mod_name(name) {
+                        if let Some((other, _)) = self.recent.as_ref().filter(|(n, _)| !is_studio_mod_name(n)) {
+                            return Some(other.clone());
+                        }
+                    }
                     return Some(name.to_string());
                 }
             }
@@ -591,6 +601,11 @@ impl ModBlame {
         // Lua frame that threw it.
         self.recent.as_ref().map(|(name, _)| name.clone())
     }
+}
+
+/// A mod the Studio installs (its packages, the bridge, the profiler): their names all start so.
+fn is_studio_mod_name(name: &str) -> bool {
+    name.starts_with("PZ Mod Studio")
 }
 
 /// The display name every Studio package gets in `generate_master_patch`: `name=PZ Mod Studio Patch: <x>`.
@@ -1761,6 +1776,24 @@ mod blame_window_tests {
         }
         assert_eq!(blamed[1].as_deref(), Some("Fancy Handwork B42.20"));
         assert_eq!(blamed[2].as_deref(), Some("Fancy Handwork B42.20"));
+    }
+
+    /// The shim's event guard and the profiler wrap a mod's handler: the mod is to blame.
+    #[test]
+    fn a_studio_wrapper_under_a_mods_frame_does_not_take_the_blame() {
+        let mut blame = ModBlame::default();
+        let lines = [
+            "\tLua((MOD:Better Cars)).onUpdate(BC_Main.lua:40)",
+            "\tLua((MOD:PZ Mod Studio Profiler)).wrapped(PZModStudio_Profiler.lua:61)",
+            "ERROR: General      f:240> Profiler)).wrapped> Exception thrown",
+        ];
+        let mut blamed = Vec::new();
+        for line in lines {
+            blame.observe(line);
+            blamed.push(blame.of(line));
+        }
+        assert_eq!(blamed[1].as_deref(), Some("Better Cars"));
+        assert_eq!(blamed[2].as_deref(), Some("Better Cars"));
     }
 
     /// A package's copy of a mod file is named as such, not as a mod of its own.

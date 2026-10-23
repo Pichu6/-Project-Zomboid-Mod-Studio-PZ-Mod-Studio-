@@ -469,6 +469,47 @@ pub fn scan_conflicts(paths: &StudioPaths) -> Vec<VfsConflictRaw> {
     scan_conflicts_with(paths, &catalog, &active)
 }
 
+/// A Workshop mod's `.lua` / `.txt` files, by its folder, the version Steam installed (publish
+/// time and size, from appworkshop_108600.acf: they change with every update) and the build.
+type ModFilesKey = (String, u64, Option<u64>, Option<u32>);
+static WORKSHOP_MOD_FILES: std::sync::Mutex<Option<HashMap<ModFilesKey, std::collections::BTreeMap<String, PathBuf>>>> =
+    std::sync::Mutex::new(None);
+
+/// The `.lua` and `.txt` files of a mod the game reads on this build, by `media/...` path. Listing
+/// them means walking every file the mod has, and mods carry tens of thousands of textures and
+/// models (one Viewpoint pack alone: 54,000 files in 18,000 folders, no Lua): a second on every
+/// health check. A Workshop mod only changes when Steam updates it, so its list is kept until
+/// then; a local mod (Zomboid/mods, maybe being written right now) is walked every time.
+fn mod_text_files(m: &crate::catalog::CatalogMod, game: Option<u32>) -> std::collections::BTreeMap<String, PathBuf> {
+    let key = m.workshop_state.as_ref().and_then(|s| s.installed_time.map(|t| (m.root_dir.clone(), t, s.size, game)));
+    if let Some(key) = &key {
+        let cache = WORKSHOP_MOD_FILES.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(files) = cache.as_ref().and_then(|c| c.get(key)) {
+            return files.clone();
+        }
+    }
+    let mut files: std::collections::BTreeMap<String, PathBuf> = std::collections::BTreeMap::new();
+    for layer in crate::load_order::mod_info::media_layers_for_build(Path::new(&m.root_dir), game) {
+        let media = layer.join("media");
+        for e in WalkDir::new(&media).into_iter().filter_map(|e| e.ok()) {
+            if !e.file_type().is_file() {
+                continue;
+            }
+            let is_text = e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("lua") || x.eq_ignore_ascii_case("txt"));
+            let Ok(rel) = e.path().strip_prefix(&media) else { continue };
+            if is_text {
+                // A later layer (the version folder) replaces the same file from common/.
+                files.insert(format!("media/{}", rel.to_string_lossy().replace('\\', "/")), e.path().to_path_buf());
+            }
+        }
+    }
+    if let Some(key) = key {
+        let mut cache = WORKSHOP_MOD_FILES.lock().unwrap_or_else(|p| p.into_inner());
+        cache.get_or_insert_with(HashMap::new).insert(key, files.clone());
+    }
+    files
+}
+
 /// `scan_conflicts` for a given catalog and active list (mod ids in load order).
 pub fn scan_conflicts_with(paths: &StudioPaths, catalog: &crate::catalog::ModCatalog, active: &[String]) -> Vec<VfsConflictRaw> {
     scan_conflicts_for_package(paths, catalog, active, None)
@@ -501,22 +542,7 @@ pub fn scan_conflicts_for_package(
         if m.loadability != crate::catalog::Loadability::Loadable || !seen_mods.insert(m.id.clone()) {
             continue;
         }
-        let mut files: std::collections::BTreeMap<String, PathBuf> = std::collections::BTreeMap::new();
-        for layer in crate::load_order::mod_info::media_layers_for_build(Path::new(&m.root_dir), game) {
-            let media = layer.join("media");
-            for e in WalkDir::new(&media).into_iter().filter_map(|e| e.ok()) {
-                if !e.file_type().is_file() {
-                    continue;
-                }
-                let is_text = e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("lua") || x.eq_ignore_ascii_case("txt"));
-                let Ok(rel) = e.path().strip_prefix(&media) else { continue };
-                if is_text {
-                    // A later layer (the version folder) replaces the same file from common/.
-                    files.insert(format!("media/{}", rel.to_string_lossy().replace('\\', "/")), e.path().to_path_buf());
-                }
-            }
-        }
-        for (rel, abs) in files {
+        for (rel, abs) in mod_text_files(m, game) {
             by_path.entry(rel).or_default().push((position, m.id.clone(), m.name.clone(), abs));
         }
     }

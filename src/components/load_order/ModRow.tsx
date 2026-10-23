@@ -10,6 +10,9 @@ import { ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Hash, ListOrdered,
 
 /** Below this a mod's loading time is a few milliseconds of mod.info and translations: not worth a tag. */
 export const SLOW_LOAD_MS = 250;
+/** A mod's share of the game's time (%) from which its row says it, and from which it is "heavy". */
+export const SHOWN_SHARE = 1;
+export const HEAVY_SHARE = 5;
 
 export interface ModRowBodyProps {
   paths: StudioPathsUI;
@@ -25,6 +28,8 @@ export interface ModRowBodyProps {
   catalogById?: Map<string, CatalogModSummary>;
   errorStats?: Map<string, ModErrorStat>;
   loadTimes?: Map<string, number>;
+  /** Share of the game's time per mod (%), from the last profiler measurement. */
+  gameShares?: Map<string, number>;
   /** In the player's Favorites list. */
   isFavorite?: boolean;
   /** The player's note on it, and the groups they put it in. */
@@ -75,6 +80,7 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
   catalogById,
   errorStats,
   loadTimes,
+  gameShares,
   isFavorite = false,
   note,
   groups = [],
@@ -299,6 +305,31 @@ export const ModRowBody: React.FC<ModRowBodyProps> = ({
                   }`}
                 >
                   {t('modList.row.loadsIn', { time })}
+                </span>
+              </Tip>
+            );
+          })()}
+
+          {/* What it cost the game while it ran, last time it was measured, when it is worth a word. */}
+          {(() => {
+            const pct = gameShares?.get(mod.mod_id);
+            if (pct === undefined || pct < SHOWN_SHARE) return null;
+            const heavy = pct >= HEAVY_SHARE;
+            const shown = pct.toFixed(pct < 10 ? 1 : 0);
+            return (
+              <Tip
+                content={
+                  <TipBody title={t('modList.row.gameTimeHead', { pct: shown })} tone={heavy ? 'amber' : 'slate'} footnote={<RichText text={t('modList.row.gameTimeHow', { min: SHOWN_SHARE })} foldAt={140} />}>
+                    <RichText text={t('modList.row.gameTimeBody', { pct: shown })} />
+                  </TipBody>
+                }
+              >
+                <span
+                  className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${
+                    heavy ? 'bg-amber-950/50 text-amber-300 border-amber-800/70' : 'bg-slate-900 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {t('modList.row.gameTime', { pct: shown })}
                 </span>
               </Tip>
             );
