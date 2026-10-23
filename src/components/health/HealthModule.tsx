@@ -735,7 +735,13 @@ export const HealthModule: React.FC<HealthModuleProps> = ({ paths, mods, report,
                           type="button"
                           onClick={() => (enableThenMove ? handleFixes(applicable) : handleFix(fix, issue))}
                           disabled={fix.action === 'merge_files' && mergeBusy}
-                          className="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 cursor-pointer"
+                          title={fix.action === 'remove_compatible_copy' ? t('health.fix.removeCopyTitle') : undefined}
+                          className={
+                            // Undoing something the Studio did is there if wanted, not a thing to do.
+                            fix.action === 'remove_compatible_copy'
+                              ? 'px-2 py-1 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-slate-700/70 hover:bg-slate-800/60 cursor-pointer'
+                              : 'px-2 py-1 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 cursor-pointer'
+                          }
                         >
                           {YOUR_CALL_CODES.has(issue.code) && fix.action === 'move_before'
                             ? t('health.useVersionInstead', { name: nameOf(fix.before) })

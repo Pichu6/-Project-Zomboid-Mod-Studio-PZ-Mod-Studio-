@@ -1449,16 +1449,18 @@ pub fn health_report(catalog: &ModCatalog, active: &[String]) -> HealthReport {
             }
         }
 
+        let compat = matches!(&m.origin, Some(crate::origins::ModOrigin::Compat { .. }));
         if let Some(crate::origins::ModOrigin::Compat { changes, .. }) = &m.origin {
             let folder = std::path::Path::new(&m.root_dir).file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
             list.push(Severity::Info, "compatible_copy", Some(id),
-                format!("{} runs from a compatible copy in Zomboid/mods ({}). It is used when the game is started from PZ Mod Studio; starting it from Steam needs the launch option -modfolders mods,workshop,steam.",
+                format!("{} runs from a compatible copy the Studio made in Zomboid/mods ({}); the Workshop original is ignored meanwhile. It is used when the game is started from PZ Mod Studio; starting it from Steam needs the launch option -modfolders mods,workshop,steam. Nothing to do: once the author updates the mod for Build 42, \"Back to the original\" removes the copy.",
                     describe(m), changes.join(" ")),
                 vec![SuggestedFix::RemoveCompatibleCopy { folder }]);
             list.with(&[("mod", &name), ("changes", &changes.join(" "))]);
         }
 
-        for copy in catalog.mods.iter().filter(|c| c.id == m.id && c.shadowed_by.is_some()) {
+        // A compatible copy shadows the Workshop original on purpose: its own row says so.
+        for copy in catalog.mods.iter().filter(|c| !compat && c.id == m.id && c.shadowed_by.is_some()) {
             list.push(Severity::Info, "shadowed_copy", Some(id),
                 format!("Another copy of {} at {} is ignored: the game uses the one at {}", m.id, copy.root_dir, m.root_dir), vec![]);
             list.with(&[("mod", &m.id), ("ignored", &copy.root_dir), ("used", &m.root_dir)]);
@@ -1701,6 +1703,25 @@ name=Off Noisy
         assert_eq!(floods[0].params["lines"], "2970");
         assert_eq!(floods[0].params["share"], "64");
         assert!(matches!(floods[0].fixes[0], SuggestedFix::DisableMod { .. }));
+    }
+
+    #[test]
+    fn a_compatible_copy_is_one_row_not_two() {
+        let f = fixture("compat-row");
+        write_mod(&f.root.join("workshop/1/mods/Old/42"), "id=Old\n");
+        write_mod(&f.root.join("Zomboid/mods/Old/42"), "id=Old\n");
+        let (w, z) = paths(&f);
+        let mut cat = build_catalog(&w, &z, Some(42_021));
+        let active = vec!["Old".to_string()];
+        let codes = |cat: &ModCatalog| health_report(cat, &active).issues.iter().map(|i| i.code.clone()).collect::<Vec<_>>();
+        // Two copies of a mod: the one ignored is worth a row.
+        assert!(codes(&cat).contains(&"shadowed_copy".to_string()));
+        // The copy in use is the Studio's compatible copy: its own row says the original is ignored.
+        let used = cat.mods.iter_mut().find(|m| m.id == "Old" && m.shadowed_by.is_none()).unwrap();
+        used.origin = Some(crate::origins::ModOrigin::Compat { workshop_id: Some("1".into()), source_dir: "x".into(), changes: vec!["fixed".into()] });
+        let after = codes(&cat);
+        assert!(after.contains(&"compatible_copy".to_string()));
+        assert!(!after.contains(&"shadowed_copy".to_string()), "{:?}", after);
     }
 
     #[test]

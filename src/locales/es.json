@@ -759,10 +759,11 @@
       "openWorkshop": "Abrir página del Workshop",
       "makeCopy": "Crear copia compatible",
       "keepVersion": "Guardar la versión que tenés",
-      "removeCopy": "Quitar la copia compatible",
+      "removeCopy": "Volver al original",
       "mergeAuto": "Fusionar automáticamente",
       "openMerger": "Abrir en el Fusionador",
-      "shimOn": "Encender el parche {{name}} del shim"
+      "shimOn": "Encender el parche {{name}} del shim",
+      "removeCopyTitle": "Opcional. Quita la copia compatible para que el juego vuelva a usar el original del Workshop: para cuando su autor lo actualice para Build 42."
     },
     "freshCopy": "{{mod}} ya tiene una copia compatible. ¿Crear una nueva? La actual se mueve a Zomboid/PZModStudio_Backups/mods.",
     "removeCopyConfirm": "¿Quitar la copia compatible de {{folder}}? El juego vuelve al original (que tu build quizá no cargue). La copia se mueve a Zomboid/PZModStudio_Backups/mods.",
@@ -787,7 +788,7 @@
       "performance": "Rendimiento",
       "problemsIntro": "Lo que rompe el juego o lo va a romper: requisitos que faltan o están apagados, mods en el orden equivocado, mods que tu versión no puede cargar, pares que no van juntos. Arreglá esto primero.",
       "conflictsIntro": "Dos mods traen el mismo archivo, ítem, receta o texto, y el juego usa uno solo. No está roto por sí mismo: fusionalos o elegí qué versión querés.",
-      "infoIntro": "Acá no hay nada que arreglar: copias que el juego ignora, mods actualizados desde la última vez que jugaste, lo que dice el índice de la comunidad sobre tus mods.",
+      "infoIntro": "Acá no hay nada que arreglar: copias compatibles que hizo el Studio, copias que el juego ignora, mods actualizados desde la última vez que jugaste, lo que dice el índice de la comunidad sobre tus mods. Un botón acá es opcional: deshace algo que hizo el Studio.",
       "conflictsEmpty": "Ningún par de tus mods trae el mismo archivo, ítem o texto.",
       "infoEmpty": "Nada más para saber sobre esta lista."
     },
@@ -2304,7 +2305,7 @@
       "load_before_order": "{{mod}} pide cargar antes de {{other}}, pero {{other}} viene más arriba en la lista",
       "incompatible": "{{mod}} está marcado como incompatible con {{other}}, y los dos están activados",
       "workshop_update_pending": "Steam tiene una versión más nueva de {{mod}}{{published}} que todavía no se descargó. Dejá que Steam la descargue (reiniciá Steam si se trabó): los servidores rechazan a los jugadores cuyas versiones de mods no coinciden (\"Workshop item version is different than the server's\").",
-      "compatible_copy": "{{mod}} corre desde una copia compatible en Zomboid/mods ({{changes}}). Se usa cuando el juego se inicia desde PZ Mod Studio; para iniciarlo desde Steam hace falta la opción de lanzamiento -modfolders mods,workshop,steam.",
+      "compatible_copy": "{{mod}} corre desde una copia compatible que hizo el Studio en Zomboid/mods ({{changes}}); mientras tanto el original del Workshop queda ignorado. Se usa cuando el juego se inicia desde PZ Mod Studio; para iniciarlo desde Steam hace falta la opción de lanzamiento -modfolders mods,workshop,steam. No hay nada que hacer: cuando el autor actualice el mod para Build 42, \"Volver al original\" quita la copia.",
       "shadowed_copy": "Otra copia de {{mod}} en {{ignored}} queda ignorada: el juego usa la de {{used}}",
       "updated_since_last_play": "{{n}} mods activos se actualizaron desde la última vez que jugaste: {{mods}}{{andMore}}. Si una partida se porta mal, empezá por estos.",
       "user_rule_order": "Pediste que {{mod}} cargue después de {{after}}{{note}}, y en la lista viene antes",
