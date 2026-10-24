@@ -19,6 +19,8 @@ Achicá la lista con el cuadro (**Nombre o mapa**) y los filtros: **Solo mi vers
 
 El juego abre en la ventana de conexión de este servidor con la contraseña del servidor ya puesta, y tu usuario también si lo escribiste en **Tu usuario en este servidor** (el Studio lo guarda; el mod Studio Link lo completa). Ahí escribís la contraseña de tu cuenta y tocás **Conectar**, que no se activa sin usuario. Un usuario nuevo crea una cuenta nueva en ese servidor. El juego descarga los mods del servidor y los usa solo ahí: tu lista de mods queda como está; el perfil con el que entrás los recibe (abajo).
 
+Con el mod Studio Link, el servidor también queda en los **Favoritos** del juego (pestaña Favorites de su pantalla Multijugador), con tu usuario debajo, igual que si lo hubieras agregado con **Add Server** y **Add New Account**. Así, si te desconectás, lo tenés ahí para volver a entrar sin cerrar el juego. No se agrega dos veces, y la contraseña de tu cuenta no se guarda; la del servidor sí, como la guarda el juego.
+
 ## Crear un perfil para un servidor
 
 Un servidor solo anuncia sus primeros mods (Steam corta la lista). Después de entrar una vez desde acá, el Studio conoce la lista completa y el botón pasa a ser **Crear un perfil con estos N mods**. Antes de eso, **Crear un perfil con los N mods que anuncia** usa la lista parcial. El perfil se llama "Servidor: (nombre)" y respeta el orden del servidor. Antes de crearlo te avisa qué mods no están instalados ahora.

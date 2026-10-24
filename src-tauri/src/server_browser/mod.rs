@@ -695,18 +695,20 @@ pub fn forget_server(user_zomboid_dir: &Path, address: &str) -> Result<Vec<Saved
 
 /// The arguments that make the game join `address` (the password from the credential store when
 /// none is given).
-/// app -> game: the server being joined and the account to fill in the game's connect window
-/// (`address=<ip:port>`, `username=<name>`). The game fills it only from its own server list,
-/// so without this it waits on an empty username. Never a password.
+/// app -> game: the server being joined, its name and the account to fill in the game's connect
+/// window (`address=<ip:port>`, `name=<name>`, `username=<name>`). The game fills it only from
+/// its own server list, so without this it waits on an empty username; the Link also adds the
+/// server (and the account) to the game's Favorites, so it is there after a disconnect. Never a
+/// password.
 pub const JOIN_FILE: &str = "PZModStudio_LinkJoin.txt";
 
-pub fn write_join_file(user_zomboid_dir: &Path, address: &str, username: &str) -> Result<(), String> {
+pub fn write_join_file(user_zomboid_dir: &Path, address: &str, name: &str, username: &str) -> Result<(), String> {
     let lua = user_zomboid_dir.join("Lua");
     if !lua.is_dir() {
         return Ok(());
     }
     let clean = |s: &str| s.replace(['\r', '\n'], " ").trim().to_string();
-    let text = format!("address={}\nusername={}\n", clean(address), clean(username));
+    let text = format!("address={}\nname={}\nusername={}\n", clean(address), clean(name), clean(username));
     crate::load_order::ini_parser::atomic_write(lua.join(JOIN_FILE), text).map_err(|e| e.to_string())
 }
 

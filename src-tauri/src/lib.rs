@@ -268,7 +268,7 @@ fn join_server_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, paths: St
         let _ = server_browser::note_join(&z, &address, &name, &username, profile.as_deref());
         // The account the game's connect window asks for: the one typed now, else the one kept.
         let kept = server_browser::read_saved(&z).into_iter().find(|s| s.address.eq_ignore_ascii_case(address.trim())).map(|s| s.username).unwrap_or_default();
-        let _ = server_browser::write_join_file(&z, &address, if username.trim().is_empty() { &kept } else { &username });
+        let _ = server_browser::write_join_file(&z, &address, &name, if username.trim().is_empty() { &kept } else { &username });
     }
     let config = SandboxLaunchConfig {
         pz_install_dir: vfs::trusted_install_dir(),

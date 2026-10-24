@@ -1766,23 +1766,66 @@ end
 -- own server list, so it waited on an empty username. The app writes the server and the account
 -- it keeps for it (never a password); filled in here when the window is for that server.
 local JOIN_FILE = "PZModStudio_LinkJoin.txt"
+
+-- The server joined from the app goes into the game's own Favorites (and the account under it),
+-- the way the game's "Add Server" and "Add New Account" do, so it is still there on the
+-- Multiplayer screen after a disconnect. Nothing is added twice; no account password is kept.
+local function keepAsFavourite(ip, port, name, username, serverPassword)
+    if not (Server and Server.new and getServerList and addServerToAccountList) then return end
+    local wantedPort = tonumber(port)
+    local function find()
+        for _, s in ipairs(getServerList()) do
+            if s:getIp() == ip and tonumber(s:getPort()) == wantedPort then return s end
+        end
+        return nil
+    end
+    local server = find()
+    if not server then
+        local s = Server.new()
+        s:setName((name and name ~= "") and name or (ip .. ":" .. tostring(port)))
+        s:setIp(ip)
+        s:setPort(wantedPort)
+        s:setServerPassword(serverPassword or "")
+        addServerToAccountList(s)
+        -- The game does not hand the new row's id back: read the list again for it.
+        server = find()
+    end
+    if not server or not username or username == "" or not (Account and Account.new and addAccountToAccountList) then return end
+    local accounts = server:getAccounts()
+    for i = 0, accounts:size() - 1 do
+        if accounts:get(i):getUserName() == username then return end
+    end
+    local account = Account.new()
+    account:setUserName(username)
+    account:setPwd("")
+    account:setSavePwd(false)
+    account:setAuthType(1)
+    account:setLastLogonNow()
+    addAccountToAccountList(server, account)
+end
+
 local setServer = ServerConnectPopup.setServer
 function ServerConnectPopup:setServer(ip, port, passwordStr)
     setServer(self, ip, port, passwordStr)
     pcall(function()
         local file = getFileReader(JOIN_FILE, false)
         if not file then return end
-        local address, username
+        local address, name, username
         local line = file:readLine()
         while line ~= nil do
             local key, value = string.match(line, "^(%a+)=(.*)$")
-            if key == "address" then address = value elseif key == "username" then username = value end
+            if key == "address" then address = value elseif key == "name" then name = value elseif key == "username" then username = value end
             line = file:readLine()
         end
         file:close()
-        if not address or not username or username == "" then return end
+        if not address then return end
         local wantedPort = string.match(address, ":(%d+)$") or "16261"
         if wantedPort ~= tostring(port) then return end
+        local host = string.match(address, "^(.-):%d+$") or address
+        if host == ip then
+            pcall(keepAsFavourite, ip, port, name, username, passwordStr)
+        end
+        if not username or username == "" then return end
         if (self.usernameEntry:getText() or "") == "" then self.usernameEntry:setText(username) end
         if self.checkFields then self:checkFields() end
     end)

@@ -19,6 +19,8 @@ Narrow the list with the box (**Name or map**) and the filters: **Only my build*
 
 The game starts on this server's connect window with the server password filled in, and your username too when you typed it in **Your username on this server** (the Studio keeps it; the Studio Link mod fills it in). There you type your account password and press **Connect**, which stays off without a username. A new username makes a new account on that server. The game downloads the server's mods and uses them only there: your own mod list stays as it is; the profile you join with gets them (below).
 
+With the Studio Link mod, the server also goes into the game's **Favorites** (the Favorites tab of its Multiplayer screen), with your username under it, as if you had added it with **Add Server** and **Add New Account**. So if you disconnect, it is there to join again without closing the game. It is never added twice, and your account password is not kept; the server password is, the way the game keeps it.
+
 ## Making a profile for a server
 
 A server only announces its first few mods (Steam cuts the list). After you join it once from here, the Studio knows the full list, and the button becomes **Make a profile with these N mods**. Before that, **Make a profile with the N mods it announces** uses the partial list. The profile is named "Server: (name)" and keeps the server's order. Mods not installed now are pointed out before the profile is made.
