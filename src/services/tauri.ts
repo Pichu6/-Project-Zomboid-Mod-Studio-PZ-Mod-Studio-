@@ -517,6 +517,10 @@ export const TauriService = {
   },
 
   /** "Not now" on the notice: quiet until the next version. */
+  /** Downloads, checks and puts the release `version` in place; the app then restarts itself. */
+  selfUpdate: async (version: string): Promise<void> => {
+    await invoke('self_update_cmd', { version });
+  },
   dismissAppUpdate: async (userZomboidDir: string, version: string): Promise<void> => {
     try {
       await invoke('dismiss_app_update_cmd', { userZomboidDir, version });

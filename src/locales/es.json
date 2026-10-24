@@ -158,7 +158,7 @@
     "communitySite": "El índice de la comunidad en la web",
     "communityLists": "Listas de la comunidad en la web",
     "updateCheck": "Buscar versiones nuevas de PZ Mod Studio",
-    "updateCheckBlurb": "Una vez al día, el Studio le pregunta a GitHub cuál es la última versión publicada de PZ Mod Studio. Si hay una más nueva, un aviso arriba ofrece descargarla (la página de la versión se abre en el navegador). No se descarga ni se instala nada solo, y no se envía nada.",
+    "updateCheckBlurb": "Al abrir y cada 6 horas mientras está abierto, el Studio le pregunta a GitHub cuál es la última versión publicada de PZ Mod Studio. Si hay una más nueva, un aviso arriba ofrece Actualizar ahora (la baja, comprueba la firma del proyecto y reinicia) o abrir la página de la versión. Nada se instala sin que lo pidas, y no se envía nada.",
     "updateCheckNow": "Buscar ahora",
     "updateChecking": "Buscando…",
     "updateUpToDate": "Tenés la última versión ({{current}}).",
@@ -2587,7 +2587,12 @@
     "current": "tenés la {{current}}",
     "download": "Descargar",
     "notNow": "Ahora no",
-    "notNowTitle": "Sin aviso para esta versión; la próxima vuelve a avisar"
+    "notNowTitle": "Sin aviso para esta versión; la próxima vuelve a avisar",
+    "now": "Actualizar ahora",
+    "nowTitle": "Baja la versión nueva, comprueba que la publicó el proyecto (firma y SHA-256), la pone en lugar de esta y reinicia el Studio",
+    "working": "Bajando y comprobando...",
+    "confirm": "¿Actualizar PZ Mod Studio a la {{latest}}?\n\nEl Studio baja la versión nueva de GitHub, comprueba que la firmó el proyecto, la pone en lugar de esta y se reinicia. Si algo no coincide, no cambia nada.",
+    "failed": "No se actualizó: {{error}}"
   },
   "notices": {
     "javaAgentsLater": "Project Zomboid estaba abierto cuando cambió el perfil, así que su archivo de inicio (agentes Java como ZombieBuddy) esperó. Ahora que el juego se cerró, ya está hecho. Prendidos: {{on}}. Apagados: {{off}}."

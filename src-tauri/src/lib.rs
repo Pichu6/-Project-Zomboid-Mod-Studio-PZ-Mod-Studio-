@@ -30,6 +30,7 @@ pub mod rules;
 pub mod sandbox;
 pub mod save_backup;
 pub mod scripts;
+pub mod self_update;
 pub mod secrets;
 pub mod steam_client;
 pub mod studio_link;
@@ -1206,6 +1207,16 @@ fn app_update_status_cmd(user_zomboid_dir: String, force: bool) -> app_update::U
     app_update::check(&user_zomboid_dir, force)
 }
 
+/// "Update now": the release `version` is downloaded, checked (signed checksums, then the zip's
+/// SHA-256) and put in place of the running app, which then starts the new one and closes.
+#[tauri::command(async)]
+fn self_update_cmd<R: tauri::Runtime>(app_handle: tauri::AppHandle<R>, version: String) -> Result<(), String> {
+    let exe = self_update::install(&version)?;
+    std::process::Command::new(&exe).spawn().map_err(|e| format!("The new version is in place but did not start: {}. Open it again by hand.", e))?;
+    app_handle.exit(0);
+    Ok(())
+}
+
 #[tauri::command(async)]
 fn set_app_update_check_cmd(user_zomboid_dir: String, enabled: bool) -> Result<app_update::UpdateStatus, String> {
     app_update::set_enabled(&user_zomboid_dir, enabled)
@@ -1707,6 +1718,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // What a previous "Update now" renamed aside.
+            self_update::remove_old_copies();
             // A panic anywhere is logged with where it happened, and the window is told.
             let handle = app.handle().clone();
             diagnostics::install_panic_hook(move |text| {
@@ -1756,6 +1769,7 @@ pub fn run() {
             community_index_cmd,
             community_downloads_cmd,
             app_update_status_cmd,
+            self_update_cmd,
             server_player_action_cmd,
             set_app_update_check_cmd,
             dismiss_app_update_cmd,

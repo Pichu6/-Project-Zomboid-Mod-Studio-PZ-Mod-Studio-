@@ -7,6 +7,7 @@ import { COMMUNITY_SITE } from '../../utils/communityIndex';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, setLanguage } from '../../i18n';
 import { tHtml } from '../../i18n/html';
+import { UpdateNowButton } from '../layout/UpdateNotice';
 
 export interface StudioPathsUI {
   pz_install_dir: string;
@@ -906,8 +907,9 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
                   ) : appUpdate.newer && appUpdate.latest ? (
                     <>
                       <span className="text-[11px] text-emerald-300">{t('settings.updateAvailable', { latest: appUpdate.latest, current: appUpdate.current })}</span>
+                      <UpdateNowButton version={appUpdate.latest} compact />
                       <button type="button" onClick={() => appUpdate.url && TauriService.openExternalUrl(appUpdate.url)}
-                        className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[11px] text-white font-semibold cursor-pointer">
+                        className="flex items-center gap-1 px-2 py-1 rounded border border-emerald-700 hover:bg-emerald-900/50 text-[11px] text-emerald-200 font-semibold cursor-pointer">
                         <ExternalLink className="w-3 h-3" aria-hidden="true" /> {t('settings.updateDownload')}
                       </button>
                     </>

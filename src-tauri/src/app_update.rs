@@ -1,11 +1,15 @@
-//! Whether a newer PZ Mod Studio is out: the repository's latest release on GitHub, asked once a
-//! day while the check is on (Settings). Nothing is downloaded or installed here: the app shows a
-//! notice whose Download button opens the release page in the browser.
+//! Whether a newer PZ Mod Studio is out: the repository's latest release on GitHub, asked at most
+//! every six hours while the check is on (Settings); the app asks at start and again every six
+//! hours while it stays open. Nothing is downloaded here: the notice offers "Update now"
+//! (`self_update`) and the release page.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-use crate::rules::community::{cache_path, fetch_text, is_fresh, now};
+use crate::rules::community::{cache_path, fetch_text, now};
+
+/// How long an answer is trusted before GitHub is asked again.
+const FRESH_FOR_SECS: i64 = 6 * 60 * 60;
 
 /// GitHub's latest published release (drafts and pre-releases are never "latest").
 const LATEST_URL: &str = "https://api.github.com/repos/Pichu6/-Project-Zomboid-Mod-Studio-PZ-Mod-Studio-/releases/latest";
@@ -99,7 +103,7 @@ fn status(state: &State, error: Option<String>) -> UpdateStatus {
     }
 }
 
-/// The status, asking GitHub when the check is on and the last answer is a day old (or `force`,
+/// The status, asking GitHub when the check is on and the last answer is six hours old (or `force`,
 /// Settings' "Check now"). A failed request keeps the last answer and says why.
 pub fn check(user_zomboid_dir: &str, force: bool) -> UpdateStatus {
     let mut state = load(user_zomboid_dir);
@@ -107,7 +111,7 @@ pub fn check(user_zomboid_dir: &str, force: bool) -> UpdateStatus {
     if !enabled && !force {
         return status(&state, None);
     }
-    if !force && state.checked_at.is_some_and(is_fresh) {
+    if !force && state.checked_at.is_some_and(|at| now() - at < FRESH_FOR_SECS) {
         return status(&state, None);
     }
     let error = match fetch_text(LATEST_URL).and_then(|t| serde_json::from_str::<Release>(&t).map_err(|e| e.to_string())) {
@@ -118,7 +122,7 @@ pub fn check(user_zomboid_dir: &str, force: bool) -> UpdateStatus {
         }
         Err(e) => Some(e),
     };
-    // A failure is not asked again before tomorrow either: no hammering while offline.
+    // A failure waits the same six hours: no hammering while offline.
     state.checked_at = Some(now());
     let _ = save(user_zomboid_dir, &state);
     status(&state, error)

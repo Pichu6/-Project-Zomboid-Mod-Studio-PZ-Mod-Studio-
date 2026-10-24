@@ -158,7 +158,7 @@
     "communitySite": "The community index on the web",
     "communityLists": "Community lists on the web",
     "updateCheck": "Check for new versions of PZ Mod Studio",
-    "updateCheckBlurb": "Once a day, the Studio asks GitHub which is the latest release of PZ Mod Studio. When there is a newer one, a notice at the top offers to download it (the release page opens in your browser). Nothing is downloaded or installed by itself, and nothing is sent.",
+    "updateCheckBlurb": "At start and every 6 hours while it is open, the Studio asks GitHub which is the latest release of PZ Mod Studio. When there is a newer one, a notice at the top offers Update now (downloads it, checks the project's signature and restarts) or the release page. Nothing is installed unless you ask, and nothing is sent.",
     "updateCheckNow": "Check now",
     "updateChecking": "Checking…",
     "updateUpToDate": "You have the latest version ({{current}}).",
@@ -2587,7 +2587,12 @@
     "current": "you have {{current}}",
     "download": "Download",
     "notNow": "Not now",
-    "notNowTitle": "No notice for this version; the next one shows again"
+    "notNowTitle": "No notice for this version; the next one shows again",
+    "now": "Update now",
+    "nowTitle": "Downloads the new version, checks the project published it (signature and SHA-256), puts it in place of this one and restarts the Studio",
+    "working": "Downloading and checking...",
+    "confirm": "Update PZ Mod Studio to {{latest}}?\n\nThe Studio downloads the new version from GitHub, checks the project signed it, puts it in place of this one and restarts. If anything does not match, nothing changes.",
+    "failed": "Not updated: {{error}}"
   },
   "notices": {
     "javaAgentsLater": "Project Zomboid was open when the profile changed, so its launch file (Java agents such as ZombieBuddy) waited. Now that the game is closed it is done. On: {{on}}. Off: {{off}}."
